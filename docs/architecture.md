@@ -59,6 +59,25 @@ Frameworks like APQC (12,000+ standard business processes), ITIL, COBIT, and ISO
 
 Every agent team has a meta-process: scan for improvements, propose changes with evidence, route to human for approval. The platform doesn't just run processes — it evolves them. The human stays in control because improvements are always proposed, never applied silently.
 
+### Agent OS Is a Harness Creator
+
+Agent OS is not an agent framework. It is a **harness creator**.
+
+Agents are commodities — Claude, GPT, scripts, APIs, whatever comes next. What Agent OS creates is the **harness** within which agents operate. The harness has two dimensions:
+
+1. **Evolving** — it learns from feedback, corrections, and trust data. The harness today is different from the harness next month. Every human edit, every approval, every rejection feeds back into a tighter, smarter harness.
+2. **Orchestrating** — it coordinates multiple agents, determines who checks whom, what runs in parallel, when to pause for humans, and how trust is earned.
+
+The **process** is not a workflow — it is a **governance declaration**. It declares: what inputs are acceptable, what value looks like, what quality gates apply, what trust level governs execution, and what outputs matter. The process is the governor of inputs, value, and outputs.
+
+Agents are pluggable. Processes are durable. The harness is the product.
+
+### Composition Over Invention
+
+Agent OS composes proven open-source projects rather than building from scratch. The first principle — for the platform and for every agent within it — is: **"what can we build FROM?"** not **"what can we build?"**
+
+Every significant component starts with a research step: scout the gold standard, evaluate what exists, adopt or adapt the best available, and only write custom code to fill genuine gaps. The unique value Agent OS creates is in the harness, trust, governance, and learning layers — not in reinventing orchestration, storage, or CLI frameworks that already exist.
+
 ---
 
 ## Architecture: Six Layers
@@ -214,6 +233,39 @@ Every process tracks three feedback signals:
 6. Verify the improvement actually helped
 
 **The platform never auto-fixes. It surfaces, diagnoses, and suggests.**
+
+### Cross-Cutting: Governance and Agent Authentication
+
+Governance spans Layers 3 (Harness) and 4 (Awareness). Trust tiers govern individual processes. Governance governs the system as a whole.
+
+**Agent Authentication:**
+
+Every agent operating within Agent OS must have a verified identity. As the platform scales beyond a single user to teams and organisations, we need to know:
+- **Who is this agent?** — Identity, owner, organisation
+- **What is it allowed to do?** — Scoped permissions per process, per environment
+- **How did it get here?** — Provenance (was it registered by an authorised human? by another trusted agent?)
+
+Authentication is how agents enter the harness. Without it, governance has no foundation.
+
+**Governance Function:**
+
+A dedicated agent or team of agents provides cross-cutting governance and compliance assurance:
+
+| Scope | What governance watches | Example |
+|-------|----------------------|---------|
+| **Individual** | Agent behaviour within its assigned processes | Builder agent stays within its budget and permissions |
+| **Team** | Cross-agent interactions, review pattern integrity | Reviewer agent actually challenges builder output (not rubber-stamping) |
+| **Organisation** | Policy compliance, data handling, audit completeness | All outputs in regulated processes have full audit trails |
+
+The governance function is itself a process — it runs within Agent OS, subject to its own trust tier (always supervised or critical). It monitors other processes for:
+- Agents operating outside their declared permissions
+- Trust tiers being circumvented or gamed
+- Quality criteria being consistently unmet without escalation
+- Compliance requirements (data retention, audit trails, approval chains)
+
+**Key principle:** Governance agents cannot modify processes or override trust tiers. They can only surface findings and recommend actions to humans. The human always decides.
+
+This is an evolving concept that will be refined as Agent OS scales beyond single-user dogfooding to team and organisational use.
 
 ### Layer 6: Human Layer (The Interface)
 
