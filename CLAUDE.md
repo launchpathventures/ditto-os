@@ -12,6 +12,7 @@ Agent OS is a harness creator for human-agent collaboration. It creates the evol
 
 ## Design Documents (read when relevant, not every session)
 
+- `docs/personas.md` — Who we're building for: three personas, five problems, jobs-to-be-done, emotional journey. Primary lens for Designer and Architect.
 - `docs/vision.md` — Why Agent OS exists, the insight, the principles. Independent of architecture.
 - `docs/architecture.md` — Source of truth: six-layer spec, process primitive, trust tiers, harness patterns
 - `docs/human-layer.md` — Layer 6 detailed design: 16 primitives, 8 views, wireframes, interaction patterns
@@ -32,11 +33,14 @@ Agent OS is a harness creator for human-agent collaboration. It creates the evol
 
 Every piece of work follows: **Research → Design → Build → Review**
 
-Six development roles govern how work proceeds. Each role is a skill (slash command) that constrains what the AI does in that role. Full contracts live in `.claude/commands/dev-*.md`. Reference doc: `docs/dev-process.md`.
+Roles can also be invoked standalone (e.g., strategic research, architecture evaluation, priority triage) — the skill determines next steps based on what it produced, not a hardcoded pipeline. See `docs/dev-process.md` for invocation modes.
+
+Seven development roles govern how work proceeds. Each role is a skill (slash command) that constrains what the AI does in that role. Full contracts live in `.claude/commands/dev-*.md`. Reference doc: `docs/dev-process.md`.
 
 | Role | Skill | Purpose |
 |------|-------|---------|
 | Dev PM | `/dev-pm` | Triage and sequence — what to work on next |
+| Dev Designer | `/dev-designer` | UX research + interaction specs — how should this feel? |
 | Dev Researcher | `/dev-researcher` | Find existing solutions before design |
 | Dev Architect | `/dev-architect` | Design the solution, produce briefs/ADRs |
 | Dev Builder | `/dev-builder` | Implement the approved plan as code |
@@ -78,7 +82,7 @@ When a design discovery emerges during work, capture it in `docs/insights/` usin
 
 ### After Completing Work
 
-Each producing role (Researcher, Architect, Builder) does a **minimum state checkpoint** — updating `docs/state.md` with what was produced and where it lives. This is built into each skill.
+Each producing role (Designer, Researcher, Architect, Builder) does a **minimum state checkpoint** — updating `docs/state.md` with what was produced and where it lives. This is built into each skill.
 
 The **full wrap-up** is the Documenter's job. Invoke `/dev-documenter` at the end of any session that changed project state — not just after building. This includes sessions that only produced research, ADRs, or insights.
 

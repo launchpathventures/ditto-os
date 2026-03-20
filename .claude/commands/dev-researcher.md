@@ -16,6 +16,7 @@ Investigate what exists before we build. Find the gold standard. Answer "what ca
 - MUST NOT evaluate trade-offs or recommend an approach (that is the Architect's job)
 - MUST NOT design the solution
 - MUST NOT write implementation code
+- MUST capture any design discoveries or principles that emerge during research — or that the human shares during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
 
 ## Required Inputs
 
@@ -49,7 +50,11 @@ Do NOT skip this step. Do NOT present research without review findings alongside
 ## Handoff
 
 → **Dev Reviewer** (automatic — spawned by you before presenting work)
-→ Then **Dev Architect** (after human approves the research)
+→ **If research feeds a specific design:**
+  → Dev Architect (to write the brief)
+→ **If research is strategic/exploratory:**
+  → Dev Architect (to evaluate against architecture/roadmap) — or —
+  → Dev Documenter (to update state and absorb findings)
 → If session is ending: **Dev Documenter** (to verify state, update landscape if flagged, run retro)
 
 ## State Update (mandatory)
@@ -61,4 +66,7 @@ After work is approved, update `docs/state.md` to reflect:
 
 This ensures a new session can pick up where this one left off.
 
-**When done, tell the human:** "Research complete and reviewed. Report persisted at `docs/research/{topic}.md`. State updated. Next step: invoke `/dev-architect` to design the solution and write the brief."
+**When done, tell the human one of:**
+
+- *(Pipeline)* "Research complete and reviewed. Report persisted at `docs/research/{topic}.md`. State updated. Next step: invoke `/dev-architect` to design the solution and write the brief."
+- *(Standalone)* "Research complete and reviewed. Report persisted at `docs/research/{topic}.md`. State updated. This research informs [specific area]. Next step: invoke `/dev-architect` to evaluate against architecture/roadmap, invoke `/dev-documenter` to update state, or absorb findings and move on."

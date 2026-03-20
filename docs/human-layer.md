@@ -33,16 +33,17 @@ In the future, every knowledge worker manages and delegates to agents. This fram
 - It must feel like working with a team, not configuring a system
 - The platform guides, not requires — the human never needs to think "what do I configure next?"
 
-### Chat Is for Exploring, Structure Is for Operating
+### Three Modes: Analyze, Explore, Operate
 
-Conversations are great for exploring and refining but poor for capturing, defining, and running business processes. Agent OS encodes this directly:
+Different phases of work need different interfaces. Agent OS encodes this directly:
 
 | Mode | Interface | When |
 |------|-----------|------|
-| **Explore** | Conversation Thread + Process Builder (dual pane) | Discovery, setup, refinement, debugging |
+| **Analyze** | Connected data views, pattern reports, gap alerts | Understanding how the org actually works — onboarding, ongoing analysis, validation |
+| **Explore** | Conversation Thread + Process Builder (dual pane) | Defining and refining processes — guided by evidence from Analyze or from a blank canvas |
 | **Operate** | Dashboard, queues, cards, metrics | Daily use, monitoring, reviewing, deciding |
 
-The magic is in the **transition**: a conversation crystallises into a process definition. The conversation is ephemeral; the structure it produces is permanent.
+The magic is in the **transitions**: Analyze surfaces what's really happening → Explore crystallises that into process definitions → Operate runs them. The user can enter at any mode — Analyze for evidence-first discovery, Explore for conversation-first definition, Operate for daily execution. Analyze is not a one-time onboarding step; it's a mode the user returns to whenever they want Agent OS to look at how things are actually working.
 
 ### The Boiling Frog: Progressive Disclosure
 
@@ -96,7 +97,7 @@ Industry standard frameworks (APQC, ITIL, COBIT, ISO 9001) provide the base know
 
 **Job:** Orient — "What needs my attention today?"
 
-**Not a list of everything. A prioritised, reasoned recommendation.** Adapts to role: an IC sees their processes, a manager sees their team's processes.
+**Not a list of everything. A prioritised, reasoned recommendation.** Adapts to role: an IC sees their processes, a manager sees their team's processes. Also serves as the **primary digest surface** for autonomous processes (ADR-011) — process health summaries replace individual review items for processes that have earned autonomy.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -124,6 +125,14 @@ Industry standard frameworks (APQC, ITIL, COBIT, ISO 9001) provide the base know
 │  member. #2 has been waiting 3 days.            │
 │  #3 has a Friday deadline.                      │
 │                                                 │
+│  RUNNING QUIETLY (autonomous — digest)          │
+│  ● Invoice reconciliation  12 runs, 0 issues    │
+│    Quality: all criteria met │ Cost: $2.40      │
+│    [View runs]                                  │
+│  ● Content generation      8 published          │
+│    0 corrections │ downstream: 100% accepted    │
+│    [View runs]                                  │
+│                                                 │
 │  PROCESS HEALTH                                 │
 │  ● Delta feature pipeline     ✓ 4/6 done       │
 │  ● Insurance scoping          ○ Not started     │
@@ -135,6 +144,7 @@ Industry standard frameworks (APQC, ITIL, COBIT, ISO 9001) provide the base know
 **Key design decisions:**
 - Always explains reasoning ("Why this order") — the human learns to trust the prioritisation
 - Shows what happened overnight — agents work while you sleep
+- **"Running quietly" section** (ADR-011) — autonomous process digest summaries. Run counts, quality status, cost. Drill into individual runs on demand. No action required — silence IS the signal. This section grows as more processes earn autonomy.
 - Process health is glance-level (green/amber/red) — drill into Process Card for detail
 - Personalised per role and per user's actual priorities (learns from what you actually do vs. what was recommended)
 

@@ -101,7 +101,9 @@ steps:
       review.
     inputs: [code-changes, conventions, test-results]
     outputs: [review-annotations]
-    harness: maker-checker # This agent checks the builder's work
+    harness:
+      review:
+        - maker-checker # This agent checks the builder's work
 
   - id: human-review
     name: Human reviews code

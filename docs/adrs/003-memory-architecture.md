@@ -101,7 +101,7 @@ A single function assembles the memory context before each agent invocation. Ins
 The assembly function:
 1. Load agent-scoped memories (filtered by agent_id, active=true)
 2. Load process-scoped memories (filtered by process_id, active=true)
-3. Merge, dedup, sort by confidence × reinforcement
+3. Merge, dedup, sort by `reinforcementCount DESC, confidence DESC` (Phase 2b). Phase 3 refines to `confidence * log(reinforcementCount + 1)` with recency decay.
 4. Apply budget: take top-N memories that fit within context allocation
 5. Render as structured text block injected into the agent's system prompt
 
@@ -130,6 +130,29 @@ When a new agent is assigned to a process, it inherits all process-scoped memori
 Agent-scoped memories stay with the agent regardless of which process they serve.
 
 This is **Original to Agent OS** — no system in the research models process-owned learning.
+
+## Phased Implementation
+
+This ADR describes the full memory architecture. Implementation is phased:
+
+**Phase 2b (current):**
+- `memories` table schema (all fields)
+- Memory assembly function (load → sort → budget → render → inject)
+- Simple sorting: `reinforcementCount DESC, confidence DESC`
+- Feedback-to-memory bridge: direct insert on edit/reject feedback, no LLM extraction
+- Duplicate detection: exact content match increments reinforcementCount
+- Confidence: starts at 0.3, grows with reinforcement (capped at 0.9)
+
+**Phase 3 (trust earning):**
+- LLM-based memory reconciliation (Mem0-style ADD/UPDATE/DELETE/NONE)
+- Correction pattern extraction from edit diffs
+- Memory reinforcement data as input to trust tier decisions
+- Confidence formula refinement (recency decay, `confidence * log(reinforcementCount + 1)`)
+
+**Phase 7 (learning, full):**
+- Performance decay detection using memory + feedback data
+- Memory consolidation/compaction (when volume demands)
+- Vector search via sqlite-vec (when >1K memories per scope)
 
 ## Non-Goals
 

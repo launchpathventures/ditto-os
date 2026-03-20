@@ -12,7 +12,9 @@ After work is approved, update project state and tracking documents. Run the pha
 - MUST update `docs/roadmap.md` if a milestone was reached
 - MUST update `docs/landscape.md` if research revealed stale framework evaluations (the Researcher flags these but doesn't update landscape.md)
 - MUST run retrospective: what worked, what surprised, what to change
-- MUST capture any design insights that emerged during the work (→ `docs/insights/`)
+- MUST capture any design insights that emerged during the work — or that the human shared during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
+- MUST audit active insights against `docs/architecture.md`, `docs/roadmap.md`, and `docs/adrs/` — mark absorbed insights and move to `docs/insights/archived/` (see `docs/dev-process.md` Artifact Lifecycle Management)
+- MUST **move** (not copy) completed briefs to `docs/briefs/complete/` — use `mv`, never `cp`. There must be exactly one copy of each brief. If the producing role already copied it, delete the original from `docs/briefs/`.
 - MUST NOT change code or architecture
 - MUST NOT make decisions about what to work on next (that is the PM's job)
 
@@ -42,6 +44,7 @@ The project has four types of evolving knowledge docs. Keeping them in sync is t
 - Updated `docs/roadmap.md` (status changes)
 - Retrospective notes (what worked, what surprised, what to change)
 - New insight files if design discoveries emerged (`docs/insights/`)
+- Insight audit: any newly-absorbed insights moved to `docs/insights/archived/`
 
 ## Handoff
 

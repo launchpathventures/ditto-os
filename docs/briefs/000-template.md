@@ -1,5 +1,10 @@
 # Brief: {Phase/Task Name}
 
+**Date:** {YYYY-MM-DD}
+**Status:** draft | ready | in_progress | complete
+**Depends on:** {prior brief or phase — "none" if standalone}
+**Unlocks:** {what becomes buildable after this — "none" if standalone}
+
 <!--
 Template provenance:
 - Goal → Issue → Work Product → Approval structure from Paperclip (paperclipai/paperclip)
@@ -9,6 +14,13 @@ Template provenance:
 - Constraints pattern from antfarm agent AGENTS.md (snarktank/antfarm)
 - Provenance section original to Agent OS
 - Review gate from Paperclip pr-report skill (.agents/skills/pr-report/SKILL.md)
+- Status lifecycle from ADR convention (Michael Nygard pattern, same as docs/adrs/)
+
+Status lifecycle:
+- draft: architect is designing, not yet reviewed
+- ready: reviewed and approved by human, available for builder
+- in_progress: builder is implementing
+- complete: built, reviewed, approved, merged
 -->
 
 ## Goal
@@ -63,6 +75,16 @@ What files are created, modified, or deleted? These are the deliverables.
 | `{file path}` | {Create / Rewrite / Modify / Delete}: {what specifically changes} |
 | ... | ... |
 
+## User Experience
+
+Which of the six human jobs does this work affect? (Orient, Review, Define, Delegate, Capture, Decide)
+
+- **Jobs affected:** {list, or "None — no user-facing changes"}
+- **Primitives involved:** {which of the 16 primitives, or "None"}
+- **Process-owner perspective:** {how does the person using Agent OS experience this change?}
+- **Interaction states:** {loading, empty, error, success, partial — for any UI-touching work, or "N/A"}
+- **Designer input:** {reference to Designer's interaction spec at `docs/research/*-ux.md`, or "Not invoked — lightweight UX section only"}
+
 ## Acceptance Criteria
 
 How do we verify this work is complete? Each criterion is boolean: pass or fail.
@@ -78,6 +100,14 @@ How to validate the work after completion:
 1. Spawn review agent with `docs/architecture.md` + `docs/review-checklist.md`
 2. Review agent checks: {specific things to verify for this task}
 3. Present work + review findings to human for approval
+
+## Smoke Test
+
+Describe the manual test that proves this brief is working. This is not optional.
+
+```bash
+# Commands to run and what to expect
+```
 
 ## After Completion
 

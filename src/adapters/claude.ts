@@ -6,13 +6,21 @@
  *
  * Follows the adapter pattern from Paperclip: invoke(), status(), cancel().
  * Each step gets a fresh context (ralph pattern) to avoid degradation.
+ *
+ * Tool use: When a step's declared inputs include codebase-type sources
+ * (type: "repository" or type: "document" with source: "file"/"git"),
+ * the adapter includes read-only codebase tools and handles the tool_use
+ * loop until the model produces a final text response.
+ *
+ * Architecture note: Tool inclusion is a pragmatic shortcut — hardcoded here
+ * based on input types. When the integration registry lands (Phase 6),
+ * tool resolution moves to the harness assembly step.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { ProcessDefinition } from "../engine/process-loader";
+import type { ProcessDefinition, StepDefinition } from "../engine/process-loader";
 import type { StepExecutionResult } from "../engine/step-executor";
-
-type StepDefinition = ProcessDefinition["steps"][number];
+import { toolDefinitions, executeTool, MAX_TOOL_CALLS } from "../engine/tools";
 
 const client = new Anthropic();
 
@@ -37,6 +45,8 @@ Your plan must include:
 - Edge cases and risks to consider
 - Step-by-step implementation order
 
+You have tools to read files, search the codebase, and list directory contents. USE THEM to ground your plan in the actual codebase — reference real files, real patterns, real conventions. Do not guess at project structure.
+
 Be specific and actionable. The builder agent will follow your plan exactly.`,
 
     builder: `You are a senior software engineer. Your job is to implement code changes according to a plan.
@@ -44,7 +54,9 @@ Be specific and actionable. The builder agent will follow your plan exactly.`,
 Follow the plan precisely. Write clean, typed, tested code.
 Use existing patterns and conventions in the codebase.
 Don't over-engineer — implement exactly what's needed.
-If you encounter something the plan didn't anticipate, note it clearly.`,
+If you encounter something the plan didn't anticipate, note it clearly.
+
+You have tools to read files and search the codebase. Use them to understand existing code before writing new code.`,
 
     reviewer: `You are a senior code reviewer. Your job is to review code changes for quality, correctness, and convention compliance.
 
@@ -57,7 +69,9 @@ Check for:
 
 Distinguish BLOCKING issues from suggestions.
 Be specific — reference exact lines and explain WHY something is a problem.
-Don't flag style preferences — only real issues.`,
+Don't flag style preferences — only real issues.
+
+You have tools to read and search the codebase. Use them to verify claims and check patterns.`,
 
     "convention-checker": `You are a convention checker. Your job is to verify code follows project conventions.
 
@@ -180,6 +194,37 @@ function buildUserMessage(
   return parts.join("\n\n---\n\n");
 }
 
+/**
+ * Determine if a step needs codebase tools based on its declared inputs
+ * resolved against the process definition's input declarations.
+ *
+ * AC5: Include tools when inputs include type: "repository" or
+ * type: "document" with source: "file" or "git".
+ */
+function stepNeedsTools(
+  step: StepDefinition,
+  processDefinition: ProcessDefinition
+): boolean {
+  if (!step.inputs || !processDefinition.inputs) return false;
+
+  for (const inputName of step.inputs) {
+    const inputDef = processDefinition.inputs.find(
+      (i) => i.name === inputName
+    );
+    if (!inputDef) continue;
+
+    if (inputDef.type === "repository") return true;
+    if (
+      inputDef.type === "document" &&
+      (inputDef.source === "file" || inputDef.source === "git")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export const claudeAdapter = {
   /**
    * Execute an AI agent step using Claude.
@@ -191,31 +236,106 @@ export const claudeAdapter = {
   ): Promise<StepExecutionResult> {
     const systemPrompt = buildSystemPrompt(step, processDefinition);
     const userMessage = buildUserMessage(step, runInputs);
+    const useTools = stepNeedsTools(step, processDefinition);
 
     console.log(`    Claude adapter: ${step.agent_role || "general"} agent`);
     console.log(`    Model: ${MODEL}`);
+    if (useTools) {
+      console.log(`    Tools: read_file, search_files, list_files`);
+    }
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    // Build initial messages
+    const messages: Anthropic.Messages.MessageParam[] = [
+      { role: "user", content: userMessage },
+    ];
 
-    // Extract text content
-    const textContent = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => {
-        if (block.type === "text") return block.text;
-        return "";
-      })
-      .join("\n\n");
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let toolCallCount = 0;
+    let finalText = "";
+
+    // Tool use loop: call API, handle tool_use responses, repeat until text
+    while (true) {
+      const requestParams: Anthropic.Messages.MessageCreateParams = {
+        model: MODEL,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages,
+      };
+
+      if (useTools) {
+        requestParams.tools = toolDefinitions;
+      }
+
+      const response = await client.messages.create(requestParams);
+
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+
+      // Check if response contains tool use
+      const toolUseBlocks = response.content.filter(
+        (block): block is Anthropic.Messages.ToolUseBlock =>
+          block.type === "tool_use"
+      );
+
+      // Extract any text from this response
+      const textBlocks = response.content
+        .filter(
+          (block): block is Anthropic.Messages.TextBlock =>
+            block.type === "text"
+        )
+        .map((block) => block.text);
+
+      if (textBlocks.length > 0) {
+        finalText += textBlocks.join("\n\n");
+      }
+
+      // If no tool use or we've hit the limit, we're done
+      if (
+        toolUseBlocks.length === 0 ||
+        response.stop_reason === "end_turn" ||
+        response.stop_reason === "max_tokens"
+      ) {
+        break;
+      }
+
+      // Safety limit on tool calls
+      if (toolCallCount + toolUseBlocks.length > MAX_TOOL_CALLS) {
+        console.log(
+          `    Tool call limit reached (${MAX_TOOL_CALLS}). Finishing.`
+        );
+        break;
+      }
+
+      // Execute tool calls and build tool results
+      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
+
+      for (const toolBlock of toolUseBlocks) {
+        toolCallCount++;
+        console.log(
+          `    Tool [${toolCallCount}]: ${toolBlock.name}(${summariseToolInput(toolBlock.input as Record<string, unknown>)})`
+        );
+
+        const result = executeTool(
+          toolBlock.name,
+          toolBlock.input as Record<string, unknown>
+        );
+
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolBlock.id,
+          content: result,
+        });
+      }
+
+      // Append assistant response + tool results to conversation
+      messages.push({ role: "assistant", content: response.content });
+      messages.push({ role: "user", content: toolResults });
+    }
 
     // Calculate cost (approximate — Sonnet 4.6 pricing)
-    const inputTokens = response.usage.input_tokens;
-    const outputTokens = response.usage.output_tokens;
     const costCents = Math.ceil(
-      (inputTokens * 0.3 + outputTokens * 1.5) / 100000
+      (totalInputTokens * 0.3 + totalOutputTokens * 1.5) / 100000
     ); // $3/$15 per 1M tokens
 
     // Determine output name from step definition
@@ -223,16 +343,17 @@ export const claudeAdapter = {
 
     return {
       outputs: {
-        [outputName]: textContent,
+        [outputName]: finalText,
       },
-      tokensUsed: inputTokens + outputTokens,
+      tokensUsed: totalInputTokens + totalOutputTokens,
       costCents,
       confidence: 0.7, // Default — will be refined by learning layer
       logs: [
         `Model: ${MODEL}`,
-        `Input tokens: ${inputTokens}`,
-        `Output tokens: ${outputTokens}`,
-        `Stop reason: ${response.stop_reason}`,
+        `Input tokens: ${totalInputTokens}`,
+        `Output tokens: ${totalOutputTokens}`,
+        `Tool calls: ${toolCallCount}`,
+        `Stop reason: complete`,
       ],
     };
   },
@@ -252,3 +373,15 @@ export const claudeAdapter = {
     // Claude API calls are atomic — nothing to cancel
   },
 };
+
+/**
+ * Summarise tool input for log output.
+ */
+function summariseToolInput(input: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(input)) {
+    const str = String(value);
+    parts.push(`${key}=${str.length > 40 ? str.slice(0, 37) + "..." : str}`);
+  }
+  return parts.join(", ");
+}

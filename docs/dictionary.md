@@ -196,9 +196,13 @@ The canonical reference for every key term, concept, and component in Agent OS. 
 - Layer: Meta (Development Process)
 - Related: Dev Builder, Maker-Checker, Review Checklist, Dev Process
 
-**Dev Process** — The formalised development workflow for building Agent OS. Six meta-roles (PM, Researcher, Architect, Builder, Reviewer, Documenter) implemented as skills that constrain the AI agent's behaviour. The manual precursor to the automated harness. Reference: `docs/dev-process.md`.
+**Dev Designer** — A development meta-role responsible for UX research and interaction specs. Thinks user-first (desirability → feasibility). Produces interaction specs that the Architect must address. Runs as a parallel track alongside the Researcher. Conditionally activated based on user-facing impact. Skill: `/dev-designer`. ADR-004.
+- Layer: Meta (Development Process), L1 Process, L6 Human
+- Related: Dev Researcher, Dev Architect, Human Layer, Six Human Jobs
+
+**Dev Process** — The formalised development workflow for building Agent OS. Seven meta-roles (PM, Designer, Researcher, Architect, Builder, Reviewer, Documenter) implemented as skills that constrain the AI agent's behaviour. The manual precursor to the automated harness. Reference: `docs/dev-process.md`.
 - Layer: Meta
-- Related: Dev PM, Dev Researcher, Dev Architect, Dev Builder, Dev Reviewer, Dev Documenter, Dogfooding
+- Related: Dev PM, Dev Designer, Dev Researcher, Dev Architect, Dev Builder, Dev Reviewer, Dev Documenter, Dogfooding
 
 **Deferred** — A roadmap status indicating a capability is intentionally postponed with an explicit re-entry condition (e.g., "Layer 4 re-enters when 2+ processes are running"). Prevents silent omission — every deferred item is acknowledged and tracked.
 - Layer: Meta

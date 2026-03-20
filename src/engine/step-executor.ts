@@ -5,7 +5,7 @@
  * This is the bridge between process definitions and agent runtimes.
  */
 
-import type { ProcessDefinition } from "./process-loader";
+import type { ProcessDefinition, StepDefinition } from "./process-loader";
 import { claudeAdapter } from "../adapters/claude";
 import { scriptAdapter } from "../adapters/script";
 
@@ -16,8 +16,6 @@ export interface StepExecutionResult {
   confidence?: number;
   logs?: string[];
 }
-
-type StepDefinition = ProcessDefinition["steps"][number];
 
 /**
  * Execute a single process step using the appropriate adapter.

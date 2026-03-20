@@ -8,12 +8,10 @@
 
 import { exec } from "child_process";
 import { promisify } from "util";
-import type { ProcessDefinition } from "../engine/process-loader";
+import type { ProcessDefinition, StepDefinition } from "../engine/process-loader";
 import type { StepExecutionResult } from "../engine/step-executor";
 
 const execAsync = promisify(exec);
-
-type StepDefinition = ProcessDefinition["steps"][number];
 
 export const scriptAdapter = {
   /**

@@ -15,12 +15,16 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 - MUST use existing project conventions (pnpm, TypeScript strict, Drizzle, existing patterns)
 - MUST run automated quality checks before declaring done:
   - `pnpm run type-check` must pass
+  - `pnpm test` must pass (if test suite exists)
   - All acceptance criteria from the brief must be verifiable
+- MUST execute the smoke test from the brief and verify it passes — the Builder owns smoke test execution (Insight-038)
+- MUST write tests for new public functions/modules when a test suite exists — if no test infrastructure exists yet, flag this as a gap but do not block on it
 - MUST note anything the plan didn't anticipate (for the Reviewer)
 - MUST self-review before spawning Reviewer: Does the implementation match every acceptance criterion? Did I introduce anything the brief didn't anticipate? Are there regressions?
 - MUST NOT redesign the solution or make architectural decisions not covered by the brief
 - MUST NOT add features, abstractions, or "improvements" beyond the brief
 - MUST NOT skip the automated checks — they are the first quality gate
+- MUST capture any design discoveries or principles that emerge during building — or that the human shares during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
 
 ## Required Inputs
 
@@ -30,7 +34,8 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 
 ## Expected Outputs
 
-- Working code changes that pass type-check
+- Working code changes that pass type-check and tests
+- Test and smoke test evidence: include test output summary and smoke test results in your handoff notes (the Reviewer checks for this)
 - List of files created/modified/deleted
 - Notes on any deviations from the brief or surprises encountered
 - Acceptance criteria status (which pass, which need verification)
@@ -51,7 +56,7 @@ Do NOT skip this step. Do NOT present implementation without review findings alo
 
 ## Handoff
 
-→ **Automated checks** first (type-check, acceptance criteria)
+→ **Automated checks** first (type-check, tests, smoke test, acceptance criteria)
 → **Dev Reviewer** (automatic — spawned by you after checks pass, separate context, maker-checker pattern)
 → Then **Human** (Reviewer findings + your implementation, human decides)
 

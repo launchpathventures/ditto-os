@@ -60,6 +60,26 @@ export const feedbackTypeValues = [
 ] as const;
 export type FeedbackType = (typeof feedbackTypeValues)[number];
 
+export const editSeverityValues = [
+  "formatting",
+  "correction",
+  "revision",
+  "rewrite",
+] as const;
+export type EditSeverity = (typeof editSeverityValues)[number];
+
+export const trustChangeActorValues = ["human", "system"] as const;
+export type TrustChangeActor = (typeof trustChangeActorValues)[number];
+
+export const trustSuggestionStatusValues = [
+  "pending",
+  "accepted",
+  "rejected",
+  "dismissed",
+] as const;
+export type TrustSuggestionStatus =
+  (typeof trustSuggestionStatusValues)[number];
+
 export const agentStatusValues = [
   "idle",
   "running",
@@ -240,6 +260,9 @@ export const stepRuns = sqliteTable("step_runs", {
     .$type<Record<string, unknown>>()
     .default({}),
 
+  // Parallel group membership
+  parallelGroupId: text("parallel_group_id"),
+
   // Execution details
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   completedAt: integer("completed_at", { mode: "timestamp_ms" }),
@@ -312,11 +335,66 @@ export const feedback = sqliteTable("feedback", {
   diff: text("diff", { mode: "json" }).$type<Record<string, unknown>>(),
   comment: text("comment"),
 
+  // Edit severity (Phase 3a — computed from structured diff)
+  editSeverity: text("edit_severity").$type<EditSeverity>(),
+  editRatio: real("edit_ratio"),
+
   // Correction pattern (extracted by learning engine)
   correctionPattern: text("correction_pattern"),
   patternConfidence: real("pattern_confidence"),
 
   createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** Memory scope type values */
+export const memoryScopeTypeValues = ["agent", "process"] as const;
+export type MemoryScopeType = (typeof memoryScopeTypeValues)[number];
+
+/** Memory type values */
+export const memoryTypeValues = [
+  "correction",
+  "preference",
+  "context",
+  "skill",
+] as const;
+export type MemoryType = (typeof memoryTypeValues)[number];
+
+/** Memory source values */
+export const memorySourceValues = ["feedback", "human", "system"] as const;
+export type MemorySource = (typeof memorySourceValues)[number];
+
+/**
+ * Memories — learned patterns that persist across runs.
+ * Two-scope model: agent-scoped (travels with agent) + process-scoped (stays with process).
+ * Provenance: ADR-003, Mem0 scope filtering, memU reinforcement counting.
+ */
+export const memories = sqliteTable("memories", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  scopeType: text("scope_type").notNull().$type<MemoryScopeType>(),
+  scopeId: text("scope_id").notNull(),
+
+  type: text("type").notNull().$type<MemoryType>(),
+  content: text("content").notNull(),
+
+  source: text("source").notNull().$type<MemorySource>(),
+  sourceId: text("source_id"),
+
+  reinforcementCount: integer("reinforcement_count").notNull().default(1),
+  lastReinforcedAt: integer("last_reinforced_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  confidence: real("confidence").notNull().default(0.3),
+
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
 });
@@ -353,6 +431,210 @@ export const improvements = sqliteTable("improvements", {
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Layer 3: Harness Layer — decisions
+// ============================================================
+
+/** Trust action values for harness decisions */
+export const trustActionValues = [
+  "pause",
+  "advance",
+  "sample_pause",
+  "sample_advance",
+] as const;
+export type TrustAction = (typeof trustActionValues)[number];
+
+/** Review result values for harness decisions */
+export const reviewResultValues = [
+  "pass",
+  "flag",
+  "retry",
+  "skip",
+] as const;
+export type ReviewResult = (typeof reviewResultValues)[number];
+
+/** Harness decisions — records every pipeline decision for every step */
+export const harnessDecisions = sqliteTable("harness_decisions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processRunId: text("process_run_id")
+    .references(() => processRuns.id)
+    .notNull(),
+  stepRunId: text("step_run_id")
+    .references(() => stepRuns.id)
+    .notNull(),
+
+  // Trust gate
+  trustTier: text("trust_tier").notNull().$type<TrustTier>(),
+  trustAction: text("trust_action").notNull().$type<TrustAction>(),
+
+  // Review pattern
+  reviewPattern: text("review_pattern", { mode: "json" })
+    .notNull()
+    .$type<string[]>()
+    .default([]),
+  reviewResult: text("review_result").notNull().$type<ReviewResult>().default("skip"),
+  reviewDetails: text("review_details", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .default({}),
+  reviewCostCents: integer("review_cost_cents").notNull().default(0),
+
+  // Memory
+  memoriesInjected: integer("memories_injected").notNull().default(0),
+
+  // Sampling
+  samplingHash: text("sampling_hash"),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Layer 3: Harness Layer — trust changes
+// ============================================================
+
+/**
+ * Trust change log — immutable record of every tier transition.
+ * Provenance: Paperclip agentConfigRevisions (append-only revision log).
+ */
+export const trustChanges = sqliteTable("trust_changes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processId: text("process_id")
+    .references(() => processes.id)
+    .notNull(),
+  fromTier: text("from_tier").notNull().$type<TrustTier>(),
+  toTier: text("to_tier").notNull().$type<TrustTier>(),
+  reason: text("reason").notNull(),
+  actor: text("actor").notNull().$type<TrustChangeActor>(),
+  metadata: text("metadata", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .default({}),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Layer 3: Harness Layer — trust suggestions
+// ============================================================
+
+/**
+ * Trust upgrade suggestions — system proposes, human decides.
+ * Provenance: Paperclip approvals table pattern.
+ */
+export const trustSuggestions = sqliteTable("trust_suggestions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processId: text("process_id")
+    .references(() => processes.id)
+    .notNull(),
+  currentTier: text("current_tier").notNull().$type<TrustTier>(),
+  suggestedTier: text("suggested_tier").notNull().$type<TrustTier>(),
+  evidence: text("evidence", { mode: "json" })
+    .notNull()
+    .$type<Array<{ name: string; threshold: string; actual: string; passed: boolean }>>(),
+  status: text("status")
+    .notNull()
+    .$type<TrustSuggestionStatus>()
+    .default("pending"),
+  decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+  decidedBy: text("decided_by"),
+  decisionComment: text("decision_comment"),
+  previousSuggestionId: text("previous_suggestion_id"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Work Items — universal unit of work entering Agent OS (ADR-010)
+// ============================================================
+
+export const workItemTypeValues = [
+  "question",
+  "task",
+  "goal",
+  "insight",
+  "outcome",
+] as const;
+export type WorkItemType = (typeof workItemTypeValues)[number];
+
+export const workItemStatusValues = [
+  "intake",
+  "routed",
+  "in_progress",
+  "waiting_human",
+  "completed",
+  "failed",
+] as const;
+export type WorkItemStatus = (typeof workItemStatusValues)[number];
+
+export const workItemSourceValues = [
+  "conversation",
+  "capture",
+  "process_spawned",
+  "system_generated",
+] as const;
+export type WorkItemSource = (typeof workItemSourceValues)[number];
+
+/**
+ * Work items — the universal unit of work entering Agent OS.
+ * Every input (question, task, goal, insight, outcome) becomes a work item.
+ * Provenance: ADR-010, Paperclip goal ancestry pattern.
+ */
+export const workItems = sqliteTable("work_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  type: text("type").notNull().$type<WorkItemType>().default("task"),
+  status: text("status")
+    .notNull()
+    .$type<WorkItemStatus>()
+    .default("intake"),
+  content: text("content").notNull(),
+  source: text("source")
+    .notNull()
+    .$type<WorkItemSource>()
+    .default("capture"),
+
+  // Goal ancestry — what goal this serves (ADR-010)
+  goalAncestry: text("goal_ancestry", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+
+  // Routing — which process handles this (set by router, or manual)
+  assignedProcess: text("assigned_process").references(() => processes.id),
+
+  // Spawning — goal decomposition (ADR-010, Insight-039: conditional flow)
+  spawnedFrom: text("spawned_from"),
+  spawnedItems: text("spawned_items", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+
+  // Execution — links to process runs that handled this item
+  executionIds: text("execution_ids", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+
+  // Accumulated context from conversation, corrections, related items
+  context: text("context", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .default({}),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
 });
 
 // ============================================================

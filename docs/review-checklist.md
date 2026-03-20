@@ -59,3 +59,24 @@ Is the roadmap up to date?
 - Are deferred items still correctly deferred?
 - Have re-entry conditions changed?
 - Does `docs/state.md` reflect current reality?
+
+### 9. User Experience (ADR-004)
+Does this work honour the Designer's input?
+- If a Designer interaction spec exists (`docs/research/*-ux.md`), does the brief/implementation address it?
+- Is the brief's User Experience section populated (not blank or "N/A" when the work has user-facing impact)?
+- Does the work serve the six human jobs it claims to? (Orient, Review, Define, Delegate, Capture, Decide)
+- Are interaction states specified for UI-touching work?
+
+### 10. Security (Insight-017)
+Does this design address security concerns?
+- Are credentials stored securely and scoped per-process/per-agent?
+- Are permission boundaries explicit — what can each agent access?
+- Is sensitive data exposure minimised (no secrets in logs, no credentials in agent context)?
+- Does trust enforcement integrity hold — can an agent bypass its trust tier?
+- Are audit trails sufficient for the security-relevant actions introduced?
+
+### 11. Execution Verification (Insight-019)
+Has the changed code been run end-to-end, not just type-checked?
+- Has the smoke test from the brief been executed?
+- Did the output match expectations (not just "no errors")?
+- If the brief has no smoke test section, FLAG it — every brief must have one

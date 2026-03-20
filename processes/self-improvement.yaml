@@ -45,28 +45,29 @@ inputs:
     description: What the human keeps fixing — systematic correction patterns
 
 steps:
-  - id: scan-performance
-    name: Review performance trends
-    executor: ai-agent
-    agent_role: scout
-    description: >
-      Analyse feedback data across all processes. What's degrading?
-      What corrections repeat? Where is time being wasted?
-    inputs: [performance-metrics, correction-patterns]
-    outputs: [performance-analysis]
-    parallel_group: scan
+  - parallel_group: scan
+    depends_on: []
+    steps:
+      - id: scan-performance
+        name: Review performance trends
+        executor: ai-agent
+        agent_role: scout
+        description: >
+          Analyse feedback data across all processes. What's degrading?
+          What corrections repeat? Where is time being wasted?
+        inputs: [performance-metrics, correction-patterns]
+        outputs: [performance-analysis]
 
-  - id: scan-ecosystem
-    name: Scan for better approaches
-    executor: ai-agent
-    agent_role: scout
-    description: >
-      Check for new packages, tools, patterns that could improve
-      the codebase. Check dependency updates. Review what's trending
-      in relevant ecosystems.
-    inputs: [codebase, ecosystem]
-    outputs: [ecosystem-analysis]
-    parallel_group: scan
+      - id: scan-ecosystem
+        name: Scan for better approaches
+        executor: ai-agent
+        agent_role: scout
+        description: >
+          Check for new packages, tools, patterns that could improve
+          the codebase. Check dependency updates. Review what's trending
+          in relevant ecosystems.
+        inputs: [codebase, ecosystem]
+        outputs: [ecosystem-analysis]
 
   - id: evaluate
     name: Evaluate and prioritise
@@ -77,7 +78,7 @@ steps:
       opportunity by: impact, effort, risk. Prioritise top 3.
     inputs: [performance-analysis, ecosystem-analysis, codebase]
     outputs: [prioritised-proposals]
-    depends_on: [scan-performance, scan-ecosystem]
+    depends_on: [scan]
 
   - id: propose
     name: Propose improvements

@@ -42,39 +42,39 @@ inputs:
     description: Past correction patterns — what this codebase gets wrong
 
 steps:
-  - id: convention-check
-    name: Pattern compliance check
-    executor: ai-agent
-    agent_role: convention-checker
-    description: >
-      Check code against project conventions (AGENTS.md, style guides).
-      Flag deviations. No opinion on logic — just pattern compliance.
-    inputs: [code-changes, conventions, learnings]
-    outputs: [convention-flags]
-    parallel_group: review # Runs in parallel with other reviewers
+  - parallel_group: review-checks
+    depends_on: []
+    steps:
+      - id: convention-check
+        name: Pattern compliance check
+        executor: ai-agent
+        agent_role: convention-checker
+        description: >
+          Check code against project conventions (AGENTS.md, style guides).
+          Flag deviations. No opinion on logic — just pattern compliance.
+        inputs: [code-changes, conventions, learnings]
+        outputs: [convention-flags]
 
-  - id: bug-hunt
-    name: Bug and logic analysis
-    executor: ai-agent
-    agent_role: bug-hunter
-    description: >
-      Adversarial review — specifically try to find bugs, logic errors,
-      edge cases, race conditions. Think like a QA engineer trying to
-      break things.
-    inputs: [code-changes, codebase]
-    outputs: [bug-flags]
-    parallel_group: review
+      - id: bug-hunt
+        name: Bug and logic analysis
+        executor: ai-agent
+        agent_role: bug-hunter
+        description: >
+          Adversarial review — specifically try to find bugs, logic errors,
+          edge cases, race conditions. Think like a QA engineer trying to
+          break things.
+        inputs: [code-changes, codebase]
+        outputs: [bug-flags]
 
-  - id: security-scan
-    name: Security review
-    executor: ai-agent
-    agent_role: security-reviewer
-    description: >
-      Check for security vulnerabilities — injection, XSS, auth issues,
-      secrets in code, OWASP top 10. Flag with severity.
-    inputs: [code-changes]
-    outputs: [security-flags]
-    parallel_group: review
+      - id: security-scan
+        name: Security review
+        executor: ai-agent
+        agent_role: security-reviewer
+        description: >
+          Check for security vulnerabilities — injection, XSS, auth issues,
+          secrets in code, OWASP top 10. Flag with severity.
+        inputs: [code-changes]
+        outputs: [security-flags]
 
   - id: synthesise
     name: Synthesise review
@@ -86,7 +86,7 @@ steps:
       Distinguish blocking issues from suggestions.
     inputs: [convention-flags, bug-flags, security-flags, code-changes]
     outputs: [annotated-review]
-    depends_on: [convention-check, bug-hunt, security-scan]
+    depends_on: [review-checks]
 
   - id: human-review
     name: Human final review
