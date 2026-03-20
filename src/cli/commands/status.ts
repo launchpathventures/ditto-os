@@ -8,7 +8,7 @@
 
 import { defineCommand } from "citty";
 import { db, schema } from "../../db";
-import { eq, desc, sql, and, ne } from "drizzle-orm";
+import { eq, desc, and, ne } from "drizzle-orm";
 import type { TrustTier } from "../../db/schema";
 import {
   formatWorkItemLine,
@@ -88,6 +88,14 @@ export const statusCommand = defineCommand({
       }
       console.log("Welcome to Agent OS. Run `pnpm cli sync` to get started.");
       return;
+    }
+
+    // Pre-build process lookup maps (eliminates N+1 queries in render loops)
+    const processNameById = new Map<string, string>();
+    const processIdBySlug = new Map<string, string>();
+    for (const proc of processes) {
+      processNameById.set(proc.id, proc.name);
+      processIdBySlug.set(proc.slug, proc.id);
     }
 
     // Build process run counts
@@ -201,20 +209,14 @@ export const statusCommand = defineCommand({
 
       // Work items first
       for (const item of pendingItems) {
-        // Look up process name
-        let processName: string | undefined;
-        if (item.assignedProcess) {
-          const [proc] = await db
-            .select({ name: schema.processes.name })
-            .from(schema.processes)
-            .where(eq(schema.processes.id, item.assignedProcess))
-            .limit(1);
-          processName = proc?.name;
-        }
+        const processName = item.assignedProcess
+          ? processNameById.get(item.assignedProcess)
+          : undefined;
         console.log(
           formatWorkItemLine({
             id: item.id,
             type: item.type,
+            status: item.status,
             content: item.content,
             processName,
             createdAt: item.createdAt,
@@ -227,16 +229,9 @@ export const statusCommand = defineCommand({
         const confidence = output.confidenceScore
           ? `${Math.round(output.confidenceScore * 100)}%`
           : "";
-        const processId = run?.processId;
-        let processName = "Unknown";
-        if (processId) {
-          const [proc] = await db
-            .select({ name: schema.processes.name })
-            .from(schema.processes)
-            .where(eq(schema.processes.id, processId))
-            .limit(1);
-          processName = proc?.name || "Unknown";
-        }
+        const processName = run?.processId
+          ? processNameById.get(run.processId) || "Unknown"
+          : "Unknown";
         const age = timeSince(output.createdAt);
         console.log(
           `  #${output.id.slice(0, 8)}  Review   ${output.name}`,
@@ -252,23 +247,24 @@ export const statusCommand = defineCommand({
     }
 
     // PROCESS HEALTH section (AC-5)
+    // Pre-load all pending suggestions to avoid N+1 queries
+    const pendingSuggestions = new Map<string, { suggestedTier: string }>();
+    for (const proc of processes) {
+      const suggestion = await getPendingSuggestion(proc.id);
+      if (suggestion) {
+        pendingSuggestions.set(proc.slug, suggestion);
+      }
+    }
+
     console.log(sectionHeader("PROCESS HEALTH"));
     for (const proc of processHealth) {
       console.log(formatProcessHealthLine(proc));
 
-      // Show pending upgrade suggestion inline
-      const [dbProc] = await db
-        .select()
-        .from(schema.processes)
-        .where(eq(schema.processes.slug, proc.slug))
-        .limit(1);
-      if (dbProc) {
-        const suggestion = await getPendingSuggestion(dbProc.id);
-        if (suggestion) {
-          console.log(
-            `    \u2191 Upgrade available: \u2192 ${trustTierLabel(suggestion.suggestedTier as TrustTier)} (run: pnpm cli trust ${proc.slug})`,
-          );
-        }
+      const suggestion = pendingSuggestions.get(proc.slug);
+      if (suggestion) {
+        console.log(
+          `    \u2191 Upgrade available: \u2192 ${trustTierLabel(suggestion.suggestedTier as TrustTier)} (run: pnpm cli trust ${proc.slug})`,
+        );
       }
     }
 

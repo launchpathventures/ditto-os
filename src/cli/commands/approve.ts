@@ -15,7 +15,7 @@ import {
 import fs from "fs";
 import path from "path";
 import { tmpdir } from "os";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export const approveCommand = defineCommand({
   meta: {
@@ -208,7 +208,7 @@ function openInEditor(content: string): string {
 
   const editor = process.env.EDITOR || "vi";
   try {
-    execSync(`${editor} ${tmpFile}`, { stdio: "inherit" });
+    execFileSync(editor, [tmpFile], { stdio: "inherit" });
   } catch {
     console.error("Editor exited with error. Using original content.");
     fs.unlinkSync(tmpFile);

@@ -49,16 +49,20 @@ export function workItemStatusLabel(status: WorkItemStatus): string {
   return labels[status] || status;
 }
 
-/** Format a review-type work item line for status display */
+/** Format a work item line for status display */
 export function formatWorkItemLine(item: {
   id: string;
   type: WorkItemType;
+  status: WorkItemStatus;
   content: string;
   processName?: string;
   createdAt: Date;
 }): string {
   const shortId = item.id.slice(0, 8);
-  const typeLabel = item.type === "task" ? "Review" : workItemTypeLabel(item.type);
+  // Distinguish review tasks (waiting_human) from action tasks
+  const typeLabel = item.type === "task"
+    ? (item.status === "waiting_human" ? "Review" : "Action")
+    : workItemTypeLabel(item.type);
   const summary = item.content.length > 60
     ? item.content.slice(0, 57) + "..."
     : item.content;
