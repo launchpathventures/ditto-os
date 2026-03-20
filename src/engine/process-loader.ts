@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import YAML from "yaml";
 import { db, schema } from "../db";
-import type { ProcessStatus, TrustTier } from "../db/schema";
+import type { ProcessStatus, TrustTier, AgentCategory } from "../db/schema";
 import { eq } from "drizzle-orm";
 
 // ============================================================
@@ -47,6 +47,19 @@ export interface StepDefinition {
   instructions?: string;
   input_fields?: HumanInputField[];
   timeout?: string; // e.g. "24h", "7d"
+
+  // Conditional routing (Brief 016b)
+  // Provenance: Inngest AgentKit three-mode routing, LangGraph conditional edges
+  route_to?: Array<{ condition: string; goto: string }>;
+  default_next?: string;
+
+  // Retry middleware (Brief 016b)
+  // Provenance: Aider lint-fix loop, Open SWE error recovery middleware
+  retry_on_failure?: {
+    max_retries: number;
+    retry_condition?: string;
+    feedback_inject?: boolean;
+  };
 }
 
 export interface ParallelGroupDefinition {
@@ -73,6 +86,7 @@ export interface ProcessDefinition {
   version: number;
   status: string;
   description: string;
+  system?: boolean; // ADR-008: system agent process
   trigger: {
     type: string;
     cron?: string;
@@ -229,13 +243,26 @@ export function loadProcessFile(filePath: string): ProcessDefinition {
  * Load all process definitions from the processes/ directory
  */
 export function loadAllProcesses(
-  processDir: string = path.join(process.cwd(), "processes")
+  processDir: string = path.join(process.cwd(), "processes"),
+  templateDir: string = path.join(process.cwd(), "templates"),
 ): ProcessDefinition[] {
-  const files = fs
-    .readdirSync(processDir)
-    .filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+  const processFiles = fs.existsSync(processDir)
+    ? fs.readdirSync(processDir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"))
+    : [];
 
-  return files.map((f) => loadProcessFile(path.join(processDir, f)));
+  const templateFiles = fs.existsSync(templateDir)
+    ? fs.readdirSync(templateDir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"))
+    : [];
+
+  const processes = processFiles.map((f) => loadProcessFile(path.join(processDir, f)));
+  const templates = templateFiles.map((f) => {
+    const def = loadProcessFile(path.join(templateDir, f));
+    // Templates load as draft — not active until explicitly adopted (Brief 020)
+    def.status = "draft";
+    return def;
+  });
+
+  return [...processes, ...templates];
 }
 
 /**
@@ -298,5 +325,46 @@ export async function syncProcessesToDb(
 
       console.log(`  Created: ${def.name} (v${def.version})`);
     }
+
+    // System agent: create/update agent record with category: system (ADR-008)
+    if (def.system) {
+      await ensureSystemAgentRecord(def);
+    }
+  }
+}
+
+/**
+ * Ensure a system agent record exists for a system process.
+ * Creates or updates the agent with category: system and the process slug as systemRole.
+ */
+async function ensureSystemAgentRecord(def: ProcessDefinition): Promise<void> {
+  const systemRole = def.id;
+
+  const [existing] = await db
+    .select()
+    .from(schema.agents)
+    .where(eq(schema.agents.systemRole, systemRole))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(schema.agents)
+      .set({
+        name: `${def.name} Agent`,
+        description: def.description,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.agents.id, existing.id));
+    console.log(`  System agent updated: ${def.name}`);
+  } else {
+    await db.insert(schema.agents).values({
+      name: `${def.name} Agent`,
+      role: "system",
+      description: def.description,
+      adapterType: "system",
+      category: "system" as AgentCategory,
+      systemRole,
+    });
+    console.log(`  System agent created: ${def.name}`);
   }
 }

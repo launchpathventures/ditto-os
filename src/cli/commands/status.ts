@@ -8,15 +8,19 @@
 
 import { defineCommand } from "citty";
 import { db, schema } from "../../db";
-import { eq, desc, and, ne } from "drizzle-orm";
+import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import type { TrustTier } from "../../db/schema";
 import {
   formatWorkItemLine,
   formatProcessHealthLine,
+  formatGoalTree,
+  formatEscalation,
   trustTierLabel,
   sectionHeader,
   timeSince,
   jsonOutput,
+  type GoalTreeTask,
+  type GoalTreeData,
 } from "../format";
 import { getPendingSuggestion } from "../../engine/trust";
 
@@ -122,6 +126,7 @@ export const statusCommand = defineCommand({
       runCount: number;
       hasIssues: boolean;
       issueText?: string;
+      isSystem?: boolean;
     }> = [];
     const runningQuietly: Array<{
       name: string;
@@ -135,6 +140,9 @@ export const statusCommand = defineCommand({
       const count = runCounts.get(proc.id) || 0;
       const issue = processIssues.get(proc.id);
 
+      const def = proc.definition as Record<string, unknown> | null;
+      const isSystem = def?.system === true;
+
       processHealth.push({
         name: proc.name,
         slug: proc.slug,
@@ -143,6 +151,7 @@ export const statusCommand = defineCommand({
         runCount: count,
         hasIssues: !!issue,
         issueText: issue,
+        isSystem,
       });
 
       // AC-6: --all shows RUNNING QUIETLY for autonomous/spot-checked
@@ -162,6 +171,17 @@ export const statusCommand = defineCommand({
 
     // AC-8: JSON output
     if (args.json) {
+      // Goal tree data for JSON (AC 10)
+      const goals = pendingItems
+        .filter((item) => (item.type === "goal" || item.type === "outcome") && item.spawnedItems && (item.spawnedItems as string[]).length > 0)
+        .map((goal) => ({
+          id: goal.id,
+          content: goal.content,
+          status: goal.status,
+          decomposition: goal.decomposition,
+          spawnedItems: goal.spawnedItems,
+        }));
+
       const jsonData = {
         pending: [
           ...pendingItems.map((item) => ({
@@ -180,6 +200,7 @@ export const statusCommand = defineCommand({
             createdAt: output.createdAt.toISOString(),
           })),
         ],
+        goals,
         processHealth: processHealth.map((p) => ({
           name: p.name,
           slug: p.slug,
@@ -252,6 +273,115 @@ export const statusCommand = defineCommand({
     } else {
       // AC-7: Nothing pending — silence principle
       console.log("Nothing needs your attention right now.\n");
+    }
+
+    // ACTIVE GOALS section (Brief 022 AC 4-8)
+    // Show goal trees for any in-progress goal work items with decomposition
+    const goalItems = pendingItems.filter(
+      (item) => (item.type === "goal" || item.type === "outcome") && item.spawnedItems && (item.spawnedItems as string[]).length > 0,
+    );
+
+    if (goalItems.length > 0) {
+      console.log(sectionHeader("ACTIVE GOALS", goalItems.length));
+      for (const goal of goalItems) {
+        const decomposition = goal.decomposition as Array<{
+          taskId: string;
+          stepId: string;
+          dependsOn: string[];
+          status: string;
+        }> | null;
+
+        if (!decomposition) continue;
+
+        // Load child work items for names and current status
+        const childIds = decomposition.map((t) => t.taskId);
+        const childItems = await db
+          .select()
+          .from(schema.workItems)
+          .where(inArray(schema.workItems.id, childIds));
+
+        const childMap = new Map(childItems.map((c) => [c.id, c]));
+
+        // Load recent route-around activities for this goal
+        const routeAroundActivities = await db
+          .select()
+          .from(schema.activities)
+          .where(
+            and(
+              eq(schema.activities.action, "orchestrator.route-around"),
+              eq(schema.activities.entityId, goal.id),
+            ),
+          );
+        const routeAroundByTask = new Map<string, string>();
+        for (const act of routeAroundActivities) {
+          const meta = act.metadata as Record<string, unknown> | null;
+          if (meta?.skippedTask) {
+            routeAroundByTask.set(
+              meta.skippedTask as string,
+              meta.reasoning as string || "Routed around — dependency paused",
+            );
+          }
+        }
+
+        // Build goal tree data
+        const tasks: GoalTreeTask[] = decomposition.map((task) => {
+          const child = childMap.get(task.taskId);
+          const childStatus = child?.status || task.status;
+          const ctx = child?.context as Record<string, unknown> | null;
+          const stepName = ctx?.stepId ? String(ctx.stepId) : task.stepId;
+
+          return {
+            taskId: task.taskId,
+            stepId: task.stepId,
+            name: child ? child.content.slice(0, 35) : stepName,
+            status: childStatus,
+            dependsOn: task.dependsOn,
+            routeAroundInfo: routeAroundByTask.get(task.taskId),
+          };
+        });
+
+        const attentionNeeded = tasks.filter(
+          (t) => t.status === "waiting_human" || t.status === "failed",
+        ).length;
+
+        const treeData: GoalTreeData = {
+          goalId: goal.id,
+          goalContent: goal.content,
+          goalStatus: goal.status,
+          tasks,
+          attentionNeeded,
+        };
+
+        console.log(formatGoalTree(treeData));
+
+        // Check for escalation on this goal (AC 9)
+        const escalationActivities = await db
+          .select()
+          .from(schema.activities)
+          .where(
+            and(
+              eq(schema.activities.action, "orchestrator.stopped"),
+              eq(schema.activities.entityId, goal.id),
+            ),
+          )
+          .orderBy(desc(schema.activities.createdAt))
+          .limit(1);
+
+        if (escalationActivities.length > 0) {
+          const meta = escalationActivities[0].metadata as Record<string, unknown> | null;
+          if (meta) {
+            console.log("");
+            console.log(formatEscalation({
+              type: "aggregate_uncertainty",
+              reason: (meta.reason as string) || "Orchestrator stopped — remaining work needs your judgment",
+              tasksCompleted: meta.tasksCompleted as number | undefined,
+              tasksRemaining: meta.tasksRemaining as number | undefined,
+            }));
+          }
+        }
+
+        console.log();
+      }
     }
 
     // PROCESS HEALTH section (AC-5)

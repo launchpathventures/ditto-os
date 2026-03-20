@@ -347,7 +347,7 @@ export const claudeAdapter = {
       },
       tokensUsed: totalInputTokens + totalOutputTokens,
       costCents,
-      confidence: 0.7, // Default — will be refined by learning layer
+      confidence: "medium", // Default — will be refined by learning layer
       logs: [
         `Model: ${MODEL}`,
         `Input tokens: ${totalInputTokens}`,

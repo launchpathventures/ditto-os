@@ -1,0 +1,182 @@
+# Agent OS — Process Definition
+# Process: Dev Pipeline
+# The Agent OS development process — from triage to shipped code.
+#
+# Runs the 7 dev roles on the real engine with conditional routing.
+# First process to exercise cli-agent executor and route_to fields.
+#
+# Provenance: antfarm YAML workflows + Insight-032 (dev process is first workspace)
+
+name: Dev Pipeline
+id: dev-pipeline
+version: 1
+status: active
+
+description: >
+  The Agent OS development pipeline. PM triages, researcher scouts,
+  designer specs UX, architect writes briefs, builder implements,
+  reviewer checks, documenter wraps up. Routing decisions determine
+  which roles execute based on output signals.
+
+trigger:
+  type: manual
+  description: Human starts a dev task or the continuous mode loop triggers
+
+inputs:
+  - name: task
+    type: text
+    source: manual
+    required: true
+    description: What to work on — a feature request, bug report, or roadmap item
+
+  - name: codebase
+    type: repository
+    source: git
+    required: true
+    description: The Agent OS repository
+
+steps:
+  - id: pm-triage
+    name: PM Triage
+    executor: cli-agent
+    agent_role: pm
+    description: >
+      Read state.md and roadmap.md, recommend what to work on.
+      Output should include routing signals: "brief exists", "research needed",
+      "design needed", or specific next step recommendation.
+    inputs: [task, codebase]
+    outputs: [recommendation]
+    route_to:
+      - condition: "brief exists"
+        goto: builder-implement
+      - condition: "research needed"
+        goto: researcher-scout
+      - condition: "design needed"
+        goto: designer-ux
+    default_next: researcher-scout
+
+  - id: researcher-scout
+    name: Research Scout
+    executor: cli-agent
+    agent_role: researcher
+    depends_on: [pm-triage]
+    description: >
+      Scout existing solutions and patterns for the recommended work.
+      Output should indicate if designer input is needed.
+    inputs: [task, codebase]
+    outputs: [research_report]
+    route_to:
+      - condition: "no designer needed"
+        goto: architect-design
+    default_next: designer-ux
+
+  - id: designer-ux
+    name: Designer UX
+    executor: cli-agent
+    agent_role: designer
+    depends_on: [pm-triage]
+    description: >
+      Design UX interaction spec for user-facing work.
+      Produces interaction patterns and wireframe descriptions.
+    inputs: [task, codebase]
+    outputs: [interaction_spec]
+    default_next: architect-design
+
+  - id: architect-design
+    name: Architect Design
+    executor: cli-agent
+    agent_role: architect
+    depends_on: [pm-triage]
+    description: >
+      Design the solution, produce a brief or ADR.
+      Output should indicate if a brief was produced.
+    inputs: [task, codebase]
+    outputs: [brief]
+    route_to:
+      - condition: "brief produced"
+        goto: builder-implement
+    default_next: builder-implement
+    harness:
+      review: [maker-checker]
+
+  - id: builder-implement
+    name: Builder Implement
+    executor: cli-agent
+    agent_role: builder
+    depends_on: [pm-triage]
+    description: >
+      Implement the approved plan as code. Run type-check.
+      Follow the brief precisely.
+    inputs: [task, codebase]
+    outputs: [code_changes]
+    retry_on_failure:
+      max_retries: 3
+      retry_condition: "type-check failed"
+      feedback_inject: true
+    default_next: reviewer-check
+    harness:
+      review: [spec-testing]
+
+  - id: reviewer-check
+    name: Reviewer Check
+    executor: cli-agent
+    agent_role: reviewer
+    depends_on: [builder-implement]
+    description: >
+      Review code changes against architecture spec and checklist.
+      Output PASS or FAIL with findings.
+    inputs: [task, codebase]
+    outputs: [review_verdict]
+    route_to:
+      - condition: "FAIL"
+        goto: builder-implement
+    default_next: documenter-wrap
+
+  - id: documenter-wrap
+    name: Documenter Wrap
+    executor: cli-agent
+    agent_role: documenter
+    depends_on: [reviewer-check]
+    description: >
+      Update state.md, roadmap.md, capture insights, run retrospective.
+    inputs: [task, codebase]
+    outputs: [state_update]
+
+outputs:
+  - name: completed-work
+    type: code
+    destination: git-repository
+    description: Working, reviewed code with updated documentation
+
+quality_criteria:
+  - Type-check passes after builder step
+  - All acceptance criteria from the brief are met
+  - Reviewer finds no architectural violations
+  - State.md is updated with what changed
+
+feedback:
+  metrics:
+    - name: approval_rate
+      description: Percentage of steps approved without edits
+      target: "> 80%"
+    - name: edit_severity
+      description: Average edit severity when corrections are made
+      target: "decreasing trend"
+    - name: correction_patterns
+      description: Number of recurring correction patterns detected
+      target: "decreasing trend"
+  capture:
+    - Human edits tracked as diff (implicit feedback)
+    - Review comments captured as correction patterns
+    - Routing decisions recorded in harness decisions
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "10 runs at ≥85% approval rate"
+      upgrade_to: spot_checked
+    - after: "20 runs at ≥90% approval, trend stable"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "approval rate drops below 70%"
+    - "2 consecutive rejections"

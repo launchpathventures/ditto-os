@@ -7,13 +7,15 @@
 
 import type { ProcessDefinition, StepDefinition } from "./process-loader";
 import { claudeAdapter } from "../adapters/claude";
+import { cliAdapter } from "../adapters/cli";
 import { scriptAdapter } from "../adapters/script";
+import { resolveSystemAgent } from "./system-agents";
 
 export interface StepExecutionResult {
   outputs: Record<string, unknown>;
   tokensUsed?: number;
   costCents?: number;
-  confidence?: number;
+  confidence?: "high" | "medium" | "low";
   logs?: string[];
 }
 
@@ -31,8 +33,19 @@ export async function executeStep(
     case "ai-agent":
       return claudeAdapter.execute(step, runInputs, processDefinition);
 
-    case "script":
+    case "cli-agent":
+      return cliAdapter.execute(step, runInputs, processDefinition);
+
+    case "script": {
+      // System agent dispatch: if step config has systemAgent, resolve handler
+      const systemAgentName = step.config?.systemAgent as string | undefined;
+      if (systemAgentName) {
+        console.log(`  System agent: ${systemAgentName}`);
+        const handler = resolveSystemAgent(systemAgentName);
+        return handler(runInputs);
+      }
       return scriptAdapter.execute(step, runInputs, processDefinition);
+    }
 
     case "handoff":
       // Handoff creates a new process run for the target process

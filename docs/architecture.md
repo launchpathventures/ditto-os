@@ -218,7 +218,10 @@ Process: [Name]
 │   ├── Source: [where data comes from]
 │   └── Trigger: [what starts the process — schedule, event, manual]
 ├── Steps:
-│   ├── 1. [Action] → [Executor: AI agent | Script | Rules | Human]
+│   ├── 1. [Action] → [Executor: AI agent | CLI agent | Script | Rules | Human]
+│   │   ├── route_to: [condition → goto step] (conditional routing)
+│   │   ├── default_next: [fallback step if no condition matches]
+│   │   └── retry_on_failure: [max_retries, feedback_inject]
 │   ├── 2. [Action] → [Executor]
 │   └── N. [Action] → [Executor]
 ├── Outputs:
@@ -233,6 +236,10 @@ Process: [Name]
 └── Trust Level: [Supervised | Spot-checked | Autonomous | Critical]
 ```
 
+**Conditional routing** (Insight-039, Brief 016b): Steps are not fixed sequences. Each step can declare `route_to` conditions that evaluate against output — the first matching condition determines the next step. If no condition matches, `default_next` provides a deterministic fallback. Steps not on the chosen route are marked `skipped` (treated as resolved for dependency purposes). Routing is currently Mode 1 (code-based substring matching); LLM-based routing (Mode 2) is deferred. Provenance: Inngest AgentKit three-mode routing, LangGraph conditional edges.
+
+**Retry middleware** (Brief 016b): Steps can declare `retry_on_failure` with a max retry count and optional feedback injection. On failure, the step is re-queued with error output as context. After max retries, confidence is set to `low` — the trust gate pauses for human review rather than hard-failing the run. Provenance: Aider lint-fix loop, Open SWE error recovery middleware.
+
 **Key properties:**
 - Process definitions persist independent of agents — swap the agent, the process stays
 - The AI understands processes semantically — it can suggest missing steps, flag risks, propose improvements
@@ -243,7 +250,14 @@ Process: [Name]
 
 **Heartbeat execution model** (borrowed from Paperclip): Agents wake, execute, sleep. Not continuous. Cost-efficient, clean state boundaries.
 
-**Adapter pattern**: Any runtime plugs in — Claude, GPT, scripts, APIs, rules engines, integrations. Three core methods: `invoke()`, `status()`, `cancel()`. Six executor types: `ai-agent`, `script`, `rules`, `human`, `handoff`, `integration`. The `integration` executor resolves a service and protocol from the integration registry, executes the external call (CLI, MCP, or REST), and returns structured output — subject to the full harness pipeline like any other executor.
+**Adapter pattern** (Insight-041): Any runtime plugs in — the harness is AI-provider-agnostic. Users bring their own execution substrate (Claude CLI, Codex CLI, Anthropic API, OpenAI API, local models via ollama). All adapters implement the same `StepExecutionResult` interface: `outputs`, `tokensUsed`, `costCents`, `confidence` (categorical: high/medium/low per ADR-011), `logs`. Three core methods: `invoke()`, `status()`, `cancel()`. Seven executor types: `ai-agent`, `cli-agent`, `script`, `rules`, `human`, `handoff`, `integration`.
+
+Current adapters:
+- **Claude API adapter** (`ai-agent`): Calls Anthropic API directly. Per-token cost. Tool use loop with read-only codebase tools.
+- **CLI adapter** (`cli-agent`, Brief 016a): Spawns `claude -p` (or `codex`) as subprocess. Loads role contracts from `.claude/commands/` as `--append-system-prompt`. Subscription-based ($0 per step). Fresh context per step (ralph pattern). Parses `CONFIDENCE: high|medium|low` from output tail. Provenance: ralph autonomous loop, Paperclip adapter pattern.
+- **Script adapter** (`script`): Deterministic commands via `child_process`. No AI cost.
+
+The `integration` executor (Phase 6) resolves a service and protocol from the integration registry, executes the external call (CLI, MCP, or REST), and returns structured output — subject to the full harness pipeline like any other executor.
 
 **Agent harness** (the babushka model): Each agent operates within its own persistent operating context — the **agent harness** — which sits between the adapter (runtime) and the process harness (Layer 3). The agent harness is assembled before each invocation and includes:
 
@@ -641,6 +655,7 @@ Agent OS composes proven patterns rather than inventing from scratch:
 |-------------|-------------|---------|
 | Heartbeat execution | **Paperclip** | Agents wake, execute, sleep. Budget controls. Atomic task checkout. |
 | Adapter pattern | **Paperclip** | Any runtime plugs in via `invoke()`, `status()`, `cancel()`. |
+| CLI adapter (subprocess) | **ralph** (snarktank) | Fresh context per iteration via `claude -p`. Role contracts as `--append-system-prompt`. Subscription-based ($0). |
 | Org structure + governance | **Paperclip** | Agent hierarchy, approval gates, audit trail. |
 | Autonomous implementation loop | **ralph** (snarktank) | Fresh context per iteration, progress tracking, AGENTS.md for patterns. |
 | Multi-agent verification | **antfarm** (snarktank) | Sequential steps with verification gates. Role-based agents checking each other. |
@@ -661,6 +676,7 @@ Agent OS composes proven patterns rather than inventing from scratch:
 | Credential brokering | **Composio** pattern | Agent never sees tokens; platform executes on agent's behalf. |
 | Integration registry | **Original** (informed by Nango + Insight-007) | Declaration files mapping services to available protocols. |
 | Skills-over-MCP | **OpenClaw** | Instruction layer (process def) over execution layer (protocol). 65% of skills wrap MCP. |
+| Harness event emitter | **Trigger.dev** | Typed lifecycle events (step-start/complete, gate-pause/advance, routing-decision). External surfaces subscribe. |
 | Attention model — oversight form | **Content moderation** (TikTok/YouTube) + **ISO 2859** + **MBE** | Three-band confidence routing, switching rules, management by exception. Adapted for process trust. |
 | Digest review | **Zapier Digest** + **GitHub Copilot** | Batch outputs for periodic review. PR-as-batch-artifact. |
 
@@ -680,6 +696,7 @@ Agent OS composes proven patterns rather than inventing from scratch:
 - Structure as the product — the eight things raw chat is missing (Insight-030). Agent OS IS the scaffolding that makes AI useful for non-technical users
 - Analyze mode — connecting to readily available org data to build a persistent understanding of how the organisation actually works
 - Organizational data model — persistent, evolving org understanding in Layer 4
+- Adapter abstraction — users bring their own AI execution substrate (CLI, API, local). Trust system handles quality differences naturally (Insight-041)
 - Self-healing via learning layer with human governance
 - Trust-aware integration access (external calls governed by earned trust tier)
 - Integration feedback capture (did the external action produce the right outcome?)

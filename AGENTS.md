@@ -75,7 +75,7 @@ Task briefs in `docs/briefs/` follow this structure:
 
 After completing work:
 1. Spawn a separate review agent with `docs/architecture.md` + `docs/review-checklist.md`
-2. Review agent challenges work against the architecture spec (8-point checklist)
+2. Review agent challenges work against the architecture spec (12-point checklist)
 3. Present both work AND review findings to human
 4. Human decides: approve, reject, or revise
 

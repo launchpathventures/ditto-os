@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** User asked whether end users would use their Claude CLI or OpenAI Codex CLI for driving Agent OS locally, or whether we'd insist on API usage.
 **Layers affected:** L2 Agent, L3 Harness
-**Status:** active
+**Status:** absorbed — CLI adapter delivered in Brief 016a, adapter abstraction documented in architecture.md L2
 
 ## The Insight
 

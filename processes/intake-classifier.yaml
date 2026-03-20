@@ -1,0 +1,74 @@
+# Agent OS — System Agent Process Definition
+# Process: Intake Classifier
+# Code-based (Mode 1) work item classifier. Keyword pattern matching.
+#
+# Provenance: Inngest AgentKit FnRouter (code-based deterministic routing)
+
+name: Intake Classifier
+id: intake-classifier
+version: 1
+status: active
+system: true
+
+description: >
+  System agent that classifies incoming work items by type (task, question,
+  goal, insight, outcome) using keyword pattern matching. Code-based Mode 1
+  — no LLM calls. Fast, free, deterministic. Starts supervised so every
+  classification is reviewable until the system earns routing trust.
+
+trigger:
+  type: event
+  event: capture.created
+  description: Triggered programmatically when a new work item is captured
+
+inputs:
+  - name: content
+    type: text
+    source: system
+    required: true
+    description: The work item text content to classify
+
+steps:
+  - id: classify
+    name: Classify Work Item
+    executor: script
+    description: >
+      Keyword pattern matching to determine work item type.
+      Questions (who/what/why/how/?), goals (achieve/target/improve),
+      insights (learned/realized), outcomes (by date/deadline),
+      tasks (action verbs or default).
+    config:
+      systemAgent: intake-classifier
+    inputs:
+      - content
+    outputs:
+      - classification-result
+
+outputs:
+  - name: classification-result
+    type: data
+    destination: system
+    description: "{ type, confidence, reasoning, matchedKeyword }"
+
+quality_criteria:
+  - Classification matches human expectation for common input patterns
+  - Question detection works for standard question words and ? suffix
+  - Default to task when uncertain (most common type)
+
+feedback:
+  metrics:
+    - name: classification_accuracy
+      description: How often the classified type matches what the human would choose
+      target: ">80%"
+  capture:
+    - Human corrections to work item type after auto-classification
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "30 runs at >90% accuracy"
+      upgrade_to: spot-checked
+    - after: "50 runs at >95% accuracy"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "Classification accuracy drops below 80%"

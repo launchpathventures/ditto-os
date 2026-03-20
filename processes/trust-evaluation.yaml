@@ -1,0 +1,71 @@
+# Agent OS — System Agent Process Definition
+# Process: Trust Evaluation
+# Wraps the Phase 3 trust evaluation code as a system agent running through the harness.
+#
+# Provenance: ADR-008 (system agent category), Phase 3 trust evaluation code (trust-evaluator.ts)
+
+name: Trust Evaluation
+id: trust-evaluation
+version: 1
+status: active
+system: true
+
+description: >
+  System agent that evaluates trust state after every feedback record.
+  Checks upgrade eligibility and downgrade triggers. Wraps the existing
+  evaluateTrust() function from Phase 3 — same logic, now running through
+  the harness pipeline for auditability and trust earning.
+
+trigger:
+  type: event
+  event: feedback.recorded
+  description: Triggered programmatically after every feedback record (approve/edit/reject)
+
+inputs:
+  - name: processId
+    type: text
+    source: system
+    required: true
+    description: The process whose trust state should be evaluated
+
+steps:
+  - id: evaluate-trust
+    name: Evaluate Trust State
+    executor: script
+    description: >
+      Compute trust state, check downgrade triggers and upgrade eligibility.
+      Wraps the existing evaluateTrust() function.
+    config:
+      systemAgent: trust-evaluator
+    inputs:
+      - processId
+    outputs:
+      - evaluation-result
+
+outputs:
+  - name: evaluation-result
+    type: data
+    destination: system
+    description: Trust evaluation result (action taken, details)
+
+quality_criteria:
+  - Trust evaluation produces the same results as direct evaluateTrust() call
+  - Downgrade triggers fire correctly
+  - Upgrade suggestions are created when eligible
+
+feedback:
+  metrics:
+    - name: evaluation_accuracy
+      description: Whether trust evaluations match expected outcomes
+      target: "100%"
+  capture:
+    - Trust state changes logged in trustChanges table
+    - Upgrade suggestions logged in trustSuggestions table
+
+trust:
+  initial_tier: spot-checked
+  upgrade_path:
+    - after: "50 runs at 100% accuracy"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "incorrect trust evaluation detected"

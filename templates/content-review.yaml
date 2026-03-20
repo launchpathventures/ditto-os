@@ -1,0 +1,102 @@
+# Agent OS — Process Template
+# Template: Content Review
+# Reviews content against brand guidelines and quality standards.
+#
+# Provenance: n8n/Zapier template pattern + ADR-008 governance declarations
+# Domain: Marketing/content (Lisa persona — ecommerce business)
+
+name: Content Review
+id: content-review
+version: 1
+status: draft
+template: true
+
+description: >
+  Reviews marketing content (product descriptions, blog posts, social media)
+  against brand voice guidelines and quality standards. Checks tone, accuracy,
+  differentiators, and compliance. Flags issues for human correction.
+
+trigger:
+  type: manual
+  description: Triggered when new content is ready for review
+
+inputs:
+  - name: content
+    type: text
+    source: manual
+    required: true
+    description: The content to review (product description, blog post, social post, etc.)
+  - name: contentType
+    type: text
+    source: manual
+    required: false
+    description: Type of content (product_description, blog_post, social_post, email)
+
+steps:
+  - id: check-brand-voice
+    name: Check Brand Voice
+    executor: ai-agent
+    agent_role: reviewer
+    description: >
+      Review content against brand voice guidelines. Check for:
+      tone consistency, jargon avoidance, differentiator emphasis,
+      and call-to-action appropriateness.
+    inputs: [content, contentType]
+    outputs: [brandCheck]
+
+  - id: check-accuracy
+    name: Check Factual Accuracy
+    executor: ai-agent
+    agent_role: reviewer
+    depends_on: [check-brand-voice]
+    description: >
+      Verify factual claims, pricing references, product specifications,
+      and any data cited in the content.
+    inputs: [content]
+    outputs: [accuracyCheck]
+
+  - id: produce-review
+    name: Produce Review Summary
+    executor: ai-agent
+    agent_role: lead-reviewer
+    depends_on: [check-brand-voice, check-accuracy]
+    description: >
+      Synthesize brand voice and accuracy checks into a single review
+      with prioritized findings. Recommend: approve, minor edits, or rewrite.
+    inputs: [brandCheck, accuracyCheck]
+    outputs: [reviewSummary]
+
+outputs:
+  - name: reviewSummary
+    type: text
+    destination: system
+    description: Consolidated review with findings, severity, and recommendation
+
+quality_criteria:
+  - Brand voice issues are specific (cite exact phrases, not vague feedback)
+  - Accuracy checks reference verifiable sources
+  - Review summary distinguishes blocking issues from suggestions
+  - Recommendation is one of: approve, minor edits, rewrite
+
+feedback:
+  metrics:
+    - name: review_accuracy
+      description: Percentage of flagged issues that human agrees with
+      target: "> 80%"
+    - name: false_positive_rate
+      description: Issues flagged that human dismisses
+      target: "< 20%"
+  capture:
+    - Human corrections to review findings
+    - Override of review recommendation (approve when review said rewrite, etc.)
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "15 runs at > 85% accuracy"
+      upgrade_to: spot_checked
+    - after: "30 runs at > 90% accuracy, decreasing false positives"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "False positive rate exceeds 30%"
+    - "Published content with unflagged factual errors"

@@ -1,0 +1,112 @@
+# Agent OS — Process Template
+# Template: Invoice Follow-Up
+# Tracks overdue invoices, sends reminders, escalates after thresholds.
+#
+# Provenance: n8n/Zapier template pattern + ADR-008 governance declarations
+# Domain: Accounts receivable (Rob persona — trades business)
+
+name: Invoice Follow-Up
+id: invoice-follow-up
+version: 1
+status: draft
+template: true
+
+description: >
+  Tracks overdue invoices and manages the follow-up sequence.
+  Identifies overdue invoices, drafts reminder emails, and escalates
+  when payment thresholds are exceeded. Includes a human step for
+  escalation decisions on high-value invoices.
+
+trigger:
+  type: manual
+  description: Run weekly or when overdue invoices are detected
+
+inputs:
+  - name: invoiceData
+    type: text
+    source: manual
+    required: true
+    description: Invoice details or reference to accounting system export
+
+steps:
+  - id: identify-overdue
+    name: Identify Overdue Invoices
+    executor: script
+    description: >
+      Parse invoice data and identify invoices past their due date.
+      Categorize by days overdue: 30, 60, 90+ days.
+    inputs: [invoiceData]
+    outputs: [overdueList]
+
+  - id: draft-reminders
+    name: Draft Reminder Emails
+    executor: ai-agent
+    agent_role: builder
+    depends_on: [identify-overdue]
+    description: >
+      Generate personalized reminder emails for each overdue invoice.
+      Tone escalates with age: friendly at 30 days, firm at 60, final notice at 90+.
+    inputs: [overdueList]
+    outputs: [reminderDrafts]
+
+  - id: review-escalations
+    name: Review High-Value Escalations
+    executor: human
+    depends_on: [draft-reminders]
+    description: >
+      Review invoices over the escalation threshold before sending
+      final notices. Decide: send reminder, call directly, or write off.
+    instructions: >
+      These invoices are over the escalation threshold. For each one,
+      decide whether to send the drafted reminder, call the customer
+      directly, or flag for write-off review.
+    input_fields:
+      - name: decision
+        type: select
+        label: Action for each invoice
+        options: ["send reminder", "call directly", "flag for write-off"]
+        required: true
+
+  - id: send-reminders
+    name: Send Approved Reminders
+    executor: script
+    depends_on: [review-escalations]
+    description: >
+      Send the approved reminder emails. Log sent status for each invoice.
+    inputs: [reminderDrafts]
+    outputs: [sendReport]
+
+outputs:
+  - name: sendReport
+    type: data
+    destination: system
+    description: Summary of reminders sent, escalations pending, and actions taken
+
+quality_criteria:
+  - All overdue invoices are identified (none skipped)
+  - Reminder tone matches overdue period (30/60/90+ days)
+  - High-value invoices always go through human review
+  - Send report includes every invoice with its outcome
+
+feedback:
+  metrics:
+    - name: collection_rate
+      description: Percentage of reminded invoices that get paid within 14 days
+      target: "> 40%"
+    - name: escalation_accuracy
+      description: Whether human review decisions improve outcomes vs auto-send
+      target: "increasing trend"
+  capture:
+    - Human decisions on escalation (send/call/write-off)
+    - Payment outcomes after reminders sent
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "10 runs at > 85% approval rate"
+      upgrade_to: spot_checked
+    - after: "25 runs at > 90% approval, stable collection rate"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "Collection rate drops below 25%"
+    - "2 consecutive escalation decisions overridden"

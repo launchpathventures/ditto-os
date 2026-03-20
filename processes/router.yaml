@@ -1,0 +1,83 @@
+# Agent OS — System Agent Process Definition
+# Process: Router
+# LLM-based (Mode 2) process routing. Matches work items to domain processes.
+#
+# Provenance: Inngest AgentKit RoutingAgent + Mastra Networks schema-driven routing
+
+name: Router
+id: router
+version: 1
+status: active
+system: true
+
+description: >
+  System agent that matches work items to the best domain process. Uses
+  Claude to evaluate work item content against available process descriptions.
+  LLM-based Mode 2 — flexible semantic matching. Starts supervised so every
+  routing decision is reviewable. Router never sees system processes.
+
+trigger:
+  type: event
+  event: intake.classified
+  description: Triggered programmatically after intake classification completes
+
+inputs:
+  - name: content
+    type: text
+    source: system
+    required: true
+    description: The work item text content to route
+  - name: workItemType
+    type: text
+    source: system
+    required: true
+    description: The classified work item type
+  - name: availableProcesses
+    type: data
+    source: system
+    required: true
+    description: "JSON array of { slug, name, description } for active domain processes"
+
+steps:
+  - id: route
+    name: Route to Process
+    executor: script
+    description: >
+      LLM-based routing. Sends work item content and available process
+      descriptions to Claude, which selects the best matching process.
+      Returns structured JSON with processSlug, confidence, reasoning.
+    config:
+      systemAgent: router
+    inputs:
+      - content
+      - workItemType
+      - availableProcesses
+    outputs:
+      - routing-result
+
+outputs:
+  - name: routing-result
+    type: data
+    destination: system
+    description: "{ processSlug, confidence, reasoning }"
+
+quality_criteria:
+  - Routes to the most semantically relevant process
+  - Returns null when no process is a reasonable match
+  - Never invents process slugs not in the available list
+
+feedback:
+  metrics:
+    - name: routing_accuracy
+      description: How often the routed process matches human expectation
+      target: ">85%"
+  capture:
+    - Human corrections to process assignment after auto-routing
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "30 runs at >90% accuracy"
+      upgrade_to: spot-checked
+  downgrade_triggers:
+    - "Routing accuracy drops below 80%"

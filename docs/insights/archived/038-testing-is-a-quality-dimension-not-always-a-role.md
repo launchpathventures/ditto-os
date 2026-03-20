@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** Research on QA/Tester role in the dev pipeline — `docs/research/qa-tester-role-in-dev-pipeline.md`
 **Layers affected:** L3 Harness (review patterns), dev process (role contracts)
-**Status:** active
+**Status:** absorbed into `docs/dev-process.md` (Quality Check Layering), Builder skill, Reviewer skill. Re-entry: Phase 10 QA role evaluation
 
 ## The Insight
 

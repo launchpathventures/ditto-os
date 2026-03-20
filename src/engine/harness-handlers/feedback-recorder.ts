@@ -17,6 +17,7 @@ import { eq, and } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { classifyEdit } from "../trust-diff";
 import { evaluateTrust } from "../trust-evaluator";
+import { startSystemAgentRun } from "../heartbeat";
 
 export const feedbackRecorderHandler: HarnessHandler = {
   name: "feedback-recorder",
@@ -27,7 +28,12 @@ export const feedbackRecorderHandler: HarnessHandler = {
   },
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
-    // Record harness decision
+    // Record harness decision (including routing decision if present)
+    const reviewDetails = { ...context.reviewDetails };
+    if (context.routingDecision) {
+      reviewDetails.routing = context.routingDecision;
+    }
+
     await db.insert(schema.harnessDecisions).values({
       processRunId: context.processRun.id,
       stepRunId: context.stepRunId,
@@ -35,7 +41,7 @@ export const feedbackRecorderHandler: HarnessHandler = {
       trustAction: context.stepError ? "pause" : context.trustAction,
       reviewPattern: context.reviewPattern,
       reviewResult: context.stepError ? "skip" : context.reviewResult,
-      reviewDetails: context.reviewDetails,
+      reviewDetails,
       reviewCostCents: context.reviewCostCents,
       memoriesInjected: context.memoriesInjected,
       samplingHash: context.samplingHash,
@@ -63,6 +69,40 @@ export const feedbackRecorderHandler: HarnessHandler = {
     return context;
   },
 };
+
+/**
+ * Trigger trust evaluation via the system agent process.
+ * Falls back to direct evaluateTrust() if the system agent process doesn't exist
+ * (before first sync) or if the process being evaluated IS the trust-evaluation
+ * process itself (infinite loop guard).
+ */
+async function triggerTrustEvaluation(processId: string): Promise<void> {
+  // Infinite loop guard: don't trigger system agent for the trust-evaluation process itself
+  const [proc] = await db
+    .select()
+    .from(schema.processes)
+    .where(eq(schema.processes.id, processId))
+    .limit(1);
+
+  const isSystemProcess = proc && (proc.definition as Record<string, unknown>)?.system === true;
+  if (isSystemProcess) {
+    // Direct evaluation for system processes — avoids recursive loop
+    await evaluateTrust(processId);
+    return;
+  }
+
+  // Try system agent; fall back to direct call if process doesn't exist yet
+  const result = await startSystemAgentRun(
+    "trust-evaluation",
+    { processId },
+    "system:feedback-recorder",
+  );
+
+  if (!result) {
+    // Graceful degradation: system agent process not synced yet
+    await evaluateTrust(processId);
+  }
+}
 
 /**
  * Feedback-to-memory bridge.
@@ -168,7 +208,7 @@ export async function createMemoryFromFeedback(
  * Identifies the first significant changed segment as the pattern name.
  * This is a simple heuristic — not ML pattern recognition.
  */
-function extractCorrectionPattern(
+export function extractCorrectionPattern(
   diff: { changes: Array<{ added?: boolean; removed?: boolean; value: string }> },
 ): string | null {
   // Find the first removed segment (the thing being corrected)
@@ -220,8 +260,8 @@ export async function recordEditFeedback(params: {
   const diffSummary = `Edit (${editSeverity}): ${diff.stats.wordsRemoved} words removed, ${diff.stats.wordsAdded} words added`;
   await createMemoryFromFeedback(params.processId, fb.id, diffSummary);
 
-  // AC-15: Evaluate trust after feedback (recomputes state + checks triggers/eligibility)
-  await evaluateTrust(params.processId);
+  // AC-15: Evaluate trust after feedback via system agent (014a)
+  await triggerTrustEvaluation(params.processId);
 }
 
 /**
@@ -296,8 +336,8 @@ export async function recordRejectionFeedback(params: {
     );
   }
 
-  // AC-15: Evaluate trust after feedback
-  await evaluateTrust(params.processId);
+  // AC-15: Evaluate trust after feedback via system agent (014a)
+  await triggerTrustEvaluation(params.processId);
 }
 
 /**
@@ -318,6 +358,6 @@ export async function recordApprovalFeedback(params: {
     comment: params.comment ?? null,
   });
 
-  // AC-15: Evaluate trust after feedback
-  await evaluateTrust(params.processId);
+  // AC-15: Evaluate trust after feedback via system agent (014a)
+  await triggerTrustEvaluation(params.processId);
 }

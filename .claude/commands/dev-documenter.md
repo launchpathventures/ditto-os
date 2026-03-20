@@ -10,7 +10,9 @@ After work is approved, update project state and tracking documents. Run the pha
 
 - MUST update `docs/state.md` with what changed
 - MUST update `docs/roadmap.md` if a milestone was reached
-- MUST update `docs/landscape.md` if research revealed stale framework evaluations (the Researcher flags these but doesn't update landscape.md)
+- MUST audit for reference doc gaps: which docs were NOT touched by any producing role this session but may have been affected by the work? (Insight-043: Documenter does cross-cutting audit, not primary maintenance)
+- MUST verify producing roles' doc updates are consistent with each other
+- MUST NOT duplicate doc updates that producing roles already made — check git diff before updating
 - MUST run retrospective: what worked, what surprised, what to change
 - MUST capture any design insights that emerged during the work — or that the human shared during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
 - MUST audit active insights against `docs/architecture.md`, `docs/roadmap.md`, and `docs/adrs/` — mark absorbed insights and move to `docs/insights/archived/` (see `docs/dev-process.md` Artifact Lifecycle Management)
@@ -20,13 +22,13 @@ After work is approved, update project state and tracking documents. Run the pha
 
 ## Document Relationships
 
-The project has four types of evolving knowledge docs. Keeping them in sync is the Documenter's job:
+The project has several types of evolving knowledge docs. Producing roles maintain docs at the point of contact (Insight-043). The Documenter audits for gaps — docs affected by this session's work but not touched by any producing role:
 
 | Doc | Purpose | Updates when |
 |-----|---------|-------------|
 | `docs/state.md` | Where we are right now | Every session that produces work |
 | `docs/roadmap.md` | What's planned and its status | Milestones reached or sequencing changes |
-| `docs/landscape.md` | Framework evaluations and fit ratings | Research reveals stale evaluations |
+| `docs/landscape.md` | Framework evaluations and fit ratings | Researcher updates directly (Insight-043) |
 | `docs/research/*.md` | Detailed pattern analysis | Research sessions (Researcher writes these) |
 | `docs/insights/*.md` | Design principles | Discoveries during building |
 | `docs/adrs/*.md` | Significant decisions | Architect writes these |

@@ -80,3 +80,10 @@ Has the changed code been run end-to-end, not just type-checked?
 - Has the smoke test from the brief been executed?
 - Did the output match expectations (not just "no errors")?
 - If the brief has no smoke test section, FLAG it — every brief must have one
+
+### 12. Reference Doc Accuracy (Insight-043)
+Do the ADRs and architecture.md sections referenced by this work still accurately describe the system?
+- Did the producing role include a "Reference docs" line in their output? FLAG if missing
+- Are referenced ADRs still consistent with what was built/designed?
+- If the work changes architectural scope, was architecture.md updated?
+- FLAG any stale reference docs — even if the producing role didn't catch them

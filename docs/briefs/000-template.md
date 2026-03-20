@@ -21,6 +21,14 @@ Status lifecycle:
 - ready: reviewed and approved by human, available for builder
 - in_progress: builder is implementing
 - complete: built, reviewed, approved, merged
+
+Naming convention:
+- Briefs are numbered sequentially: 001, 002, 003, ...
+- When a parent brief is split into sub-phases, each sub-brief gets its OWN
+  sequential number (not a letter suffix). Example: parent brief 007 split into
+  sub-phases → 008, 009. NOT 007a, 007b.
+- The parent brief's "Depends on" / "Unlocks" fields link sub-briefs together.
+- This keeps `ls` sorting predictable and avoids inconsistent naming.
 -->
 
 ## Goal

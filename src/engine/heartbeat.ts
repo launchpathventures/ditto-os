@@ -30,9 +30,11 @@ import {
   createHarnessContext,
   type HarnessContext,
 } from "./harness";
+import { harnessEvents } from "./events";
 import { memoryAssemblyHandler } from "./harness-handlers/memory-assembly";
 import { stepExecutionHandler } from "./harness-handlers/step-execution";
 import { reviewPatternHandler } from "./harness-handlers/review-pattern";
+import { routingHandler } from "./harness-handlers/routing";
 import { trustGateHandler } from "./harness-handlers/trust-gate";
 import { feedbackRecorderHandler } from "./harness-handlers/feedback-recorder";
 
@@ -51,6 +53,7 @@ function buildPipeline(): HarnessPipeline {
   pipeline.register(memoryAssemblyHandler);
   pipeline.register(stepExecutionHandler);
   pipeline.register(reviewPatternHandler);
+  pipeline.register(routingHandler);
   pipeline.register(trustGateHandler);
   pipeline.register(feedbackRecorderHandler);
   return pipeline;
@@ -71,14 +74,19 @@ type NextWork =
  *
  * Resolution rules:
  * 1. If no depends_on/parallel_group, execute in YAML order (backward compatible)
- * 2. If depends_on is declared, check all dependencies are approved
- * 3. Parallel groups are ready when their depends_on are all approved
+ * 2. If depends_on is declared, check all dependencies are approved/skipped
+ * 3. Parallel groups are ready when their depends_on are all approved/skipped
  * 4. Steps within waiting_review parallel groups are skipped (group is paused)
+ * 5. If routingTarget is set, only that step is eligible next (Brief 016b)
+ *
+ * "doneStepIds" includes both approved AND skipped steps — routing can
+ * skip steps, and downstream dependencies should treat them as resolved.
  */
 function findNextWork(
   definition: ProcessDefinition,
-  completedStepIds: Set<string>,
-  waitingStepIds: Set<string>
+  doneStepIds: Set<string>,
+  waitingStepIds: Set<string>,
+  routingTarget?: string | null,
 ): NextWork {
   const hasDependencies = definition.steps.some(
     (entry) =>
@@ -86,15 +94,23 @@ function findNextWork(
       (isStep(entry) && entry.depends_on)
   );
 
+  // If routing target is set, go directly to that step (if it exists and is ready)
+  if (routingTarget) {
+    const allSteps = flattenSteps(definition);
+    const targetStep = allSteps.find((s) => s.id === routingTarget);
+    if (targetStep && !doneStepIds.has(targetStep.id) && !waitingStepIds.has(targetStep.id)) {
+      return { type: "step", step: targetStep };
+    }
+  }
+
   // If no dependencies declared anywhere, use simple sequential order
   if (!hasDependencies) {
     const allSteps = flattenSteps(definition);
     const nextStep = allSteps.find(
-      (s) => !completedStepIds.has(s.id) && !waitingStepIds.has(s.id)
+      (s) => !doneStepIds.has(s.id) && !waitingStepIds.has(s.id)
     );
     if (!nextStep) {
-      // Check if all steps are done
-      const allDone = allSteps.every((s) => completedStepIds.has(s.id));
+      const allDone = allSteps.every((s) => doneStepIds.has(s.id));
       return allDone ? { type: "complete" } : { type: "blocked" };
     }
     return { type: "step", step: nextStep };
@@ -103,39 +119,33 @@ function findNextWork(
   // Dependency-aware resolution
   for (const entry of definition.steps) {
     if (isParallelGroup(entry)) {
-      // Check if all steps in group are already done
-      const allGroupDone = entry.steps.every((s) => completedStepIds.has(s.id));
+      const allGroupDone = entry.steps.every((s) => doneStepIds.has(s.id));
       if (allGroupDone) continue;
 
-      // Check if any step is waiting for review
       const anyWaiting = entry.steps.some((s) => waitingStepIds.has(s.id));
       if (anyWaiting) continue;
 
-      // Check if group dependencies are met
       const deps = entry.depends_on || [];
-      const depsReady = deps.every((dep) => isDependencyMet(dep, definition, completedStepIds));
+      const depsReady = deps.every((dep) => isDependencyMet(dep, definition, doneStepIds));
       if (!depsReady) continue;
 
-      // Group is ready — return steps that haven't been completed
-      const pendingSteps = entry.steps.filter((s) => !completedStepIds.has(s.id));
+      const pendingSteps = entry.steps.filter((s) => !doneStepIds.has(s.id));
       if (pendingSteps.length > 0) {
         return { type: "parallel_group", groupId: entry.parallel_group, steps: pendingSteps };
       }
     } else {
-      if (completedStepIds.has(entry.id) || waitingStepIds.has(entry.id)) continue;
+      if (doneStepIds.has(entry.id) || waitingStepIds.has(entry.id)) continue;
 
-      // Check if step dependencies are met
       const deps = entry.depends_on || [];
-      const depsReady = deps.every((dep) => isDependencyMet(dep, definition, completedStepIds));
+      const depsReady = deps.every((dep) => isDependencyMet(dep, definition, doneStepIds));
       if (!depsReady) continue;
 
       return { type: "step", step: entry };
     }
   }
 
-  // Check if everything is done
   const allSteps = flattenSteps(definition);
-  const allDone = allSteps.every((s) => completedStepIds.has(s.id));
+  const allDone = allSteps.every((s) => doneStepIds.has(s.id));
   return allDone ? { type: "complete" } : { type: "blocked" };
 }
 
@@ -168,6 +178,7 @@ interface StepPipelineResult {
   stepId: string;
   stepName: string;
   message: string;
+  routingDecision?: import("./harness-handlers/routing").RoutingDecision | null;
 }
 
 async function executeSingleStep(
@@ -268,6 +279,16 @@ async function executeSingleStep(
     })
     .returning();
 
+  // Emit step-start event (AC16)
+  const stepStartTime = Date.now();
+  harnessEvents.emit({
+    type: "step-start",
+    processRunId,
+    stepId: step.id,
+    roleName: step.agent_role || step.executor,
+    processName: definition.name,
+  });
+
   // Run through harness pipeline
   const pipeline = buildPipeline();
   const harnessContext = createHarnessContext({
@@ -327,7 +348,6 @@ async function executeSingleStep(
         type: matchingOutput?.type || "text",
         content: content as Record<string, unknown>,
         needsReview,
-        confidenceScore: stepResult.confidence,
       });
     }
   }
@@ -344,6 +364,7 @@ async function executeSingleStep(
         completedAt: new Date(),
         tokensUsed: stepResult.tokensUsed || 0,
         costCents: stepResult.costCents || 0,
+        confidenceLevel: stepResult.confidence || null,
       })
       .where(eq(schema.stepRuns.id, stepRunRecord[0].id));
 
@@ -354,11 +375,38 @@ async function executeSingleStep(
       trustAction: result.trustAction,
     });
 
+    // Emit events (AC16)
+    harnessEvents.emit({
+      type: "gate-advance",
+      processRunId,
+      stepId: step.id,
+      confidence: stepResult.confidence,
+    });
+    harnessEvents.emit({
+      type: "step-complete",
+      processRunId,
+      stepId: step.id,
+      summary: `${step.name} auto-advanced`,
+      confidence: stepResult.confidence,
+      duration: Date.now() - stepStartTime,
+    });
+    if (result.routingDecision?.nextStepId) {
+      harnessEvents.emit({
+        type: "routing-decision",
+        processRunId,
+        from: step.id,
+        to: result.routingDecision.nextStepId,
+        reasoning: result.routingDecision.reasoning,
+        mode: result.routingDecision.mode,
+      });
+    }
+
     return {
       status: "advanced",
       stepId: step.id,
       stepName: step.name,
       message: `Completed step: ${step.name} (auto-advanced)`,
+      routingDecision: result.routingDecision,
     };
   }
 
@@ -371,6 +419,7 @@ async function executeSingleStep(
       completedAt: new Date(),
       tokensUsed: stepResult.tokensUsed || 0,
       costCents: stepResult.costCents || 0,
+      confidenceLevel: stepResult.confidence || null,
     })
     .where(eq(schema.stepRuns.id, stepRunRecord[0].id));
 
@@ -380,12 +429,80 @@ async function executeSingleStep(
     trustAction: result.trustAction,
   });
 
+  // Emit events (AC16)
+  const outputSummary = Object.values(stepResult.outputs)
+    .map((v) => (typeof v === "string" ? v.slice(0, 200) : JSON.stringify(v).slice(0, 200)))
+    .join("; ");
+  harnessEvents.emit({
+    type: "gate-pause",
+    processRunId,
+    stepId: step.id,
+    reason: `trust: ${trustTier}, action: ${result.trustAction}`,
+    output: outputSummary,
+  });
+  harnessEvents.emit({
+    type: "step-complete",
+    processRunId,
+    stepId: step.id,
+    summary: `${step.name} paused for review`,
+    confidence: stepResult.confidence,
+    duration: Date.now() - stepStartTime,
+  });
+
   return {
     status: "waiting_review",
     stepId: step.id,
     stepName: step.name,
     message: `Step "${step.name}" paused for review (trust: ${trustTier}, action: ${result.trustAction})`,
+    routingDecision: result.routingDecision,
   };
+}
+
+// ============================================================
+// Routing helpers
+// ============================================================
+
+/**
+ * When a step routes to a specific target, mark sibling steps
+ * (those that depend on the same parent and aren't the target or
+ * descendants of the target) as "skipped".
+ *
+ * Only skips steps that share the same depends_on as the target
+ * and aren't already done. This prevents skipping unrelated steps.
+ */
+async function applyRoutingSkips(
+  processRunId: string,
+  fromStepId: string,
+  targetStepId: string,
+  definition: ProcessDefinition,
+  doneStepIds: Set<string>,
+): Promise<void> {
+  const allSteps = flattenSteps(definition);
+
+  // Find siblings: steps that depend on the same parent as target
+  // (or steps that depend on fromStepId but aren't the target)
+  const stepsToSkip = allSteps.filter((step) => {
+    if (step.id === targetStepId) return false;
+    if (step.id === fromStepId) return false;
+    if (doneStepIds.has(step.id)) return false;
+
+    // Skip steps that depend on fromStepId but aren't the routing target
+    if (step.depends_on?.includes(fromStepId)) {
+      return true;
+    }
+    return false;
+  });
+
+  for (const step of stepsToSkip) {
+    console.log(`    Routing skip: ${step.id} (routed to ${targetStepId} instead)`);
+    await db.insert(schema.stepRuns).values({
+      processRunId,
+      stepId: step.id,
+      status: "skipped",
+      executorType: step.executor as StepExecutor,
+    });
+    doneStepIds.add(step.id);
+  }
 }
 
 // ============================================================
@@ -435,8 +552,11 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     .from(schema.stepRuns)
     .where(eq(schema.stepRuns.processRunId, processRunId));
 
-  const completedStepIds = new Set(
-    existingStepRuns.filter((s) => s.status === "approved").map((s) => s.stepId)
+  // doneStepIds includes both approved AND skipped (routing can skip steps)
+  const doneStepIds = new Set(
+    existingStepRuns
+      .filter((s) => s.status === "approved" || s.status === "skipped")
+      .map((s) => s.stepId)
   );
   const waitingStepIds = new Set(
     existingStepRuns
@@ -445,7 +565,7 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   );
 
   // 4. Find next work
-  const nextWork = findNextWork(definition, completedStepIds, waitingStepIds);
+  const nextWork = findNextWork(definition, doneStepIds, waitingStepIds);
 
   if (nextWork.type === "complete") {
     await db
@@ -454,6 +574,13 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
       .where(eq(schema.processRuns.id, processRunId));
 
     await logActivity("process.run.completed", processRunId, "process_run");
+
+    harnessEvents.emit({
+      type: "run-complete",
+      processRunId,
+      processName: definition.name,
+      stepsExecuted: existingStepRuns.filter((s) => s.status === "approved").length,
+    });
 
     return { processRunId, stepsExecuted: 0, status: "completed", message: "All steps complete" };
   }
@@ -481,10 +608,75 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     );
 
     if (result.status === "failed") {
+      // Check retry_on_failure before failing the run
+      const retryConfig = nextWork.step.retry_on_failure;
+      if (retryConfig) {
+        const retryCount = existingStepRuns.filter(
+          (s) => s.stepId === nextWork.step.id && s.status === "failed"
+        ).length;
+
+        if (retryCount < retryConfig.max_retries) {
+          console.log(`    Retry ${retryCount + 1}/${retryConfig.max_retries} for step "${nextWork.step.name}"`);
+          harnessEvents.emit({
+            type: "retry",
+            processRunId,
+            stepId: nextWork.step.id,
+            attempt: retryCount + 1,
+            maxRetries: retryConfig.max_retries,
+          });
+          // Re-queue — next heartbeat will re-execute this step
+          await db.update(schema.processRuns)
+            .set({ status: "running" })
+            .where(eq(schema.processRuns.id, processRunId));
+          return { processRunId, stepsExecuted: 1, status: "advanced", message: `Retrying step: ${nextWork.step.name} (attempt ${retryCount + 1})` };
+        }
+
+        // AC10: Max retries exceeded — set confidence to "low" and pause via trust gate
+        // rather than hard-failing. The human gets to review the failure.
+        console.log(`    Max retries (${retryConfig.max_retries}) exceeded for step "${nextWork.step.name}" — pausing with low confidence`);
+        const lastFailedRun = existingStepRuns.find(
+          (s) => s.stepId === nextWork.step.id && s.status === "failed"
+        );
+        await db.update(schema.stepRuns)
+          .set({
+            status: "waiting_review",
+            confidenceLevel: "low",
+          })
+          .where(eq(schema.stepRuns.id, lastFailedRun!.id));
+
+        await db.update(schema.processRuns)
+          .set({ status: "waiting_review" })
+          .where(eq(schema.processRuns.id, processRunId));
+
+        harnessEvents.emit({
+          type: "gate-pause",
+          processRunId,
+          stepId: nextWork.step.id,
+          reason: `max retries (${retryConfig.max_retries}) exceeded`,
+          output: result.message,
+        });
+
+        return { processRunId, stepsExecuted: 1, status: "waiting_review", message: `Step "${nextWork.step.name}" exhausted retries — paused for review` };
+      }
+
       await db.update(schema.processRuns)
         .set({ status: "failed" })
         .where(eq(schema.processRuns.id, processRunId));
+
+      harnessEvents.emit({
+        type: "run-failed",
+        processRunId,
+        processName: definition.name,
+        error: result.message,
+      });
+
       return { processRunId, stepsExecuted: 1, status: "failed", message: result.message };
+    }
+
+    // Handle routing: if step has a routing decision, skip non-target siblings
+    if (result.routingDecision?.nextStepId) {
+      const targetStepId = result.routingDecision.nextStepId;
+      await applyRoutingSkips(processRunId, nextWork.step.id, targetStepId, definition, doneStepIds);
     }
 
     if (result.status === "waiting_review") {
@@ -704,6 +896,320 @@ export async function startProcessRun(
 
   console.log(`Started process run: ${process.name} (${run.id})`);
   return run.id;
+}
+
+/**
+ * Start and execute a system agent process run programmatically.
+ * Creates a process run for the named system agent process and runs
+ * the full heartbeat cycle. Used by the feedback-recorder to trigger
+ * trust evaluation, and by capture (014b) for intake/routing.
+ *
+ * Returns null if the system agent process doesn't exist (graceful degradation).
+ */
+export async function startSystemAgentRun(
+  processSlug: string,
+  inputs: Record<string, unknown>,
+  triggeredBy: string = "system",
+): Promise<HeartbeatResult | null> {
+  const [proc] = await db
+    .select()
+    .from(schema.processes)
+    .where(eq(schema.processes.slug, processSlug))
+    .limit(1);
+
+  if (!proc) {
+    // Graceful degradation: if the system agent process doesn't exist yet
+    // (e.g., before first sync), return null instead of throwing
+    return null;
+  }
+
+  const [run] = await db
+    .insert(schema.processRuns)
+    .values({
+      processId: proc.id,
+      status: "queued",
+      triggeredBy,
+      inputs,
+    })
+    .returning();
+
+  await logActivity("process.run.created", run.id, "process_run", {
+    processSlug,
+    triggeredBy,
+    systemAgent: true,
+  });
+
+  return fullHeartbeat(run.id);
+}
+
+// ============================================================
+// Orchestrator Heartbeat (Brief 021)
+// Wrapper that iterates over spawned tasks for a goal work item,
+// calling fullHeartbeat() on each unblocked one.
+// Does NOT modify the inner heartbeat loop — existing linear execution unchanged.
+//
+// Provenance: Temporal Selectors (completion-order processing),
+//             LangGraph plan-and-execute (plan-track loop)
+// ============================================================
+
+export interface OrchestratorHeartbeatResult {
+  goalWorkItemId: string;
+  tasksCompleted: number;
+  tasksPaused: number;
+  tasksRemaining: number;
+  tasksRouteAround: number;
+  confidence: "high" | "medium" | "low";
+  status: "advancing" | "completed" | "paused" | "escalated";
+  escalation?: {
+    type: "blocked" | "error" | "aggregate_uncertainty";
+    reason: string;
+    openQuestions?: string[];
+  };
+}
+
+/**
+ * Execute a heartbeat cycle for a goal work item.
+ * Iterates over spawned child tasks, running fullHeartbeat() on each
+ * unblocked one. Routes around paused tasks to independent work.
+ */
+export async function orchestratorHeartbeat(
+  goalWorkItemId: string,
+): Promise<OrchestratorHeartbeatResult> {
+  // Load the goal work item
+  const [goalItem] = await db
+    .select()
+    .from(schema.workItems)
+    .where(eq(schema.workItems.id, goalWorkItemId))
+    .limit(1);
+
+  if (!goalItem) {
+    return {
+      goalWorkItemId,
+      tasksCompleted: 0,
+      tasksPaused: 0,
+      tasksRemaining: 0,
+      tasksRouteAround: 0,
+      confidence: "low",
+      status: "escalated",
+      escalation: {
+        type: "error",
+        reason: "Goal work item not found",
+      },
+    };
+  }
+
+  const decomposition = goalItem.decomposition as Array<{
+    taskId: string;
+    stepId: string;
+    dependsOn: string[];
+    status: string;
+  }> | null;
+
+  if (!decomposition || decomposition.length === 0) {
+    return {
+      goalWorkItemId,
+      tasksCompleted: 0,
+      tasksPaused: 0,
+      tasksRemaining: 0,
+      tasksRouteAround: 0,
+      confidence: "low",
+      status: "escalated",
+      escalation: {
+        type: "blocked",
+        reason: "Goal has no decomposition — orchestrator needs to decompose first",
+      },
+    };
+  }
+
+  // Load all child work items to get current status
+  const childIds = decomposition.map((t) => t.taskId);
+  const childItems = await db
+    .select()
+    .from(schema.workItems)
+    .where(inArray(schema.workItems.id, childIds));
+
+  const childStatusMap = new Map<string, string>();
+  for (const child of childItems) {
+    childStatusMap.set(child.id, child.status);
+  }
+
+  // Categorize tasks
+  const completedTaskIds = new Set<string>();
+  const pausedTaskIds = new Set<string>();
+  const failedTaskIds = new Set<string>();
+
+  for (const task of decomposition) {
+    const status = childStatusMap.get(task.taskId) || "intake";
+    if (status === "completed") completedTaskIds.add(task.taskId);
+    else if (status === "waiting_human" || status === "routed") pausedTaskIds.add(task.taskId);
+    else if (status === "failed") failedTaskIds.add(task.taskId);
+  }
+
+  // Check completion
+  if (completedTaskIds.size === decomposition.length) {
+    // All tasks complete — goal achieved
+    await db.update(schema.workItems)
+      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.workItems.id, goalWorkItemId));
+
+    // Update orchestrator confidence on the process run if one exists
+    const executionId = goalItem.executionIds?.[0];
+    if (executionId) {
+      await db.update(schema.processRuns)
+        .set({ orchestratorConfidence: "high" })
+        .where(eq(schema.processRuns.id, executionId));
+    }
+
+    return {
+      goalWorkItemId,
+      tasksCompleted: completedTaskIds.size,
+      tasksPaused: 0,
+      tasksRemaining: 0,
+      tasksRouteAround: 0,
+      confidence: "high",
+      status: "completed",
+    };
+  }
+
+  // Find unblocked tasks: dependencies met and not yet complete/paused/failed
+  let tasksRouteAround = 0;
+  let tasksAdvanced = 0;
+
+  for (const task of decomposition) {
+    if (completedTaskIds.has(task.taskId) || pausedTaskIds.has(task.taskId) || failedTaskIds.has(task.taskId)) {
+      continue;
+    }
+
+    // Check dependencies
+    const depsReady = task.dependsOn.every(
+      (depId) => completedTaskIds.has(depId),
+    );
+
+    if (!depsReady) {
+      // Check if blocked by a paused task — this is a route-around situation
+      const blockedByPaused = task.dependsOn.some((depId) => pausedTaskIds.has(depId));
+      if (blockedByPaused) {
+        tasksRouteAround++;
+        await logActivity("orchestrator.route-around", goalWorkItemId, "work_item", {
+          skippedTask: task.taskId,
+          stepId: task.stepId,
+          blockedBy: task.dependsOn.filter((d) => pausedTaskIds.has(d)),
+          reasoning: "Dependency paused at trust gate — routing around to independent work",
+        });
+      }
+      continue;
+    }
+
+    // This task is unblocked — start a process run for it
+    const childItem = childItems.find((c) => c.id === task.taskId);
+    if (!childItem) continue;
+
+    const ctx = childItem.context as Record<string, unknown> | null;
+    const processSlug = (ctx?.processSlug as string) || "";
+
+    if (!processSlug) continue;
+
+    try {
+      // Start process run for this task
+      const processRunId = await startProcessRun(
+        processSlug,
+        {
+          workItemId: task.taskId,
+          content: childItem.content,
+          stepId: task.stepId,
+          triggeredByOrchestrator: true,
+        },
+        "system:orchestrator",
+      );
+
+      // Update child work item status
+      await db.update(schema.workItems)
+        .set({
+          status: "in_progress",
+          executionIds: [processRunId],
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.workItems.id, task.taskId));
+
+      // Run the heartbeat for this task's process run
+      const heartbeatResult = await fullHeartbeat(processRunId);
+
+      // Update task status based on heartbeat result
+      if (heartbeatResult.status === "completed") {
+        completedTaskIds.add(task.taskId);
+        await db.update(schema.workItems)
+          .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.workItems.id, task.taskId));
+      } else if (heartbeatResult.status === "waiting_review" || heartbeatResult.status === "waiting_human") {
+        pausedTaskIds.add(task.taskId);
+      }
+
+      tasksAdvanced++;
+    } catch (error) {
+      failedTaskIds.add(task.taskId);
+      await db.update(schema.workItems)
+        .set({ status: "failed", updatedAt: new Date() })
+        .where(eq(schema.workItems.id, task.taskId));
+    }
+  }
+
+  // Update decomposition status on parent
+  const updatedDecomposition = decomposition.map((task) => ({
+    ...task,
+    status: completedTaskIds.has(task.taskId) ? "completed"
+      : pausedTaskIds.has(task.taskId) ? "paused"
+      : failedTaskIds.has(task.taskId) ? "failed"
+      : "pending",
+  }));
+
+  await db.update(schema.workItems)
+    .set({ decomposition: updatedDecomposition, updatedAt: new Date() })
+    .where(eq(schema.workItems.id, goalWorkItemId));
+
+  // Determine confidence and status
+  const tasksRemaining = decomposition.length - completedTaskIds.size;
+  const allRemainingBlocked = tasksAdvanced === 0 && tasksRemaining > 0;
+
+  if (allRemainingBlocked) {
+    // Type 4: aggregate uncertainty — no progress possible
+    const confidence = "low" as const;
+
+    await logActivity("orchestrator.stopped", goalWorkItemId, "work_item", {
+      tasksCompleted: completedTaskIds.size,
+      tasksPaused: pausedTaskIds.size,
+      tasksFailed: failedTaskIds.size,
+      tasksRemaining,
+      reason: "All remaining tasks are blocked or paused",
+    });
+
+    return {
+      goalWorkItemId,
+      tasksCompleted: completedTaskIds.size,
+      tasksPaused: pausedTaskIds.size,
+      tasksRemaining,
+      tasksRouteAround,
+      confidence,
+      status: "escalated",
+      escalation: {
+        type: "aggregate_uncertainty",
+        reason: "All remaining tasks are blocked — waiting for human decisions on paused items",
+        openQuestions: [...pausedTaskIds].map((id) => {
+          const task = decomposition.find((t) => t.taskId === id);
+          return `Task "${task?.stepId}" is paused`;
+        }),
+      },
+    };
+  }
+
+  return {
+    goalWorkItemId,
+    tasksCompleted: completedTaskIds.size,
+    tasksPaused: pausedTaskIds.size,
+    tasksRemaining,
+    tasksRouteAround,
+    confidence: tasksRemaining > completedTaskIds.size ? "medium" : "high",
+    status: tasksAdvanced > 0 ? "advancing" : "paused",
+  };
 }
 
 // Helper to log activities

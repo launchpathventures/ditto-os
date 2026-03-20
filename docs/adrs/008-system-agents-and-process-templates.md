@@ -43,21 +43,24 @@ These two gaps — unnamed system agents and unspecified template library — co
 
 The distinction is a `category` field on agent definitions: `system` | `domain`. System agents have a `systemRole` field identifying their platform function.
 
-### 2. Define seven system agent roles
+### 2. Define ten system agent roles
 
-These are the functions the architecture already describes, now formalized as system agents:
+These are the functions the architecture already describes, now formalized as system agents. ADR-010 added three meta-process agents (intake-classifier, router, orchestrator) to the original seven:
 
-| System role | Purpose | Phase |
-|-------------|---------|-------|
-| **trust-evaluator** | Calculates trust scores, recommends upgrades/downgrades based on accumulated feedback data | Phase 3 |
-| **improvement-scanner** | Scans for process degradation, correction patterns, ecosystem changes. Proposes improvements | Phase 9 |
-| **brief-synthesizer** | Aggregates status across all processes, produces personalized Daily Brief | Phase 10 |
-| **process-analyst** | Helps users articulate and formalize processes via conversation. Classifies against industry standards (APQC). Compares against templates | Phase 11 |
-| **onboarding-guide** | Walks new users through first process setup. Conversational. Knows template library | Phase 11 |
-| **process-discoverer** | Connects to org data sources, identifies recurring process patterns, surfaces candidates | Phase 11 (requires Phase 6 integrations) |
-| **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 |
+| System role | Purpose | Phase | Status |
+|-------------|---------|-------|--------|
+| **intake-classifier** | Classifies incoming work items by type (question/task/goal/insight/outcome) | Phase 4 (ADR-010) | Done |
+| **router** | Matches work items to the best-fit process | Phase 4 (ADR-010) | Done |
+| **orchestrator** | Decomposes goals into tasks, tracks progress, routes around blockers (Brief 021) | Phase 4-5 (ADR-010) | Done |
+| **trust-evaluator** | Calculates trust scores, recommends upgrades/downgrades based on accumulated feedback data | Phase 3 | Done |
+| **improvement-scanner** | Scans for process degradation, correction patterns, ecosystem changes. Proposes improvements | Phase 9 | Not started |
+| **brief-synthesizer** | Aggregates status across all processes, produces personalized Daily Brief | Phase 10 | Not started |
+| **process-analyst** | Helps users articulate and formalize processes via conversation. Classifies against industry standards (APQC). Compares against templates | Phase 11 | Not started |
+| **onboarding-guide** | Walks new users through first process setup. Conversational. Knows template library | Phase 11 | Not started |
+| **process-discoverer** | Connects to org data sources, identifies recurring process patterns, surfaces candidates | Phase 11 (requires Phase 6 integrations) | Not started |
+| **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 | Not started |
 
-**Key principle:** Not all system agents are built at once. The `trust-evaluator` is Phase 3. The `improvement-scanner` is Phase 9. The `process-analyst` and `onboarding-guide` are Phase 11. The architecture accommodates them now; the roadmap sequences when they're built.
+**Key principle:** Not all system agents are built at once. The architecture accommodates them now; the roadmap sequences when they're built. Four are done (trust-evaluator Phase 3, intake-classifier + router + orchestrator Phase 4-5).
 
 **Key principle:** System agents are subject to their own trust tiers. The governance monitor is always `critical` (human reviews every finding). The brief synthesizer starts `supervised` and can earn `spot-checked`. System agents are not trusted by default — they earn trust like any other agent.
 
@@ -81,7 +84,7 @@ template:
 name: Customer Quoting
 id: quoting
 version: 1
-status: template  # new status: not active until user adopts
+status: draft  # templates load as draft — not active until user adopts
 # ... inputs, steps, outputs, quality_criteria, feedback, trust ...
 ```
 
@@ -117,10 +120,9 @@ Add to the `agents` table:
 - `category`: text, `system` | `domain`, default `domain`
 - `systemRole`: text, nullable — only for system agents (e.g., `trust-evaluator`, `governance-monitor`)
 
-Add `template` to `processStatusValues`:
-- Allows distinguishing templates from active processes in the database
+Templates sync to the `processes` table with status `draft` (not active until explicitly adopted by the user). The existing `draft` status is reused rather than adding a new `template` status — this keeps the status lifecycle simple and means adoption is just changing status to `active`.
 
-Add a `templates/` directory for process template YAML files, parallel to `processes/`. Templates sync to the `processes` table (like process YAML files do via `pnpm cli sync`) with status `template`. The YAML file is authoritative; the database row enables querying.
+Add a `templates/` directory for process template YAML files, parallel to `processes/`. Templates sync via `pnpm cli sync` alongside process definitions. The loader forces `status: draft` regardless of what the YAML says. The YAML file is authoritative; the database row enables querying.
 
 ### 7. Security implications
 

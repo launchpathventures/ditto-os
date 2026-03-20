@@ -25,6 +25,7 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 - MUST NOT add features, abstractions, or "improvements" beyond the brief
 - MUST NOT skip the automated checks — they are the first quality gate
 - MUST capture any design discoveries or principles that emerge during building — or that the human shares during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
+- MUST flag in handoff notes any reference doc (ADR, architecture.md) that doesn't match what was actually built — do not fix, flag for the Architect (Insight-043: Builder flags, Architect fixes)
 
 ## Required Inputs
 
@@ -39,6 +40,7 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 - List of files created/modified/deleted
 - Notes on any deviations from the brief or surprises encountered
 - Acceptance criteria status (which pass, which need verification)
+- Reference doc status: "Reference doc drift flagged: [description]" or "Reference docs checked: no drift found"
 
 ## Review Loop (mandatory)
 

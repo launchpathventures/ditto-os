@@ -22,6 +22,9 @@ Design the solution. Make structural decisions. Produce briefs, ADRs, and archit
 - MUST address the Designer's interaction spec in the brief's User Experience section (if Designer was invoked). If the Designer was not invoked, fill the UX section yourself as a lightweight check
 - MUST evaluate security implications for every design: credential handling, permission boundaries, data exposure, trust enforcement integrity. Security is architectural, not a separate discipline (Insight-017)
 - MUST NOT skip research — if the Researcher hasn't run, send them first
+- MUST update existing ADRs when a new design extends, narrows, or contradicts them — an ADR that doesn't match the current design is a defect, not a historical record (Insight-043: Architect owns ADR accuracy)
+- MUST update `docs/architecture.md` when a design changes architectural scope (new layers, new system agents, new capabilities)
+- When Designer and Researcher run in parallel and flag shared docs, the Architect resolves the flags — parallel roles flag, Architect fixes
 
 ## Required Inputs
 
@@ -42,7 +45,7 @@ One of:
 - An architecture document update
 - A design insight (`docs/insights/NNN-*.md`)
 
-Always a document, never code.
+Always a document, never code. Include in output: "Reference docs updated: [list]" or "Reference docs checked: no drift found"
 
 ### Brief Sizing (Insight-004)
 

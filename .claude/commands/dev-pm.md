@@ -16,6 +16,9 @@ Determine what to work on next and in what order. You triage, sequence, and surf
 - MUST NOT write implementation code
 - MUST NOT skip the brief for any work larger than a single-file change
 - MUST capture any strategic thinking, design discoveries, or principles shared by the human as insights in `docs/insights/` using the template at `docs/insights/000-template.md`. If the human shares something that could inform future architecture or design decisions, it's an insight — don't let it stay only in conversation.
+- When the human approves a pending brief, move it to `docs/briefs/complete/` and update its status in `docs/state.md`.
+- MUST fix stale entries in `docs/state.md` and `docs/roadmap.md` when encountered during triage (Insight-043: these are PM-owned docs)
+- MUST flag ADR or architecture.md discrepancies discovered during triage in work recommendation output
 
 ## Required Inputs
 
@@ -31,6 +34,7 @@ Determine what to work on next and in what order. You triage, sequence, and surf
 - Identified blockers or dependencies
 - **Designer activation recommendation:** Based on ADR-004's phase table, recommend whether `/dev-designer` should be invoked. Invoke when work touches user-facing concerns (process definitions, CLI UX, dashboard UI, interaction patterns). Skip for pure infrastructure. The human can override.
 - One of: "pick up brief X" / "write brief for Y" / "research Z first"
+- Reference doc status: "Reference docs updated: [list]" or "Reference docs checked: no drift found"
 
 ## Handoff
 

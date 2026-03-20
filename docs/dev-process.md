@@ -224,6 +224,42 @@ Research reports stay in the root directory. They are durable artifacts (ADR-002
 
 ---
 
+## Knowledge Maintenance (Insight-043)
+
+Reference docs are maintained by the roles that use them, not by a centralised cleanup pass. The role that discovers drift is the cheapest point to fix it. This is the manual precursor to the product's knowledge lifecycle meta-process (Insight-042).
+
+### Ownership Model
+
+| Doc type | Owner (fixes) | Consumers (flag) |
+|----------|---------------|------------------|
+| `docs/state.md`, `docs/roadmap.md` | PM | All roles |
+| `docs/adrs/*.md`, `docs/architecture.md` | Architect | Builder, Reviewer |
+| `docs/landscape.md`, `docs/research/*.md` | Researcher | Architect |
+| `docs/personas.md`, `docs/human-layer.md` | Designer | Architect |
+| `docs/dev-process.md`, `docs/review-checklist.md` | Architect | PM, Documenter |
+| `CLAUDE.md` | Architect | All roles |
+| `docs/insights/*.md` lifecycle | Documenter | All roles create |
+| `docs/vision.md`, `docs/dictionary.md` | No single owner | Documenter audits |
+| `docs/changelog.md` | Documenter | — |
+| `docs/debts/*.md` | Builder creates | Documenter audits |
+
+**Flag vs fix:** Roles that own a doc type fix drift directly. Roles that consume a doc flag drift in their output for the owner to address. When parallel roles (Designer + Researcher) encounter shared docs, both flag — the downstream Architect resolves.
+
+**Handoff visibility:** Every producing role's output includes a "Reference docs" line:
+- `Reference docs updated: [list of files changed]`
+- `Reference docs checked: no drift found`
+- `Reference doc drift flagged: [description]`
+
+This makes maintenance visible to the Reviewer (checklist point 12) and auditable by the Documenter.
+
+**The Documenter's shifted role:** Cross-cutting audit of what nobody touched this session. The Documenter still sweeps all docs but producing roles catch most drift earlier, making the sweep faster and focused on gaps.
+
+**Verification:** After 5 sessions under this model, the Documenter reports in the retrospective whether drift was caught by producing roles or by audit. If mostly caught by audit, the constraints need strengthening.
+
+**Provenance:** Insight-043 (point of contact), Insight-042 (meta-process), Insight-022 (active pruning). Original to Agent OS.
+
+---
+
 ## Quality Check Layering
 
 Software development has a self-governing quality infrastructure: linters, type checkers, tests, CI/CD. These catch errors mechanically before human review. The agent doesn't need to be perfect — it needs to be testable.
@@ -231,7 +267,7 @@ Software development has a self-governing quality infrastructure: linters, type 
 Agent OS development applies this principle directly:
 
 1. **Automated checks run first** — `pnpm run type-check` + `pnpm test` + smoke test from the brief
-2. **Structured review second** — Dev Reviewer checks against the 11-point architecture checklist, including verification that the Builder ran tests and smoke test
+2. **Structured review second** — Dev Reviewer checks against the 12-point architecture checklist, including verification that the Builder ran tests and smoke test
 3. **Human judgment last** — only on what passed everything else
 
 The Builder owns all automated quality gates: type-check, test suite, smoke test execution, and test authoring for new code. The Reviewer verifies these were run (checking for evidence) and challenges the work architecturally. There is no separate QA/Tester role — testing is a quality dimension distributed across Builder (execution) and Reviewer (verification). See Insight-038.

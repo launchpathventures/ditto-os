@@ -31,5 +31,8 @@ Reports in `docs/research/`. Detailed pattern analysis feeding architectural dec
 | `phase-2-harness-patterns.md` | Harness patterns across 7 projects | 2026-03-19 | Consumed | Briefs 003-005 |
 | `memory-systems.md` | 9 memory systems surveyed | 2026-03-19 | Consumed | ADR-003 |
 | `process-driven-skill-orchestration.md` | Skill orchestration patterns | 2026-03-20 | Active | Brief 016 |
+| `qmd-obsidian-knowledge-search.md` | QMD markdown search, Obsidian patterns, OpenClaw memory model | 2026-03-21 | Active | Pending — Insight-042 (knowledge-manager), landscape.md |
+| `goal-directed-orchestrator-patterns.md` | Goal decomposition, work-queue scheduling, confidence-based stopping across 12 frameworks | 2026-03-21 | Active | Phase 5 brief, ADR-010, Insight-045 |
+| `phase-5-orchestrator-ux.md` | Orchestrator UX: goal setting, decomposition visibility, progress/routing, stopping conditions, templates | 2026-03-21 | Active | Phase 5 brief (Architect) |
 
 **Statuses:** Active = still informing decisions. Consumed = primary consumer complete, retained for reference.

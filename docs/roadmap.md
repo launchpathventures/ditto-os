@@ -1,7 +1,7 @@
 # Agent OS — Roadmap
 
-**Last updated:** 2026-03-20
-**Current phase:** Phase 4b complete (human steps + capture + unified task surface). Brief 016 (Intelligent Coding Orchestrator) ready for build. Then Phase 4c.
+**Last updated:** 2026-03-21
+**Current phase:** Phase 5 complete — goal-directed orchestrator, E2E verification, 3 non-coding process templates. Phase 4 remaining: cognitive model fields (deferred to Phase 8). Phase 5 deferred: attention model extensions (digest mode), cognitive model (mode-aware review). Next: Phase 6 (External Integrations).
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Agent OS is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Agent OS. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -128,7 +128,7 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Grace period (5 runs, safety valve) | done | architecture.md L3 | Discourse TL3 grace period | `src/engine/trust.ts` |
 | Trust simulation (`--simulate`) | done | architecture.md L3 | GitHub Rulesets evaluate mode | `src/engine/trust.ts`, `src/cli.ts` |
 | `canAutoAdvance` enforcement for critical | done | architecture.md L3 | Original | `src/cli.ts` |
-| `trust-evaluator` system agent (first system agent — ADR-008) | not started | ADR-008 | Original | System agent definition + schema `category` field |
+| `trust-evaluator` system agent (first system agent — ADR-008) | done | ADR-008, Brief 014a | Original (Insight-044: script handler pattern) | `src/engine/system-agents/trust-evaluator.ts`, `processes/trust-evaluation.yaml` |
 | ADR-007 written | done | — | — | `docs/adrs/007-trust-earning.md` |
 
 ---
@@ -140,20 +140,20 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Capability | Status | Source doc | Build from | Deliverable |
 |-----------|--------|-----------|------------|-------------|
 | **016a: CLI Adapter** | | | | |
-| CLI adapter (`claude -p` as execution substrate) | in progress | Brief 016, Insight-041 | ralph autonomous loop, Paperclip adapter pattern | `src/adapters/cli.ts` |
-| `cli-agent` executor type in step executor | in progress | Brief 016 | Existing adapter routing pattern | `src/engine/step-executor.ts` |
-| Confidence parsing from CLI output | in progress | Brief 016, ADR-011 | Original (categorical) | `src/adapters/cli.ts` |
+| CLI adapter (`claude -p` as execution substrate) | done | Brief 016, Insight-041 | ralph autonomous loop, Paperclip adapter pattern | `src/adapters/cli.ts` |
+| `cli-agent` executor type in step executor | done | Brief 016 | Existing adapter routing pattern | `src/engine/step-executor.ts` |
+| Confidence parsing from CLI output | done | Brief 016, ADR-011 | Original (categorical) | `src/adapters/cli.ts` |
 | **016b: Conditional Routing** | | | | |
-| `route_to` + `default_next` on StepDefinition | not started | Brief 016, Insight-039 | Inngest AgentKit three-mode, LangGraph conditional edges | `src/engine/process-loader.ts` |
-| Routing handler in harness pipeline | not started | Brief 016 | Inngest AgentKit code-based routing | `src/engine/harness-handlers/routing.ts` |
-| `retry_on_failure` with feedback injection | not started | Brief 016 | Aider lint-fix loop, Open SWE middleware | `src/engine/heartbeat.ts` |
+| `route_to` + `default_next` on StepDefinition | done | Brief 016, Insight-039 | Inngest AgentKit three-mode, LangGraph conditional edges | `src/engine/process-loader.ts` |
+| Routing handler in harness pipeline | done | Brief 016 | Inngest AgentKit code-based routing | `src/engine/harness-handlers/routing.ts` |
+| `retry_on_failure` with feedback injection | done | Brief 016 | Aider lint-fix loop, Open SWE middleware | `src/engine/heartbeat.ts` |
 | **016c: Dev Pipeline Process** | | | | |
-| Dev pipeline as process YAML (7 roles) | not started | Brief 016, Insight-032 | antfarm YAML workflows | `processes/dev-pipeline.yaml` |
-| Role contracts as agent system prompts | not started | Brief 016 | Open SWE `get_agent()` | `src/adapters/cli.ts` |
+| Dev pipeline as process YAML (7 roles) | done | Brief 016, Insight-032 | antfarm YAML workflows | `processes/dev-pipeline.yaml` |
+| Role contracts as agent system prompts | done | Brief 016 | Open SWE `get_agent()` | `src/adapters/cli.ts` |
 | **016d: Confidence + Events** | | | | |
-| Confidence-based trust gate extension | not started | Brief 016, ADR-011 | SAE Level 3 self-assessment | `src/engine/harness-handlers/trust-gate.ts` |
-| Harness event emitter | not started | Brief 016 | Trigger.dev event pattern | `src/engine/events.ts` |
-| Telegram subscribes to harness events | not started | Brief 016 | Original | `src/dev-bot.ts` |
+| Confidence-based trust gate extension | done | Brief 016, ADR-011 | SAE Level 3 self-assessment | `src/engine/harness-handlers/trust-gate.ts` |
+| Harness event emitter | done | Brief 016 | Trigger.dev event pattern | `src/engine/events.ts` |
+| Telegram subscribes to harness events | deferred | Brief 016 | Original | Re-entry: follow-up task after live engine validation |
 
 ---
 
@@ -166,12 +166,12 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | **Work items** | | | | |
 | `workItems` table (type, status, goal_ancestry, assigned_process) | done | ADR-010 | Paperclip tickets + goal ancestry | `src/db/schema.ts` |
 | Work item creation via CLI | done | ADR-010 | citty + @clack/prompts | `src/cli/commands/start.ts` |
-| Goal → task decomposition (manual first, orchestrator agent later) | not started | ADR-010 | Manus Planner module pattern | CLI command |
+| Goal → task decomposition (orchestrator agent — Brief 021) | done | ADR-010, Brief 021 | LangGraph plan-execute + Temporal Selectors + Manus Planner | `src/engine/system-agents/orchestrator.ts`, `src/engine/heartbeat.ts` |
 | **Meta-processes (system agents)** | | | | |
-| Intake-classifier agent (classify work item type + urgency) | not started | ADR-010 | Original | System agent definition |
-| Router agent (match work item to process) | not started | ADR-010 | Original | System agent definition |
-| Orchestrator agent (decompose goals into tasks) | not started | ADR-010 | Anthropic orchestrator-worker | System agent definition |
-| System agents go through harness pipeline | not started | ADR-008, ADR-010 | Original | Harness integration |
+| Intake-classifier agent (classify work item type via keywords) | done | ADR-010, Brief 014b | Inngest AgentKit FnRouter (code-based Mode 1) | `src/engine/system-agents/intake-classifier.ts` |
+| Router agent (match work item to process via LLM) | done | ADR-010, Brief 014b | Inngest AgentKit RoutingAgent + Mastra Networks | `src/engine/system-agents/router.ts` |
+| Orchestrator agent (goal-directed — Briefs 014b, 021, 022) | done | ADR-010, Briefs 014b+021+022 | Anthropic orchestrator-worker + LangGraph + Temporal | `src/engine/system-agents/orchestrator.ts` |
+| System agents go through harness pipeline | done | ADR-008, ADR-010, Brief 014a | Original | `src/engine/system-agents/index.ts`, `startSystemAgentRun()` |
 | **Human step executor** | | | | |
 | `human` executor type with suspend/resume | done | ADR-010 | Mastra suspend/resume | `src/engine/heartbeat.ts` |
 | Human step surfaces as work item in CLI | done | ADR-010 | Sim Studio HITL block | `src/cli/commands/status.ts` |
@@ -183,13 +183,13 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Interactive UX (@clack/prompts) | done | landscape.md | @clack/prompts | `src/cli/commands/reject.ts` |
 | Orient: `status` (work items + process health + brief) | done | ADR-010, human-layer.md | Original | `src/cli/commands/status.ts` |
 | Review: `review`, `approve`, `edit`, `reject` | done | human-layer.md | Paperclip approval flow | `src/cli/commands/review.ts`, `approve.ts`, `reject.ts` |
-| Capture: `capture` (creates work item, manual classification + process assignment) | done | ADR-010, human-layer.md | Original | `src/cli/commands/capture.ts` |
+| Capture: `capture` (auto-classification + auto-routing, fallback to manual) | done | ADR-010, Brief 014b | Original | `src/cli/commands/capture.ts` |
 | Trust: `trust` (accept/reject/override/simulate) | done | architecture.md L3 | Original (existing) | `src/cli/commands/trust.ts` |
 | Define: `sync`, `start` | done | architecture.md L1 | Keep existing patterns | `src/cli/commands/sync.ts`, `start.ts` |
 | **Attention model (Phase 4 scope — partially delivered by Brief 016d)** | | | | |
-| Per-output confidence metadata on `stepRuns` | in progress | ADR-011, Brief 016 | Content moderation three-band (adapted to categorical) | `src/db/schema.ts`, `src/engine/harness-handlers/trust-gate.ts` |
-| Confidence-based routing in trust gate (low → item review regardless of tier) | in progress | ADR-011, Brief 016 | SAE Level 3 (system self-assessment) | `src/engine/harness-handlers/trust-gate.ts` |
-| Agent system prompt instruction for confidence self-assessment | in progress | ADR-011, Brief 016 | Original | `src/adapters/cli.ts` |
+| Per-output confidence metadata on `stepRuns` | done | ADR-011, Brief 016 | Content moderation three-band (adapted to categorical) | `src/db/schema.ts`, `src/engine/harness-handlers/trust-gate.ts` |
+| Confidence-based routing in trust gate (low → item review regardless of tier) | done | ADR-011, Brief 016 | SAE Level 3 (system self-assessment) | `src/engine/harness-handlers/trust-gate.ts` |
+| Agent system prompt instruction for confidence self-assessment | done | ADR-011, Brief 016 | Original | `src/adapters/cli.ts` |
 | **Cognitive model (Phase 4 scope)** | | | | |
 | `cognitive_mode` field on process definitions (optional, default: analytical) | not started | ADR-013 | Original | `src/db/schema.ts`, process YAML |
 | Challenge `concern` field on confidence metadata | not started | ADR-013 | Edmondson psychological safety + SAE Level 3 | `src/db/schema.ts` |
@@ -202,12 +202,12 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 
 | Capability | Status | Source doc | Build from | Deliverable |
 |-----------|--------|-----------|------------|-------------|
-| Full work evolution cycle (work item → intake → route → execute → human step → resume → review → trust) | not started | ADR-010 | — | Successful run |
-| Goal decomposition verified (goal → multiple tasks → multiple processes → tracked completion) | not started | ADR-010 | — | Successful run |
-| Meta-process trust earning verified (intake-classifier corrections improve routing) | not started | ADR-010 | — | Feedback data |
-| All 6 layers proven working | not started | architecture.md | — | Verification report |
-| Process template library (`templates/` directory) | not started | ADR-008 | n8n/Zapier pattern + Original governance declarations | `templates/` with 2-3 non-coding templates |
-| Template sync + adoption flow | not started | ADR-008 | Process loader pattern + Original | CLI command or flow |
+| Full work evolution cycle (work item → intake → route → execute → human step → resume → review → trust) | done | ADR-010, Brief 020 | — | `docs/verification/phase-5-e2e.md` |
+| Goal decomposition verified (goal → multiple tasks → multiple processes → tracked completion) | done | ADR-010, Brief 021 | LangGraph + Temporal + Manus | `src/engine/system-agents/orchestrator.ts` |
+| Meta-process trust earning verified (intake-classifier corrections improve routing) | done | ADR-010, Brief 020 | — | Verified in E2E report |
+| All 6 layers proven working | done | architecture.md, Brief 020 | — | `docs/verification/phase-5-e2e.md` |
+| Process template library (`templates/` directory) | done | ADR-008, Brief 020 | n8n/Zapier pattern + Original governance declarations | `templates/` with 3 non-coding templates |
+| Template sync + adoption flow | done | ADR-008, Brief 020 | Process loader pattern + Original | `src/engine/process-loader.ts` (loads from templates/ as draft) |
 | **Attention model (Phase 5 scope)** | | | | |
 | Digest mode for autonomous processes (outputs not in Review Queue, summary in Daily Brief) | not started | ADR-011 | Zapier Digest + GitHub Copilot PR-as-batch | CLI status output / Daily Brief |
 | Silence-as-feature verified (autonomous clean runs produce no notifications) | not started | ADR-011 | Management by Exception, PagerDuty | Verification |

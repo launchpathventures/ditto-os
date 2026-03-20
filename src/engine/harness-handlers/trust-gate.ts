@@ -49,6 +49,14 @@ export const trustGateHandler: HarnessHandler = {
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
     const { trustTier, reviewResult } = context;
+    const confidence = context.stepResult?.confidence;
+
+    // AC15: Low confidence overrides tier — always pause regardless of trust level
+    // Provenance: ADR-011, SAE Level 3 self-assessment
+    if (confidence === "low") {
+      context.trustAction = "pause";
+      return context;
+    }
 
     switch (trustTier) {
       case "supervised": {
@@ -78,12 +86,9 @@ export const trustGateHandler: HarnessHandler = {
       }
 
       case "autonomous": {
-        // Advance unless review pattern flagged, confidence is low,
-        // or step is marked always_review
+        // Advance unless review pattern flagged or step is marked always_review
         if (
           reviewResult === "flag" ||
-          (context.stepResult?.confidence !== undefined &&
-            context.stepResult.confidence < 0.5) ||
           context.stepDefinition.config?.always_review === true
         ) {
           context.trustAction = "pause";
@@ -95,8 +100,6 @@ export const trustGateHandler: HarnessHandler = {
 
       case "critical": {
         context.trustAction = "pause";
-        // canAutoAdvance=false is data-only in Phase 2a.
-        // Phase 3 enforces this in the CLI approve flow (prevents batch-auto-approve).
         context.canAutoAdvance = false;
         break;
       }

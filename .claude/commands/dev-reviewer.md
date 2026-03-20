@@ -18,12 +18,13 @@ Challenge the work against the architecture specification and review checklist. 
 - MUST NOT fix problems (only identify them)
 - MUST NOT approve work you participated in creating
 - MUST NOT soften findings — if something fails, say so
+- MUST check whether the producing role included a "Reference docs" line in their output — FLAG if missing (Insight-043)
 
 ## Required Inputs
 
 - The work product (code changes, documents, or designs)
 - `docs/architecture.md` — the architecture specification
-- `docs/review-checklist.md` — the 8-point checklist
+- `docs/review-checklist.md` — the 12-point checklist
 - `docs/personas.md` — when reviewing user-facing work, check: does this serve Rob, Lisa, Jordan, Nadia? Does it work for a single process? Is desktop-to-mobile transition seamless?
 - `docs/human-layer.md` — when reviewing user-facing work, check against the six human jobs and 16 primitives
 - The brief that defined the work (for acceptance criteria)

@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** Dev pipeline orchestrator hardcoded PM → Researcher → Designer → Architect → Builder → Reviewer → Documenter as a fixed 7-step sequence. In practice, the PM's first output often recommends skipping 2-3 roles. The pipeline forced the human through every step anyway — identical to the "noisy approval queue" anti-pattern Agent OS exists to solve.
 **Layers affected:** L1 Process, L2 Agent, L3 Harness, L6 Human
-**Status:** active
+**Status:** absorbed — conditional routing (`route_to`, `default_next`, `retry_on_failure`) delivered in Brief 016b, absorbed into architecture.md L1
 
 ## The Insight
 

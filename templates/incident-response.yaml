@@ -1,0 +1,133 @@
+# Agent OS — Process Template
+# Template: Incident Response
+# Triages incidents, gathers context, coordinates response with human decisions.
+#
+# Provenance: n8n/Zapier template pattern + ADR-008 governance declarations
+# Domain: Operations/IT (Jordan persona — generalist technologist)
+
+name: Incident Response
+id: incident-response
+version: 1
+status: draft
+template: true
+
+description: >
+  Handles operational incidents from detection through resolution.
+  Triages severity, gathers context from relevant systems, proposes
+  response actions, and coordinates with the human responder for
+  critical decisions. Includes human steps for severity confirmation
+  and resolution sign-off.
+
+trigger:
+  type: manual
+  description: Triggered when an incident is reported or detected
+
+inputs:
+  - name: incidentReport
+    type: text
+    source: manual
+    required: true
+    description: Description of the incident (what happened, when, who reported it)
+
+steps:
+  - id: triage
+    name: Triage Incident
+    executor: ai-agent
+    agent_role: pm
+    description: >
+      Assess incident severity (critical/high/medium/low) based on:
+      affected users, business impact, data risk, and time sensitivity.
+      Propose initial severity classification.
+    inputs: [incidentReport]
+    outputs: [triageResult]
+
+  - id: confirm-severity
+    name: Confirm Severity
+    executor: human
+    depends_on: [triage]
+    description: >
+      Review the AI's severity assessment and confirm or adjust.
+      Critical incidents trigger immediate escalation.
+    instructions: >
+      The system assessed this incident's severity. Please confirm
+      the classification or adjust it. Critical incidents will
+      trigger immediate escalation to the on-call team.
+    input_fields:
+      - name: confirmedSeverity
+        type: select
+        label: Confirmed severity
+        options: ["critical", "high", "medium", "low"]
+        required: true
+      - name: notes
+        type: text
+        label: Additional context
+        required: false
+
+  - id: gather-context
+    name: Gather Context
+    executor: ai-agent
+    agent_role: debugger
+    depends_on: [confirm-severity]
+    description: >
+      Based on confirmed severity, gather relevant context:
+      recent changes, error logs, affected systems, similar past incidents.
+      Propose response actions.
+    inputs: [incidentReport, triageResult]
+    outputs: [contextReport]
+
+  - id: resolution-signoff
+    name: Resolution Sign-Off
+    executor: human
+    depends_on: [gather-context]
+    description: >
+      Review the proposed response actions and gathered context.
+      Approve the response plan or provide alternative instructions.
+    instructions: >
+      Review the incident context and proposed response actions.
+      Approve the plan, modify it, or provide alternative instructions.
+    input_fields:
+      - name: approved
+        type: boolean
+        label: Approve response plan
+        required: true
+      - name: modifications
+        type: text
+        label: Modifications to the plan
+        required: false
+
+outputs:
+  - name: contextReport
+    type: text
+    destination: system
+    description: Full incident context with severity, timeline, and response plan
+
+quality_criteria:
+  - Severity classification considers all four factors (users, business, data, time)
+  - Context gathering references verifiable system data
+  - Response actions are specific and actionable
+  - Human confirms severity before any escalation occurs
+
+feedback:
+  metrics:
+    - name: triage_accuracy
+      description: How often the AI severity matches the human-confirmed severity
+      target: "> 75%"
+    - name: response_time
+      description: Time from incident report to response plan approval
+      target: "decreasing trend"
+    - name: resolution_quality
+      description: Whether the response plan addresses the root cause
+      target: "> 80%"
+  capture:
+    - Severity overrides (AI vs human classification)
+    - Response plan modifications
+    - Resolution outcomes (did the plan work?)
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "20 runs at > 80% triage accuracy"
+      upgrade_to: spot_checked
+  downgrade_triggers:
+    - "Critical incident misclassified as low"
+    - "Response plan fails to address root cause 2 times"

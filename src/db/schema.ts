@@ -40,11 +40,13 @@ export const runStatusValues = [
   "rejected",
   "failed",
   "cancelled",
+  "skipped",
 ] as const;
 export type RunStatus = (typeof runStatusValues)[number];
 
 export const stepExecutorValues = [
   "ai-agent",
+  "cli-agent",
   "script",
   "rules",
   "human",
@@ -88,6 +90,9 @@ export const agentStatusValues = [
   "disabled",
 ] as const;
 export type AgentStatus = (typeof agentStatusValues)[number];
+
+export const agentCategoryValues = ["system", "domain"] as const;
+export type AgentCategory = (typeof agentCategoryValues)[number];
 
 export const improvementStatusValues = [
   "proposed",
@@ -185,6 +190,10 @@ export const agents = sqliteTable("agents", {
   totalRuns: integer("total_runs").notNull().default(0),
   successRate: real("success_rate"),
 
+  // System agent classification (ADR-008)
+  category: text("category").notNull().$type<AgentCategory>().default("domain"),
+  systemRole: text("system_role"),
+
   // Agent identity (governance readiness — Phase 1 brief requirement)
   ownerId: text("owner_id"),
   organisationId: text("organisation_id"),
@@ -239,6 +248,11 @@ export const processRuns = sqliteTable("process_runs", {
   suspendState: text("suspend_state", { mode: "json" })
     .$type<Record<string, unknown>>(),
 
+  // Orchestrator confidence for goal-directed scheduling (Brief 021, Insight-045)
+  // Process-level analogue of ADR-011's per-output confidence
+  orchestratorConfidence: text("orchestrator_confidence")
+    .$type<"high" | "medium" | "low">(),
+
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -275,6 +289,9 @@ export const stepRuns = sqliteTable("step_runs", {
   tokensUsed: integer("tokens_used").default(0),
   costCents: integer("cost_cents").default(0),
   error: text("error"),
+
+  // Confidence level (ADR-011: categorical high/medium/low)
+  confidenceLevel: text("confidence_level").$type<"high" | "medium" | "low">(),
 
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
@@ -624,6 +641,10 @@ export const workItems = sqliteTable("work_items", {
     .$type<string[]>()
     .default([]),
 
+  // Goal decomposition plan (Brief 021: task list with IDs, dependencies, status)
+  decomposition: text("decomposition", { mode: "json" })
+    .$type<Array<{ taskId: string; stepId: string; dependsOn: string[]; status: string }>>(),
+
   // Execution — links to process runs that handled this item
   executionIds: text("execution_ids", { mode: "json" })
     .$type<string[]>()
@@ -641,39 +662,6 @@ export const workItems = sqliteTable("work_items", {
     .notNull()
     .$defaultFn(() => new Date()),
   completedAt: integer("completed_at", { mode: "timestamp_ms" }),
-});
-
-// ============================================================
-// Capture — quick input from humans
-// ============================================================
-
-/** Quick captures — tasks, context, notes from humans */
-export const captures = sqliteTable("captures", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => randomUUID()),
-
-  content: text("content").notNull(),
-  type: text("type").notNull().default("note"),
-
-  // Auto-classification
-  projectId: text("project_id"),
-  processId: text("process_id").references(() => processes.id),
-  classified: integer("classified", { mode: "boolean" })
-    .notNull()
-    .default(false),
-
-  // Source
-  source: text("source").notNull().default("manual"),
-
-  // Metadata
-  metadata: text("metadata", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .default({}),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
 });
 
 // ============================================================

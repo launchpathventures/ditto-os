@@ -55,7 +55,7 @@ Seven development roles govern how work proceeds. Each role is a skill (slash co
 ### Quality Check Layering
 
 1. **Automated checks first** — `pnpm run type-check`, acceptance criteria from the brief
-2. **Structured review second** — Dev Reviewer checks against the 8-point architecture checklist
+2. **Structured review second** — Dev Reviewer checks against the 12-point architecture checklist
 3. **Human judgment last** — only on what passed everything else
 
 ### Review Process (mandatory)

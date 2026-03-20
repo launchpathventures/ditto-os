@@ -1,0 +1,106 @@
+# Agent OS — System Agent Process Definition
+# Process: Orchestrator
+# Goal-directed orchestrator (Brief 021). Decomposes goals into tasks
+# using process step lists as blueprints. Routes around trust gate pauses.
+# Stops when confidence drops to low.
+#
+# Provenance:
+# - Anthropic multi-agent research (orchestrator-worker pattern)
+# - LangGraph plan-and-execute (plan-track loop)
+# - Temporal Selectors (completion-order processing)
+# - ADR-010 (orchestrator specification)
+# - Insight-045 (confidence as stopping condition)
+
+name: Orchestrator
+id: orchestrator
+version: 2
+status: active
+system: true
+
+description: >
+  Goal-directed system agent that manages work item lifecycle.
+  For goals: decomposes into tasks using the assigned process step list
+  as a blueprint, spawns child work items with dependencies, and manages
+  a work queue that routes around trust gate pauses.
+  For tasks: pass-through — triggers the assigned process run.
+  Stops when orchestrator confidence drops to low (Insight-045).
+
+trigger:
+  type: event
+  event: intake.routed
+  description: Triggered programmatically after routing completes
+
+inputs:
+  - name: processSlug
+    type: text
+    source: system
+    required: true
+    description: The slug of the process to trigger
+  - name: workItemId
+    type: text
+    source: system
+    required: true
+    description: The work item ID being orchestrated
+  - name: content
+    type: text
+    source: system
+    required: true
+    description: The work item content to pass as process input
+  - name: workItemType
+    type: text
+    source: system
+    required: false
+    description: The work item type (goal triggers decomposition, task triggers pass-through)
+
+steps:
+  - id: orchestrate
+    name: Orchestrate Work
+    executor: script
+    description: >
+      For goals: decompose into child tasks using process step list.
+      For tasks: pass-through to startProcessRun().
+    config:
+      systemAgent: orchestrator
+    inputs:
+      - processSlug
+      - workItemId
+      - content
+      - workItemType
+    outputs:
+      - orchestration-result
+
+outputs:
+  - name: orchestration-result
+    type: data
+    destination: system
+    description: "{ action, goalWorkItemId, tasks, confidence, escalation?, reasoning }"
+
+quality_criteria:
+  - Goals are decomposed into child work items with correct goalAncestry
+  - Dependencies between tasks mirror process YAML depends_on
+  - Tasks are pass-through for non-goal work items (backward compatible)
+  - Graceful escalation when process not found or no steps defined
+
+feedback:
+  metrics:
+    - name: decomposition_quality
+      description: Whether decomposed tasks accurately reflect the process structure
+      target: ">90%"
+    - name: orchestration_success
+      description: Whether process runs are successfully started
+      target: ">95%"
+  capture:
+    - Goal decomposition decisions
+    - Route-around decisions when tasks are paused
+    - Escalation events with reasoning
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "30 runs at >95% success"
+      upgrade_to: spot-checked
+    - after: "50 runs at >99% success"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "Decomposition quality drops below 80%"
+    - "Process run creation failure rate exceeds 5%"

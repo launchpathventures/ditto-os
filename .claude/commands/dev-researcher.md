@@ -17,6 +17,8 @@ Investigate what exists before we build. Find the gold standard. Answer "what ca
 - MUST NOT design the solution
 - MUST NOT write implementation code
 - MUST capture any design discoveries or principles that emerge during research — or that the human shares during conversation — as insights in `docs/insights/` using the template at `docs/insights/000-template.md`
+- MUST update `docs/landscape.md` when findings contradict or supersede an existing evaluation (Insight-043: Researcher owns landscape accuracy)
+- MUST mark prior research reports as stale when new findings supersede them (add `**Superseded by:** [new report]` header, don't delete)
 
 ## Required Inputs
 
@@ -32,8 +34,9 @@ Investigate what exists before we build. Find the gold standard. Answer "what ca
 - Factual description of each option — what it does, how it works
 - Pros/cons per option (factual, not evaluative)
 - Gaps where no existing solution fits
+- Reference doc status: "Reference docs updated: [list]" or "Reference docs checked: no drift found"
 
-**Relationship between docs:** `docs/landscape.md` is the high-level entry point (framework evaluations, fit ratings). Research reports in `docs/research/` are the detailed companion (specific files, how things work, code-level patterns). The landscape doc is your starting input; the research report is your output. If your research reveals that a landscape evaluation is outdated, flag it — but don't update landscape.md yourself (that's the Documenter's job).
+**Relationship between docs:** `docs/landscape.md` is the high-level entry point (framework evaluations, fit ratings). Research reports in `docs/research/` are the detailed companion (specific files, how things work, code-level patterns). The landscape doc is your starting input; the research report is your output. If your research reveals that a landscape evaluation is outdated, update it directly — the Researcher owns landscape accuracy (Insight-043).
 
 ## Review Loop (mandatory)
 

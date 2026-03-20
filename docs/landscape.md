@@ -126,6 +126,15 @@
 - Self-improving product system. Analyse → identify priority → create PRD → execute → deliver PR.
 - **Agent OS relevance:** Reference for Layer 5 and Self-Improvement Meta-Process.
 
+**OpenClaw** — openclaw.ai
+- Active March 2026 | Open source agent framework
+- Skills-as-progressive-disclosure, skills wrapping MCP servers (65% of skills wrap MCP), channel adapters (Telegram, Slack, Discord).
+- **Memory architecture (4 layers):** (1) Bootstrap files (SOUL.md, AGENTS.md, USER.md, MEMORY.md, TOOLS.md) — reloaded every session, permanent. (2) Session transcript — subject to lossy compaction. (3) LLM context window — 200K token budget, temporary. (4) Retrieval index — searchable layer over memory files (optional, via QMD or built-in hybrid search).
+- **Key limitation: compaction is lossy.** When context fills, OpenClaw summarizes conversation history, permanently destroying detail. Instructions given only in chat (not written to files) are silently lost. Core principle: "if it's not written to a file, it doesn't exist." Bootstrap files capped at 20K chars per file, 150K aggregate.
+- **Memory persistence is user-managed:** pre-compaction flush (automated but imperfect), manual save discipline, strategic file organization. The burden is on the user to maintain persistence.
+- **Agent OS relevance:** MEDIUM for patterns (skills-over-MCP adopted in architecture.md borrowing table), HIGH as competitive contrast. Agent OS's memory architecture (ADR-003) solves the compaction problem structurally — memories extracted, reconciled, stored in SQLite with scope filtering and salience scoring. The harness manages persistence, not the user. See `docs/research/qmd-obsidian-knowledge-search.md` Section 5.
+- **What NOT to adopt:** User-managed memory discipline. The file-first principle is correct (data must be persisted), but the mechanism should be structural (harness), not cognitive (user remembering to save).
+
 ---
 
 ## Storage, CLI, and Infrastructure
@@ -140,6 +149,16 @@
 | **conf** | - | Config | Platform-correct config dir. Good for API keys, preferences. |
 
 **Recommendation:** Drizzle ORM + better-sqlite3 for structured data. conf for user config.
+
+### Knowledge Search
+
+**QMD** — github.com/tobi/qmd
+- 16.2k stars | Active March 2026 | TypeScript | MIT
+- On-device markdown search engine. BM25 full-text + vector semantic + LLM re-ranking, all local via node-llama-cpp. SQLite-based index. MCP server (stdio or HTTP daemon). CLI and SDK interfaces.
+- Collections with hierarchical context descriptions. Hybrid query expansion via reciprocal rank fusion.
+- **Dependencies:** better-sqlite3 (same family as Agent OS), sqlite-vec (alpha), node-llama-cpp, @modelcontextprotocol/sdk, zod. Node ≥22 required.
+- **Agent OS relevance:** MEDIUM — future composition target for knowledge search (Insight-042 knowledge-manager agent, Analyze mode org data ingestion). MCP server mode fits ADR-005 integration architecture cleanly. Not needed now (corpus is 130 files, 1.8MB — skill commands encode the knowledge map). See `docs/research/qmd-obsidian-knowledge-search.md`.
+- **Limitation:** Very young (v2.0.1, 5 weeks since 1.0). sqlite-vec alpha. node-llama-cpp requires local model downloads (~100MB-1GB). Breaking changes between minors.
 
 ### Memory Systems (Tier 2 — Pattern Sources)
 

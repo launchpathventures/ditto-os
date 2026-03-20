@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** Briefs directory grew to 10+ files with no visual indicator of status — all in a flat folder. The same issue affects insights (duplicate numbering, no lifecycle grouping).
 **Layers affected:** None (dev process, not architecture)
-**Status:** active
+**Status:** absorbed into `docs/dev-process.md` (Artifact Lifecycle Management section)
 
 ## The Insight
 
