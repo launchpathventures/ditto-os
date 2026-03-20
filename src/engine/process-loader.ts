@@ -16,6 +16,16 @@ import { eq } from "drizzle-orm";
 // Types
 // ============================================================
 
+export interface HumanInputField {
+  name: string;
+  type: "text" | "select" | "date" | "number" | "boolean";
+  label?: string;
+  description?: string;
+  required?: boolean;
+  options?: string[]; // For select type
+  default?: string;
+}
+
 export interface StepDefinition {
   id: string;
   name: string;
@@ -33,6 +43,10 @@ export interface StepDefinition {
   on_failure?: string;
   handoff_to?: string;
   handoff_at_step?: string;
+  // Human step fields (ADR-010 Section 4)
+  instructions?: string;
+  input_fields?: HumanInputField[];
+  timeout?: string; // e.g. "24h", "7d"
 }
 
 export interface ParallelGroupDefinition {

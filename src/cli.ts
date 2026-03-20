@@ -17,7 +17,8 @@
  *   pnpm cli edit <id>         # Edit output before approving (alias)
  *   pnpm cli reject <id>       # Reject outputs with reason
  *   pnpm cli trust <process>   # Show trust data for a process
- *   pnpm cli capture <text>    # Quick capture a note/task
+ *   pnpm cli capture <text>    # Capture a work item with classification
+ *   pnpm cli complete <id>     # Complete a human step
  *   pnpm cli debt              # List all deferred debt
  */
 
@@ -33,6 +34,7 @@ import { approveCommand, editCommand } from "./cli/commands/approve";
 import { rejectCommand } from "./cli/commands/reject";
 import { trustCommand } from "./cli/commands/trust";
 import { captureCommand } from "./cli/commands/capture";
+import { completeCommand } from "./cli/commands/complete";
 import { debtCommand } from "./cli/commands/debt";
 
 const main = defineCommand({
@@ -52,6 +54,7 @@ const main = defineCommand({
     reject: rejectCommand,
     trust: trustCommand,
     capture: captureCommand,
+    complete: completeCommand,
     debt: debtCommand,
   },
 });

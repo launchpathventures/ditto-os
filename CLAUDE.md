@@ -6,9 +6,10 @@ Agent OS is a harness creator for human-agent collaboration. It creates the evol
 
 ## Before You Do Anything
 
-1. Read `docs/state.md` — what's working, what's in progress, what's blocked
+1. Read `docs/state.md` — compact current state (~80 lines): what's working, in progress, blocked, next steps
 2. Read `docs/roadmap.md` — the full capability map and current phase
 3. If there's a brief for your task in `docs/briefs/`, read it
+4. Do NOT read `docs/changelog.md` unless you need historical context on a completed phase
 
 ## Design Documents (read when relevant, not every session)
 
@@ -20,6 +21,8 @@ Agent OS is a harness creator for human-agent collaboration. It creates the evol
 - `docs/dictionary.md` — Canonical glossary of all Agent OS terms
 - `docs/dev-process.md` — How Agent OS gets built: role contracts, session flows, quality check layering
 - `docs/insights/` — Design discoveries that emerge during building. One file per insight. Capture here; absorb into architecture.md or ADRs when mature.
+- `docs/changelog.md` — Historical record: completed phases, retrospectives, resolved decisions. Read on demand, not every session.
+- `docs/research/README.md` — Index of all 27 research reports with status and consumers.
 
 ## Principles
 

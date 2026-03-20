@@ -163,6 +163,27 @@ export async function createMemoryFromFeedback(
  *       computes and stores editSeverity + editRatio.
  * AC-13: Recomputes and caches trust state after recording.
  */
+/**
+ * Extract a correction pattern from a structured diff.
+ * Identifies the first significant changed segment as the pattern name.
+ * This is a simple heuristic — not ML pattern recognition.
+ */
+function extractCorrectionPattern(
+  diff: { changes: Array<{ added?: boolean; removed?: boolean; value: string }> },
+): string | null {
+  // Find the first removed segment (the thing being corrected)
+  for (const change of diff.changes) {
+    if (change.removed) {
+      // Use the first few words as the pattern identifier
+      const words = change.value.trim().split(/\s+/).slice(0, 5);
+      if (words.length > 0 && words[0].length > 0) {
+        return words.join("_").toLowerCase().replace(/[^a-z0-9_]/g, "");
+      }
+    }
+  }
+  return null;
+}
+
 export async function recordEditFeedback(params: {
   outputId: string;
   processId: string;
@@ -174,6 +195,9 @@ export async function recordEditFeedback(params: {
     params.originalText,
     params.editedText,
   );
+
+  // AC-11: Extract correction pattern from the diff
+  const correctionPattern = extractCorrectionPattern(diff);
 
   const [fb] = await db
     .insert(schema.feedback)
@@ -187,6 +211,7 @@ export async function recordEditFeedback(params: {
       } as unknown as Record<string, unknown>,
       editSeverity,
       editRatio,
+      correctionPattern,
       comment: params.comment ?? null,
     })
     .returning();
@@ -197,6 +222,48 @@ export async function recordEditFeedback(params: {
 
   // AC-15: Evaluate trust after feedback (recomputes state + checks triggers/eligibility)
   await evaluateTrust(params.processId);
+}
+
+/**
+ * Check if a correction pattern has been seen 3+ times for a process.
+ * Returns the pattern string and count if threshold is met, null otherwise.
+ *
+ * AC-11: Pattern notification fires after 3+ identical correctionPattern values.
+ */
+export async function checkCorrectionPattern(
+  processId: string,
+): Promise<{ pattern: string; count: number } | null> {
+  // Get all feedback with correction patterns for this process
+  const feedbackRecords = await db
+    .select()
+    .from(schema.feedback)
+    .where(
+      and(
+        eq(schema.feedback.processId, processId),
+        eq(schema.feedback.type, "edit"),
+      ),
+    );
+
+  // Count patterns
+  const patternCounts = new Map<string, number>();
+  for (const fb of feedbackRecords) {
+    if (fb.correctionPattern) {
+      const count = (patternCounts.get(fb.correctionPattern) || 0) + 1;
+      patternCounts.set(fb.correctionPattern, count);
+    }
+  }
+
+  // Find the most recent pattern that meets the threshold
+  for (const fb of feedbackRecords) {
+    if (fb.correctionPattern) {
+      const count = patternCounts.get(fb.correctionPattern) || 0;
+      if (count >= 3) {
+        return { pattern: fb.correctionPattern, count };
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

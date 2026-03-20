@@ -59,10 +59,12 @@ export function formatWorkItemLine(item: {
   createdAt: Date;
 }): string {
   const shortId = item.id.slice(0, 8);
-  // Distinguish review tasks (waiting_human) from action tasks
-  const typeLabel = item.type === "task"
-    ? (item.status === "waiting_human" ? "Review" : "Action")
-    : workItemTypeLabel(item.type);
+  // Distinguish action tasks (human steps waiting) from review tasks
+  const typeLabel = item.status === "waiting_human"
+    ? "Action"
+    : item.type === "task"
+      ? "Task"
+      : workItemTypeLabel(item.type);
   const summary = item.content.length > 60
     ? item.content.slice(0, 57) + "..."
     : item.content;

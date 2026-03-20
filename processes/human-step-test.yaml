@@ -1,0 +1,77 @@
+# Agent OS — Process Definition (Smoke Test)
+# Process: Human Step Test — validates human executor suspend/resume
+
+name: Human Step Test
+id: human-step-test
+version: 1
+status: active
+
+description: >
+  Simple process with a human step for smoke testing.
+  Script step → human step → script step.
+
+trigger:
+  type: manual
+  description: Started manually for testing
+
+inputs:
+  - name: test-input
+    type: text
+    source: manual
+    required: false
+
+steps:
+  - id: prepare
+    name: Prepare data
+    executor: script
+    commands: ["echo 'prepared'"]
+
+  - id: human-confirm
+    name: Confirm deployment target
+    executor: human
+    instructions: >
+      Review the prepared data and confirm the deployment target.
+      Select the environment and add any notes.
+    input_fields:
+      - name: environment
+        type: select
+        label: Target environment
+        options: [staging, production, development]
+        required: true
+      - name: notes
+        type: text
+        label: Additional notes
+        description: Any context for this deployment
+        required: false
+      - name: deploy_date
+        type: date
+        label: Planned deploy date
+        required: true
+
+  - id: finalize
+    name: Finalize
+    executor: script
+    commands: ["echo 'finalized'"]
+
+outputs:
+  - name: result
+    type: text
+    destination: manual
+    description: Test result
+
+quality_criteria:
+  - Human step completes successfully
+  - Process resumes after human input
+
+feedback:
+  metrics:
+    - name: completion_rate
+      description: Rate of successful completions
+      target: "100%"
+  capture:
+    - Whether human step completed
+
+trust:
+  initial_tier: supervised
+  upgrade_path: []
+  downgrade_triggers: []

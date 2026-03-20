@@ -35,6 +35,7 @@ export const runStatusValues = [
   "queued",
   "running",
   "waiting_review",
+  "waiting_human",
   "approved",
   "rejected",
   "failed",
@@ -232,6 +233,11 @@ export const processRuns = sqliteTable("process_runs", {
   // Cost tracking
   totalTokens: integer("total_tokens").default(0),
   totalCostCents: integer("total_cost_cents").default(0),
+
+  // Suspend state for human steps (serialized execution path + step results)
+  // Provenance: Mastra path-based suspend/resume pattern
+  suspendState: text("suspend_state", { mode: "json" })
+    .$type<Record<string, unknown>>(),
 
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()

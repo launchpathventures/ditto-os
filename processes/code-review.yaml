@@ -91,11 +91,25 @@ steps:
   - id: human-review
     name: Human final review
     executor: human
+    instructions: >
+      Review the annotated diff. Agent flags are pre-applied.
+      Approve, request changes, or override agent flags.
     description: >
       Human reviews the annotated diff. Agent flags are pre-applied.
       Human approves, requests changes, or overrides agent flags.
     inputs: [annotated-review, code-changes]
     outputs: [review-decision]
+    input_fields:
+      - name: decision
+        type: select
+        label: Review decision
+        options: [approve, request_changes, reject]
+        required: true
+      - name: comments
+        type: text
+        label: Review comments
+        description: Any feedback or notes on the review
+        required: false
 
 outputs:
   - name: review-decision

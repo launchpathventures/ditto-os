@@ -11,6 +11,7 @@ import { fullHeartbeat } from "../../engine/heartbeat";
 import {
   recordEditFeedback,
   recordApprovalFeedback,
+  checkCorrectionPattern,
 } from "../../engine/harness-handlers/feedback-recorder";
 import fs from "fs";
 import path from "path";
@@ -181,7 +182,22 @@ async function doApprove(
 
   // Designer spec: "Approved. [Process name] continuing."
   const processName = proc?.name || "Process";
-  console.log(`\u2713 Approved. ${processName} continuing.\n`);
+  console.log(`\u2713 Approved. ${processName} continuing.`);
+
+  // AC-11: Pattern notification after edits — check if correction patterns are repeating
+  if (withEdit && proc) {
+    const patternResult = await checkCorrectionPattern(proc.id);
+    if (patternResult) {
+      const displayPattern = patternResult.pattern.replace(/_/g, " ");
+      console.log(
+        `  Note: You've corrected "${displayPattern}" ${patternResult.count} times for this process.`,
+      );
+      console.log(
+        "  This pattern is being tracked \u2014 the system will learn from it.",
+      );
+    }
+  }
+  console.log();
 
   const result = await fullHeartbeat(runId);
   console.log(`Status: ${result.status}`);

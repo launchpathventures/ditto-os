@@ -1,7 +1,7 @@
 # Agent OS — Roadmap
 
 **Last updated:** 2026-03-20
-**Current phase:** Phase 4a complete (work items + CLI infrastructure). Phase 4b next (human steps + capture).
+**Current phase:** Phase 4b complete (human steps + capture + unified task surface). Brief 016 (Intelligent Coding Orchestrator) ready for build. Then Phase 4c.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Agent OS is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Agent OS. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -133,6 +133,30 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 
 ---
 
+## Brief 016: Intelligent Coding Orchestrator (Engine-First)
+
+**Objective:** Run the dev pipeline on the real engine. Build 4 missing engine capabilities: CLI adapter, conditional routing, confidence gating, notification events. First process to exercise the full harness with a CLI execution substrate. Validates patterns before Phase 4b/4c user processes need them.
+
+| Capability | Status | Source doc | Build from | Deliverable |
+|-----------|--------|-----------|------------|-------------|
+| **016a: CLI Adapter** | | | | |
+| CLI adapter (`claude -p` as execution substrate) | in progress | Brief 016, Insight-041 | ralph autonomous loop, Paperclip adapter pattern | `src/adapters/cli.ts` |
+| `cli-agent` executor type in step executor | in progress | Brief 016 | Existing adapter routing pattern | `src/engine/step-executor.ts` |
+| Confidence parsing from CLI output | in progress | Brief 016, ADR-011 | Original (categorical) | `src/adapters/cli.ts` |
+| **016b: Conditional Routing** | | | | |
+| `route_to` + `default_next` on StepDefinition | not started | Brief 016, Insight-039 | Inngest AgentKit three-mode, LangGraph conditional edges | `src/engine/process-loader.ts` |
+| Routing handler in harness pipeline | not started | Brief 016 | Inngest AgentKit code-based routing | `src/engine/harness-handlers/routing.ts` |
+| `retry_on_failure` with feedback injection | not started | Brief 016 | Aider lint-fix loop, Open SWE middleware | `src/engine/heartbeat.ts` |
+| **016c: Dev Pipeline Process** | | | | |
+| Dev pipeline as process YAML (7 roles) | not started | Brief 016, Insight-032 | antfarm YAML workflows | `processes/dev-pipeline.yaml` |
+| Role contracts as agent system prompts | not started | Brief 016 | Open SWE `get_agent()` | `src/adapters/cli.ts` |
+| **016d: Confidence + Events** | | | | |
+| Confidence-based trust gate extension | not started | Brief 016, ADR-011 | SAE Level 3 self-assessment | `src/engine/harness-handlers/trust-gate.ts` |
+| Harness event emitter | not started | Brief 016 | Trigger.dev event pattern | `src/engine/events.ts` |
+| Telegram subscribes to harness events | not started | Brief 016 | Original | `src/dev-bot.ts` |
+
+---
+
 ## Phase 4: Workspace Foundation
 
 **Objective:** Prove the workspace interaction model. Work items enter, meta-processes route them, processes execute with human steps, the system demonstrates it's alive. CLI is the first surface, but the concepts transfer directly to the web dashboard.
@@ -149,23 +173,23 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Orchestrator agent (decompose goals into tasks) | not started | ADR-010 | Anthropic orchestrator-worker | System agent definition |
 | System agents go through harness pipeline | not started | ADR-008, ADR-010 | Original | Harness integration |
 | **Human step executor** | | | | |
-| `human` executor type with suspend/resume | not started | ADR-010 | Mastra suspend/resume | `src/engine/step-executor.ts` |
-| Human step surfaces as work item in CLI | not started | ADR-010 | Sim Studio HITL block | CLI display |
-| Human step completion via CLI | not started | ADR-010 | Trigger.dev waitpoint token | CLI command |
+| `human` executor type with suspend/resume | done | ADR-010 | Mastra suspend/resume | `src/engine/heartbeat.ts` |
+| Human step surfaces as work item in CLI | done | ADR-010 | Sim Studio HITL block | `src/cli/commands/status.ts` |
+| Human step completion via CLI | done | ADR-010 | Trigger.dev waitpoint token | `src/cli/commands/complete.ts` |
 | **Unified task surface** | | | | |
-| CLI shows review tasks + action tasks + goal-driven tasks together | not started | ADR-010 | Original | CLI command |
+| CLI shows review tasks + action tasks + goal-driven tasks together | done | ADR-010 | Original | `src/cli/commands/status.ts` |
 | **CLI infrastructure** | | | | |
 | Command routing (citty) | done | landscape.md | citty `/src/command.ts` | `src/cli.ts` |
 | Interactive UX (@clack/prompts) | done | landscape.md | @clack/prompts | `src/cli/commands/reject.ts` |
 | Orient: `status` (work items + process health + brief) | done | ADR-010, human-layer.md | Original | `src/cli/commands/status.ts` |
 | Review: `review`, `approve`, `edit`, `reject` | done | human-layer.md | Paperclip approval flow | `src/cli/commands/review.ts`, `approve.ts`, `reject.ts` |
-| Capture: `capture` (creates work item, routes via intake-classifier) | partial | ADR-010, human-layer.md | Original | `src/cli/commands/capture.ts` (simple — redesigned in 4b) |
+| Capture: `capture` (creates work item, manual classification + process assignment) | done | ADR-010, human-layer.md | Original | `src/cli/commands/capture.ts` |
 | Trust: `trust` (accept/reject/override/simulate) | done | architecture.md L3 | Original (existing) | `src/cli/commands/trust.ts` |
 | Define: `sync`, `start` | done | architecture.md L1 | Keep existing patterns | `src/cli/commands/sync.ts`, `start.ts` |
-| **Attention model (Phase 4 scope)** | | | | |
-| Per-output confidence metadata on `stepRuns` | not started | ADR-011 | Content moderation three-band (adapted to categorical) | `src/db/schema.ts`, `src/engine/harness-handlers/trust-gate.ts` |
-| Confidence-based routing in trust gate (low → item review regardless of tier) | not started | ADR-011 | SAE Level 3 (system self-assessment) | `src/engine/harness-handlers/trust-gate.ts` |
-| Agent system prompt instruction for confidence self-assessment | not started | ADR-011 | Original | `src/adapters/claude.ts` |
+| **Attention model (Phase 4 scope — partially delivered by Brief 016d)** | | | | |
+| Per-output confidence metadata on `stepRuns` | in progress | ADR-011, Brief 016 | Content moderation three-band (adapted to categorical) | `src/db/schema.ts`, `src/engine/harness-handlers/trust-gate.ts` |
+| Confidence-based routing in trust gate (low → item review regardless of tier) | in progress | ADR-011, Brief 016 | SAE Level 3 (system self-assessment) | `src/engine/harness-handlers/trust-gate.ts` |
+| Agent system prompt instruction for confidence self-assessment | in progress | ADR-011, Brief 016 | Original | `src/adapters/cli.ts` |
 | **Cognitive model (Phase 4 scope)** | | | | |
 | `cognitive_mode` field on process definitions (optional, default: analytical) | not started | ADR-013 | Original | `src/db/schema.ts`, process YAML |
 | Challenge `concern` field on confidence metadata | not started | ADR-013 | Edmondson psychological safety + SAE Level 3 | `src/db/schema.ts` |

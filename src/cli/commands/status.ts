@@ -207,7 +207,7 @@ export const statusCommand = defineCommand({
     if (totalPending > 0) {
       console.log(sectionHeader("NEEDS YOUR ATTENTION", totalPending));
 
-      // Work items first
+      // Work items first — action tasks (human steps) get special treatment
       for (const item of pendingItems) {
         const processName = item.assignedProcess
           ? processNameById.get(item.assignedProcess)
@@ -222,6 +222,14 @@ export const statusCommand = defineCommand({
             createdAt: item.createdAt,
           }),
         );
+
+        // AC-4: Show instructions for action tasks (human steps waiting)
+        if (item.status === "waiting_human") {
+          const ctx = item.context as Record<string, unknown> | null;
+          if (ctx?.instructions) {
+            console.log(`       Instructions: ${ctx.instructions}`);
+          }
+        }
       }
 
       // Legacy pending outputs (review items not yet migrated to work items)

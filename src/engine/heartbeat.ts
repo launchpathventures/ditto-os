@@ -39,7 +39,7 @@ import { feedbackRecorderHandler } from "./harness-handlers/feedback-recorder";
 export interface HeartbeatResult {
   processRunId: string;
   stepsExecuted: number;
-  status: "advanced" | "waiting_review" | "completed" | "failed";
+  status: "advanced" | "waiting_review" | "waiting_human" | "completed" | "failed";
   message: string;
 }
 
@@ -178,14 +178,73 @@ async function executeSingleStep(
   trustTier: TrustTier,
   parallelGroupId?: string
 ): Promise<StepPipelineResult> {
-  // Human steps pause immediately — no pipeline
+  // Human steps suspend immediately — create action work item, serialize state
+  // Provenance: Mastra path-based suspend/resume, ADR-010 Section 4
   if (step.executor === "human") {
-    await db.insert(schema.stepRuns).values({
+    const [stepRunRecord] = await db.insert(schema.stepRuns).values({
       processRunId,
       stepId: step.id,
       status: "waiting_review",
       executorType: "human",
       parallelGroupId: parallelGroupId || null,
+    }).returning();
+
+    // Build suspend payload (ADR-010: instructions, context, input_fields, timeout)
+    const suspendPayload = {
+      stepId: step.id,
+      stepName: step.name,
+      stepRunId: stepRunRecord.id,
+      instructions: step.instructions || step.description || `Complete: ${step.name}`,
+      inputFields: step.input_fields || [],
+      timeout: step.timeout,
+      context: run.inputs,
+    };
+
+    // Collect completed step results so far (for resume — skip completed steps)
+    const completedResults: Record<string, unknown> = {};
+    const existingRuns = await db
+      .select()
+      .from(schema.stepRuns)
+      .where(eq(schema.stepRuns.processRunId, processRunId));
+    for (const sr of existingRuns) {
+      if (sr.status === "approved" && sr.outputs) {
+        completedResults[sr.stepId] = sr.outputs;
+      }
+    }
+
+    // Serialize suspend state on the process run
+    await db.update(schema.processRuns)
+      .set({
+        suspendState: {
+          suspendedAtStep: step.id,
+          suspendPayload,
+          completedStepResults: completedResults,
+        } as Record<string, unknown>,
+      })
+      .where(eq(schema.processRuns.id, processRunId));
+
+    // Create an action work item for the human step
+    const processName = definition.name;
+    await db.insert(schema.workItems).values({
+      type: "task",
+      status: "waiting_human",
+      content: step.instructions || step.description || step.name,
+      source: "process_spawned",
+      assignedProcess: run.processId,
+      executionIds: [processRunId],
+      context: {
+        stepRunId: stepRunRecord.id,
+        processRunId,
+        processName,
+        inputFields: step.input_fields || [],
+        instructions: step.instructions || step.description || step.name,
+      },
+    });
+
+    await logActivity("step.waiting_human", stepRunRecord.id, "step_run", {
+      step: step.id,
+      stepName: step.name,
+      processRunId,
     });
 
     return {
@@ -349,7 +408,11 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     return { processRunId, stepsExecuted: 0, status: "failed", message: "Process run not found" };
   }
 
-  if (run.status !== "queued" && run.status !== "running") {
+  if (run.status === "waiting_human") {
+    return { processRunId, stepsExecuted: 0, status: "waiting_human", message: "Waiting for human step completion" };
+  }
+
+  if (run.status !== "queued" && run.status !== "running" && run.status !== "waiting_review") {
     return { processRunId, stepsExecuted: 0, status: "failed", message: `Process run is ${run.status}, not executable` };
   }
 
@@ -425,13 +488,24 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     }
 
     if (result.status === "waiting_review") {
+      // Human steps set run to waiting_human; AI steps set to waiting_review
+      const isHumanStep = nextWork.step.executor === "human";
+      const runStatus = isHumanStep ? "waiting_human" : "waiting_review";
       await db.update(schema.processRuns)
-        .set({ status: "waiting_review" })
+        .set({ status: runStatus })
         .where(eq(schema.processRuns.id, processRunId));
-      await logActivity("process.run.waiting_review", processRunId, "process_run", {
-        step: result.stepId, stepName: result.stepName,
-      });
-      return { processRunId, stepsExecuted: 1, status: "waiting_review", message: result.message };
+      await logActivity(
+        isHumanStep ? "process.run.waiting_human" : "process.run.waiting_review",
+        processRunId,
+        "process_run",
+        { step: result.stepId, stepName: result.stepName },
+      );
+      return {
+        processRunId,
+        stepsExecuted: 1,
+        status: isHumanStep ? "waiting_human" : "waiting_review",
+        message: result.message,
+      };
     }
 
     return { processRunId, stepsExecuted: 1, status: "advanced", message: result.message };
@@ -499,11 +573,100 @@ export async function fullHeartbeat(processRunId: string): Promise<HeartbeatResu
     lastResult = await heartbeat(processRunId);
     totalSteps += lastResult.stepsExecuted;
   } while (lastResult.status === "advanced");
+  // Stops on: waiting_review, waiting_human, completed, failed
 
   return {
     ...lastResult,
     stepsExecuted: totalSteps,
   };
+}
+
+/**
+ * Resume a process run after a human step is completed.
+ * Injects human input into the suspended step, marks it approved,
+ * clears suspend state, and continues execution.
+ *
+ * Provenance: Mastra path-based suspend/resume + Trigger.dev waitpoint token pattern.
+ */
+export async function resumeHumanStep(
+  processRunId: string,
+  humanInput: Record<string, unknown>,
+): Promise<HeartbeatResult> {
+  const [run] = await db
+    .select()
+    .from(schema.processRuns)
+    .where(eq(schema.processRuns.id, processRunId))
+    .limit(1);
+
+  if (!run) {
+    return { processRunId, stepsExecuted: 0, status: "failed", message: "Process run not found" };
+  }
+
+  if (run.status !== "waiting_human") {
+    return { processRunId, stepsExecuted: 0, status: "failed", message: `Process run is ${run.status}, not waiting for human` };
+  }
+
+  const suspendState = run.suspendState as Record<string, unknown> | null;
+  if (!suspendState || !suspendState.suspendedAtStep) {
+    return { processRunId, stepsExecuted: 0, status: "failed", message: "No suspend state found" };
+  }
+
+  const suspendedStepId = suspendState.suspendedAtStep as string;
+  const suspendPayload = suspendState.suspendPayload as Record<string, unknown>;
+
+  // Mark the suspended step run as approved with human input as outputs
+  await db.update(schema.stepRuns)
+    .set({
+      status: "approved",
+      outputs: humanInput,
+      completedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.stepRuns.processRunId, processRunId),
+        eq(schema.stepRuns.stepId, suspendedStepId),
+      )
+    );
+
+  // Mark the corresponding work item as completed
+  // Use source + status + assignedProcess for targeted lookup (avoids scanning all waiting items)
+  const workItemCandidates = await db
+    .select()
+    .from(schema.workItems)
+    .where(
+      and(
+        eq(schema.workItems.status, "waiting_human"),
+        eq(schema.workItems.source, "process_spawned"),
+        eq(schema.workItems.assignedProcess, run.processId),
+      )
+    )
+    .limit(10);
+
+  for (const wi of workItemCandidates) {
+    const ctx = wi.context as Record<string, unknown> | null;
+    if (ctx && ctx.processRunId === processRunId) {
+      await db.update(schema.workItems)
+        .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+        .where(eq(schema.workItems.id, wi.id));
+      break;
+    }
+  }
+
+  // Clear suspend state and set run back to running
+  await db.update(schema.processRuns)
+    .set({
+      status: "running",
+      suspendState: null,
+    })
+    .where(eq(schema.processRuns.id, processRunId));
+
+  await logActivity("process.run.resumed", processRunId, "process_run", {
+    stepId: suspendedStepId,
+    humanInput,
+  });
+
+  // Continue execution from where we left off
+  return fullHeartbeat(processRunId);
 }
 
 /**
