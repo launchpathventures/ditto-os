@@ -95,11 +95,13 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | 023 — Phase 6 External Integrations (parent) | 6 | In progress — 024 complete |
 | 025 — MCP + Agent Tool Use (Phase 6b) | 6b | Ready — approved 2026-03-21 |
 | 026 — Credentials + Process I/O (Phase 6c) | 6c | Ready — approved 2026-03-21 |
+| 027 — Telegram Bot Engine Bridge | — | Draft — reviewed PASS WITH FLAGS, awaiting approval 2026-03-21 |
 
 ## Next Steps
 
-1. **NOW:** Brief 024 complete. Next: `/dev-builder` for Brief 025 (MCP + Agent Tool Use). Parallel: ADR-014 Phase A1 (Cognitive Toolkit) can run alongside 025. Reviewer recommends manual `gh` smoke test before starting 025.
-2. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
+1. **NOW:** Brief 027 designed and reviewed (PASS WITH FLAGS — 4 flags addressed). Telegram Bot Engine Bridge — routes bot through engine harness instead of standalone orchestrator. Enables live dogfooding with memory, trust, feedback. Awaiting human approval → `/dev-builder` to implement.
+2. **Parallel:** Brief 025 (MCP + Agent Tool Use) ready for build. ADR-014 Phase A1 (Cognitive Toolkit) can run alongside.
+3. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
 4. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
 5. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
 6. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
