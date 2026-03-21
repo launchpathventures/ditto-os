@@ -57,15 +57,19 @@ The magic is in the **transitions**: Analyze surfaces what's really happening �
 
 ### Process Is the Internal Primitive
 
-The atomic unit of the system's internal organisation is the **process**. But the user doesn't think in processes — they think in goals, tasks, questions, and insights. Processes are the system's learned skills for handling work, like organs in a body.
+The atomic unit of the system's internal organisation is the **process**. But the user doesn't think in processes — they think in goals, tasks, questions, and insights. The user is an **outcome owner** — responsible for results, possibly with a sense of the process, possibly just knowing what "good" looks like. Processes are the system's learned skills for handling work, like organs in a body. The system helps outcome owners define, refine, and improve processes over time — through conversation, templates, evidence from connected data, and accumulated corrections.
 
-A process is: inputs → transformation → outputs, with known sources and known destinations. An agent is just the thing that executes a process. The platform's job is:
+A process is: inputs → transformation → outputs, with known sources and known destinations. An agent is just the thing that executes a process. **Processes declare structure. Agents bring judgment. The harness evaluates outcomes.** A process definition governs what happens and in what order. The agent within each step has freedom to exercise judgment about how. The harness evaluates whether the output meets quality criteria. This ensures consistency without rigidity — the same process, the same governance, but agents can adapt to genuine context shifts. Processes are durable: defined once, refined through use, executed consistently. AI does not reinvent its approach each time.
+
+The platform's job is:
 
 1. **Receive work** from the user (goals, tasks, questions, insights, outcomes) and route it to the right process
-2. **Help humans discover and articulate processes** they can't yet describe precisely — through Analyze mode (evidence from connected data) and Explore mode (guided conversation), or both together
+2. **Help outcome owners discover and articulate processes** they can't yet describe precisely — through an intelligently guided hybrid of conversation and structured process building, with meta-agents reasoning alongside the user, drawing on industry standards (APQC), templates, and evidence from connected data
 3. **Match agents to processes** — not the other way around
 4. **Create a harness** where agents check each other and humans govern the whole thing
 5. **Evolve work** — a single input can spawn research, create projects, generate tasks handled by multiple processes
+
+**Processes declare structure. Agents bring judgment. The harness evaluates outcomes.** A process definition governs what happens and in what order. The agent within each step has freedom to exercise judgment about how — choosing reasoning approaches, applying mental models, sensing when something is off. The harness evaluates whether the output meets quality criteria — it doesn't prescribe how the agent got there. This ensures consistency (same process, same governance) without rigidity (agents can adapt to context). See ADR-014 for the full cognitive architecture and judgment hierarchy.
 
 ### Work Items Enter, Processes Execute
 
@@ -556,6 +560,30 @@ Trust tiers determine oversight **rate** — how often. The attention model dete
 **Silence is a feature.** When an autonomous process runs cleanly, the human sees nothing until the next digest. No notification, no queue item. The absence of noise IS the signal that things are working. This is the Management by Exception pattern from management science.
 
 **Provenance:** Content moderation three-band routing (TikTok, YouTube). ISO 2859 switching rules. Management by Exception (active MBE). Hersey-Blanchard Situational Leadership. SAE J3016 Level 3 (system knows when it's out of its depth). Zapier Digest (batch review). PagerDuty Event Intelligence (noise reduction). Per-output confidence routing, digest as explicit attention mode, and silence-as-feature are Original to Agent OS. See ADR-011.
+
+### Cross-Cutting: Agent Cognitive Architecture (ADR-014)
+
+The cognitive architecture spans Layers 2 (Agent), 3 (Harness), 4 (Awareness), 5 (Learning), and 6 (Human). It answers a question no other cross-cutting concern addresses: **how should the agent think?**
+
+Trust tiers determine oversight **rate** (how often). The attention model determines oversight **form** (item review, digest, alert). The cognitive model (ADR-013) determines what kind of **human thinking** review demands. The cognitive architecture determines what kind of **agent thinking** execution demands — and provides the executive function that governs the system's cognitive resources.
+
+**The governing principle:** Processes declare structure. Agents bring judgment. The harness evaluates outcomes. A process definition governs what happens and in what order. The agent within each step has freedom to exercise judgment about how. The harness evaluates whether the output meets quality criteria — it doesn't prescribe how the agent got there. This ensures consistency (same process, same governance) without rigidity (agents can adapt to context). The balance between **declarative process** (structured, governed, repeatable) and **intuitive metacognition** (adaptive, context-aware, capable of noticing what wasn't asked for) is the core design tension.
+
+**Three-layer cognitive architecture:**
+
+| Layer | Character | What it provides |
+|-------|-----------|------------------|
+| **A: Cognitive Infrastructure** | Always active | Executive function substrate: context assembly (position-aware working memory), metacognitive monitoring (intention tracking between steps), friction detection (retry/confidence trajectory), inhibitory control (existing trust gate), calibrated uncertainty (honest confidence signals) |
+| **B: Cognitive Toolkit** | Available, not mandated | Library of cognitive tools agents can draw on: mental models (first principles, inversion, circle of competence), reasoning strategies, reflection prompts, communication patterns. Markdown templates in `cognitive/`. The MeMo pattern: provide the toolkit, let the model choose. |
+| **C: Cognitive Context** | Framing, not scripting | Per-step declarations that set the cognitive register: `framing` (exploratory, analytical, convergent, adversarial, generative, integrative), `toolkit` (which models are available), `reflection` (checkpoint prompts), `freedom` (scaffolding depth: high/medium/low). The frame primes; the agent decides. |
+
+**Executive function as orchestrator evolution:** The orchestrator evolves from task tracker to cognitive manager. At each heartbeat, it evaluates: Is this approach converging on the intention? Is friction accumulating? Should the approach be adapted? This includes space for intuitive observation — "What, if anything, surprises you about the current state?"
+
+**Adaptive scaffolding:** Cognitive scaffolding depth adapts to model capability, task novelty, and trust tier. More capable models get less structure (addressing the Prompting Inversion finding: constrained prompting hurts frontier models). The `freedom` field controls this per step.
+
+**Trust rewards cognitive quality:** Agents with well-calibrated uncertainty earn trust faster. Productive failure (structured learning from failures) and proactive concern flagging contribute positively to trust evaluation. Trust is built through vulnerability and authenticity, not just performance metrics.
+
+**Provenance:** MeMo (Guan et al., 2024) for toolkit-not-prescription. MAP (Webb et al., Nature Communications 2025) for modular cognitive decomposition. Reflexion (Shinn et al., NeurIPS 2023) for metacognitive monitoring. CoALA (Sumers et al., TMLR 2024) for theoretical framework. Prompting Inversion (Bernstein et al., 2025) for adaptive scaffolding. Farnam Street (mental models), Tony Robbins (state management), Brené Brown (relational trust), cognitive neuroscience (executive function). Three-layer architecture, executive function as orchestrator, adaptive scaffolding, and cognitive quality in trust are Original to Agent OS. See ADR-014.
 
 ### Layer 6: Human Layer (The Interface)
 

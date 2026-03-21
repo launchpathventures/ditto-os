@@ -1,7 +1,7 @@
 # Agent OS — Current State
 
 **Last updated:** 2026-03-21
-**Current phase:** Phase 5 complete. Goal-directed orchestrator (021), CLI (022), E2E verification + templates (020) all approved. 3 non-coding templates shipped. Next: Documenter retro, then PM triage for Phase 6.
+**Current phase:** Phase 5 complete. ADR-014 (Agent Cognitive Architecture) accepted. Insight-047 (Outcome Owners + Process Lifecycle) captured. README, vision, personas reframed around "outcome owners" and the reinvention problem. Next: PM triage for Phase 6 or Cognitive Architecture A1.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -29,7 +29,7 @@
 - **Agent tools** — 3 read-only tools (read_file, search_files, list_files). Path traversal prevention, secret deny-list.
 - **DB schema enforcement** — `pnpm cli sync` runs drizzle-kit push. Handles first-run and evolution.
 - **Debt tracking** — `docs/debts/` markdown files. `pnpm cli debt` to list.
-- **Dev process** — 7 roles as skills. Brief template. 26 active insights, 21 archived. 30 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
+- **Dev process** — 7 roles as skills. Brief template. 28 active insights, 21 archived. 31 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
 - **Dev pipeline** — `claude -p` orchestrator + Telegram bot. Full Claude workspace on mobile. (Brief 015). Engine-integrated: `processes/dev-pipeline.yaml` runs 7 roles through the real harness with conditional routing (Brief 016c).
 - **System agents (Brief 014a+014b+021)** — 4 system agents running through the harness pipeline: trust-evaluator (wraps Phase 3 code, spot-checked), intake-classifier (keyword matching, supervised), router (LLM-based via Anthropic SDK, supervised), orchestrator (goal-directed — decomposes goals into tasks, routes around paused items, confidence-based stopping; supervised). `category: system` + `systemRole` on agents table. System agent registry dispatches via `script` executor + `systemAgent` config (Insight-044). `startSystemAgentRun()` for programmatic triggering.
 - **Goal-directed orchestrator (Brief 021+022)** — Decomposes goals into child work items using process step list as blueprint. `orchestratorHeartbeat()` iterates spawned tasks, routes around trust gate pauses to independent work. Confidence-based stopping: low confidence triggers escalation (Types 1/3/4). CLI: scope negotiation in `capture`, goal tree in `status`, escalation display. Schema: `decomposition` on workItems, `orchestratorConfidence` on processRuns.
@@ -44,6 +44,9 @@
 
 ## Recently Completed
 
+- **ADR-014 accepted** (Agent Cognitive Architecture) — Three-layer cognitive architecture (infrastructure + toolkit + context), orchestrator as executive function, adaptive scaffolding, cognitive quality in trust. 6-phase build plan (A1-D). Research report: 30+ sources. Approved 2026-03-21.
+- **Insight-047 captured** (Outcome Owners + Process Lifecycle) — Architecture review against "outcome owner" reframe. Two gaps: process articulation tools deferred too far (Phase 11), declarative-metacognitive balance unnamed. Judgment hierarchy proposed. Reviewed: PASS WITH FLAGS.
+- **Outcome owner reframe** — README rewritten, vision.md updated, personas.md updated. Users are "outcome owners" not "process owners." Reinvention problem (AI without durable process) is central. Declarative process vs intuitive metacognition named as core design tension.
 - **Phase 5 complete** (Briefs 018-022) — Goal-directed orchestrator, CLI integration, E2E verification, 3 process templates. 42 AC across 3 build briefs. 11 new tests (66 total). All reviewed: PASS WITH FLAGS (all addressed). Approved 2026-03-21.
 - **Phase 4c complete** (Brief 014 = 014a + 014b) — 4 system agents. Auto-classification capture pipeline. 17 AC. Approved 2026-03-21.
 - **Brief 016 complete** — CLI adapter, conditional routing, dev pipeline YAML, confidence gating + events. Approved 2026-03-21.
@@ -81,19 +84,50 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | Attention model (3 modes, confidence, silence) | ADR-011 | Accepted |
 | Context engineering, model routing, cost | ADR-012 | Accepted |
 | Cognitive model (mode, feedback, escalation) | ADR-013 | Accepted |
+| Agent cognitive architecture (toolkit, executive function, judgment hierarchy) | ADR-014 | Accepted |
 
 ## Active Briefs
 
-All Phase 5 briefs complete and moved to `docs/briefs/complete/`. No active briefs.
+| Brief | Phase | Status |
+|-------|-------|--------|
+| 023 — Phase 6 External Integrations (parent) | 6 | Draft — awaiting approval |
+| 024 — Integration Foundation + CLI (Phase 6a) | 6a | Ready — approved 2026-03-21 |
+| 025 — MCP + Agent Tool Use (Phase 6b) | 6b | Ready — approved 2026-03-21 |
+| 026 — Credentials + Process I/O (Phase 6c) | 6c | Ready — approved 2026-03-21 |
 
 ## Next Steps
 
-1. **NOW:** Insight-046 (Agent Cognitive Architecture) captured. Research phase: survey cognitive prompting architectures for prior art and evidence base. Then Architect designs ADR-014.
-2. **Planned:** PM triage for Phase 6 (External Integrations) or other priority.
-3. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
-4. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Will be extended by ADR-014 to include agent-execution cognitive framing, not just human review.
-5. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
-6. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+1. **NOW:** Phase 6 briefs approved. Build order: 024 (Integration Foundation + CLI) → 025 (MCP + Tool Use) → 026 (Credentials + Process I/O). Parallel: ADR-014 Phase A1 (Cognitive Toolkit) can run alongside 024. Next: `/dev-builder` for Brief 024.
+2. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
+4. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
+5. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
+6. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
+7. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+
+## Documenter Retrospective (2026-03-21 — Cognitive Architecture Deep-Dive Session)
+
+**What was produced this session:**
+1. Insight-046 significantly expanded through three rounds of strategic conversation: (1) reflection & mental models, (2) mindset/state/cognitive skills, (3) executive function & intuition as the governing layer.
+2. Seven layers of agent effectiveness defined (up from six): Skills → Mental Models → Thinking Style → State → Metacognition → Relational Intelligence → Executive Function.
+3. Executive function mapped to agent equivalents: working memory, cognitive flexibility, inhibitory control, planning, monitoring, initiation.
+4. Design principle articulated: "Agent OS provides cognitive tools and creates conditions for quality thinking. It does NOT prescribe which tool to use."
+5. Incremental implementation plan: Phase 1 (toolkit + tracking, human as executive function) → Phase 2 (learning correlation, orchestrator begins) → Phase 3 (full cognitive management, orchestrator as executive function).
+6. Consulting market parallel refined: ~$500B+ market, Agent OS captures methodology + execution (process-as-primitive) + problem framing + adaptation + intuitive sensing (cognitive architecture).
+
+**What worked:**
+- **Iterative deepening produced genuine insight.** Three rounds of conversation, each building on the last, moved from "agents need mental models" (obvious) to "executive function is the governing layer" (non-obvious). The third round — adding executive function and intuition — fundamentally changed the design direction from "cognitive toolkit" to "cognitive architecture with judgment."
+- **The consulting market parallel sharpened the value proposition.** Connecting executive function to the 40% problem-framing / 20% adaptation split in consulting made the abstract concrete. It clarifies what Agent OS does that raw AI doesn't.
+- **The "firm, not playbook" metaphor is a strong design test.** Every feature decision can be tested against: "Does this make Agent OS more like a firm (judgment, adaptation) or more like a playbook (prescription, rigidity)?"
+
+**What surprised us:**
+- **Intuition emerged as a design requirement.** The original insight was about structured cognitive tools. The conversation surfaced that too much structure kills the very intelligence we're trying to enable. "Space for intuition" is now a first-class design principle — genuinely unexpected.
+- **The orchestrator evolution table was clarifying.** Mapping current orchestrator capabilities (decompose, route, track, stop) against cognitive equivalents (evaluate decomposition, sense approach failure, track convergence, reflect on why) revealed how far the orchestrator needs to evolve. It's currently a task tracker, not an executive function.
+
+**What to change:**
+- **Strategic insight sessions produce high-value artifacts but no code.** The dev process accommodates this (Researcher/Designer/Architect can run standalone), but the Documenter retrospective format assumes build artifacts. Should distinguish "design evolution" sessions from "build" sessions.
+- **Insight-046 is now quite large.** At 129 lines, it's approaching the size of a design document. When research completes and ADR-014 is written, the insight should be significantly trimmed — it will have served its purpose as a staging area.
+
+---
 
 ## Documenter Retrospective (2026-03-21 — Phase 5 Session)
 

@@ -1,7 +1,7 @@
 # Agent OS — Roadmap
 
 **Last updated:** 2026-03-21
-**Current phase:** Phase 5 complete — goal-directed orchestrator, E2E verification, 3 non-coding process templates. Phase 4 remaining: cognitive model fields (deferred to Phase 8). Phase 5 deferred: attention model extensions (digest mode), cognitive model (mode-aware review). Next: Phase 6 (External Integrations).
+**Current phase:** Phase 5 complete — goal-directed orchestrator, E2E verification, 3 non-coding process templates. ADR-014 (Agent Cognitive Architecture) accepted. Phase 4 remaining: cognitive model fields (deferred to Phase 8). Phase 5 deferred: attention model extensions (digest mode), cognitive model (mode-aware review). Next: Phase 6 (External Integrations). Cognitive architecture phases (A1-D) interleave with existing roadmap.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Agent OS is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Agent OS. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -262,6 +262,32 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Impact propagation ("if I change X, these processes affected") | architecture.md L4 | Original |
 | Remaining 2 trust downgrade triggers (downstream reports, input changes) | architecture.md L3 | Requires L4 |
 
+### Cognitive Architecture A1: Cognitive Toolkit (can run parallel with Phase 6)
+
+**Re-entry condition:** Phase 5 complete (process steps, harness pipeline working)
+**Note:** Primarily content + schema work. Can run in parallel with Phase 6 (external integrations) since they touch different subsystems.
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| Cognitive content library (5-7 mental models, 3+ reflection prompts, communication patterns) | ADR-014 | MeMo (Guan et al., 2024) toolkit-not-prescription pattern. Farnam Street mental model library |
+| `cognitive_context` block on process step definitions (framing, toolkit, reflection, freedom) | ADR-014 | Original |
+| Context assembly injects toolkit content when `cognitive_context` present | ADR-014 | MeMo pattern adapted for process harness |
+| Cognitive approach recorded on step runs as metadata | ADR-014 | Original |
+| Backward compatible — steps without `cognitive_context` execute identically | ADR-014 | — |
+| Dev role validation — at least 2 dev roles run with cognitive context | ADR-014 | — |
+
+### Cognitive Architecture A2: Orchestrator Reflection
+
+**Re-entry condition:** A1 validated — cognitive context flows through harness
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| Orchestrator reflection cycle at each heartbeat (intention tracking, friction detection, approach evaluation) | ADR-014 | MAP Monitor/Evaluator (Webb et al., 2025), Reflexion (Shinn et al., 2023) |
+| Four-way reflection decision: continue / adapt / escalate / stop | ADR-014 | Original |
+| Reflection outputs stored as meta-memory for future retrieval | ADR-014 | Reflexion episodic memory pattern |
+| Escalation surfaces structured message to human | ADR-014 | Brown productive failure pattern |
+| Intuitive observation prompt in reflection cycle | ADR-014 | Original |
+
 ### Phase 8: Layer 5 — Learning (Full)
 
 **Re-entry condition:** 50+ feedback records exist
@@ -280,6 +306,37 @@ This is the complete capability map for Agent OS. Every item traces back to the 
 | Mode-aware feedback capture (aesthetic tags for creative outputs) | ADR-013 | Original |
 | Insight escalation: correction → pattern ("Teach this" formalised as level 2 of 4) | ADR-013 | Weick sensemaking, Soar impasse-driven learning |
 | Insight escalation: pattern → structural (LLM-based root cause detection) | ADR-013 | Original — via improvement-scanner agent |
+
+### Cognitive Architecture B: Learning Correlation + Adaptive Scaffolding
+
+**Re-entry condition:** A1+A2 data accumulation (20+ runs with cognitive context)
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| **B1: Learning correlation** | | |
+| Approach-outcome correlation (which cognitive framings produce best results per domain) | ADR-014 | Original |
+| Toolkit effectiveness tracking (which mental models correlate with high-rated outputs) | ADR-014 | Original |
+| Friction pattern detection (consistent friction at specific steps suggests wrong framing) | ADR-014 | Wray et al. (2025) reconsideration gap |
+| Improvement proposals include cognitive recommendations | ADR-014 | Existing improvement mechanism extended |
+| **B2: Adaptive scaffolding** | | |
+| Automatic scaffolding depth suggestions based on model capability + trust tier + task novelty | ADR-014 | Prompting Inversion (Bernstein et al., 2025) |
+| `freedom` field always takes precedence if explicitly set | ADR-014 | — |
+
+### Cognitive Architecture C-D: Cognitive Trust + Full Cognitive Management
+
+**Re-entry condition:** B1+B2 evidence accumulation
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| **C: Cognitive trust** | | |
+| Calibrated uncertainty as trust signal (honest low confidence that proves justified increases trust) | ADR-014 | Kadavath et al. 2022, Steyvers & Peters 2025 |
+| Productive failure quality in trust evaluation | ADR-014 | Brown (vulnerability as trust builder) |
+| Proactive concern flagging contributes to trust | ADR-014 | ADR-013 `concern` field, extended |
+| Cross-process cognitive learning | ADR-014 | Original |
+| **D: Full cognitive management** | | |
+| Orchestrator recommends cognitive postures based on accumulated evidence | ADR-014 | Original |
+| Cognitive toolkit expansion based on measured effectiveness | ADR-014 | Original |
+| Human approves/adjusts all cognitive recommendations | ADR-014 | — |
 
 ### Phase 9: Self-Improvement Meta-Process
 

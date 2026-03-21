@@ -55,8 +55,8 @@ These are the functions the architecture already describes, now formalized as sy
 | **trust-evaluator** | Calculates trust scores, recommends upgrades/downgrades based on accumulated feedback data | Phase 3 | Done |
 | **improvement-scanner** | Scans for process degradation, correction patterns, ecosystem changes. Proposes improvements | Phase 9 | Not started |
 | **brief-synthesizer** | Aggregates status across all processes, produces personalized Daily Brief | Phase 10 | Not started |
-| **process-analyst** | Helps users articulate and formalize processes via conversation. Classifies against industry standards (APQC). Compares against templates | Phase 11 | Not started |
-| **onboarding-guide** | Walks new users through first process setup. Conversational. Knows template library | Phase 11 | Not started |
+| **process-analyst** | Guides outcome owners through process articulation via intelligently guided hybrid (conversation + structured builder). Classifies against industry standards (APQC). Infers process structure from descriptions. Surfaces relevant templates. Reasons alongside the user — not a form or a transcript-to-YAML converter (Insight-047) | Phase 11 (PM triage: may move earlier) | Not started |
+| **onboarding-guide** | Walks new outcome owners through first process setup. Conversational. Helps users who "know what good looks like" but haven't codified it. Knows template library | Phase 11 (PM triage: may move earlier) | Not started |
 | **process-discoverer** | Connects to org data sources, identifies recurring process patterns, surfaces candidates | Phase 11 (requires Phase 6 integrations) | Not started |
 | **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 | Not started |
 

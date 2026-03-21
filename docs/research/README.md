@@ -34,5 +34,6 @@ Reports in `docs/research/`. Detailed pattern analysis feeding architectural dec
 | `qmd-obsidian-knowledge-search.md` | QMD markdown search, Obsidian patterns, OpenClaw memory model | 2026-03-21 | Active | Pending — Insight-042 (knowledge-manager), landscape.md |
 | `goal-directed-orchestrator-patterns.md` | Goal decomposition, work-queue scheduling, confidence-based stopping across 12 frameworks | 2026-03-21 | Active | Phase 5 brief, ADR-010, Insight-045 |
 | `phase-5-orchestrator-ux.md` | Orchestrator UX: goal setting, decomposition visibility, progress/routing, stopping conditions, templates | 2026-03-21 | Active | Phase 5 brief (Architect) |
+| `cognitive-prompting-architectures.md` | Cognitive architectures for agents: structured reasoning evidence, executive function, metacognition, structure-vs-intuition balance (30+ sources) | 2026-03-21 | Active | ADR-014 (Agent Cognitive Architecture) |
 
 **Statuses:** Active = still informing decisions. Consumed = primary consumer complete, retained for reference.

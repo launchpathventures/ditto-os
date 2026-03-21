@@ -19,6 +19,8 @@ They don't think in terms of "agents" or "workflows" or "orchestration." They th
 
 Their problem is not "I need AI." Their problem is "I need to stop doing this myself, but I can't hand it off because nothing I've tried is reliable enough."
 
+And when they *do* try AI, they hit the reinvention problem: the same prompt produces different outcomes every time — not because context shifted, but because nothing durable governs how the work gets done. No memory of what worked last time. No process to follow. No standards to meet. They re-check the same things every time. **AI without durable process is unreliable. AI without memory is unlearning.** This is why "just use ChatGPT" doesn't work for operational work — it reinvents its approach randomly instead of following a process that improves.
+
 ---
 
 ## Two Design Principles That Shape Everything
@@ -51,18 +53,19 @@ This means:
 
 ## Who We're Building For
 
-### Primary: The Process Owner
+### Primary: The Outcome Owner
 
-The process owner is the person who **knows how the work should be done** but is currently **doing too much of it themselves.** They are the domain expert, not the technology expert. They carry the quality standard in their head — and that's exactly why they can't delegate.
+The outcome owner is the person **responsible for results** — they might have a clear sense of the process, or they might just know what "good" looks like and need a system to help them define, refine, and improve the process over time. They are the domain expert, not the technology expert. They carry the quality standard in their head — and that's exactly why they can't delegate.
 
 **What they have in common:**
 - They are responsible for outcomes, not just activities
 - They have high standards and have been burned by delegation failures (to people or tools)
 - They spend significant time on operational work they know is beneath their capability
-- They can describe what "good" looks like but struggle to codify it into rules
+- They can describe what "good" looks like but struggle to codify it into rules — some have a clear process, others just have instinct and standards
 - They are pragmatic — they'll adopt technology that works, but they won't tolerate configuration hell or unreliable output
 - They did not train as managers. Managing agents is a new skill they'll need to learn without realising they're learning it
 - **They're regularly away from their desk** — on sites, in meetings, commuting — and need to keep work moving from their phone
+- They've tried AI tools and hit the reinvention problem: every interaction starts from scratch, nothing learns, nothing sticks
 
 **What distinguishes them from power users of existing AI tools:**
 - They are not prompt engineers. They won't iterate on prompts to get better results.
@@ -204,13 +207,13 @@ The process owner is the person who **knows how the work should be done** but is
 
 **What Agent OS does differently:** Progressive trust. Everything starts supervised — the human reviews every output. As the system proves reliable, it earns less oversight. But the human never "turns off" monitoring — the system downgrades itself if quality drops. The human's anxiety is addressed by visible trust data: "47 runs, 83% clean, corrections decreasing."
 
-### Problem 2: "I keep making the same corrections and nothing learns"
+### Problem 2: "AI reinvents its approach every time — nothing learns, nothing sticks"
 
-**The feeling:** Frustration. They've told the AI tool 12 times to stop using last quarter's baseline. They've corrected the formatting on the luxury brand report 8 times. Every time feels like the first time.
+**The feeling:** Frustration. They've told the AI tool 12 times to stop using last quarter's baseline. They've corrected the formatting on the luxury brand report 8 times. Every time feels like the first time. The AI doesn't have a process to follow — it figures it out from scratch each time.
 
-**Why existing tools fail:** No memory. Each invocation is a blank slate. Some tools have "custom instructions" but they're generic — they don't learn from the specific corrections the user makes on specific types of work.
+**Why existing tools fail:** No durable process. No memory. Each invocation is a blank slate. Some tools have "custom instructions" but they're generic — they don't learn from the specific corrections the user makes on specific types of work. There's no accumulating standard that improves over time.
 
-**What Agent OS does differently:** Edits ARE feedback. When the user corrects an output, the system captures the diff, detects patterns across corrections, and offers to make them permanent: "You consistently fix the baseline year in Chen's reports. Teach this?" One tap, and the correction becomes a quality criterion the harness enforces.
+**What Agent OS does differently:** Processes are durable — defined once, refined through use, executed consistently. The AI doesn't reinvent its approach; it follows a governed process that improves. Edits ARE feedback. When the user corrects an output, the system captures the diff, detects patterns across corrections, and offers to make them permanent: "You consistently fix the baseline year in Chen's reports. Teach this?" One tap, and the correction becomes a quality criterion the harness enforces. The process gets better every time — the opposite of reinvention.
 
 ### Problem 3: "I can't see what's happening across all my work"
 
