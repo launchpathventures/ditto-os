@@ -4,10 +4,17 @@
  * Assembles agent context from memories before step execution.
  * Loads agent-scoped + process-scoped memories, sorts, budgets, renders.
  *
+ * Also assembles intra-run context: outputs from completed steps in the same
+ * process run. This is ephemeral per-run state — NOT durable memory. It replaces
+ * the standalone dev-pipeline's buildContextPreamble() which passed prior role
+ * outputs to subsequent roles. Intra-run context uses a separate token budget
+ * from durable memories.
+ *
  * Provenance:
  * - Assembly function: Letta compile(), Open SWE get_agent()
  * - Scope filtering: Mem0 mem0/memory/main.py
  * - Reinforcement sorting: memU src/memu/database/models.py
+ * - Intra-run context: Ditto dev-session.ts buildContextPreamble() concept (Brief 027)
  */
 
 import { db, schema } from "../../db";
@@ -19,6 +26,15 @@ const DEFAULT_TOKEN_BUDGET = 2000;
 const CHARS_PER_TOKEN = 4;
 
 /**
+ * Separate token budget for intra-run context (Brief 027, AC7).
+ * Intra-run context is ephemeral per-run state — outputs from prior steps
+ * in the same process run. It is NOT durable memory (not learned, not
+ * reinforced, not confidence-scored). It uses a separate budget so it
+ * doesn't starve durable agent/process memories.
+ */
+export const RUN_CONTEXT_TOKEN_BUDGET = 1500;
+
+/**
  * Render a single memory as a formatted line.
  */
 function renderMemory(memory: {
@@ -28,6 +44,15 @@ function renderMemory(memory: {
   reinforcementCount: number;
 }): string {
   return `- [${memory.type}] ${memory.content} (confidence: ${memory.confidence}, reinforced: ${memory.reinforcementCount}x)`;
+}
+
+/**
+ * Truncate text to fit within a character budget, preserving line breaks.
+ * Adds ellipsis when truncated.
+ */
+function truncateToCharBudget(text: string, charBudget: number): string {
+  if (text.length <= charBudget) return text;
+  return text.slice(0, charBudget - 20) + "\n... (truncated)";
 }
 
 export const memoryAssemblyHandler: HarnessHandler = {
@@ -97,20 +122,13 @@ export const memoryAssemblyHandler: HarnessHandler = {
         desc(schema.memories.confidence)
       );
 
-    // AC10: gracefully handle zero memories
-    if (agentMemories.length === 0 && processMemories.length === 0) {
-      context.memories = "";
-      context.memoriesInjected = 0;
-      return context;
-    }
-
     // Dedup across scopes — if same content exists in both, keep only the agent-scoped version
     const agentContents = new Set(agentMemories.map((m) => m.content));
     const dedupedProcessMemories = processMemories.filter(
       (m) => !agentContents.has(m.content)
     );
 
-    // Render within budget
+    // Render durable memories within budget
     const sections: string[] = [];
     let totalChars = 0;
     let injectedCount = 0;
@@ -146,6 +164,66 @@ export const memoryAssemblyHandler: HarnessHandler = {
       if (lines.length > 1) {
         sections.push(lines.join("\n"));
       }
+    }
+
+    // --- Intra-run context (Brief 027, AC7) ---
+    // Load outputs from completed steps in the SAME process run.
+    // This is ephemeral per-run state, not durable memory.
+    // Uses a separate token budget so it doesn't starve agent/process memories.
+    const runContextCharBudget = RUN_CONTEXT_TOKEN_BUDGET * CHARS_PER_TOKEN;
+    const completedSteps = await db
+      .select({
+        stepId: schema.stepRuns.stepId,
+        outputs: schema.stepRuns.outputs,
+        confidenceLevel: schema.stepRuns.confidenceLevel,
+      })
+      .from(schema.stepRuns)
+      .where(
+        and(
+          eq(schema.stepRuns.processRunId, context.processRun.id),
+          eq(schema.stepRuns.status, "approved"),
+        ),
+      );
+
+    if (completedSteps.length > 0) {
+      const runContextLines: string[] = ["## Run Context (prior steps in this run)"];
+      let runContextChars = runContextLines[0].length + 1;
+
+      for (const step of completedSteps) {
+        // Skip the current step
+        if (step.stepId === context.stepDefinition.id) continue;
+
+        const header = `### ${step.stepId}`;
+        if (runContextChars + header.length + 1 > runContextCharBudget) break;
+        runContextLines.push(header);
+        runContextChars += header.length + 1;
+
+        if (step.outputs && typeof step.outputs === "object") {
+          // Extract the first output value as text summary
+          const outputValues = Object.values(step.outputs as Record<string, unknown>);
+          for (const val of outputValues) {
+            const text = typeof val === "string" ? val : JSON.stringify(val);
+            const truncated = truncateToCharBudget(text, runContextCharBudget - runContextChars - 10);
+            runContextLines.push(truncated);
+            runContextChars += truncated.length + 1;
+            if (runContextChars >= runContextCharBudget) break;
+          }
+        }
+
+        if (runContextChars >= runContextCharBudget) break;
+      }
+
+      if (runContextLines.length > 1) {
+        sections.push(runContextLines.join("\n"));
+        injectedCount += completedSteps.length;
+      }
+    }
+
+    // AC10: gracefully handle zero memories (including zero run context)
+    if (sections.length === 0) {
+      context.memories = "";
+      context.memoriesInjected = 0;
+      return context;
     }
 
     context.memories = sections.join("\n\n");
