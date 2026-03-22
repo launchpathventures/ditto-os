@@ -1,7 +1,7 @@
 # Ditto — Current State
 
-**Last updated:** 2026-03-21
-**Current phase:** Brief 027 (Telegram Bot Engine Bridge) complete and approved. Telegram bot routes through engine harness pipeline — memory, trust, feedback all fire. 88 tests (6 new). Insight-032 archived, Debt-005 resolved. Next: dogfood via Telegram, or `/dev-pm` for next work.
+**Last updated:** 2026-03-22
+**Current phase:** PM triage identified the Conversational Self as the foundational missing piece. Insight-056 captured. The product has no unified entity — users talk to raw Claude + slash commands, not to "Ditto." This must be designed before Phase 10 (web dashboard) and alongside Cognitive Architecture A1. Next: `/dev-designer` (interaction spec) + `/dev-researcher` (patterns for persistent AI identity) in parallel, then `/dev-architect` for ADR + brief.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -101,13 +101,14 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 
 ## Next Steps
 
-1. **NOW:** Brief 027 complete. Use the Telegram bot to dogfood the engine on real dev work. Architecture.md Layer 2 needs intra-run context documented (Brief 027 After Completion item 6).
-2. **Parallel:** Brief 025 (MCP + Agent Tool Use) ready for build. ADR-014 Phase A1 (Cognitive Toolkit) can run alongside.
-3. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
-4. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
-5. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
-6. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
-7. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+1. **NOW:** Design the Conversational Self (Insight-056). `/dev-designer` for interaction spec + `/dev-researcher` for persistent AI identity patterns (parallel), then `/dev-architect` for ADR + brief. This is the foundational missing piece — the product has no unified entity. Must be designed before Phase 10 and alongside Cognitive Architecture A1.
+2. **Still needed:** Architecture.md Layer 2 needs intra-run context documented (Brief 027 After Completion item 6).
+3. **Paused:** Brief 025 (MCP + Agent Tool Use) and 026 (Credentials) — ready for build but deprioritised. Adding tools to agents without a coherent invoker is infrastructure without a user.
+4. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
+5. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
+6. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
+7. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
+8. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
 
 ## Documenter Retrospective (2026-03-21 — Brief 027 Engine Bridge Session)
 
