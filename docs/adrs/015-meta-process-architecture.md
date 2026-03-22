@@ -31,8 +31,8 @@ Simultaneously, the creator's experience building Ditto has surfaced a critical 
 
 - `docs/insights/052-creator-is-first-outcome-owner.md` — validate on this repo first
 - `docs/insights/053-pm-consultative-framing.md` — PM's job is framing, not routing
-- `docs/insights/054-meta-processes-are-the-platform.md` — meta processes ARE the platform
-- `docs/insights/055-complete-meta-process-map.md` — the five meta processes and their hierarchy
+- `docs/insights/054-meta-processes-are-the-platform.md` — meta processes ARE the platform (initial four-process model)
+- `docs/insights/055-complete-meta-process-map.md` — refined to five meta processes; this ADR further refines to four meta processes + Cognitive Framework as environment
 - `docs/insights/031-research-extract-evolve-is-the-meta-process.md` — external research as continuous input
 - `docs/insights/042-knowledge-management-is-a-meta-process.md` — knowledge lifecycle through harness
 - `docs/adrs/008-system-agents-and-process-templates.md` — existing system agent definitions
@@ -41,9 +41,13 @@ Simultaneously, the creator's experience building Ditto has surfaced a critical 
 
 ## Decision
 
-### 1. Define five meta processes as first-class architectural concepts
+### 1. Four meta processes within the Cognitive Framework
 
-Meta processes are the processes through which the platform operates, creates, evolves, and reasons. They are not system agents (those are implementations). They are not domain processes (those handle user work). They are the platform's backbone — the fundamental capabilities that make everything else possible.
+Meta processes are the processes through which the platform operates, creates, and evolves. They are not system agents (those are implementations). They are not domain processes (those handle user work). They are the platform's backbone — the fundamental capabilities that make everything else possible.
+
+The **Cognitive Framework** is not a fifth meta process — it is the **environment** within which all four meta processes operate. It shapes how all thinking happens, but it is not itself a sequential process with inputs and outputs. It is the soup everything swims in.
+
+**The four meta processes:**
 
 | Meta Process | Purpose | Existing Building Blocks |
 |---|---|---|
@@ -51,17 +55,24 @@ Meta processes are the processes through which the platform operates, creates, e
 | **Build** | Create all processes, agents, and skills — including meta processes and itself | process-analyst, onboarding-guide (ADR-008 Phase 11); dev pipeline (Brief 016c) |
 | **Process Execution** | Orchestrate roles/agents through defined processes to deliver outcomes | orchestrator, heartbeat, harness pipeline (existing); trust gate (Phase 2) |
 | **Feedback & Evolution** | Observe, research, learn, and propose improvements to everything | improvement-scanner (ADR-008 Phase 9); trust-evaluator (Phase 3); L5 Learning Layer |
-| **Cognitive Framework** | The executive function and filter that ALL thinking passes through | ADR-014 cognitive architecture; ADR-013 cognitive model |
+
+**The Cognitive Framework (environment):**
+
+| Concern | What It Is | Existing Building Blocks |
+|---|---|---|
+| **Cognitive Framework** | The pervasive executive function — the environment and filter that ALL thinking passes through. Not a process but the operating context for all cognition. | ADR-014 cognitive architecture; ADR-013 cognitive model; CLAUDE.md; architecture.md principles; accumulated insights |
+
+This distinction matters: the four meta processes can be sequenced, orchestrated, and trust-gated. The Cognitive Framework cannot — it is always active, shaping how the four processes operate. When the Cognitive Framework itself needs to evolve, it does so through Feedback & Evolution (the only meta process that can modify the environment).
 
 ### 2. Establish the meta process hierarchy
 
-The five meta processes are not peers. They have a structural hierarchy:
+The four meta processes are not peers. They have a structural hierarchy, operating within the Cognitive Framework environment:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  COGNITIVE FRAMEWORK (pervasive executive function)             │
-│  Shapes how all thinking happens — not a step in the pipeline  │
-│  but the operating context for all cognition.                   │
+│  COGNITIVE FRAMEWORK (environment — the soup)                   │
+│  Pervasive executive function. Always active. Shapes how all   │
+│  thinking happens. Not a process — the operating context.       │
 │                                                                 │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
 │  │ GOAL FRAMING │───→│    BUILD     │───→│  EXECUTION   │     │
@@ -84,7 +95,7 @@ The five meta processes are not peers. They have a structural hierarchy:
 │                    │ externally.       │                        │
 │                    │ Primary consumer: │                        │
 │                    │ Build process.    │                        │
-│                    │ Can modify the    │                        │
+│                    │ Can evolve the    │                        │
 │                    │ Cognitive         │                        │
 │                    │ Framework itself. │                        │
 │                    └──────────────────┘                         │
@@ -92,12 +103,18 @@ The five meta processes are not peers. They have a structural hierarchy:
 ```
 
 **Key relationships:**
-- **Cognitive Framework** is pervasive — not a step but the operating context. Every meta process and domain process operates within it.
+- **Cognitive Framework** is the environment — not a step but the operating context. Every meta process and domain process operates within it.
 - **Goal Framing** is the universal entry point — every interaction starts with framing.
 - **Build** is the generative core — creates all processes, agents, skills. The only self-referential meta process (it can build and modify itself).
-- **Process Execution** runs what Build created — with trust-gated human interrupts.
+- **Process Execution** is the existing harness pipeline (L3) viewed through the meta process lens. It adds no new layer above the harness — it IS the harness, the orchestrator, and the heartbeat operating as a coherent meta process.
 - **Feedback & Evolution** feeds back into everything — but its primary consumer is Build. The learning loop must directly improve how Build operates.
-- **Feedback & Evolution** is the only meta process that can modify the Cognitive Framework itself (with human approval at the highest trust gate).
+- **Feedback & Evolution** is the only meta process that can modify the Cognitive Framework environment (with human approval).
+
+### 2a. Code is an encoded process
+
+A foundational observation: the platform's source code is itself an encoded process. Every file, function, and configuration is the output of a Build process run. The distinction between "code" and "process definition" is one of encoding, not kind. A YAML process definition and a TypeScript module are both outputs of Build — both evolve through the same meta process pipeline (Goal Framing → Build → Execution → Feedback).
+
+This means the platform literally runs on itself at every level: meta processes govern the creation of the code that implements meta processes. The dev pipeline doesn't just validate the meta process architecture — it IS the meta process architecture operating on its own substrate.
 
 ### 3. Define Goal Framing as a consultative process
 
@@ -146,7 +163,19 @@ The Build process creates all processes, agents, and skills — including other 
 
 **Implementation:** The existing dev pipeline (processes/dev-pipeline.yaml) is the first Build process. The process-analyst system agent (ADR-008, Phase 11) becomes a Build capability. The dev roles (/dev-pm, /dev-researcher, /dev-architect, /dev-builder, /dev-reviewer, /dev-documenter) are Build's agents.
 
-**Trust:** Build starts supervised — the human approves every creation. As trust is earned, Build may create routine extensions autonomously (e.g., adding a step to an existing process) while structural changes (new processes, new agents) always require human approval.
+**Trust:** Build starts supervised — the human approves every creation. Everything can earn trust, including Build itself and its self-modification capabilities. But **breaking changes always require human approval** — regardless of trust tier. The trust gradient within Build:
+
+| Operation Type | Can earn autonomous trust? | Breaking change? |
+|---|---|---|
+| Adding a step to an existing process | Yes | No |
+| Creating a new domain process | Yes (over time) | No |
+| Modifying Build's own operation | Yes (over time) | Depends — structural changes to Build's pipeline are breaking |
+| Creating a new meta process | Yes (over time) | No — but starts supervised by default |
+| Modifying the Cognitive Framework | Yes (over time) | Always treated as breaking — always requires human approval |
+| Deleting or restructuring processes | Never autonomous | Yes — always requires human approval |
+| Changing trust rules or permission boundaries | Never autonomous | Yes — always requires human approval |
+
+The principle: **earn trust in creation, require approval for destruction and structural change.** This mirrors how organizations work — a trusted employee can draft new proposals autonomously, but restructuring the org chart always goes through leadership.
 
 ### 5. Elevate the Cognitive Framework to pervasive executive function
 
@@ -166,7 +195,18 @@ ADR-014 defines a three-layer cognitive architecture for agents. This ADR extend
 
 **What changes from ADR-014:** Nothing is contradicted. ADR-014 defines how cognitive capabilities are assembled for individual agent invocations. This ADR elevates the concept: the Cognitive Framework is the meta-level executive function that informs how ADR-014's layers are composed, which toolkit entries are relevant, and what metacognitive monitoring should watch for. ADR-014 is the mechanism; the Cognitive Framework is the governing intelligence.
 
-**Evolution:** The Cognitive Framework evolves through Feedback & Evolution — the only meta process that can modify it. Modifying the Cognitive Framework is the highest-trust operation in the system because it changes how everything thinks. Every modification requires human approval.
+**How the Cognitive Framework relates to all processes:**
+
+The Cognitive Framework is not a layer that sits above processes or a step that runs before them. It is the **medium** in which all cognition occurs — the way water is the medium fish swim in. Every process, meta or domain, operates within the Cognitive Framework. But the relationship is not uniform:
+
+| Process Type | Cognitive Framework Relationship | Example |
+|---|---|---|
+| **Meta processes** | Full executive function active. The framework shapes how Goal Framing assesses clarity, how Build researches and creates, how Execution orchestrates, how Feedback evaluates. | Build uses mental models to assess architectural trade-offs. Goal Framing uses consultative patterns to calibrate question depth. |
+| **Domain processes (complex)** | Domain-relevant subset of the framework. The framework provides reasoning tools appropriate to the domain. | A financial reconciliation process uses analytical reasoning, systematic checking, anomaly detection patterns. |
+| **Domain processes (routine)** | Minimal cognitive scaffolding. The framework is present but lightweight — the process is procedural enough that deep reasoning adds cost without value. | A report formatting process needs template matching, not first-principles reasoning. |
+| **The framework on itself** | Metacognitive — the framework monitors its own effectiveness. "Is this mental model producing better outcomes? Is this reasoning pattern being used?" | Feedback & Evolution tracks which cognitive toolkit entries correlate with high-quality outputs (ADR-014 Phase B1). |
+
+The Cognitive Framework is **not static**. It evolves through Feedback & Evolution — the only meta process that can modify the environment. This is the highest-trust operation in the system because it changes how everything thinks. Everything can earn trust, including modifications to the Cognitive Framework, but breaking changes to the framework (removing mental models, changing core reasoning patterns) always require human approval.
 
 ### 6. Define the meta-to-domain relationship
 
@@ -176,7 +216,7 @@ ADR-014 defines a three-layer cognitive architecture for agents. This ADR extend
 | **Purpose** | Platform operation, creation, evolution | User work |
 | **Trust baseline** | Higher (platform-level operations) | Standard (user-configured) |
 | **Permission scope** | Cross-process, can modify platform | Scoped to assigned data/tools |
-| **Examples** | Goal Framing, Build, Execution, Feedback, Cognitive | Quoting, reconciliation, content review |
+| **Examples** | Goal Framing, Build, Execution, Feedback & Evolution | Quoting, reconciliation, content review |
 | **Modified by** | Build + Feedback (with human approval) | Build (with human approval) |
 | **Can create new...** | Processes, agents, skills, meta processes | Work items, outputs |
 | **Cognitive Framework** | Full executive function active | Subset relevant to domain |
@@ -223,6 +263,44 @@ The first validation of the meta process architecture is the dev pipeline on thi
 
 **The current gap:** Goal Framing doesn't exist as a process yet — the creator currently invokes /dev-pm manually and the PM does triage, not consultative framing. Building Goal Framing is the first brief that emerges from this ADR.
 
+### 9. Security model for meta processes
+
+Meta processes that can modify the platform represent the highest-risk capability in the system. The security model ensures that trust-earning does not create attack vectors.
+
+**Threat model:**
+
+| Threat | Mitigation |
+|---|---|
+| **Compromised Build creates malicious processes** | All Build outputs go through the harness pipeline — including review patterns and trust gates. A compromised Build cannot bypass the harness. Breaking changes always require human approval regardless of trust tier. |
+| **Feedback & Evolution modifies Cognitive Framework to weaken reasoning** | Cognitive Framework modifications are audited with full diff visibility. The human sees exactly what changed and why. Modifications are versioned — rollback is always possible. |
+| **Meta process escalates its own permissions** | Permission boundaries are enforced by the harness layer (L3), not by the meta processes themselves. A meta process cannot grant itself new permissions — only the harness can, and only with human approval for breaking changes. |
+| **Trust gaming on meta processes** | The governance-monitor system agent (Phase 12) watches for trust gaming patterns. Meta processes have the same trust-earning constraints as domain processes — sliding window, conjunctive upgrades, disjunctive downgrades (ADR-007). |
+| **Self-referential Build loop creates unintended changes** | Build's self-modification outputs are treated as breaking changes when they alter Build's own pipeline structure. Additive self-improvements (new toolkit entries, refined prompts) can earn autonomous trust. Structural changes (new steps, changed flow) always require human approval. |
+
+**Permission scoping:**
+
+| Meta Process | Required Permissions | Restricted From |
+|---|---|---|
+| **Goal Framing** | Read work items, read process definitions, write confirmed briefs | Cannot modify processes, agents, or the Cognitive Framework |
+| **Build** | Read/write process definitions, read/write agent configurations, read integration registry | Cannot bypass trust gates, cannot modify permission boundaries, cannot delete without human approval |
+| **Process Execution** | Execute process steps, invoke agents, read/write step run data | Cannot modify process definitions, cannot change trust tiers |
+| **Feedback & Evolution** | Read all harness data, read external sources, write improvement proposals, modify Cognitive Framework (with human approval) | Cannot directly modify processes (proposes to Build), cannot bypass trust gates |
+
+**Audit trail:** Every meta process operation is logged through the existing harness feedback recorder. Meta process operations carry a `meta: true` flag for audit filtering. The governance-monitor (Phase 12) specifically watches meta process trust patterns.
+
+**Versioning and rollback:** All meta process modifications (process definitions, cognitive toolkit entries, agent configurations) are versioned. The human can rollback any modification. Cognitive Framework changes maintain a separate version history because of their pervasive impact.
+
+### 10. Architecture layer impact
+
+| Layer | Impact | What Changes |
+|---|---|---|
+| **L1: Process** | Process definitions gain a `category: meta \| domain` field. Meta processes follow the same YAML structure but have broader scope declarations. | Schema extension |
+| **L2: Agent** | System agents are mapped to meta process functions (section 7). No new agents introduced. | Organizational clarity |
+| **L3: Harness** | Meta processes go through the same harness pipeline. Breaking change detection added as a trust gate modifier — breaking changes always pause regardless of trust tier. | Trust gate extension |
+| **L4: Awareness** | Meta process dependency graph (Goal Framing → Build → Execution, Feedback → Build) is a new awareness layer concern. | Dependency tracking |
+| **L5: Learning** | Feedback & Evolution IS the meta process embodiment of L5. No structural change — but the primary consumer (Build) is now explicit. | Consumer clarity |
+| **L6: Human** | Goal Framing is the primary human entry point. The consultative conversation pattern is a new L6 interaction. | New interaction pattern |
+
 ## Provenance
 
 - **Meta process concept:** Original — no existing framework distinguishes meta processes from domain processes in this way. Closest is Paperclip's distinction between system goals and user goals, but Paperclip doesn't model goal framing or build as separate processes.
@@ -235,21 +313,22 @@ The first validation of the meta process architecture is the dev pipeline on thi
 
 ### What becomes easier
 
-- **Explaining what Ditto is.** "Five meta processes that create, run, evolve, and reason about user work" is clearer than "ten system agents and a harness."
+- **Explaining what Ditto is.** "Four meta processes operating within a Cognitive Framework — they create, run, evolve, and reason about user work" is clearer than "ten system agents and a harness."
 - **Prioritizing work.** Build process quality is the highest-leverage investment — this gives clear sequencing guidance.
 - **Self-improvement.** The feedback loop has a clear primary consumer (Build) rather than feeding into a vague "learning layer."
 - **New capability creation.** When a goal doesn't map to an existing process, the response is clear: Build creates what's missing.
 
 ### What becomes harder
 
-- **Nothing becomes structurally harder.** This ADR organizes existing concepts — it doesn't introduce new infrastructure.
+- **Conceptual complexity increases.** Two levels of process (meta and domain) with different trust profiles, self-referential Build, and a pervasive Cognitive Framework add conceptual weight. No new infrastructure, but more to reason about.
+- **Testing circular dependencies.** Meta processes that modify the platform create circular dependencies in testing — the test infrastructure is itself a Build output.
 - **Discipline in Goal Framing.** The consultative conversation requires restraint — not rushing to execute, not over-questioning. This is a design challenge, not a structural one.
 
 ### New constraints
 
 - **Goal Framing must precede Build and Execution.** No process creation or execution starts without a confirmed brief from Goal Framing (unless the task is trivially clear).
 - **Build must be research-driven.** The research-extract-evolve cycle is mandatory, not optional.
-- **Cognitive Framework modifications require highest trust.** Any change to how the platform thinks must be human-approved.
+- **Breaking changes always require human approval.** Regardless of trust tier — for meta processes, domain processes, and the Cognitive Framework. Everything can earn trust in creation; destruction and structural change require human confirmation.
 - **Feedback & Evolution has a primary consumer.** The learning loop feeds Build first, then everything else.
 
 ### Follow-up decisions needed
