@@ -1,7 +1,7 @@
 # Ditto — Current State
 
-**Last updated:** 2026-03-21
-**Current phase:** Phase 6a complete (Brief 024). Integration foundation proven: registry loader, CLI protocol handler, integration executor, harness logging. ADR-005 accepted. Next: `/dev-builder` for Brief 025 (MCP + Agent Tool Use), or ADR-014 Phase A1 (Cognitive Toolkit) in parallel.
+**Last updated:** 2026-03-22
+**Current phase:** PM triage identified the Conversational Self as the foundational missing piece. Insight-056 captured. The product has no unified entity — users talk to raw Claude + slash commands, not to "Ditto." This must be designed before Phase 10 (web dashboard) and alongside Cognitive Architecture A1. Next: `/dev-designer` (interaction spec) + `/dev-researcher` (patterns for persistent AI identity) in parallel, then `/dev-architect` for ADR + brief.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -21,7 +21,7 @@
 - **Trust gate** — 4 tiers: supervised, spot-checked (~20%), autonomous, critical. Deterministic SHA-256 sampling. Confidence override: `low` always pauses regardless of tier (ADR-011, Brief 016d).
 - **Trust earning** — Sliding window (20 runs), conjunctive upgrades, disjunctive downgrades, grace period, simulation, override. (ADR-007)
 - **Review patterns** — Maker-checker, adversarial, spec-testing. Retry with feedback injection.
-- **Memory** — Two-scope (agent + process), salience sorting, token-budgeted assembly, feedback-to-memory bridge. (ADR-003)
+- **Memory** — Three-scope: agent-scoped + process-scoped (durable, ADR-003) + intra-run context (ephemeral, Brief 027). Salience sorting, token-budgeted assembly (2000 tokens durable, 1500 tokens run context), feedback-to-memory bridge.
 - **Human steps** — `executor: human` suspends execution, creates action work item with input_fields, `aos complete` resumes with human input.
 - **Pattern notification** — After 3+ corrections of same pattern, read-only notification surfaced. Precursor to Phase 8 "Teach this".
 - **Parallel execution** — Promise.all for parallel groups, depends_on resolution
@@ -30,13 +30,14 @@
 - **Agent tools** — 3 read-only tools (read_file, search_files, list_files). Path traversal prevention, secret deny-list.
 - **DB schema enforcement** — `pnpm cli sync` runs drizzle-kit push. Handles first-run and evolution.
 - **Debt tracking** — `docs/debts/` markdown files. `pnpm cli debt` to list.
-- **Dev process** — 7 roles as skills. Brief template. 26 active insights, 23 archived. 31 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
-- **Dev pipeline** — `claude -p` orchestrator + Telegram bot. Full Claude workspace on mobile. (Brief 015). Engine-integrated: `processes/dev-pipeline.yaml` runs 7 roles through the real harness with conditional routing (Brief 016c).
+- **Dev process** — 7 roles as skills. Brief template. 29 active insights, 24 archived. 31 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
+- **Dev pipeline** — `claude -p` orchestrator + Telegram bot. Full Claude workspace on mobile. (Brief 015). Engine-integrated: `processes/dev-pipeline.yaml` runs 7 roles through the real harness with conditional routing (Brief 016c). Telegram bot routes through engine harness pipeline (Brief 027): `startProcessRun()` + `fullHeartbeat()` loop, review actions via `approveRun()`/`editRun()`/`rejectRun()`, intra-run context passing. Memory, trust, feedback all active.
+- **Review actions (Brief 027)** — `src/engine/review-actions.ts`. Shared approve/edit/reject logic extracted from CLI commands. Pure engine functions (no TTY, no process.exit). Step-level granularity via `findWaitingStepRun()`. Used by both CLI commands and Telegram bot.
 - **System agents (Brief 014a+014b+021)** — 4 system agents running through the harness pipeline: trust-evaluator (wraps Phase 3 code, spot-checked), intake-classifier (keyword matching, supervised), router (LLM-based via Anthropic SDK, supervised), orchestrator (goal-directed — decomposes goals into tasks, routes around paused items, confidence-based stopping; supervised). `category: system` + `systemRole` on agents table. System agent registry dispatches via `script` executor + `systemAgent` config (Insight-044). `startSystemAgentRun()` for programmatic triggering.
 - **Goal-directed orchestrator (Brief 021+022)** — Decomposes goals into child work items using process step list as blueprint. `orchestratorHeartbeat()` iterates spawned tasks, routes around trust gate pauses to independent work. Confidence-based stopping: low confidence triggers escalation (Types 1/3/4). CLI: scope negotiation in `capture`, goal tree in `status`, escalation display. Schema: `decomposition` on workItems, `orchestratorConfidence` on processRuns.
 - **Process templates (Brief 020)** — 3 non-coding templates in `templates/`: invoice-follow-up (4 steps, 1 human), content-review (3 steps, all AI), incident-response (4 steps, 2 human). All include governance declarations (trust, quality_criteria, feedback). Loaded as `status: draft` via `aos sync`. Process loader reads from both `processes/` and `templates/`.
 - **Auto-classification capture (Brief 014b)** — `aos capture` auto-classifies work item type (keyword patterns) and auto-routes to best matching process (LLM). Falls back to interactive @clack/prompts on low confidence. System processes filtered from routing targets.
-- **Test infrastructure (Brief 017)** — vitest + 82 integration tests covering process-loader, trust-diff, heartbeat (including orchestratorHeartbeat), feedback-recorder, trust computation, system agents (registry, classifier, orchestrator decomposition + scheduling + escalation, step dispatch), integration registry (8 tests), CLI protocol handler (6 tests). Real SQLite per test (no mocks). Anthropic SDK mocked at module level. `pnpm test` runs in ~3.2s.
+- **Test infrastructure (Brief 017)** — vitest + 88 integration tests across 10 test files covering process-loader, trust-diff, heartbeat (including orchestratorHeartbeat), feedback-recorder, trust computation, system agents (registry, classifier, orchestrator decomposition + scheduling + escalation, step dispatch), integration registry (8 tests), CLI protocol handler (6 tests), memory-assembly intra-run context (6 tests, Brief 027). Real SQLite per test (no mocks). Anthropic SDK mocked at module level. `pnpm test` runs in ~3.3s.
 - **E2E verification (Brief 020)** — Full work evolution cycle verified: capture → classify → route → orchestrate → execute → human step → resume → review → trust update. All 6 architecture layers proven working. Report at `docs/verification/phase-5-e2e.md`.
 
 ## What Needs Rework
@@ -45,6 +46,7 @@
 
 ## Recently Completed
 
+- **Brief 027 complete** (Telegram Bot Engine Bridge) — Telegram bot routes through engine harness pipeline. Review-actions extraction (`approveRun`/`editRun`/`rejectRun`), memory-assembly intra-run context (1500-token budget), dev-bot engine heartbeat loop. 14 AC, 6 new tests (88 total). Reviewed: CONDITIONAL PASS (1 must-fix applied: step-level granularity in CLI edit path). Insight-032 archived, Debt-005 resolved. Approved 2026-03-21.
 - **Brief 024 complete** (Phase 6a: Integration Foundation + CLI) — Integration registry (YAML loader + validation), CLI protocol handler (exec + retry + credential scrubbing), `integration` executor type, harness `integration.call` logging, process loader validation. ADR-005 accepted. 13 AC, 16 new tests (82 total). Reviewed: PASS WITH FLAGS (4 flags, 2 addressed inline). Approved 2026-03-21.
 - **ADR-014 accepted** (Agent Cognitive Architecture) — Three-layer cognitive architecture (infrastructure + toolkit + context), orchestrator as executive function, adaptive scaffolding, cognitive quality in trust. 6-phase build plan (A1-D). Research report: 30+ sources. Approved 2026-03-21.
 - **Insight-047 captured** (Outcome Owners + Process Lifecycle) — Architecture review against "outcome owner" reframe. Two gaps: process articulation tools deferred too far (Phase 11), declarative-metacognitive balance unnamed. Judgment hierarchy proposed. Reviewed: PASS WITH FLAGS.
@@ -95,15 +97,47 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | 023 — Phase 6 External Integrations (parent) | 6 | In progress — 024 complete |
 | 025 — MCP + Agent Tool Use (Phase 6b) | 6b | Ready — approved 2026-03-21 |
 | 026 — Credentials + Process I/O (Phase 6c) | 6c | Ready — approved 2026-03-21 |
+| 027 — Telegram Bot Engine Bridge | — | Complete — approved 2026-03-21 |
 
 ## Next Steps
 
-1. **NOW:** Brief 024 complete. Next: `/dev-builder` for Brief 025 (MCP + Agent Tool Use). Parallel: ADR-014 Phase A1 (Cognitive Toolkit) can run alongside 025. Reviewer recommends manual `gh` smoke test before starting 025.
-2. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
-4. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
-5. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
-6. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
-7. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+1. **NOW:** Design the Conversational Self (Insight-056). `/dev-designer` for interaction spec + `/dev-researcher` for persistent AI identity patterns (parallel), then `/dev-architect` for ADR + brief. This is the foundational missing piece — the product has no unified entity. Must be designed before Phase 10 and alongside Cognitive Architecture A1.
+2. **Still needed:** Architecture.md Layer 2 needs intra-run context documented (Brief 027 After Completion item 6).
+3. **Paused:** Brief 025 (MCP + Agent Tool Use) and 026 (Credentials) — ready for build but deprioritised. Adding tools to agents without a coherent invoker is infrastructure without a user.
+4. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Outcome owner reframe means process creation tools are core, not late-stage.
+5. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
+6. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8. Extended by ADR-014 for agent-execution cognitive framing.
+7. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
+8. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+
+## Documenter Retrospective (2026-03-21 — Brief 027 Engine Bridge Session)
+
+**What was produced this session:**
+1. Strategic PM conversation: human identified "use the product to build the product via Telegram" as the right next move. PM validated the nesting-problem workaround (Telegram = Node.js, no nesting) and recommended Architect.
+2. Architect: Brief 027 (Telegram Bot Engine Bridge) designed. 14 AC, one integration seam. Reviewed: PASS WITH FLAGS (4 flags addressed — intra-run context budget, step-level granularity, security, architecture.md update).
+3. Builder: 6 files changed. `review-actions.ts` (new), `approve.ts` + `reject.ts` (refactored), `memory-assembly.ts` (intra-run context), `memory-assembly.test.ts` (new, 6 tests), `dev-bot.ts` (rewritten for engine heartbeat loop). Reviewed: CONDITIONAL PASS (1 must-fix applied: step-level granularity in CLI edit path).
+4. 88 tests pass (6 new). Type-check passes with 0 errors.
+5. Insight-032 archived (dev process is first workspace dogfood — completed by this brief).
+6. Debt-005 resolved (dev memory not dogfooding — the dev pipeline now runs through engine memory).
+
+**What worked:**
+- **The human's strategic insight drove the session.** "The outcome of the next move must be to actually use the Ditto CLI via Telegram to continue the build." This was not a technical observation — it was a product-level insight that the dev process was not using the product. The PM validated it technically (nesting workaround) and routed to the Architect. The dev process supported strategic thinking before blind execution.
+- **The nesting-problem workaround was hiding in plain sight.** `claude -p` can't nest inside Claude Code, but the Telegram bot runs as a standalone Node.js process — no nesting. This constraint was documented in Phase 5's retrospective as a blocker, but nobody had connected "Telegram = Node.js = no nesting problem" until this session. The PM conversation surfaced it.
+- **Extraction before integration.** Creating `review-actions.ts` as shared functions before modifying the bot meant the review logic was tested and proven before the integration. The reviewer caught that the CLI's `--edit` path still used run-wide updates — a pre-existing bug that the extraction made visible.
+- **Intra-run context fills a real gap.** The standalone orchestrator's `buildContextPreamble()` passed prior role outputs to subsequent roles. Without this, engine-routed steps would execute blind to what prior steps produced. The separate token budget (1500 tokens) prevents run context from starving durable memories.
+- **The reviewer caught a real bug.** The CLI `approve.ts` `--edit` path updated ALL step runs for a process run, not just the waiting one. This pre-existed Brief 027 but was made visible by the extraction. The fix (using `findWaitingStepRun()`) improves correctness for the CLI too, not just the bot.
+
+**What surprised us:**
+- **The session spanned PM → Architect → Builder → Reviewer → Documenter in one flow.** Five role transitions driven by a single strategic insight. The dev process handled this naturally — the human's "just do it" instruction skipped unnecessary research/design phases because the components already existed.
+- **Two parallel systems had been running without anyone connecting them.** The engine (heartbeat, harness, trust, memory) and the standalone orchestrator (dev-pipeline.ts, dev-session.ts) were functionally equivalent but completely disconnected. Brief 027 bridges them with minimal code — the engine already did everything the standalone orchestrator did, plus memory/trust/feedback.
+- **Debt-005 was resolved as a side effect.** Nobody explicitly planned to resolve the "dev memory not dogfooding" debt. It was resolved because the bridge routes through the engine's memory system. The debt's re-entry condition ("Phase 4 complete") was met long ago but nobody triggered the resolution until the strategic conversation surfaced it.
+
+**What to change:**
+- **Architecture.md Layer 2 needs updating.** The reviewer flagged that intra-run context is a new memory scope not documented in architecture.md. The brief's "After Completion" item 6 specifies this. This should be done in the next session.
+- **The smoke test was not executed.** The brief includes a 6-step smoke test (start bot, /start, approve, check engine state, check memories). This requires a live Telegram bot token and a real `claude` binary — it should be done when the human first runs `pnpm dev-bot`.
+- **The standalone orchestrator (`dev-pipeline.ts`) should be deprecated.** It still works for terminal use, but with the engine bridge in place, there are now two ways to run the dev pipeline. The terminal mode should eventually route through the engine too (same pattern as the bot).
+
+---
 
 ## Documenter Retrospective (2026-03-21 — Phase 6a Build Session)
 

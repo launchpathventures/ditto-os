@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
 **Last updated:** 2026-03-21
-**Current phase:** Phase 6 in progress — Brief 024 (Integration Foundation + CLI) complete. Integration registry, CLI handler, `integration` executor, harness logging all working. ADR-005 accepted. Next: Brief 025 (MCP + Agent Tool Use). Cognitive architecture phases (A1-D) interleave with existing roadmap.
+**Current phase:** Phase 6 in progress — Brief 024 (Integration Foundation + CLI) complete. Brief 027 (Telegram Bot Engine Bridge) complete — bot routes through engine harness with memory, trust, feedback. Next: dogfood via Telegram, Brief 025 (MCP + Agent Tool Use). Cognitive architecture phases (A1-D) interleave with existing roadmap.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -106,6 +106,12 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Auto-PM on startup (Daily Brief pattern) | done | ADR-010, human-layer.md | Original | `src/dev-bot.ts` |
 | Skill invocation via inline keyboards | done | Brief 015 | Telegram Bot API InlineKeyboard | `src/dev-bot.ts` |
 | Session handoff (Documenter before reset) | done | dev-process.md | Original | `src/dev-bot.ts` |
+| **Brief 027: Telegram Bot Engine Bridge** | | | | |
+| Telegram bot routes through engine harness | done | Brief 027, Insight-032, Insight-050 | Direct engine API import (same as CLI commands) | `src/dev-bot.ts` |
+| Review actions extraction (approveRun/editRun/rejectRun) | done | Brief 027 | Ditto CLI approve.ts/reject.ts | `src/engine/review-actions.ts` |
+| Intra-run context in memory assembly (1500 token budget) | done | Brief 027 | dev-session.ts buildContextPreamble concept | `src/engine/harness-handlers/memory-assembly.ts` |
+| TELEGRAM_CHAT_ID required (security) | done | Brief 027 | Original | `src/dev-bot.ts` |
+| Memory assembly intra-run context tests | done | Brief 027 | Existing test patterns | `src/engine/harness-handlers/memory-assembly.test.ts` |
 
 ---
 

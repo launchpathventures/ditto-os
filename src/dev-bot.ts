@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * Dev Pipeline — Telegram Bot
+ * Dev Pipeline — Telegram Bot (Engine Bridge)
  *
- * Mobile review surface for the dev pipeline orchestrator.
- * Sends review gate notifications with inline keyboards.
- * Supports /start, /status commands and feedback capture.
+ * Mobile review surface for the Ditto dev pipeline.
+ * Routes work through the engine's harness pipeline (memory, trust, feedback)
+ * instead of the standalone orchestrator.
  *
  * Usage:
  *   pnpm dev-bot    — start the Telegram bot (long-polling)
@@ -14,41 +14,41 @@
  * Provenance:
  *   - Telegram Bot API: inline keyboards, pinned messages, long-polling
  *   - Review gate UX: ADR-010 workspace interaction model
+ *   - Engine bridge: Brief 027 — routes through harness pipeline
+ *   - Direct engine import: same pattern as src/cli/commands/start.ts
  */
 
 import "dotenv/config";
 import crypto from "node:crypto";
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import {
-  createSession,
-  loadSession,
-  saveSession,
-  formatStatus,
-  formatRoleList,
-  formatTransitionBanner,
-  shouldWarnContextSize,
-  type DevSession,
-  type RoleState,
-} from "./dev-session.js";
-import { runPipeline, runClaude, loadRoleContract, getToolsForRole, type ReviewGateHandler, type GateDecision } from "./dev-pipeline.js";
+import { runClaude, loadRoleContract } from "./dev-pipeline.js";
+import { startProcessRun, fullHeartbeat, type HeartbeatResult } from "./engine/heartbeat.js";
+import { approveRun, editRun, rejectRun, getWaitingStepOutput } from "./engine/review-actions.js";
+import { db, schema } from "./db/index.js";
+import { eq } from "drizzle-orm";
 
 // --- Config ---
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 if (!BOT_TOKEN) {
   console.error("TELEGRAM_BOT_TOKEN not set in .env");
   process.exit(1);
 }
 
-// Chat ID: explicit from env, or auto-locked on first message
-let chatId: number | null = process.env.TELEGRAM_CHAT_ID
-  ? Number(process.env.TELEGRAM_CHAT_ID)
-  : null;
+// AC13: Require TELEGRAM_CHAT_ID when running engine-bridge mode.
+// The auto-lock-to-first-message pattern is a security risk when the bot
+// routes through the engine with --dangerously-skip-permissions.
+if (!CHAT_ID) {
+  console.error("TELEGRAM_CHAT_ID not set in .env — required for engine-bridge mode (security: --dangerously-skip-permissions)");
+  process.exit(1);
+}
 
-/** Get chat ID, guaranteed non-null after auth middleware runs */
+const chatId: number = Number(CHAT_ID);
+
+/** Get chat ID, guaranteed non-null */
 function getChatId(): number {
-  if (chatId === null) throw new Error("Chat ID not set — no messages received yet");
   return chatId;
 }
 
@@ -56,18 +56,10 @@ function getChatId(): number {
 
 const bot = new Bot(BOT_TOKEN);
 
-// Auth middleware — lock to first chat, reject all others
+// Auth middleware — only accept messages from authorized chat
 bot.use(async (ctx, next) => {
   const incomingId = ctx.chat?.id;
   if (!incomingId) return;
-
-  if (chatId === null) {
-    chatId = incomingId;
-    console.log(`Auto-locked to chat ID: ${chatId}`);
-    // Send welcome + pinned status on first contact
-    sendStartupStatus().catch(() => {});
-  }
-
   if (incomingId !== chatId) return;
 
   console.log(`[bot] received: ${ctx.message?.text ?? ctx.callbackQuery?.data ?? "(unknown)"}`);
@@ -79,200 +71,131 @@ bot.catch((err) => {
   console.error("[bot] error:", err);
 });
 
-// --- State for pending review gates ---
+// --- Engine bridge state ---
 
-interface PendingGate {
-  resolve: (value: GateDecision) => void;
-  session: DevSession;
-  completedRole: RoleState;
-  nextRole?: RoleState;
-}
+/** Active engine process run ID */
+let activeRunId: string | null = null;
 
-interface PendingFeedback {
-  resolve: (value: string) => void;
-  roleName: string;
-}
-
-interface PendingError {
-  resolve: (value: "retry" | "skip" | "quit") => void;
-}
-
-let pendingGate: PendingGate | null = null;
 /** Persistent session ID for free-text chat — maintains conversation continuity */
 let chatSessionId: string | null = null;
-let pendingFeedback: PendingFeedback | null = null;
-let pendingError: PendingError | null = null;
+
+/** Pending feedback capture — when user taps "Edit", we wait for their text */
+let pendingEditRunId: string | null = null;
+
+/** Pending reject capture — when user taps "Reject", we wait for their reason */
+let pendingRejectRunId: string | null = null;
+
 let pinnedMessageId: number | null = null;
 
-// --- Pinned status message ---
+// --- DB initialization check (AC11) ---
 
-async function updatePinnedMessage(session: DevSession): Promise<void> {
-  const text = formatStatus(session);
-
+async function checkDbInitialized(): Promise<boolean> {
   try {
-    if (pinnedMessageId) {
-      await bot.api.editMessageText(getChatId(), pinnedMessageId, text);
-    } else {
-      const msg = await bot.api.sendMessage(getChatId(), text);
-      pinnedMessageId = msg.message_id;
-      session.pinnedMessageId = pinnedMessageId;
-      saveSession(session);
-      try {
-        await bot.api.pinChatMessage(getChatId(), pinnedMessageId);
-      } catch {
-        // May fail in private chats or without pin permission — non-critical
-      }
-    }
+    const [proc] = await db
+      .select()
+      .from(schema.processes)
+      .where(eq(schema.processes.slug, "dev-pipeline"))
+      .limit(1);
+    return !!proc;
   } catch {
-    // Edit may fail if text unchanged — ignore
+    return false;
   }
 }
 
-// --- Telegram gate handler ---
+// --- Helper: send step output + review keyboard ---
 
-const telegramHandler: ReviewGateHandler = {
-  async onRoleStart(session, role) {
-    await updatePinnedMessage(session);
-  },
+async function showStepForReview(runId: string): Promise<void> {
+  const stepOutput = await getWaitingStepOutput(runId);
+  if (!stepOutput) return;
 
-  async onRoleComplete(session, completedRole, nextRole) {
-    await updatePinnedMessage(session);
+  const label = stepOutput.stepName.replace(/-/g, " ");
+  const confidence = stepOutput.confidence ? ` | Confidence: ${stepOutput.confidence}` : "";
 
-    // Send transition banner
-    const banner = formatTransitionBanner(completedRole, nextRole);
-    await bot.api.sendMessage(getChatId(), banner);
+  // Send step output (truncated for Telegram)
+  const header = `━━━ ${label.toUpperCase()} COMPLETE ━━━${confidence}`;
+  const outputPreview = stepOutput.outputText.length > 3500
+    ? stepOutput.outputText.slice(0, 3500) + "\n... (truncated)"
+    : stepOutput.outputText;
 
-    // Build inline keyboard with skip options for remaining roles
-    const keyboard = new InlineKeyboard()
-      .text("Approve ✓", "gate:approve")
-      .text("Reject ✗", "gate:reject")
-      .row()
-      .text("Feedback 💬", "gate:feedback")
-      .text("Desk 🖥", "gate:desk");
+  await sendLongMessage(null, `${header}\n\n${outputPreview}`);
 
-    // Add skip-to buttons for roles after the next one
-    const remaining = session.roles
-      .slice(session.currentRoleIndex + 2) // +2 = skip "next" (approve does that)
-      .filter((r) => r.status === "pending");
-    if (remaining.length > 0) {
-      keyboard.row();
-      for (const r of remaining) {
-        const label = r.name.replace("dev-", "");
-        keyboard.text(`⏭ ${label}`, `gate:skipto:${r.name}`);
-      }
-    }
+  // Build inline keyboard
+  const keyboard = new InlineKeyboard()
+    .text("Approve ✓", "engine:approve")
+    .text("Reject ✗", "engine:reject")
+    .row()
+    .text("Feedback 💬", "engine:edit")
+    .text("Desk 🖥", "engine:desk");
 
-    const nextLabel = nextRole
-      ? nextRole.name.replace("dev-", "")
-      : "pipeline completion";
+  await bot.api.sendMessage(
+    getChatId(),
+    `Ready for review: ${label}`,
+    { reply_markup: keyboard },
+  );
+}
 
-    await bot.api.sendMessage(
-      getChatId(),
-      `Ready for review. Next: ${nextLabel}`,
-      { reply_markup: keyboard }
-    );
+/** Show heartbeat result to user and handle waiting_review */
+async function handleHeartbeatResult(result: HeartbeatResult): Promise<void> {
+  if (result.status === "waiting_review") {
+    await showStepForReview(result.processRunId);
+  } else if (result.status === "completed") {
+    activeRunId = null;
+    await bot.api.sendMessage(getChatId(), `✅ Pipeline complete!\n\nSteps executed: ${result.stepsExecuted}\n${result.message}`);
+  } else if (result.status === "failed") {
+    await bot.api.sendMessage(getChatId(), `❌ Pipeline failed: ${result.message}`);
+  } else if (result.status === "waiting_human") {
+    await bot.api.sendMessage(getChatId(), `⏸ Waiting for human step: ${result.message}`);
+  }
+}
 
-    // Wait for user response
-    return new Promise<GateDecision>((resolve) => {
-      pendingGate = { resolve, session, completedRole, nextRole };
-    });
-  },
+// --- Engine gate callback handlers ---
 
-  async onFeedbackRequest(session, roleName) {
-    await bot.api.sendMessage(
-      getChatId(),
-      `What feedback should ${roleName.replace("dev-", "")} receive?`
-    );
-
-    return new Promise<string>((resolve) => {
-      pendingFeedback = { resolve, roleName };
-    });
-  },
-
-  async onRoleError(session, role, error) {
-    await updatePinnedMessage(session);
-
-    const label = role.name.replace("dev-", "");
-    const keyboard = new InlineKeyboard()
-      .text("Retry 🔄", "error:retry")
-      .text("Skip ⏭", "error:skip")
-      .text("Quit ⏹", "error:quit");
-
-    await bot.api.sendMessage(
-      getChatId(),
-      `❌ ${label} failed: ${error}`,
-      { reply_markup: keyboard }
-    );
-
-    return new Promise<"retry" | "skip" | "quit">((resolve) => {
-      pendingError = { resolve };
-    });
-  },
-
-  async onPipelineComplete(session) {
-    await updatePinnedMessage(session);
-    const summary = formatRoleList(session);
-    await bot.api.sendMessage(getChatId(), `✅ Pipeline complete!\n\n${summary}`);
-  },
-
-  async onContextWarning(session) {
-    await bot.api.sendMessage(
-      getChatId(),
-      `⚠️ Context preamble at ~${Math.round(session.contextSizeBytes / 1024)}KB. Recommend starting fresh after this gate.`
-    );
-  },
-};
-
-
-// --- Callback query handlers ---
-
-bot.callbackQuery(/^gate:(.+)$/, async (ctx) => {
-  const action = ctx.match![1];
+bot.callbackQuery("engine:approve", async (ctx) => {
   await ctx.answerCallbackQuery();
-
-  if (!pendingGate) {
-    await ctx.reply("No pending review gate.");
+  if (!activeRunId) {
+    await ctx.reply("No active engine run.");
     return;
   }
 
-  if (action === "approve") {
-    await ctx.reply("✓ Approved. Continuing pipeline...");
-    pendingGate.resolve({ action: "approve" });
-    pendingGate = null;
-  } else if (action === "reject") {
-    await ctx.reply("✗ Rejected. Pipeline paused.");
-    pendingGate.resolve({ action: "reject" });
-    pendingGate = null;
-  } else if (action === "feedback") {
-    pendingGate.resolve({ action: "feedback" });
-    pendingGate = null;
-  } else if (action === "desk") {
-    await ctx.reply("🖥 Deferred to desktop. Pipeline paused.");
-    pendingGate.resolve({ action: "quit" });
-    pendingGate = null;
-  } else if (action.startsWith("skipto:")) {
-    const roleName = action.replace("skipto:", "");
-    const label = roleName.replace("dev-", "");
-    await ctx.reply(`⏭ Skipping to ${label}...`);
-    pendingGate.resolve({ action: "skipto", roleName });
-    pendingGate = null;
+  await ctx.reply("✓ Approved. Continuing pipeline...");
+
+  try {
+    const { action, heartbeat } = await approveRun(activeRunId);
+    if (!action.success) {
+      await ctx.reply(`❌ Approve failed: ${action.message}`);
+      return;
+    }
+    await handleHeartbeatResult(heartbeat);
+  } catch (err) {
+    await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
   }
 });
 
-bot.callbackQuery(/^error:(.+)$/, async (ctx) => {
-  const action = ctx.match![1] as "retry" | "skip" | "quit";
+bot.callbackQuery("engine:edit", async (ctx) => {
   await ctx.answerCallbackQuery();
-
-  if (!pendingError) {
-    await ctx.reply("No pending error decision.");
+  if (!activeRunId) {
+    await ctx.reply("No active engine run.");
     return;
   }
 
-  pendingError.resolve(action);
-  pendingError = null;
+  pendingEditRunId = activeRunId;
+  await ctx.reply("What feedback should this step receive? (type your response)");
+});
 
-  const labels = { retry: "🔄 Retrying...", skip: "⏭ Skipping...", quit: "⏹ Pipeline paused." };
-  await ctx.reply(labels[action]);
+bot.callbackQuery("engine:reject", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!activeRunId) {
+    await ctx.reply("No active engine run.");
+    return;
+  }
+
+  pendingRejectRunId = activeRunId;
+  await ctx.reply("Why are you rejecting this? (type your reason)");
+});
+
+bot.callbackQuery("engine:desk", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.reply("🖥 Deferred to desktop. Run paused. Resume later with /resume.");
 });
 
 // --- Command handlers (MUST be registered before message:text) ---
@@ -286,70 +209,121 @@ bot.command("start", async (ctx) => {
     return;
   }
 
-  const existing = loadSession();
-  if (existing && existing.status !== "completed") {
-    await ctx.reply(
-      `Active pipeline: "${existing.taskDescription}"\nUse /resume to continue.`
-    );
+  if (activeRunId) {
+    await ctx.reply(`Active pipeline running. Use /resume to continue or wait for completion.`);
     return;
   }
 
-  const session = createSession(description);
-  pinnedMessageId = null;
-  // Chat session stays alive — pipeline runs independently
+  // AC11: Check DB is initialized
+  const dbReady = await checkDbInitialized();
+  if (!dbReady) {
+    await ctx.reply("❌ Database not initialized. Run `pnpm cli sync` first to load process definitions.");
+    return;
+  }
+
   await ctx.reply(
-    `Starting dev pipeline for: ${description}\nFirst role: PM (reading state.md, roadmap.md)\nWill notify when PM has a recommendation.`
+    `Starting dev pipeline via engine for: ${description}\nRunning through harness (memory → trust → feedback)...`
   );
 
-  // Run pipeline asynchronously
-  runPipeline(session, telegramHandler).catch(async (err) => {
+  // AC1: Create process run + work item via engine, then run heartbeat
+  try {
+    const runId = await startProcessRun("dev-pipeline", { task: description });
+    activeRunId = runId;
+
+    // Create work item (same pattern as src/cli/commands/start.ts)
+    const [proc] = await db
+      .select()
+      .from(schema.processes)
+      .where(eq(schema.processes.slug, "dev-pipeline"))
+      .limit(1);
+
+    if (proc) {
+      await db.insert(schema.workItems).values({
+        type: "task",
+        status: "in_progress",
+        content: `Dev Pipeline: ${description}`,
+        source: "system_generated",
+        assignedProcess: proc.id,
+        executionIds: [runId],
+      });
+    }
+
+    // AC2: Run heartbeat — steps go through full harness pipeline
+    // AC12: async execution — bot remains responsive
+    const result = await fullHeartbeat(runId);
+    await handleHeartbeatResult(result);
+  } catch (err) {
+    activeRunId = null;
     await bot.api.sendMessage(
       getChatId(),
       `❌ Pipeline error: ${err instanceof Error ? err.message : String(err)}`
     );
-  });
+  }
 });
 
 bot.command("status", async (ctx) => {
-  const session = loadSession();
-  if (!session) {
-    await ctx.reply("No active pipeline.");
+  if (!activeRunId) {
+    await ctx.reply("No active engine pipeline. Use /start <task> to begin.");
     return;
   }
-  const text = formatStatus(session) + "\n\n" + formatRoleList(session);
-  await ctx.reply(text);
+
+  try {
+    // Get process run status from DB
+    const [run] = await db
+      .select()
+      .from(schema.processRuns)
+      .where(eq(schema.processRuns.id, activeRunId))
+      .limit(1);
+
+    if (!run) {
+      await ctx.reply("Run not found in DB.");
+      return;
+    }
+
+    // Get step runs
+    const stepRuns = await db
+      .select()
+      .from(schema.stepRuns)
+      .where(eq(schema.stepRuns.processRunId, activeRunId));
+
+    const lines: string[] = [];
+    lines.push("📌 Ditto Dev Pipeline (Engine)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push(`Status: ${run.status}`);
+    lines.push(`Run ID: ${activeRunId.slice(0, 8)}`);
+    lines.push("");
+
+    for (const step of stepRuns) {
+      const icon = step.status === "approved" ? "✓"
+        : step.status === "running" ? "⏳"
+        : step.status === "waiting_review" ? "🔔"
+        : step.status === "failed" ? "✗"
+        : step.status === "rejected" ? "✗"
+        : "○";
+      const label = step.stepId.replace(/-/g, " ");
+      lines.push(`  ${icon} ${label} (${step.status})`);
+    }
+
+    await ctx.reply(lines.join("\n"));
+  } catch (err) {
+    await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
+  }
 });
 
 bot.command("resume", async (ctx) => {
-  const session = loadSession();
-  if (!session) {
-    await ctx.reply("No session to resume.");
-    return;
-  }
-  if (session.status === "completed") {
-    await ctx.reply("Pipeline already completed.");
+  if (!activeRunId) {
+    await ctx.reply("No active run to resume.");
     return;
   }
 
-  const currentRole = session.roles[session.currentRoleIndex];
-  if (currentRole?.status === "failed" || currentRole?.status === "running") {
-    currentRole.status = "pending";
-    currentRole.error = undefined;
+  await ctx.reply("Resuming pipeline...");
+
+  try {
+    const result = await fullHeartbeat(activeRunId);
+    await handleHeartbeatResult(result);
+  } catch (err) {
+    await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
   }
-  session.status = "running";
-  saveSession(session);
-
-  pinnedMessageId = session.pinnedMessageId ?? null;
-  await ctx.reply(
-    `Resuming: ${session.taskDescription}\nContinuing from: ${currentRole?.name.replace("dev-", "") ?? "unknown"}`
-  );
-
-  runPipeline(session, telegramHandler).catch(async (err) => {
-    await bot.api.sendMessage(
-      getChatId(),
-      `❌ Pipeline error: ${err instanceof Error ? err.message : String(err)}`
-    );
-  });
 });
 
 // --- Session handoff: run documenter before resetting ---
@@ -394,18 +368,19 @@ bot.command("newchat", async (ctx) => {
 bot.command("help", async (ctx) => {
   await ctx.reply(
     [
-      "Ditto Dev Bot",
-      "━━━━━━━━━━━━━━━━",
+      "Ditto Dev Bot (Engine Bridge)",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "",
       "Just type naturally — I'm Claude with full project context.",
       "",
       "Commands:",
-      "  /start <task> — kick off a dev pipeline",
-      "  /status — current pipeline state",
+      "  /start <task> — kick off a dev pipeline (through engine)",
+      "  /status — current pipeline state (from engine DB)",
       "  /resume — resume paused pipeline",
       "  /newchat — wrap up + reset conversation",
       "  /help — this message",
       "",
+      "Pipeline runs through the harness: memory, trust, feedback.",
       "Or tap a quick action below.",
     ].join("\n"),
     { reply_markup: quickActions() }
@@ -438,12 +413,42 @@ function skillButtons(): InlineKeyboard {
 
 bot.callbackQuery("quick:status", async (ctx) => {
   await ctx.answerCallbackQuery();
-  const session = loadSession();
-  if (!session) {
+  if (!activeRunId) {
     await ctx.reply("No active pipeline. Ask me anything or tap a skill.");
     return;
   }
-  await ctx.reply(formatStatus(session) + "\n\n" + formatRoleList(session));
+  // Trigger status command
+  await ctx.reply("Fetching engine status...");
+  // Re-use the status logic
+  try {
+    const [run] = await db
+      .select()
+      .from(schema.processRuns)
+      .where(eq(schema.processRuns.id, activeRunId!))
+      .limit(1);
+
+    if (!run) {
+      await ctx.reply("Run not found.");
+      return;
+    }
+
+    const stepRuns = await db
+      .select()
+      .from(schema.stepRuns)
+      .where(eq(schema.stepRuns.processRunId, activeRunId!));
+
+    const lines: string[] = [`📌 Status: ${run.status}`, ""];
+    for (const step of stepRuns) {
+      const icon = step.status === "approved" ? "✓"
+        : step.status === "waiting_review" ? "🔔"
+        : step.status === "failed" ? "✗"
+        : "○";
+      lines.push(`  ${icon} ${step.stepId.replace(/-/g, " ")}`);
+    }
+    await ctx.reply(lines.join("\n"));
+  } catch {
+    await ctx.reply("Could not fetch status.");
+  }
 });
 
 bot.callbackQuery("quick:newchat", async (ctx) => {
@@ -560,14 +565,47 @@ async function sendLongMessage(ctx: Context | null, text: string): Promise<void>
 bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
 
-  // If waiting for feedback at a review gate, capture it
-  if (pendingFeedback) {
-    const roleName = pendingFeedback.roleName;
-    pendingFeedback.resolve(text);
-    pendingFeedback = null;
-    await ctx.reply(
-      `✓ Feedback captured for ${roleName.replace("dev-", "")}. Continuing...`
-    );
+  // If waiting for edit feedback at an engine review gate, capture it
+  if (pendingEditRunId) {
+    const runId = pendingEditRunId;
+    pendingEditRunId = null;
+    await ctx.reply("✓ Feedback captured. Continuing pipeline...");
+
+    try {
+      const { action, heartbeat } = await editRun(runId, text);
+      if (!action.success) {
+        await ctx.reply(`❌ Edit failed: ${action.message}`);
+        return;
+      }
+      if (action.correctionPattern) {
+        const displayPattern = action.correctionPattern.pattern.replace(/_/g, " ");
+        await ctx.reply(
+          `Note: You've corrected "${displayPattern}" ${action.correctionPattern.count} times. The system is learning from it.`
+        );
+      }
+      await handleHeartbeatResult(heartbeat);
+    } catch (err) {
+      await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
+
+  // If waiting for reject reason at an engine review gate, capture it
+  if (pendingRejectRunId) {
+    const runId = pendingRejectRunId;
+    pendingRejectRunId = null;
+
+    try {
+      const result = await rejectRun(runId, text);
+      if (!result.success) {
+        await ctx.reply(`❌ Reject failed: ${result.message}`);
+        return;
+      }
+      await ctx.reply(`✗ ${result.message}`);
+      activeRunId = null;
+    } catch (err) {
+      await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return;
   }
 
@@ -575,46 +613,32 @@ bot.on("message:text", async (ctx) => {
   await sendClaudeResponse(ctx, text);
 });
 
-// --- Startup: pin current state ---
+// --- Startup ---
 
 async function sendStartupStatus(): Promise<void> {
-  if (chatId === null) return;
-
-  const session = loadSession();
-  if (session && session.status !== "completed") {
-    await updatePinnedMessage(session);
-    return;
-  }
-
-  // Send welcome + instructions first
+  // Send welcome + instructions
   const welcome = [
-    "📌 Ditto — Your Workspace",
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "📌 Ditto — Your Workspace (Engine Bridge)",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "",
     "I'm Claude with full project context. Talk to me like you would at your desk — I remember our conversation.",
     "",
     "💬 Just type — ask questions, think through problems, give direction.",
     "🛠 Tap Skills — invoke a specific dev role.",
-    "🚀 /start <task> — kick off a full dev pipeline.",
+    "🚀 /start <task> — kick off a full dev pipeline (through engine).",
     "",
-    "📌 This message stays pinned and updates as things change.",
+    "Pipeline now runs through the harness: memory, trust, feedback.",
   ].join("\n");
 
   try {
-    if (pinnedMessageId) {
-      await bot.api.editMessageText(getChatId(), pinnedMessageId, welcome, {
-        reply_markup: quickActions(),
-      });
-    } else {
-      const msg = await bot.api.sendMessage(getChatId(), welcome, {
-        reply_markup: quickActions(),
-      });
-      pinnedMessageId = msg.message_id;
-      try {
-        await bot.api.pinChatMessage(getChatId(), pinnedMessageId);
-      } catch {
-        // Pin may fail in some chat types
-      }
+    const msg = await bot.api.sendMessage(getChatId(), welcome, {
+      reply_markup: quickActions(),
+    });
+    pinnedMessageId = msg.message_id;
+    try {
+      await bot.api.pinChatMessage(getChatId(), pinnedMessageId);
+    } catch {
+      // Pin may fail in some chat types
     }
   } catch {
     // Ignore failures
@@ -638,15 +662,19 @@ async function runAutoPM(): Promise<void> {
 
 // --- Start bot ---
 
-console.log("Dev Pipeline Telegram bot starting (long-polling)...");
-console.log(
-  chatId
-    ? `Authorized chat ID: ${chatId}`
-    : "No chat ID configured — will lock to first message received"
-);
+console.log("Dev Pipeline Telegram bot starting (engine bridge mode)...");
+console.log(`Authorized chat ID: ${chatId}`);
+
+// AC11: Check DB initialization before starting
+checkDbInitialized().then((ready) => {
+  if (!ready) {
+    console.error("WARNING: dev-pipeline process not found in DB. Run `pnpm cli sync` first.");
+  }
+});
+
 bot.start({
   onStart: async () => {
-    console.log("Bot is running.");
+    console.log("Bot is running (engine bridge mode).");
     await sendStartupStatus();
   },
 });

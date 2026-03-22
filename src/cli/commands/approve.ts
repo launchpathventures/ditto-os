@@ -2,6 +2,10 @@
  * CLI Command: approve (and edit alias)
  * Approve outputs and continue the process.
  * AC-10: approve <id>, approve <id> --edit, edit <id> alias.
+ *
+ * Refactored (Brief 027): Core approve/edit logic extracted to
+ * src/engine/review-actions.ts. This file handles CLI-specific concerns
+ * (TTY editor, process.exit, console output).
  */
 
 import { defineCommand } from "citty";
@@ -17,6 +21,7 @@ import fs from "fs";
 import path from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
+import { approveRun, findWaitingStepRun } from "../../engine/review-actions";
 
 export const approveCommand = defineCommand({
   meta: {
@@ -74,6 +79,24 @@ async function doApprove(
   withEdit: boolean,
   comment?: string,
 ) {
+  // For --edit mode, we still need the CLI-specific editor interaction,
+  // so we use the old flow with direct DB operations + editor.
+  // For plain approve (no edit), use the shared review-actions.
+  if (!withEdit) {
+    const { action, heartbeat } = await approveRun(runId, { comment });
+    if (!action.success) {
+      console.error(action.message);
+      process.exit(1);
+    }
+    console.log(`\u2713 ${action.message}`);
+    console.log();
+    console.log(`Status: ${heartbeat.status}`);
+    console.log(`Steps: ${heartbeat.stepsExecuted}`);
+    console.log(`Message: ${heartbeat.message}`);
+    return;
+  }
+
+  // --- Edit mode: CLI-specific flow with $EDITOR ---
   const [run] = await db
     .select()
     .from(schema.processRuns)
@@ -100,7 +123,7 @@ async function doApprove(
       .where(eq(schema.processOutputs.processRunId, runId));
 
     const reviewable = pendingOutputs.filter((o) => o.needsReview);
-    if (reviewable.length > 1 && !withEdit) {
+    if (reviewable.length > 1) {
       console.error(
         `Critical tier: ${reviewable.length} outputs require individual review.`,
       );
@@ -121,40 +144,30 @@ async function doApprove(
     return;
   }
 
-  if (withEdit) {
-    for (const output of outputs) {
-      const originalText = contentToText(output.content);
-      const editedText = openInEditor(originalText);
+  for (const output of outputs) {
+    const originalText = contentToText(output.content);
+    const editedText = openInEditor(originalText);
 
-      if (editedText === originalText) {
-        await recordApprovalFeedback({
-          outputId: output.id,
-          processId: run.processId,
-          comment: comment ?? undefined,
-        });
-        console.log(
-          `Output ${output.id.slice(0, 8)}: no changes, approved clean.`,
-        );
-      } else {
-        await recordEditFeedback({
-          outputId: output.id,
-          processId: run.processId,
-          originalText,
-          editedText,
-          comment: comment ?? undefined,
-        });
-        console.log(
-          `Output ${output.id.slice(0, 8)}: edit recorded with diff.`,
-        );
-      }
-    }
-  } else {
-    for (const output of outputs) {
+    if (editedText === originalText) {
       await recordApprovalFeedback({
         outputId: output.id,
         processId: run.processId,
         comment: comment ?? undefined,
       });
+      console.log(
+        `Output ${output.id.slice(0, 8)}: no changes, approved clean.`,
+      );
+    } else {
+      await recordEditFeedback({
+        outputId: output.id,
+        processId: run.processId,
+        originalText,
+        editedText,
+        comment: comment ?? undefined,
+      });
+      console.log(
+        `Output ${output.id.slice(0, 8)}: edit recorded with diff.`,
+      );
     }
   }
 
@@ -168,11 +181,14 @@ async function doApprove(
     })
     .where(eq(schema.processOutputs.processRunId, runId));
 
-  // Mark the waiting step as approved
-  await db
-    .update(schema.stepRuns)
-    .set({ status: "approved", completedAt: new Date() })
-    .where(eq(schema.stepRuns.processRunId, runId));
+  // Mark only the specific waiting step as approved (step-level granularity, AC9)
+  const waitingStep = await findWaitingStepRun(runId);
+  if (waitingStep) {
+    await db
+      .update(schema.stepRuns)
+      .set({ status: "approved", completedAt: new Date() })
+      .where(eq(schema.stepRuns.id, waitingStep.id));
+  }
 
   // Resume the run
   await db
@@ -185,7 +201,7 @@ async function doApprove(
   console.log(`\u2713 Approved. ${processName} continuing.`);
 
   // AC-11: Pattern notification after edits — check if correction patterns are repeating
-  if (withEdit && proc) {
+  if (proc) {
     const patternResult = await checkCorrectionPattern(proc.id);
     if (patternResult) {
       const displayPattern = patternResult.pattern.replace(/_/g, " ");

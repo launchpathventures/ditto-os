@@ -1,12 +1,12 @@
 ---
 title: "Development memory uses flat files instead of Ditto memory architecture"
 severity: high
-status: deferred
+status: resolved
 scope: system
 source: manual
 reentry: "Phase 4 complete — dev process should migrate onto Ditto memory"
 created: 2026-03-20
-resolved: null
+resolved: 2026-03-21
 ---
 
 ## What
@@ -25,4 +25,4 @@ When Phase 4 (Workspace Foundation) is complete and the system can accept work i
 
 ## Resolution
 
-[Pending]
+Brief 027 (Telegram Bot Engine Bridge) routes the Telegram dev bot through the engine's harness pipeline. Dev pipeline runs now use the engine's memory architecture (agent-scoped + process-scoped + intra-run context), trust evaluation, and feedback recording. The dev process dogfoods the memory system it builds.

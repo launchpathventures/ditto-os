@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** PM session — human observed they are manually being the orchestrator meta-process, invoking dev roles one at a time in Claude Code. This is exactly the problem Ditto solves for Rob, Lisa, Jordan, and Nadia.
 **Layers affected:** L2 Agent, L3 Harness, L6 Human
-**Status:** active
+**Status:** absorbed into Brief 027 (Telegram Bot Engine Bridge) — archived 2026-03-21
 
 ## The Insight
 

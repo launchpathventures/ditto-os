@@ -2,13 +2,15 @@
  * CLI Command: reject
  * Reject outputs with required reason.
  * AC-11: Requires reason via interactive prompt or --reason flag.
+ *
+ * Refactored (Brief 027): Core reject logic extracted to
+ * src/engine/review-actions.ts. This file handles CLI-specific concerns
+ * (TTY prompts, process.exit, console output).
  */
 
 import { defineCommand } from "citty";
-import { db, schema } from "../../db";
-import { eq } from "drizzle-orm";
-import { recordRejectionFeedback } from "../../engine/harness-handlers/feedback-recorder";
 import * as p from "@clack/prompts";
+import { rejectRun } from "../../engine/review-actions";
 
 export const rejectCommand = defineCommand({
   meta: {
@@ -53,63 +55,13 @@ export const rejectCommand = defineCommand({
       }
     }
 
-    const [run] = await db
-      .select()
-      .from(schema.processRuns)
-      .where(eq(schema.processRuns.id, args.id))
-      .limit(1);
+    const result = await rejectRun(args.id, reason!);
 
-    if (!run) {
-      console.error(`Run not found: ${args.id}`);
+    if (!result.success) {
+      console.error(result.message);
       process.exit(1);
     }
 
-    // Look up process name for output message
-    const [proc] = await db
-      .select()
-      .from(schema.processes)
-      .where(eq(schema.processes.id, run.processId))
-      .limit(1);
-
-    const outputs = await db
-      .select()
-      .from(schema.processOutputs)
-      .where(eq(schema.processOutputs.processRunId, args.id));
-
-    for (const output of outputs) {
-      await recordRejectionFeedback({
-        outputId: output.id,
-        processId: run.processId,
-        comment: reason ?? undefined,
-      });
-    }
-
-    // Mark outputs as reviewed
-    await db
-      .update(schema.processOutputs)
-      .set({
-        needsReview: false,
-        reviewedAt: new Date(),
-        reviewedBy: "human",
-      })
-      .where(eq(schema.processOutputs.processRunId, args.id));
-
-    // Mark step as rejected
-    await db
-      .update(schema.stepRuns)
-      .set({ status: "rejected", completedAt: new Date() })
-      .where(eq(schema.stepRuns.processRunId, args.id));
-
-    // Mark run as rejected
-    await db
-      .update(schema.processRuns)
-      .set({ status: "rejected" })
-      .where(eq(schema.processRuns.id, args.id));
-
-    // Designer spec: "Rejected. Reason recorded. [Process] will retry with feedback."
-    const processName = proc?.name || "Process";
-    console.log(
-      `\u2713 Rejected. Reason recorded. ${processName} will retry with feedback.`,
-    );
+    console.log(`\u2713 ${result.message}`);
   },
 });
