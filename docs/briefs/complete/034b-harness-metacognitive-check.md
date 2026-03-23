@@ -129,6 +129,22 @@ pnpm run type-check
 # 7. Observe: metacognitive check runs for that step
 ```
 
+## Benchmark Criteria (Insight-064)
+
+This handler must justify its place in the pipeline with data. After 50 supervised runs with the metacognitive check active, evaluate:
+
+1. **Flag rate** — % of steps where the check flags issues. If 0% after 50+ runs, it's dead weight.
+2. **True positive rate** — of flagged steps, % where human agreed (rejected or edited).
+3. **Catch rate** — steps flagged by metacognitive check but passed by review patterns. Unique catches = the handler's reason to exist.
+4. **False positive rate** — flagged steps the human approved unchanged.
+
+**Decision threshold:**
+- Catch rate > 5%: keep and consider expanding to more tiers
+- Catch rate < 2% with flag rate < 5%: demote to opt-in only across all tiers
+- False positive rate > 30%: tune the prompt or cut the handler
+
+Data sources: `stepRuns` (reviewResult, reviewDetails.metacognitive), `activities` (feedback records), human approve/edit/reject actions. Benchmark is a correlation query, not new infrastructure.
+
 ## After Completion
 
 1. Update `docs/state.md` with what changed

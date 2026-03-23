@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
 **Last updated:** 2026-03-23
-**Current phase:** Self metacognitive oversight complete (Brief 034a). Consultation tool, decision tracking, correction memories. Cognitive framework updated. Next: Brief 034b (harness-level metacognitive check), Brief 033 (model routing), or Briefs 025+026 (Phase 6b/6c).
+**Current phase:** Model routing intelligence shipped (Brief 033). Cognitive Architecture section complete (Briefs 029-034b). Next: Briefs 025+026 (Phase 6b/6c) or PM triages next work.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -292,11 +292,11 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Self decision tracking (delegation/consultation/inline) | done | Insight-063 | Activity logging from feedback-recorder | `src/engine/self-context.ts` (Brief 034a) |
 | Self-correction memories (cross-turn redirect detection) | done | Insight-063 | feedback-to-memory bridge pattern | `src/engine/self-context.ts` (Brief 034a) |
 | Cognitive framework metacognitive checks | done | Insight-063, ADR-014 | Original | `cognitive/self.md` (Brief 034a) |
-| Harness-level metacognitive check handler (all agents) | not started | Insight-063, ADR-014 | HarnessHandler interface | Brief 034b |
+| Harness-level metacognitive check handler (all agents) | done | Insight-063, ADR-014 | HarnessHandler interface | `src/engine/harness-handlers/metacognitive-check.ts` (Brief 034b) |
 | **Model Routing Intelligence (Brief 033)** | | | | |
-| Step-level `model_hint` in process definitions | not started | ADR-017, ADR-014 | ADR-017 runtime resolution | Brief 033 |
-| Model tracking on step runs (which model produced what) | not started | ADR-014 Phase B1 | Original | Brief 033 |
-| Self recommends optimal model routing from trust data | not started | ADR-014, ADR-007 | Trust earning pattern applied to models | Brief 033 |
+| Step-level `model_hint` in process definitions | done | ADR-017, ADR-014 | Vercel AI SDK alias pattern | `src/engine/model-routing.ts` (Brief 033) |
+| Model tracking on step runs (which model produced what) | done | ADR-014 Phase B1 | Vercel AI SDK `ai.response.model` | `src/db/schema.ts`, `src/engine/heartbeat.ts` (Brief 033) |
+| Self recommends optimal model routing from trust data | done | ADR-014, ADR-007 | Trust earning + RouteLLM economics | `src/engine/model-routing.ts` `generateModelRecommendations()` (Brief 033) |
 
 ---
 

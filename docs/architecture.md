@@ -254,7 +254,9 @@ Process: [Name]
 
 **Heartbeat execution model** (borrowed from Paperclip): Agents wake, execute, sleep. Not continuous. Cost-efficient, clean state boundaries.
 
-**Adapter pattern** (Insight-041): Any runtime plugs in — the harness is AI-provider-agnostic. Users bring their own execution substrate (Claude CLI, Codex CLI, Anthropic API, OpenAI API, local models via ollama). All adapters implement the same `StepExecutionResult` interface: `outputs`, `tokensUsed`, `costCents`, `confidence` (categorical: high/medium/low per ADR-011), `logs`. Three core methods: `invoke()`, `status()`, `cancel()`. Seven executor types: `ai-agent`, `cli-agent`, `script`, `rules`, `human`, `handoff`, `integration`.
+**Adapter pattern** (Insight-041): Any runtime plugs in — the harness is AI-provider-agnostic. Users bring their own execution substrate (Claude CLI, Codex CLI, Anthropic API, OpenAI API, local models via ollama). All adapters implement the same `StepExecutionResult` interface: `outputs`, `tokensUsed`, `costCents`, `confidence` (categorical: high/medium/low per ADR-011), `model` (actual model that executed this step — Brief 033), `logs`. Three core methods: `invoke()`, `status()`, `cancel()`. Seven executor types: `ai-agent`, `cli-agent`, `script`, `rules`, `human`, `handoff`, `integration`.
+
+**Model routing** (Brief 033): Process steps can declare `config.model_hint` (`fast`, `capable`, `default`) on `ai-agent` steps. `resolveModel(hint)` maps hints to provider-specific models (e.g., `fast` → Haiku for Anthropic, gpt-4o-mini for OpenAI). Steps without hints use the deployment default. Model is recorded on every step run for learning. `generateModelRecommendations()` analyzes accumulated data (20+ runs) to surface advisory cost/quality trade-offs — system recommends, human decides. Provenance: Vercel AI SDK alias pattern, RouteLLM economics.
 
 Current adapters:
 - **Claude API adapter** (`ai-agent`, primary): Calls LLM via `createCompletion()`. Per-token cost. Tool use loop with codebase tools — two subsets: `readOnlyTools` (read_file, search_files, list_files) and `readWriteTools` (+ write_file). Step config declares which subset via `config.tools: "read-only" | "read-write"`. Loads role contracts from `.claude/commands/dev-*.md` via `step.config.role_contract` (fallback to hardcoded prompts). Parses `CONFIDENCE: high|medium|low` from response text. All 7 dev roles execute via this adapter (Brief 031). Provenance: Claude Code tool patterns, OpenClaw SOUL.md/skills.
@@ -367,7 +369,8 @@ Trust tiers determine oversight **rate** (how often). The attention model determ
 | **Autonomous** | Digest only — summary in Daily Brief, detail on demand | Low confidence → item review; metric deviation → process alert |
 | **Critical** | Item review — every output, always | None |
 
-Two additional mechanisms:
+Three additional mechanisms:
+- **Metacognitive self-check** — a fast, post-execution self-review that checks the agent's output against its input for unsupported assumptions, missing edge cases, scope creep, and contradictions. This is the *internal* oversight loop (same role's lens), complementary to review patterns which provide *external* oversight (second perspective). Auto-enabled for supervised and critical tiers; opt-in for spot-checked and autonomous via `harness.metacognitive: true`. If issues found, flags for human review. Does not re-execute or replace review patterns. (Insight-063, ADR-014 Phase A2, Brief 034b)
 - **Per-output confidence scoring** — the agent self-assesses each output. High-confidence outputs auto-advance. Low-confidence outputs route to human regardless of trust tier. This is a second dimension: trust tiers are process-level/historical; confidence is output-level/per-invocation.
 - **Digest review mode** — the Review Queue supports both item review (approve/edit/reject) and digest review (summary of accumulated outputs from autonomous processes, drill-down on demand).
 
@@ -441,6 +444,13 @@ Every process tracks three feedback signals:
 6. Verify the improvement actually helped
 
 **The platform never auto-fixes. It surfaces, diagnoses, and suggests.**
+
+**4. Model routing feedback** (Brief 033) — Which model produced which output, at what cost, with what quality?
+- Every step run records the actual model used (from the provider API response)
+- `generateModelRecommendations()` compares models per (process, step) from 20+ runs
+- Recommends cheaper model when quality is comparable (within 5% approval rate)
+- Recommends upgrade when current model quality is low (<80% approval rate)
+- Advisory only — the Self surfaces recommendations, human decides
 
 **Reactive-to-repetitive lifecycle (ADR-010):** Beyond improving existing processes, Layer 5 also watches for patterns in ad-hoc work. When the system notices the user creating similar work items repeatedly (e.g., Rob keeps manually entering bathroom reno quotes), it proposes formalising the pattern as a new process. The user confirms, refines, and activates — the ad-hoc work becomes a governed, trust-earning process. This is how the system grows its capabilities from user behaviour.
 

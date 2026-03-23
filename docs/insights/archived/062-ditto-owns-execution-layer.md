@@ -3,7 +3,7 @@
 **Date:** 2026-03-23
 **Trigger:** Architect session on delegation weight classes. Creator challenged the Light/Heavy split, then the local-only assumption, then the Claude-default assumption. The thread revealed that `cli-agent` (Claude Code dependency) and the hardcoded Claude API default are both architectural debts that prevent provider choice, cloud deployment, and model optimization.
 **Layers affected:** L1 Process, L2 Agent, L3 Harness, L5 Learning
-**Status:** active
+**Status:** archived — fully absorbed by Briefs 031 (Ditto Execution Layer), 032 (LLM Provider Extensibility), 033 (Model Routing Intelligence). All 7 items implemented. Moved to archived 2026-03-23.
 
 ## The Insight
 

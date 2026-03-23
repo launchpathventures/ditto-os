@@ -26,11 +26,11 @@ import {
   createCompletion,
   extractText,
   extractToolUse,
-  getConfiguredModel,
   type LlmMessage,
   type LlmToolDefinition,
   type LlmToolResultBlock,
 } from "../engine/llm";
+import { resolveModel } from "../engine/model-routing";
 
 /**
  * Build a system prompt for an agent step based on its role and context.
@@ -275,7 +275,7 @@ export const claudeAdapter = {
       tools = readOnlyTools; // Legacy backward compatible
     }
 
-    const model = getConfiguredModel();
+    const model = resolveModel(step.config?.model_hint as string | undefined);
     console.log(`    Claude adapter: ${step.agent_role || "general"} agent`);
     console.log(`    Model: ${model}`);
     if (tools) {
@@ -291,6 +291,7 @@ export const claudeAdapter = {
     let totalCostCents = 0;
     let toolCallCount = 0;
     let finalText = "";
+    let actualModel = model; // Will be updated with the actual model from API response
 
     // Tool use loop: call API, handle tool_use responses, repeat until text
     while (true) {
@@ -303,6 +304,7 @@ export const claudeAdapter = {
 
       totalTokens += response.tokensUsed;
       totalCostCents += response.costCents;
+      actualModel = response.model;
 
       // Check if response contains tool use
       const toolUseBlocks = extractToolUse(response.content);
@@ -373,8 +375,9 @@ export const claudeAdapter = {
       tokensUsed: totalTokens,
       costCents: totalCostCents,
       confidence,
+      model: actualModel,
       logs: [
-        `Model: ${model}`,
+        `Model: ${actualModel}`,
         `Tokens: ${totalTokens}`,
         `Tool calls: ${toolCallCount}`,
         `Confidence: ${confidence}`,

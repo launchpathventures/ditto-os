@@ -294,6 +294,9 @@ export const stepRuns = sqliteTable("step_runs", {
   // Confidence level (ADR-011: categorical high/medium/low)
   confidenceLevel: text("confidence_level").$type<"high" | "medium" | "low">(),
 
+  // Model tracking (Brief 033 — which model executed this step, for learning/routing)
+  model: text("model"),
+
   // Integration tracking (Brief 024 — which service/protocol was used per step)
   // Populated by the step-execution harness handler after integration steps complete.
   // TODO: Wire population in step-execution handler when Brief 025 adds tool use context.

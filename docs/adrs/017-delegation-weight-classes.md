@@ -111,6 +111,8 @@ Execution Mode Resolution (runtime)
 
 **Future: Model routing** is an orthogonal concern (which LLM, not how it runs). Process steps could declare a preferred model; `llm.ts` resolves model IDs to providers. Example: Light + Codex for coding reasoning, Light + Claude for conversation. This belongs in a future extension of ADR-012 (LLM abstraction), not in this ADR.
 
+> **Post-implementation note (Brief 033, 2026-03-23):** Now implemented. `config.model_hint` (`fast`/`capable`/`default`) on process steps, resolved by `resolveModel()` in `src/engine/model-routing.ts`. See ADR-012 post-implementation note for details.
+
 This mirrors OpenClaw's model where users choose between Claude, Claude Code, or API — but Ditto adds intelligent defaulting. The system picks the fastest mode that satisfies the step's declared capabilities, and the user can override.
 
 ### 3. Standalone role processes updated with smart defaults
@@ -193,4 +195,4 @@ Already working (delegation guidance in the system prompt). The Self's cognitive
 - **Context passing for light roles:** Light roles can't read files at runtime. The preferred approach: the Self pre-loads relevant context (work state summary, recent activity, key doc excerpts) and includes it in the task description. The Self already assembles work state via `loadWorkStateSummary()` — this same data feeds the delegation prompt. For cases where the PM genuinely needs to read specific files (e.g., a full brief), the Self can escalate to Heavy, or the task description can include the file contents. The implementation brief must specify the concrete pattern.
 - **Claude subscription provider in `llm.ts`:** Add `claude` CLI (non-Code) as a provider alongside the Anthropic API. This would give Light execution at subscription cost — matching OpenClaw's access model.
 - **Model-agnostic heavy execution:** The `cli-agent` executor is Claude Code-specific. To use Codex or other models for codebase work, `ai-agent` would need enhanced tools (write_file, run_command). This is a separate design decision — it means building our own agentic coding layer rather than depending on Claude Code. Separate ADR.
-- **Model routing per process/step:** Orthogonal to this ADR. Extend ADR-012 to add optional `model` field to process and step definitions.
+- **Model routing per process/step:** ~~Orthogonal to this ADR. Extend ADR-012 to add optional `model` field to process and step definitions.~~ **Done (Brief 033).** `config.model_hint` on process steps, resolved by `resolveModel()`. See ADR-012 post-implementation note.

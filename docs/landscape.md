@@ -198,7 +198,17 @@
 - Active 2024-2026 | Python
 - Open-source framework for cost-effective LLM routing. Trained on Chatbot Arena preference data. Multiple classifier types (similarity-weighted ranking, matrix factorization, BERT, causal LLM). 85% cost reduction on MT Bench, 45% MMLU, maintaining 95% performance. 40% cheaper than commercial routing.
 - **Ditto relevance:** MEDIUM — validates cost-based cascade routing pattern adopted in ADR-012. Ditto uses process-declared tiers (not runtime classification), but the cost savings benchmarks inform the value proposition.
-- **Limitation:** Python-only. Requires training data. Runtime classification approach differs from Ditto's declarative approach.
+- **Limitation:** Python-only. Binary routing (strong vs weak) only — no multi-tier. Requires training data. Runtime per-prompt classification differs from Ditto's declarative process-level approach.
+
+**LiteLLM Router** — github.com/BerriAI/litellm
+- Active 2023-2026 | Python
+- Unified LLM interface (100+ providers via `litellm.completion(model="provider/model")`). Router with operational routing strategies: cost-based (cheapest healthy deployment), latency-based (fastest cached response time), round-robin, semantic auto-routing. Redis-backed stats for production. Cooldown system for failing deployments.
+- **Ditto relevance:** LOW-MEDIUM — operational routing patterns (fallback, cooldown) are useful references. But Ditto already has its own multi-provider `llm.ts` (Brief 032) and routes at the process level, not the infra level. LiteLLM optimizes for operational metrics, not output quality.
+- **Limitation:** Python-only. Operational routing only (cost, latency) — no quality-based learning. Infrastructure layer, not an agent framework.
+
+**Vercel AI SDK (model routing)** — github.com/vercel/ai
+- Provider registry (`provider:model` string format), `customProvider` for user-defined aliases mapping capability hints to concrete models, per-call model selection, OpenTelemetry telemetry with `ai.response.model` (actual model used).
+- **Ditto relevance:** MEDIUM — provider registry and alias patterns are well-designed. Ditto's `llm.ts` already implements a simpler version. `customProvider` alias pattern is the closest existing implementation to Ditto's model hint concept. See `docs/research/llm-model-routing-patterns.md` for full analysis.
 
 ### CLI
 | Option | Stars | Fit | Notes |

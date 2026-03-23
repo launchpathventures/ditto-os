@@ -69,6 +69,7 @@ export interface LlmCompletionResponse {
   tokensUsed: number;
   costCents: number;
   stopReason: string | null;
+  model: string; // Actual model that produced this response (Vercel AI SDK ai.response.model pattern)
 }
 
 // ============================================================
@@ -305,11 +306,13 @@ class AnthropicProvider implements LlmProvider {
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
 
+    const actualModel = response.model;
     return {
       content: fromAnthropicContent(response.content),
       tokensUsed: inputTokens + outputTokens,
-      costCents: calculateCostCents(model, inputTokens, outputTokens),
+      costCents: calculateCostCents(actualModel, inputTokens, outputTokens),
       stopReason: response.stop_reason,
+      model: actualModel,
     };
   }
 }
@@ -362,6 +365,7 @@ class OpenAIProvider implements LlmProvider {
         tokensUsed: 0,
         costCents: 0,
         stopReason: "error",
+        model: response.model || model,
       };
     }
 
@@ -375,11 +379,13 @@ class OpenAIProvider implements LlmProvider {
     else if (choice.finish_reason === "length") stopReason = "max_tokens";
     else stopReason = choice.finish_reason;
 
+    const actualModel = response.model || model;
     return {
       content: fromOpenAIChoice(choice),
       tokensUsed: inputTokens + outputTokens,
-      costCents: calculateCostCents(model, inputTokens, outputTokens),
+      costCents: calculateCostCents(actualModel, inputTokens, outputTokens),
       stopReason,
+      model: actualModel,
     };
   }
 }

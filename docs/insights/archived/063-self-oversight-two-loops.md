@@ -3,7 +3,7 @@
 **Date:** 2026-03-23
 **Trigger:** PM triage session — reviewing `self.ts` revealed the Self has zero oversight despite being the outermost ring with the widest authority. Creator extended: every agent should operate this way when it counts.
 **Layers affected:** L2 Agent, L3 Harness, L5 Learning
-**Status:** partially absorbed — Brief 034a shipped (Self consultation + decision tracking + cognitive framework). Brief 034b remaining (harness-level metacognitive check for all agents).
+**Status:** absorbed — Brief 034a shipped (Self consultation + decision tracking + cognitive framework). Brief 034b shipped (harness-level metacognitive check for all agents). Moved to archived 2026-03-23.
 
 ## The Insight
 

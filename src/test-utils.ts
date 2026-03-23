@@ -134,6 +134,7 @@ function createTables(sqlite: Database.Database): void {
       cost_cents INTEGER DEFAULT 0,
       error TEXT,
       confidence_level TEXT,
+      model TEXT,
       integration_service TEXT,
       integration_protocol TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)

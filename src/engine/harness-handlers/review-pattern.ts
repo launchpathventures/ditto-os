@@ -17,51 +17,12 @@
  */
 
 import type { HarnessHandler, HarnessContext } from "../harness";
-import type { StepDefinition } from "../process-loader";
 import { executeStep } from "../step-executor";
 import { createCompletion, extractText, getConfiguredModel } from "../llm";
+import { parseHarnessConfig } from "./harness-config";
 
 /** Default max retries for maker-checker/adversarial retry results */
 const DEFAULT_MAX_RETRIES = 2;
-
-// ============================================================
-// YAML harness field parsing
-// ============================================================
-
-interface HarnessConfig {
-  review: string[];
-}
-
-/**
- * Parse the harness field from a step definition.
- * Accepts both legacy string format and new structured format:
- * - Legacy: `harness: maker-checker` → { review: ['maker-checker'] }
- * - New: `harness: { review: ['maker-checker', 'spec-testing'] }` → as-is
- */
-function parseHarnessConfig(
-  step: StepDefinition
-): HarnessConfig {
-  const harness = step.harness;
-
-  if (!harness) {
-    return { review: [] };
-  }
-
-  // Legacy string format
-  if (typeof harness === "string") {
-    return { review: [harness] };
-  }
-
-  // New structured format
-  if (typeof harness === "object" && harness !== null) {
-    const obj = harness as Record<string, unknown>;
-    if (Array.isArray(obj.review)) {
-      return { review: obj.review as string[] };
-    }
-  }
-
-  return { review: [] };
-}
 
 // ============================================================
 // Review layer implementations
@@ -374,12 +335,20 @@ export const reviewPatternHandler: HarnessHandler = {
       // "pass" doesn't change overallResult unless already flagged
     }
 
-    context.reviewResult = overallResult;
+    // Guard: if metacognitive check already flagged, preserve the flag
+    if (context.reviewResult === "flag" && overallResult !== "flag") {
+      // Keep the prior flag — do not overwrite to 'pass'
+    } else {
+      context.reviewResult = overallResult;
+    }
+
+    // Merge: spread existing reviewDetails (e.g. from metacognitive check) + add review layers
     context.reviewDetails = {
+      ...context.reviewDetails,
       layers: allDetails,
       retriesUsed,
     };
-    context.reviewCostCents = totalCostCents;
+    context.reviewCostCents += totalCostCents;
 
     return context;
   },

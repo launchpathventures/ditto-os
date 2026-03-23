@@ -19,6 +19,7 @@ export interface StepExecutionResult {
   costCents?: number;
   confidence?: "high" | "medium" | "low";
   logs?: string[];
+  model?: string; // Which model executed this step (for learning/routing)
 }
 
 /**

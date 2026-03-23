@@ -35,5 +35,6 @@ Reports in `docs/research/`. Detailed pattern analysis feeding architectural dec
 | `goal-directed-orchestrator-patterns.md` | Goal decomposition, work-queue scheduling, confidence-based stopping across 12 frameworks | 2026-03-21 | Active | Phase 5 brief, ADR-010, Insight-045 |
 | `phase-5-orchestrator-ux.md` | Orchestrator UX: goal setting, decomposition visibility, progress/routing, stopping conditions, templates | 2026-03-21 | Active | Phase 5 brief (Architect) |
 | `cognitive-prompting-architectures.md` | Cognitive architectures for agents: structured reasoning evidence, executive function, metacognition, structure-vs-intuition balance (30+ sources) | 2026-03-21 | Active | ADR-014 (Agent Cognitive Architecture) |
+| `llm-model-routing-patterns.md` | Model routing patterns: per-step selection, capability hints, model tracking, learned routing, multi-provider families (11 projects) | 2026-03-23 | Active | Brief 033 (Model Routing Intelligence) |
 
 **Statuses:** Active = still informing decisions. Consumed = primary consumer complete, retained for reference.

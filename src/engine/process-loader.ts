@@ -39,7 +39,7 @@ export interface StepDefinition {
   verification?: string[];
   commands?: string[];
   config?: Record<string, unknown>;
-  harness?: string | { review: string[] };
+  harness?: string | { review?: string[]; metacognitive?: boolean };
   on_failure?: string;
   handoff_to?: string;
   handoff_at_step?: string;
@@ -162,6 +162,32 @@ export function flattenSteps(definition: ProcessDefinition): StepDefinition[] {
     }
   }
   return flat;
+}
+
+/** Valid model hint values for step config */
+const VALID_MODEL_HINTS = ["fast", "capable", "default"];
+
+/**
+ * Validate model_hint values on ai-agent steps.
+ * Other executor types ignore model_hint silently.
+ * Returns error messages (empty array = valid).
+ */
+export function validateModelHints(definition: ProcessDefinition): string[] {
+  const errors: string[] = [];
+  const allSteps = flattenSteps(definition);
+
+  for (const step of allSteps) {
+    if (step.executor === "ai-agent" && step.config?.model_hint) {
+      const hint = step.config.model_hint as string;
+      if (!VALID_MODEL_HINTS.includes(hint)) {
+        errors.push(
+          `Step "${step.id}": invalid model_hint "${hint}". Valid: ${VALID_MODEL_HINTS.join(", ")}`,
+        );
+      }
+    }
+  }
+
+  return errors;
 }
 
 /**
@@ -311,6 +337,16 @@ export async function syncProcessesToDb(
         console.error(`    - ${err}`);
       }
       throw new Error(`Process "${def.name}" has integration step errors`);
+    }
+
+    // Validate model hints (Brief 033: only valid hints on ai-agent steps)
+    const modelHintErrors = validateModelHints(def);
+    if (modelHintErrors.length > 0) {
+      console.error(`  Model hint validation errors in ${def.name}:`);
+      for (const err of modelHintErrors) {
+        console.error(`    - ${err}`);
+      }
+      throw new Error(`Process "${def.name}" has model hint errors`);
     }
 
     const existing = await db

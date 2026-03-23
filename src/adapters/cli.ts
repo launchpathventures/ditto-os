@@ -214,6 +214,7 @@ export const cliAdapter = {
       tokensUsed: undefined, // CLI doesn't report token usage
       costCents: 0, // AC5: Subscription-based, no API cost
       confidence,
+      model, // Record which model was used (Brief 033)
       logs,
     };
   },

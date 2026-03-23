@@ -36,6 +36,7 @@ import { stepExecutionHandler } from "./harness-handlers/step-execution";
 import { reviewPatternHandler } from "./harness-handlers/review-pattern";
 import { routingHandler } from "./harness-handlers/routing";
 import { trustGateHandler } from "./harness-handlers/trust-gate";
+import { metacognitiveCheckHandler } from "./harness-handlers/metacognitive-check";
 import { feedbackRecorderHandler } from "./harness-handlers/feedback-recorder";
 
 export interface HeartbeatResult {
@@ -52,6 +53,7 @@ function buildPipeline(): HarnessPipeline {
   const pipeline = new HarnessPipeline();
   pipeline.register(memoryAssemblyHandler);
   pipeline.register(stepExecutionHandler);
+  pipeline.register(metacognitiveCheckHandler);
   pipeline.register(reviewPatternHandler);
   pipeline.register(routingHandler);
   pipeline.register(trustGateHandler);
@@ -365,6 +367,7 @@ async function executeSingleStep(
         tokensUsed: stepResult.tokensUsed || 0,
         costCents: stepResult.costCents || 0,
         confidenceLevel: stepResult.confidence || null,
+        model: stepResult.model || null,
       })
       .where(eq(schema.stepRuns.id, stepRunRecord[0].id));
 
@@ -420,6 +423,7 @@ async function executeSingleStep(
       tokensUsed: stepResult.tokensUsed || 0,
       costCents: stepResult.costCents || 0,
       confidenceLevel: stepResult.confidence || null,
+      model: stepResult.model || null,
     })
     .where(eq(schema.stepRuns.id, stepRunRecord[0].id));
 

@@ -156,6 +156,8 @@ This indirection means: (a) model names change without updating process definiti
 
 **Trust-modulated model routing (Original to Ditto):** The trust-evaluator can recommend model tier downgrades when data supports it. If a step running on `reasoning` tier achieves consistent quality (low correction rate, high approval rate over N runs), the system suggests downgrading to `balanced`. Human approves. If quality degrades after downgrade, auto-revert to previous tier (same mechanism as trust tier downgrades in ADR-007).
 
+> **Post-implementation note (Brief 033, 2026-03-23):** Implemented as `config.model_hint` with two capability hints (`fast`, `capable`) plus `default`, rather than the three named tiers (`fast`, `balanced`, `reasoning`) proposed here. The simplification reflects that `balanced` = deployment default, so only the extremes need explicit hints. `resolveModel()` in `src/engine/model-routing.ts` maps hints to provider-specific models. `generateModelRecommendations()` implements the trust-modulated routing concept: compares approval rates across models per (process, step) from 20+ runs, advisory only. Auto-revert on quality degradation not yet implemented (future brief). The core principle holds: "process-level learned routing from human feedback — original to Ditto."
+
 ### 4. Cost-per-outcome is the fourth feedback signal
 
 Layer 5 currently tracks three feedback signals: output quality, process efficiency, outcome impact. This ADR adds a fourth:

@@ -3,7 +3,7 @@
 **Date:** 2026-03-23
 **Trigger:** Live testing of the Conversational Self on Telegram. Delegating to the PM via `cli-agent` (claude -p subprocess) took 5+ minutes for a task the Self could have handled in seconds. The user was left waiting with no feedback, unable to even ask for status because the bot was blocked.
 **Layers affected:** L2 Agent, L6 Human
-**Status:** active
+**Status:** archived — absorbed by ADR-017 (Delegation Weight Classes) and Brief 031 (Ditto Execution Layer). All 7 roles migrated to `ai-agent`. Moved to archived 2026-03-23.
 
 ## The Insight
 

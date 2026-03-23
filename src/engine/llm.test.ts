@@ -364,6 +364,7 @@ describe("createCompletion", () => {
       tokensUsed: 10,
       costCents: 1,
       stopReason: "end_turn",
+      model: "test-model",
     };
     const mockProvider = {
       name: "test",
