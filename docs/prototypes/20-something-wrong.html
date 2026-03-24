@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ditto — Something Went Wrong (Rob's Phone)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --negative: hsl(0 65% 50%);
+    --negative-subtle: hsl(0 50% 96%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .conversation {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+
+  .top-bar-title { font-size: 16px; font-weight: 600; flex: 1; }
+
+  .messages {
+    flex: 1;
+    padding: 12px 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .msg-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .msg-group.self { align-items: flex-start; }
+  .msg-group.user { align-items: flex-end; }
+
+  .sender {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .self-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .sender-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .msg {
+    max-width: 88%;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .msg-group.self .msg { padding: 2px 0 2px 14px; }
+
+  .msg-group.user .msg {
+    background: var(--accent-subtle);
+    padding: 10px 14px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg p + p { margin-top: 8px; }
+
+  /* ═══ PROBLEM CARD — calm, not alarming ═══
+     This is NOT a red alert. It's Ditto saying
+     "I caught something, here's what happened,
+     here's what I've already done, here's what
+     you should decide."
+  */
+  .problem-card {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--caution);
+    border-radius: 14px;
+    padding: 18px;
+    margin-left: 14px;
+    max-width: 330px;
+  }
+
+  .problem-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .problem-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--caution-subtle);
+    color: hsl(38 60% 35%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .problem-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .problem-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+
+  .problem-body strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  /* What happened — clear timeline */
+  .problem-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  .timeline-dot.past { background: var(--border-strong); }
+  .timeline-dot.problem { background: var(--caution); }
+  .timeline-dot.action { background: var(--accent); }
+
+  .timeline-text { color: var(--text-secondary); }
+  .timeline-text strong { color: var(--text-primary); font-weight: 500; }
+
+  /* What I've already done */
+  .already-done {
+    padding: 10px 14px;
+    background: var(--positive-subtle);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .already-done-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--positive);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  /* Trust downgrade notice — informational, not punitive */
+  .trust-change {
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .trust-change-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .trust-change strong { color: var(--text-primary); font-weight: 600; }
+
+  .problem-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* Recovery confirmation */
+  .recovery-card {
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 85%);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-left: 14px;
+    max-width: 330px;
+  }
+
+  .recovery-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--positive);
+    margin-bottom: 8px;
+  }
+
+  .recovery-body {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.55;
+  }
+
+  .recovery-body strong { font-weight: 600; }
+
+  .recovery-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.12s;
+    -webkit-tap-highlight-color: transparent;
+    flex: 1;
+    text-align: center;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+
+  /* Input */
+  .bottom-input {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 12px);
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .input-container:focus-within { border-color: var(--accent); }
+
+  .input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .input-container input::placeholder { color: var(--text-muted); }
+
+  .send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .send-btn svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="conversation">
+
+  <div class="top-bar">
+    <span class="self-dot" style="width: 8px; height: 8px;"></span>
+    <span class="top-bar-title">Ditto</span>
+  </div>
+
+  <div class="messages">
+
+    <!-- Push notification context — Rob got pinged -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+      <div class="msg">
+        <p>Rob, heads up — I caught a problem with quoting. No damage done, but you should know.</p>
+      </div>
+
+      <!-- THE PROBLEM — calm, structured, complete -->
+      <div class="problem-card">
+        <div class="problem-header">
+          <div class="problem-icon">!</div>
+          <div class="problem-title">Quoting sent a bad quote</div>
+        </div>
+
+        <div class="problem-body">
+          The Chambers kitchen quote went out at <strong>$6,200</strong> but should have been <strong>$8,400</strong>. I used the old Tradelink prices — the price list you uploaded last month is outdated.
+        </div>
+
+        <!-- What happened — clear, chronological -->
+        <div class="problem-timeline">
+          <div class="timeline-item">
+            <span class="timeline-dot past"></span>
+            <span class="timeline-text">Monday — Chambers kitchen quote drafted using Tradelink prices</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-dot past"></span>
+            <span class="timeline-text">Tuesday — Quote auto-sent (you had quoting at spot-checked)</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-dot problem"></span>
+            <span class="timeline-text"><strong>Today</strong> — Tradelink emailed you new prices. I compared and found the quote was $2,200 under.</span>
+          </div>
+        </div>
+
+        <!-- What Ditto already did — showing competence -->
+        <div class="already-done">
+          <div class="already-done-title">What I've already done</div>
+          Paused quoting — no more quotes will go out until you update the price list. Drafted a revised quote for Chambers at the correct price.
+        </div>
+
+        <!-- Trust downgrade — automatic, transparent -->
+        <div class="trust-change">
+          <div class="trust-change-title">Trust change</div>
+          I've moved quoting back to <strong>supervised</strong> — you'll review every quote until we sort this out. This happened because the price list was stale, not because my quoting logic is wrong. Once you update the prices, we can go back to spot-checked.
+        </div>
+
+        <div class="problem-actions">
+          <button class="btn btn-primary">Update prices now</button>
+          <button class="btn btn-secondary">Send revised to Chambers</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rob responds -->
+    <div class="msg-group user">
+      <div class="msg">Good catch. I'll upload the new Tradelink list now. Send the revised quote to Chambers with an apology — say we quoted from an old price list.</div>
+    </div>
+
+    <!-- Ditto confirms recovery -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+
+      <div class="recovery-card">
+        <div class="recovery-title">Sorted</div>
+        <div class="recovery-body">
+          <strong>Chambers:</strong> Revised quote ($8,400) sent with a note about the pricing error.
+        </div>
+        <div class="recovery-detail">Waiting for your new Tradelink PDF to update the price list.</div>
+      </div>
+
+      <div class="msg">
+        <p>Once you upload the new prices, I'll re-check the last 5 quotes against them and let you know if any others were affected. Then we can talk about moving back to spot-checked.</p>
+        <p>This is exactly what the safety net is for — I caught it before it became a bigger problem.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom-input">
+    <div class="input-container">
+      <input type="text" placeholder="Tell Ditto something...">
+      <button class="send-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="proto-nav"><a href="19-multi-process-workspace.html">&larr; Multi-Process</a><span class="pn-t"><a href="index.html">P20 Something Wrong</a></span><span class="pn-d">&rarr;</span></div><!-- pnav -->
+</body>
+</html>

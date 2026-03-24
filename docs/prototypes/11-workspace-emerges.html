@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Workspace Emerges (Libby, Day 1)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+    --sidebar-bg: hsl(38 16% 95%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════════════
+     THE WORKSPACE — born from work, not configured.
+     Sidebar + Centre + Self panel.
+     This is the FIRST TIME Libby sees the full layout.
+  ═══════════════════════════════════════════ */
+  .workspace {
+    display: grid;
+    grid-template-columns: 220px 1fr 320px;
+    height: 100vh;
+  }
+
+  /* ═══ SIDEBAR — simple, just what exists ═══ */
+  .sidebar {
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+  }
+
+  .sidebar-header {
+    padding: 0 18px 16px;
+  }
+
+  .sidebar-logo {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .sidebar-section {
+    padding: 0 10px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 8px 6px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    font-size: 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .sidebar-item:hover { background: hsl(40 12% 91%); }
+
+  .sidebar-item.active {
+    background: var(--surface-raised);
+    box-shadow: 0 1px 2px hsl(30 10% 15% / 0.04);
+  }
+
+  .sidebar-item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sidebar-dot.done { background: var(--positive); }
+  .sidebar-dot.active { background: var(--accent); }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-footer {
+    padding: 0 10px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .sidebar-footer .sidebar-item {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  /* ═══ CENTRE — The feed ═══ */
+  .feed {
+    overflow-y: auto;
+    padding: 32px 28px 48px;
+  }
+
+  .feed::-webkit-scrollbar { width: 6px; }
+  .feed::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  .feed-inner {
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  /* Welcome back message */
+  .welcome-card {
+    background: var(--surface-raised);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+  }
+
+  .welcome-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .welcome-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .welcome-body {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .welcome-body p + p { margin-top: 10px; }
+  .welcome-body strong { font-weight: 600; }
+
+  /* Journey card — where Libby is */
+  .journey-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+  }
+
+  .journey-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+  }
+
+  .journey-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .journey-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 14px;
+  }
+
+  .journey-step-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+
+  .journey-step-icon.done { background: var(--positive); color: white; }
+  .journey-step-icon.next { background: var(--accent); color: white; font-weight: 700; }
+  .journey-step-icon.later {
+    background: var(--surface);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-muted);
+  }
+
+  .journey-step-text { color: var(--text-primary); }
+  .journey-step-text.done { color: var(--text-secondary); }
+  .journey-step-text.next { font-weight: 500; color: var(--accent); }
+  .journey-step-text.later { color: var(--text-muted); }
+
+  .journey-step-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* Completed work card */
+  .work-done-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--positive);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+
+  .work-done-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .work-done-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .work-done-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--positive-subtle);
+    color: var(--positive);
+  }
+
+  .work-done-body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .work-done-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  /* Next step card — slightly highlighted */
+  .next-step-card {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--accent);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .next-step-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .next-step-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .next-step-body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .next-step-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.12s;
+    line-height: 1.3;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* ═══ SELF PANEL ═══ */
+  .self-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .self-panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .self-panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  /* Knowledge summary in self panel */
+  .knowledge-summary {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .knowledge-summary-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+
+  .knowledge-mini-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .knowledge-mini-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .knowledge-mini-dot.known { background: var(--positive); }
+  .knowledge-mini-dot.gap { background: var(--border-strong); }
+
+  .knowledge-mini-label { font-weight: 500; color: var(--text-primary); min-width: 70px; }
+
+  .knowledge-see-all {
+    display: block;
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  .knowledge-see-all:hover { text-decoration: underline; }
+
+  /* Self messages */
+  .self-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: 14px;
+  }
+
+  .panel-msg {
+    line-height: 1.55;
+    color: var(--text-primary);
+    padding-left: 12px;
+  }
+
+  .panel-msg .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
+  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+  /* Panel input */
+  .self-panel-input {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .panel-input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .panel-input-container:focus-within { border-color: var(--accent); }
+
+  .panel-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .panel-input-container input::placeholder { color: var(--text-muted); }
+
+  .panel-send {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
+
+  /* ═══ Responsive ═══ */
+  @media (max-width: 1100px) {
+    .workspace { grid-template-columns: 200px 1fr; }
+    .self-panel { display: none; }
+  }
+
+  @media (max-width: 768px) {
+    .workspace { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .feed { padding: 20px 16px; }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="workspace">
+
+  <!-- ═══ SIDEBAR — born from work ═══ -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">Ditto</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Your work</div>
+      <a class="sidebar-item active" href="#">
+        <span class="sidebar-item-text">Getting started</span>
+        <span class="sidebar-dot active"></span>
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Completed</div>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">5 Instagram posts</span>
+        <span class="sidebar-dot done"></span>
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">What I know</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══ CENTRE FEED ═══ -->
+  <main class="feed">
+    <div class="feed-inner">
+
+      <!-- Ditto's welcome-back -->
+      <div class="welcome-card">
+        <div class="welcome-header">
+          <span class="self-dot"></span>
+          <span class="welcome-label">Ditto</span>
+        </div>
+        <div class="welcome-body">
+          <p><strong>Your first posts are ready to go.</strong> 5 Instagram posts approved — 1 edited, 4 as-is. You changed "baby" to "bub" and I've saved that for all future content.</p>
+          <p>Here's where you're at:</p>
+        </div>
+      </div>
+
+      <!-- Journey progress -->
+      <div class="journey-card">
+        <div class="journey-title">Getting your business out there</div>
+        <div class="journey-steps">
+          <div class="journey-step">
+            <div class="journey-step-icon done">&#10003;</div>
+            <span class="journey-step-text done">Understand you and your client</span>
+            <span class="journey-step-meta">Done</span>
+          </div>
+          <div class="journey-step">
+            <div class="journey-step-icon done">&#10003;</div>
+            <span class="journey-step-text done">Define your voice</span>
+            <span class="journey-step-meta">Done</span>
+          </div>
+          <div class="journey-step">
+            <div class="journey-step-icon done">&#10003;</div>
+            <span class="journey-step-text done">5 Instagram posts</span>
+            <span class="journey-step-meta">5 approved</span>
+          </div>
+          <div class="journey-step">
+            <div class="journey-step-icon next">4</div>
+            <span class="journey-step-text next">Landing page with waitlist</span>
+          </div>
+          <div class="journey-step">
+            <div class="journey-step-icon later">5</div>
+            <span class="journey-step-text later">Content plan for the first month</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- What was produced -->
+      <div class="work-done-card">
+        <div class="work-done-header">
+          <div class="work-done-title">5 Instagram Posts</div>
+          <span class="work-done-badge">Complete</span>
+        </div>
+        <div class="work-done-body">
+          Fear of birth &middot; Hospital bag &middot; Asking for help &middot; Partner's role &middot; Trusting yourself
+        </div>
+        <div class="work-done-actions">
+          <button class="btn btn-secondary">View posts</button>
+          <button class="btn btn-ghost">Copy all</button>
+        </div>
+      </div>
+
+      <!-- What's next — the clear call to action -->
+      <div class="next-step-card">
+        <div class="next-step-label">Next step</div>
+        <div class="next-step-title">Landing page with waitlist</div>
+        <div class="next-step-body">
+          Now that your voice and first content are done, let's give people somewhere to go when they find you. I'll draft a landing page using your voice and your client profile — you'll review and approve it just like the posts.
+        </div>
+        <div class="next-step-actions">
+          <button class="btn btn-primary">Let's do it</button>
+          <button class="btn btn-secondary">Something else first</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ═══ SELF PANEL ═══ -->
+  <aside class="self-panel">
+    <div class="self-panel-header">
+      <span class="self-dot"></span>
+      <span class="self-panel-title">Ditto</span>
+    </div>
+
+    <!-- Knowledge summary — always visible -->
+    <div class="knowledge-summary">
+      <div class="knowledge-summary-title">What I know</div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot known"></span>
+        <span class="knowledge-mini-label">You</span>
+        Doula, education, mum
+      </div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot known"></span>
+        <span class="knowledge-mini-label">Client</span>
+        First-time mums, 30s, professional
+      </div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot known"></span>
+        <span class="knowledge-mini-label">Voice</span>
+        Safe, practical, real. Uses "bub"
+      </div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot known"></span>
+        <span class="knowledge-mini-label">Stage</span>
+        Building, not launched
+      </div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot gap"></span>
+        <span class="knowledge-mini-label">Pricing</span>
+        <span style="color: var(--text-muted); font-style: italic;">Not yet</span>
+      </div>
+      <div class="knowledge-mini-item">
+        <span class="knowledge-mini-dot gap"></span>
+        <span class="knowledge-mini-label">Competitors</span>
+        <span style="color: var(--text-muted); font-style: italic;">Not yet</span>
+      </div>
+      <a class="knowledge-see-all" href="#">See everything &rarr;</a>
+    </div>
+
+    <div class="self-messages">
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Nice work. You've got 5 posts ready to put out — that's real progress in one session.
+      </div>
+
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        The landing page is the natural next step — it gives your Instagram audience somewhere to go. But if you'd rather work on something else, just tell me.
+      </div>
+
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Whenever you come back, I'll remember everything. We pick up where we left off.
+      </div>
+    </div>
+
+    <div class="self-panel-input">
+      <div class="panel-input-container">
+        <input type="text" placeholder="What's on your mind?">
+        <button class="panel-send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<div class="proto-nav"><a href="10-first-output.html">&larr; First Output</a><span class="pn-t"><a href="index.html">P11 Workspace Emerges</a></span><a href="12-morning-mobile.html">Morning Mobile &rarr;</a></div><!-- pnav -->
+</body>
+</html>

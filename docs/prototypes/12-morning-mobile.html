@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ditto — Morning (Rob's Phone)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    /* Simulate phone width */
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  /* ═══════════════════════════════════════════
+     MOBILE LAYOUT — scroll feed, no panels.
+     Everything Rob needs in a vertical scroll.
+     3 minutes. Coffee. Done.
+  ═══════════════════════════════════════════ */
+  .mobile-app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Top bar — minimal */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+
+  .top-bar-logo {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .top-bar-action {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .top-bar-action svg { width: 20px; height: 20px; stroke-width: 1.5; }
+
+  /* ═══ MORNING BRIEF — the first thing Rob sees ═══ */
+  .morning-brief {
+    padding: 0 18px 8px;
+  }
+
+  .morning-greeting {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+
+  .morning-summary {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-bottom: 16px;
+  }
+
+  .morning-summary strong { color: var(--text-primary); font-weight: 600; }
+
+  /* Quick stats */
+  .quick-stats {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .quick-stat {
+    flex: 1;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .quick-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .quick-stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ═══ NEEDS YOU — the action items ═══ */
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 16px 18px 8px;
+  }
+
+  /* Review card — tappable, swipeable feel */
+  .review-card {
+    margin: 0 14px 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .review-card.urgent {
+    border-left: 3px solid var(--accent);
+  }
+
+  .review-card-body {
+    padding: 16px;
+  }
+
+  .review-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .review-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .review-card-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-needs-you {
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  .badge-heads-up {
+    background: var(--caution-subtle);
+    color: hsl(38 60% 35%);
+  }
+
+  .review-card-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  /* Key details — what Rob needs to decide */
+  .review-details {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+
+  .review-detail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .review-detail-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .review-detail-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* Ditto's note */
+  .review-aside {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    background: hsl(24 50% 97%);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-bottom: 4px;
+  }
+
+  .review-aside-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  /* Based on strip — compact for mobile */
+  .review-based-on {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 0 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .review-based-on-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    background: var(--surface);
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  .review-based-on-tag-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--positive);
+  }
+
+  /* Action buttons — big, tappable */
+  .review-card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: hsl(40 15% 97%);
+  }
+
+  .review-card-actions .btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* ═══ RUNNING FINE — compact process health ═══ */
+  .health-strip {
+    display: flex;
+    gap: 8px;
+    padding: 0 18px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+  }
+
+  .health-strip::-webkit-scrollbar { display: none; }
+
+  .health-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .health-chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .health-chip-dot.good { background: var(--positive); }
+  .health-chip-dot.watching { background: hsl(210 50% 50%); }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.12s;
+    line-height: 1.3;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:active { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+
+  /* ═══ BOTTOM INPUT — always accessible ═══ */
+  .bottom-input {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 12px);
+  }
+
+  .bottom-input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bottom-input-container:focus-within {
+    border-color: var(--accent);
+  }
+
+  .bottom-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .bottom-input-container input::placeholder { color: var(--text-muted); }
+
+  .bottom-icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottom-icon-btn svg { width: 20px; height: 20px; stroke-width: 1.5; }
+
+  .bottom-send {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .bottom-send svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="mobile-app">
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <span class="top-bar-logo">Ditto</span>
+    <button class="top-bar-action">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- ═══ MORNING BRIEF ═══ -->
+  <div class="morning-brief">
+    <div class="morning-greeting">Morning Rob</div>
+    <div class="morning-summary">
+      <strong>2 quotes need you.</strong> Henderson bathroom might be underpriced. Wilson kitchen looks good. Everything else is running fine.
+    </div>
+
+    <div class="quick-stats">
+      <div class="quick-stat">
+        <div class="quick-stat-value">5</div>
+        <div class="quick-stat-label">Quotes this week</div>
+      </div>
+      <div class="quick-stat">
+        <div class="quick-stat-value">4</div>
+        <div class="quick-stat-label">Approved clean</div>
+      </div>
+      <div class="quick-stat">
+        <div class="quick-stat-value">$68k</div>
+        <div class="quick-stat-label">Quoted</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ NEEDS YOU ═══ -->
+  <div class="section-label">Needs you</div>
+
+  <div class="review-card urgent">
+    <div class="review-card-body">
+      <div class="review-card-top">
+        <div class="review-card-title">Henderson bathroom reno</div>
+        <span class="review-card-badge badge-needs-you">Review</span>
+      </div>
+      <div class="review-card-subtitle">Drafted 2 hours ago</div>
+
+      <div class="review-details">
+        <div class="review-detail">
+          <span class="review-detail-label">Materials</span>
+          <span class="review-detail-value">$8,400</span>
+        </div>
+        <div class="review-detail">
+          <span class="review-detail-label">Labour</span>
+          <span class="review-detail-value">18 hrs</span>
+        </div>
+        <div class="review-detail">
+          <span class="review-detail-label">Total</span>
+          <span class="review-detail-value">$14,200</span>
+        </div>
+      </div>
+
+      <div class="review-aside">
+        <span class="review-aside-dot"></span>
+        <span>Labour looks low — bathrooms usually take 22 hrs. Want me to bump it?</span>
+      </div>
+
+      <div class="review-based-on">
+        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Reece prices (12 Mar)</span>
+        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> 25% margin</span>
+        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Bathroom rule: 22 hrs</span>
+      </div>
+    </div>
+
+    <div class="review-card-actions">
+      <button class="btn btn-primary">Bump &amp; send</button>
+      <button class="btn btn-secondary">Approve as-is</button>
+    </div>
+  </div>
+
+  <div class="review-card">
+    <div class="review-card-body">
+      <div class="review-card-top">
+        <div class="review-card-title">Wilson kitchen renovation</div>
+        <span class="review-card-badge badge-needs-you">Review</span>
+      </div>
+      <div class="review-card-subtitle">Drafted 4 hours ago</div>
+
+      <div class="review-details">
+        <div class="review-detail">
+          <span class="review-detail-label">Materials</span>
+          <span class="review-detail-value">$4,800</span>
+        </div>
+        <div class="review-detail">
+          <span class="review-detail-label">Labour</span>
+          <span class="review-detail-value">12 hrs</span>
+        </div>
+        <div class="review-detail">
+          <span class="review-detail-label">Total</span>
+          <span class="review-detail-value">$8,900</span>
+        </div>
+      </div>
+
+      <div class="review-based-on">
+        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Tradelink prices (10 Mar)</span>
+        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> 25% margin</span>
+      </div>
+    </div>
+
+    <div class="review-card-actions">
+      <button class="btn btn-primary">Approve &amp; send</button>
+      <button class="btn btn-secondary">Adjust</button>
+    </div>
+  </div>
+
+  <!-- ═══ HEADS UP ═══ -->
+  <div class="section-label">Heads up</div>
+
+  <div class="review-card">
+    <div class="review-card-body">
+      <div class="review-card-top">
+        <div class="review-card-title">Copper prices moved</div>
+        <span class="review-card-badge badge-heads-up">Info</span>
+      </div>
+      <div class="review-card-subtitle">Up 8% this week. 2 quotes used old prices.</div>
+    </div>
+    <div class="review-card-actions">
+      <button class="btn btn-secondary">Update prices</button>
+      <button class="btn btn-ghost">I'll handle it</button>
+    </div>
+  </div>
+
+  <!-- ═══ RUNNING FINE — horizontal scroll chips ═══ -->
+  <div class="section-label">Running fine</div>
+
+  <div class="health-strip">
+    <div class="health-chip">
+      <span class="health-chip-dot good"></span>
+      Quoting &middot; 31/34 clean
+    </div>
+    <div class="health-chip">
+      <span class="health-chip-dot good"></span>
+      Follow-ups &middot; 3 sent yesterday
+    </div>
+    <div class="health-chip">
+      <span class="health-chip-dot watching"></span>
+      Invoicing &middot; 2 of 5 paid
+    </div>
+  </div>
+
+  <!-- Spacer for bottom input -->
+  <div style="height: 80px;"></div>
+
+  <!-- ═══ BOTTOM INPUT ═══ -->
+  <div class="bottom-input">
+    <div class="bottom-input-container">
+      <input type="text" placeholder="Tell Ditto something...">
+      <button class="bottom-icon-btn" title="Voice">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+        </svg>
+      </button>
+      <button class="bottom-send">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="proto-nav"><a href="11-workspace-emerges.html">&larr; Workspace Emerges</a><span class="pn-t"><a href="index.html">P12 Morning Mobile</a></span><a href="13-daily-workspace.html">Daily Workspace &rarr;</a></div><!-- pnav -->
+</body>
+</html>

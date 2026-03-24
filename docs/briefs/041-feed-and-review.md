@@ -105,7 +105,7 @@ A working feed component that renders 6 item types with inline actions, captures
 6. [ ] Insight card (Type 5) renders pattern detection + evidence + actions (Teach this, No, Tell me more)
 7. [ ] Process output card (Type 6) renders summary + content area (placeholder for json-render)
 8. [ ] Entity grouping: updates for the same work item cluster together
-9. [ ] Inline review: approve calls `approveRun()` server-side, card collapses to confirmation
+9. [ ] Inline review: approve calls `approveRun()` server-side, card collapses to confirmation. Note: `approveRun()` already records to activities table — the web path preserves this existing audit trail.
 10. [ ] Inline review: edit opens inline editor, saves diff, calls `editRun()` server-side with diff attached
 11. [ ] Inline review: reject shows reason input, calls `rejectRun()` server-side
 12. [ ] Feedback capture: edit diffs stored via existing `feedback-recorder.ts` pathway

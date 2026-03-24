@@ -97,7 +97,7 @@ const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> =
   "o3-mini": { inputPerM: 1.1, outputPerM: 4.4 },
 };
 
-function calculateCostCents(model: string, inputTokens: number, outputTokens: number): number {
+export function calculateCostCents(model: string, inputTokens: number, outputTokens: number): number {
   const pricing = MODEL_PRICING[model];
   if (!pricing) {
     // Ollama and unknown models: $0

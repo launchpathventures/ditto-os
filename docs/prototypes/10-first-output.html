@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — First Output (Libby's Instagram Posts)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════════════
+     LAYOUT — The output is primary. Chat is secondary.
+     Insight-080: artefact-primary surface.
+  ═══════════════════════════════════════════ */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    height: 100vh;
+  }
+
+  /* ═══════════════════════════════════════════
+     LEFT: THE OUTPUT — what Ditto produced
+  ═══════════════════════════════════════════ */
+  .output-pane {
+    overflow-y: auto;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .output-pane::-webkit-scrollbar { width: 6px; }
+  .output-pane::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  /* Header — what this is and what it's based on */
+  .output-header {
+    padding: 28px 36px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .output-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 12px;
+    transition: color 0.12s;
+  }
+  .output-back:hover { color: var(--text-secondary); }
+  .output-back svg { width: 14px; height: 14px; }
+
+  .output-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+
+  .output-meta {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  /* Based-on strip — THE TRUST MECHANISM (Insight-083) */
+  .based-on {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .based-on-label {
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  .based-on-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: default;
+  }
+
+  .based-on-tag-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--positive);
+  }
+
+  /* Content area */
+  .output-content {
+    padding: 24px 36px 80px;
+    flex: 1;
+  }
+
+  /* Progress strip at the top */
+  .output-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .output-progress strong { color: var(--accent); font-weight: 600; }
+
+  .output-progress-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .progress-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.2s;
+  }
+
+  .progress-dot.done { background: var(--positive); }
+  .progress-dot.active { background: var(--accent); box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.15); }
+  .progress-dot.upcoming { background: var(--border-strong); }
+
+  /* ═══ POST CARD — each Instagram post ═══ */
+  .post-card {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .post-card:hover {
+    box-shadow: 0 2px 12px hsl(30 10% 15% / 0.05);
+  }
+
+  .post-card.editing {
+    border-color: var(--accent);
+    box-shadow: 0 2px 16px hsl(24 80% 38% / 0.08);
+  }
+
+  .post-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .post-card-number {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .post-card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 6px;
+  }
+
+  .status-ready {
+    background: var(--positive-subtle);
+    color: var(--positive);
+  }
+
+  .status-edited {
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  .status-approved {
+    background: var(--positive-subtle);
+    color: var(--positive);
+  }
+
+  .post-card-body {
+    padding: 18px;
+  }
+
+  .post-content {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+  }
+
+  /* Editable state */
+  .post-content[contenteditable="true"] {
+    outline: none;
+    cursor: text;
+    background: hsl(40 20% 99%);
+    border-radius: 6px;
+    padding: 8px;
+    margin: -8px;
+  }
+
+  .post-content[contenteditable="true"]:focus {
+    background: hsl(24 60% 98%);
+  }
+
+  /* Post topic tag */
+  .post-topic {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+
+  /* Post actions */
+  .post-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    background: hsl(40 15% 97%);
+  }
+
+  .post-card-actions .spacer { flex: 1; }
+
+  /* Self aside — Ditto's thinking about this specific post */
+  .post-aside {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    margin: 12px 0 0;
+    background: hsl(24 50% 97%);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .post-aside-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.12s;
+    line-height: 1.3;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); padding: 7px 10px; }
+  .btn-ghost:hover { color: var(--text-primary); background: var(--surface); }
+  .btn-sm { font-size: 12px; padding: 5px 10px; }
+
+  /* Bulk actions bar — sticky bottom of output pane */
+  .bulk-actions {
+    position: sticky;
+    bottom: 0;
+    padding: 16px 36px;
+    background: var(--surface-raised);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 -4px 16px hsl(40 20% 98% / 0.8);
+  }
+
+  .bulk-status {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .bulk-status strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════
+     RIGHT: DITTO CONVERSATION
+     Secondary — supports the output review
+  ═══════════════════════════════════════════ */
+  .self-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .self-panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .self-panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .self-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: 14px;
+  }
+
+  .self-messages::-webkit-scrollbar { width: 4px; }
+  .self-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .panel-msg {
+    line-height: 1.55;
+    color: var(--text-primary);
+  }
+
+  .panel-msg.from-self {
+    padding-left: 12px;
+  }
+
+  .panel-msg.from-user {
+    background: var(--accent-subtle);
+    padding: 8px 12px;
+    border-radius: 14px;
+    align-self: flex-end;
+    max-width: 85%;
+  }
+
+  .panel-msg .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
+  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+  /* Teach-this prompt in panel */
+  .teach-prompt {
+    background: var(--accent-subtle);
+    border: 1px solid hsl(24 60% 88%);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+  }
+
+  .teach-prompt-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .teach-prompt-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  /* Panel input */
+  .self-panel-input {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .panel-input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .panel-input-container:focus-within { border-color: var(--accent); }
+
+  .panel-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .panel-input-container input::placeholder { color: var(--text-muted); }
+
+  .panel-send {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
+
+  /* ═══ Responsive ═══ */
+  @media (max-width: 960px) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+    .self-panel { display: none; }
+    .output-header { padding: 20px 20px 16px; }
+    .output-content { padding: 20px 20px 80px; }
+    .bulk-actions { padding: 14px 20px; }
+  }
+
+  @media (max-width: 768px) {
+    .post-card-body { padding: 14px; }
+    .post-card-actions { flex-wrap: wrap; }
+    .based-on { flex-direction: column; align-items: flex-start; gap: 6px; }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ═══════════════════════════════════════
+       LEFT: THE OUTPUT
+  ═══════════════════════════════════════ -->
+  <main class="output-pane">
+
+    <div class="output-header">
+      <a href="#" class="output-back">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        Back
+      </a>
+
+      <div class="output-title">5 Instagram Posts</div>
+      <div class="output-meta">Step 3 of 5 &middot; Getting your business out there</div>
+
+      <!-- THE TRUST MECHANISM — Libby can see what knowledge produced this -->
+      <div class="based-on">
+        <span class="based-on-label">Written using</span>
+        <span class="based-on-tag"><span class="based-on-tag-dot"></span> Your voice: safe, practical, real</span>
+        <span class="based-on-tag"><span class="based-on-tag-dot"></span> Your client: first-time mums, 30s</span>
+        <span class="based-on-tag"><span class="based-on-tag-dot"></span> Your brand: warm friend, not woo-woo</span>
+      </div>
+    </div>
+
+    <div class="output-content">
+
+      <!-- Review progress -->
+      <div class="output-progress">
+        <strong>Reviewing</strong>
+        <div class="output-progress-dots">
+          <span class="progress-dot done"></span>
+          <span class="progress-dot done"></span>
+          <span class="progress-dot active"></span>
+          <span class="progress-dot upcoming"></span>
+          <span class="progress-dot upcoming"></span>
+        </div>
+        2 approved, reviewing post 3
+      </div>
+
+      <!-- ═══ POST 1 — Approved ═══ -->
+      <div class="post-card">
+        <div class="post-card-header">
+          <span class="post-card-number">Post 1</span>
+          <span class="post-card-status status-approved">Approved</span>
+        </div>
+        <div class="post-card-body">
+          <div class="post-topic">Fear of birth</div>
+          <div class="post-content">Feeling terrified about birth doesn't mean something's wrong with you. It means you care and you're paying attention.
+
+Most of the fear comes from not knowing what to expect. And that's actually good news — because that part is fixable.
+
+You don't need to be fearless. You need to be prepared. There's a difference.</div>
+        </div>
+        <div class="post-card-actions">
+          <span class="btn btn-ghost btn-sm" style="color: var(--positive); cursor: default;">&#10003; Approved</span>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">Edit</button>
+        </div>
+      </div>
+
+      <!-- ═══ POST 2 — Approved with edit ═══ -->
+      <div class="post-card">
+        <div class="post-card-header">
+          <span class="post-card-number">Post 2</span>
+          <span class="post-card-status status-edited">Edited &amp; approved</span>
+        </div>
+        <div class="post-card-body">
+          <div class="post-topic">Hospital bag</div>
+          <div class="post-content">Your hospital bag doesn't need 47 items from a Pinterest checklist.
+
+Here's what actually matters: something comfortable to wear home, snacks you'll actually eat, your phone charger, and one outfit for bub. That's it.
+
+Everything else is nice to have. Don't let the packing list stress you out more than the birth.</div>
+
+          <div class="post-aside">
+            <span class="post-aside-dot"></span>
+            <span>You changed "baby" to "bub" — noted. Want me to use "bub" in all your content?</span>
+          </div>
+        </div>
+        <div class="post-card-actions">
+          <span class="btn btn-ghost btn-sm" style="color: var(--positive); cursor: default;">&#10003; Approved</span>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">Edit</button>
+        </div>
+      </div>
+
+      <!-- ═══ POST 3 — Under review (active) ═══ -->
+      <div class="post-card editing">
+        <div class="post-card-header">
+          <span class="post-card-number">Post 3</span>
+          <span class="post-card-status" style="background: var(--accent-subtle); color: var(--accent);">Reviewing</span>
+        </div>
+        <div class="post-card-body">
+          <div class="post-topic">Asking for help</div>
+          <div class="post-content" contenteditable="true">You're not failing if you need help. You're not weak if you're struggling. You're not a bad mum if you don't love every second of it.
+
+You're a person doing something massive for the first time. Of course it's hard.
+
+The strongest thing you can do is say "I need support." Not push through alone pretending you're fine.</div>
+        </div>
+        <div class="post-card-actions">
+          <button class="btn btn-primary">Approve</button>
+          <button class="btn btn-secondary">Edit</button>
+          <button class="btn btn-ghost">Regenerate</button>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">Skip</button>
+        </div>
+      </div>
+
+      <!-- ═══ POST 4 — Waiting ═══ -->
+      <div class="post-card" style="opacity: 0.7;">
+        <div class="post-card-header">
+          <span class="post-card-number">Post 4</span>
+          <span class="post-card-status" style="background: var(--surface); color: var(--text-muted);">Up next</span>
+        </div>
+        <div class="post-card-body">
+          <div class="post-topic">Partner's role</div>
+          <div class="post-content">The number one thing your partner can do during birth isn't hold your hand. It's protect your space.
+
+That means: knowing your birth preferences so you don't have to explain them mid-contraction. Asking questions you're too tired to ask. Being the buffer between you and the world.
+
+You're doing the work. They're guarding the room.</div>
+        </div>
+        <div class="post-card-actions">
+          <button class="btn btn-primary">Approve</button>
+          <button class="btn btn-secondary">Edit</button>
+          <button class="btn btn-ghost">Regenerate</button>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">Skip</button>
+        </div>
+      </div>
+
+      <!-- ═══ POST 5 — Waiting ═══ -->
+      <div class="post-card" style="opacity: 0.5;">
+        <div class="post-card-header">
+          <span class="post-card-number">Post 5</span>
+          <span class="post-card-status" style="background: var(--surface); color: var(--text-muted);">Up next</span>
+        </div>
+        <div class="post-card-body">
+          <div class="post-topic">Trusting yourself</div>
+          <div class="post-content">Everyone has an opinion on how you should do this. Your mum, your friends, the internet, that random woman at the shops.
+
+Here's what I've learned after years of doing this work: you already know more than you think. You just need the space to hear yourself.
+
+That's what good preparation gives you. Not a script. Just confidence that you can handle what comes.</div>
+        </div>
+        <div class="post-card-actions">
+          <button class="btn btn-primary">Approve</button>
+          <button class="btn btn-secondary">Edit</button>
+          <button class="btn btn-ghost">Regenerate</button>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">Skip</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bulk actions -->
+    <div class="bulk-actions">
+      <div class="bulk-status"><strong>2 of 5</strong> approved &middot; reviewing post 3</div>
+      <button class="btn btn-secondary">Approve remaining</button>
+      <button class="btn btn-primary">Done — use these</button>
+    </div>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════
+       RIGHT: DITTO
+  ═══════════════════════════════════════ -->
+  <aside class="self-panel">
+    <div class="self-panel-header">
+      <span class="self-dot"></span>
+      <span class="self-panel-title">Ditto</span>
+    </div>
+
+    <div class="self-messages">
+
+      <div class="panel-msg from-self">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Here are 5 posts. Each one targets a different concern your ideal client has — fear of birth, practical preparation, asking for help, partner involvement, and self-trust.
+      </div>
+
+      <div class="panel-msg from-self">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Go through them one at a time. Approve, edit, or regenerate — whatever feels right. Your edits teach me your voice better than anything else.
+      </div>
+
+      <div class="panel-msg from-user">
+        Post 1 is great. Post 2 — I'd say "bub" not "baby"
+      </div>
+
+      <div class="panel-msg from-self">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Fixed. "Bub" — that's a strong voice signal.
+      </div>
+
+      <!-- Teach-this prompt — pattern detected -->
+      <div class="teach-prompt">
+        <div class="teach-prompt-label">Quick thing</div>
+        "Bub" instead of "baby" — want me to use that across all your content? It fits your voice perfectly.
+        <div class="teach-prompt-actions">
+          <button class="btn btn-secondary btn-sm">Yeah, always use bub</button>
+          <button class="btn btn-ghost btn-sm">Just this once</button>
+        </div>
+      </div>
+
+      <div class="panel-msg from-self">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Post 3 is ready for you. This one's about asking for help — it's the topic your survey respondents felt strongest about.
+      </div>
+
+    </div>
+
+    <div class="self-panel-input">
+      <div class="panel-input-container">
+        <input type="text" placeholder="Tell me what to change...">
+        <button class="panel-send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // Make contenteditable posts feel like editing
+  document.querySelectorAll('.post-content[contenteditable]').forEach(el => {
+    el.addEventListener('focus', () => {
+      el.closest('.post-card').classList.add('editing');
+    });
+    el.addEventListener('blur', () => {
+      // Keep editing class if content changed
+    });
+  });
+</script>
+
+<div class="proto-nav"><a href="09-first-conversation.html">&larr; First Conversation</a><span class="pn-t"><a href="index.html">P10 First Output</a></span><a href="11-workspace-emerges.html">Workspace Emerges &rarr;</a></div><!-- pnav -->
+</body>
+</html>

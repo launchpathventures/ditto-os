@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
+    "dev": "pnpm --filter @ditto/web dev",
     "dev-pipeline": "tsx src/dev-pipeline.ts",
     "dev-bot": "tsx src/dev-bot.ts"
   },

@@ -28,11 +28,13 @@ The Self can handle every primary user action through conversation: create work 
 
 ## Inputs
 
-1. `docs/briefs/038-phase-10-mvp-architecture.md` — Self Extensions section
+1. `docs/briefs/038-phase-10-mvp-architecture.md` — Self Extensions section (incl. integration auth)
 2. `docs/research/phase-10-mvp-dashboard-ux.md` — sections 2.2-2.6, 7.1.1
-3. `src/engine/self.ts` + `self-delegation.ts` — existing Self
-4. `src/engine/review-actions.ts` — existing approve/edit/reject
-5. `docs/adrs/016-conversational-self.md` — Self as outermost harness
+3. `docs/research/integration-auth-reality.md` — auth types analysis, API key MVP path, masked input requirement
+4. `src/engine/self.ts` + `self-delegation.ts` — existing Self
+5. `src/engine/review-actions.ts` — existing approve/edit/reject
+6. `src/engine/credential-vault.ts` — existing vault (Brief 035)
+7. `docs/adrs/016-conversational-self.md` — Self as outermost harness
 
 ## Constraints
 
@@ -40,7 +42,7 @@ The Self can handle every primary user action through conversation: create work 
 - MUST implement confirmation model for irreversible actions (UX spec 7.1.1)
 - MUST NOT auto-execute irreversible actions without explicit user confirmation
 - MUST capture user model data from onboarding conversation as structured self-scoped memory
-- MUST render inline data (tables, progress bars) as structured content blocks the frontend can render — not as ASCII art
+- MUST render inline data (tables, progress bars, knowledge synthesis cards, work item cards) as structured content blocks the frontend can render — not as ASCII art. These are the conversation component catalog (ADR-009 v2 pattern, `docs/research/self-meta-processes-ux.md`)
 - MUST NOT bypass trust gates — `adjust_trust` only proposes changes through existing trust-diff.ts
 
 ## Provenance
@@ -57,19 +59,20 @@ The Self can handle every primary user action through conversation: create work 
 
 | File | Action |
 |------|--------|
-| `src/engine/self-delegation.ts` | Modify: add 8 new tool definitions |
+| `src/engine/self-delegation.ts` | Modify: add 6 new tool definitions (briefing/risks/suggestions deferred to Brief 043) |
 | `src/engine/self-tools/create-work-item.ts` | Create: work item creation tool |
 | `src/engine/self-tools/generate-process.ts` | Create: conversational process definition tool |
-| `src/engine/self-tools/get-briefing.ts` | Create: briefing assembly tool (basic — extended in 043) |
 | `src/engine/self-tools/quick-capture.ts` | Create: capture + classify tool |
 | `src/engine/self-tools/adjust-trust.ts` | Create: trust level change tool (goes through trust-diff) |
 | `src/engine/self-tools/get-process-detail.ts` | Create: process detail retrieval tool |
-| `src/engine/self-tools/detect-risks.ts` | Create: risk detection tool (basic — extended in 043) |
-| `src/engine/self-tools/suggest-next.ts` | Create: suggestion tool (basic — extended in 043) |
+| `src/engine/self-tools/connect-service.ts` | Create: conversational integration auth — guides user, presents masked input, stores to credential vault, verifies connection |
 | `src/engine/self.ts` | Modify: confirmation model — Self recognizes irreversible tool calls and confirms before executing |
 | `src/engine/user-model.ts` | Create: structured user model read/write from self-scoped memory |
+| `src/engine/integration-registry.ts` | Modify: add `connection` metadata (auth_type, provider_name, setup_url, setup_instructions) to registry schema |
 | `packages/web/components/self/inline-data.tsx` | Create: components for rendering inline tables, progress bars, trend indicators in conversation |
+| `packages/web/components/self/masked-input.tsx` | Create: masked credential input field — value never written to conversation history or activity logs |
 | `packages/web/app/api/chat/route.ts` | Modify: handle structured content blocks from Self tool results |
+| `packages/web/app/api/credential/route.ts` | Create: Route Handler for masked credential submission (goes directly to vault, bypasses conversation log) |
 
 ## User Experience
 
@@ -87,18 +90,19 @@ The Self can handle every primary user action through conversation: create work 
 
 1. [ ] `create_work_item` tool: Self creates work item from natural language, routes through intake-classifier
 2. [ ] `generate_process` tool: Self defines a process YAML from conversation, validates via process-loader, saves to DB
-3. [ ] `get_briefing` tool: returns basic summary of recent process runs and pending items (extended in 043)
-4. [ ] `quick_capture` tool: stores raw text as a capture work item, auto-classifies via intake-classifier
-5. [ ] `adjust_trust` tool: proposes trust change through `trust-diff.ts`, returns evidence data, applies only after user confirms
-6. [ ] `get_process_detail` tool: returns process steps, trust data, recent runs, correction rates
-7. [ ] `detect_risks` tool: returns basic temporal risks (aging items, approaching deadlines) — extended in 043
-8. [ ] `suggest_next` tool: returns one suggestion based on stated pain points or process maturity — extended in 043
-9. [ ] Confirmation model: Self identifies irreversible actions (send external, trust change, archive) and confirms with user before executing
-10. [ ] User model: structured data (business type, size, pain points) stored as self-scoped memory, populated from conversation
-11. [ ] Inline data rendering: conversation UI renders tables (≤5 rows), progress indicators, and trend arrows from Self tool results
-12. [ ] Self's onboarding flow: for new users, Self drives a getting-to-know-you conversation (not a form), extracts user model data
-13. [ ] All new tools execute server-side — no engine functions callable from browser
-14. [ ] Existing 5 Self tools continue working unchanged
+3. [ ] `quick_capture` tool: stores raw text as a capture work item, auto-classifies via intake-classifier
+4. [ ] `adjust_trust` tool: proposes trust change through `trust-diff.ts`, returns evidence data, applies only after user confirms
+5. [ ] `get_process_detail` tool: returns process steps, trust data, recent runs, correction rates
+6. [ ] Confirmation model: Self identifies irreversible actions (send external, trust change, archive) and confirms with user before executing
+7. [ ] User model: structured data across 9 dimensions (problems, vision, work, challenges, concerns, frustrations, goals, tasks, communication preferences) stored as self-scoped memory. Populated progressively — most important first (problems, tasks for immediate value), deepened across sessions (vision, goals for strategic guidance). (Insight-093)
+8. [ ] Inline data rendering: conversation UI renders tables (≤5 rows), progress indicators, and trend arrows from Self tool results
+9. [ ] Self's onboarding flow: multi-session deep intake process (not a single form-like conversation). First session captures enough for first process + immediate value. Subsequent sessions deepen understanding. Self drives — asks open questions, picks up signals, suggests where to start. (Insight-093)
+10. [ ] AI coaching moments: Self naturally teaches users to be better collaborators — "when you tell me *why* you changed that, I learn faster", "you've taught me 4 things this week — here's what I know now". Woven into corrections and reviews, not as a separate mode. (Insight-093)
+11. [ ] `connect_service` tool: Self detects need, guides API key setup, presents masked input, stores to vault, verifies with test call
+12. [ ] Masked credential input: API keys entered via secure field, never written to conversation history, activity logs, or stepRuns
+13. [ ] Integration registry extended with `connection` metadata (auth_type, provider_name, setup_url, setup_instructions)
+14. [ ] All new tools execute server-side — no engine functions callable from browser
+15. [ ] Existing 5 Self tools continue working unchanged
 
 ## Review Process
 

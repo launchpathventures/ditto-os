@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — What I Know (Rob's Knowledge Base)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 36px 24px 80px;
+  }
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 20px;
+    transition: color 0.12s;
+  }
+  .back:hover { color: var(--text-secondary); }
+  .back svg { width: 14px; height: 14px; }
+
+  .header {
+    margin-bottom: 28px;
+  }
+
+  .header-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .header-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Overall health strip */
+  .health-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .health-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    max-width: 200px;
+  }
+
+  .health-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--positive);
+  }
+
+  .health-pct {
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 28px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+
+  /* ═══ KNOWLEDGE CARDS ═══
+     Each is a structured, editable, viewable document.
+     NOT a setting. NOT a memory entry. A living document.
+  */
+  .knowledge-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: box-shadow 0.15s;
+  }
+
+  .knowledge-card:hover {
+    box-shadow: 0 2px 10px hsl(30 10% 15% / 0.05);
+  }
+
+  .knowledge-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+  }
+
+  .knowledge-card-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .knowledge-card-dot.strong { background: var(--positive); }
+  .knowledge-card-dot.developing { background: var(--accent); }
+  .knowledge-card-dot.stale { background: var(--caution); }
+  .knowledge-card-dot.empty { background: var(--border-strong); }
+
+  .knowledge-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .knowledge-card-status {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .status-strong { background: var(--positive-subtle); color: var(--positive); }
+  .status-developing { background: var(--accent-subtle); color: var(--accent); }
+  .status-stale { background: var(--caution-subtle); color: hsl(38 60% 35%); }
+  .status-empty { background: var(--surface); color: var(--text-muted); }
+
+  .knowledge-card-used {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Expanded content */
+  .knowledge-card-body {
+    padding: 0 18px 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+
+  .knowledge-card-content {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  .knowledge-card-content p + p { margin-top: 8px; }
+
+  /* Items within a card */
+  .knowledge-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .knowledge-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .knowledge-line-label {
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+
+  .knowledge-line-value {
+    color: var(--text-secondary);
+  }
+
+  .knowledge-line-learned {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    margin-left: 4px;
+  }
+
+  /* Source + actions */
+  .knowledge-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .knowledge-source {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .knowledge-used-by {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .knowledge-used-by strong {
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .knowledge-card-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  /* Empty state card */
+  .knowledge-card.empty-state .knowledge-card-body {
+    padding: 14px 18px 16px;
+    border-top: 1px dashed var(--border-strong);
+  }
+
+  .knowledge-empty-text {
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { color: var(--text-primary); }
+  .btn-accent { background: var(--accent-subtle); color: var(--accent); border: none; }
+  .btn-accent:hover { background: hsl(24 60% 91%); }
+
+  @media (max-width: 768px) {
+    .page { padding: 24px 16px 60px; }
+    .header-title { font-size: 22px; }
+    .knowledge-line { flex-direction: column; gap: 2px; }
+    .knowledge-line-label { min-width: auto; }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <a href="#" class="back">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+    Back
+  </a>
+
+  <div class="header">
+    <div class="header-title">What I know</div>
+    <div class="header-subtitle">Everything Ditto uses when working for you. Edit anything, anytime.</div>
+
+    <div class="health-strip">
+      <span>Business knowledge</span>
+      <div class="health-bar-track">
+        <div class="health-bar-fill" style="width: 72%"></div>
+      </div>
+      <span class="health-pct">72%</span>
+      <span style="color: var(--text-muted);">&middot; 3 gaps</span>
+    </div>
+  </div>
+
+  <!-- ═══ PRICING & COSTS ═══ -->
+  <div class="section">
+    <div class="section-title">Pricing &amp; costs</div>
+
+    <div class="knowledge-card">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot stale"></span>
+        <span class="knowledge-card-title">Reece supplier prices</span>
+        <span class="knowledge-card-status status-stale">3 weeks old</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-card-content">
+          <p>Copper fittings, pipe, fixtures. Last updated from Reece price list PDF.</p>
+        </div>
+        <div class="knowledge-card-footer">
+          <span class="knowledge-source">Uploaded 4 Mar &middot; PDF</span>
+          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
+          <div class="knowledge-card-actions">
+            <button class="btn btn-accent">Update</button>
+            <button class="btn btn-ghost">View</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="knowledge-card">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot strong"></span>
+        <span class="knowledge-card-title">Tradelink supplier prices</span>
+        <span class="knowledge-card-status status-strong">Current</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-card-content">
+          <p>Tapware, hot water systems, bathroom accessories.</p>
+        </div>
+        <div class="knowledge-card-footer">
+          <span class="knowledge-source">Uploaded 10 Mar &middot; PDF</span>
+          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
+          <div class="knowledge-card-actions">
+            <button class="btn btn-secondary">Update</button>
+            <button class="btn btn-ghost">View</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="knowledge-card">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot strong"></span>
+        <span class="knowledge-card-title">Your margin rules</span>
+        <span class="knowledge-card-status status-strong">Current</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-items">
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Residential</span>
+            <span class="knowledge-line-value">25%</span>
+          </div>
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Commercial</span>
+            <span class="knowledge-line-value">20%</span>
+          </div>
+        </div>
+        <div class="knowledge-card-footer">
+          <span class="knowledge-source">From setup conversation</span>
+          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
+          <div class="knowledge-card-actions">
+            <button class="btn btn-secondary">Edit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LABOUR ═══ -->
+  <div class="section">
+    <div class="section-title">Labour estimates</div>
+
+    <div class="knowledge-card">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot strong"></span>
+        <span class="knowledge-card-title">Standard labour hours</span>
+        <span class="knowledge-card-status status-strong">Current</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-items">
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Bathroom</span>
+            <span class="knowledge-line-value">22 hrs</span>
+            <span class="knowledge-line-learned">learned from your corrections</span>
+          </div>
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Kitchen</span>
+            <span class="knowledge-line-value">12 hrs</span>
+          </div>
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Hot water</span>
+            <span class="knowledge-line-value">4 hrs</span>
+          </div>
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Ensuite</span>
+            <span class="knowledge-line-value">18 hrs</span>
+          </div>
+          <div class="knowledge-line">
+            <span class="knowledge-line-label">Office refit</span>
+            <span class="knowledge-line-value">Based on scope (no standard)</span>
+          </div>
+        </div>
+        <div class="knowledge-card-footer">
+          <span class="knowledge-source">Setup + 3 corrections over 6 weeks</span>
+          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
+          <div class="knowledge-card-actions">
+            <button class="btn btn-secondary">Edit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CUSTOMERS ═══ -->
+  <div class="section">
+    <div class="section-title">Customers</div>
+
+    <div class="knowledge-card">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot developing"></span>
+        <span class="knowledge-card-title">Customer history</span>
+        <span class="knowledge-card-status status-developing">Growing</span>
+        <span class="knowledge-card-used">12 customers</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-card-content">
+          <p>34 quotes across 12 customers. I track quote history, job types, response patterns, and preferred contact methods.</p>
+        </div>
+        <div class="knowledge-card-footer">
+          <span class="knowledge-source">Built from quoting activity</span>
+          <span class="knowledge-used-by">Used by <strong>Quoting, Follow-ups</strong></span>
+          <div class="knowledge-card-actions">
+            <button class="btn btn-ghost">Browse</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ GAPS — what Ditto doesn't know yet ═══ -->
+  <div class="section">
+    <div class="section-title">Gaps</div>
+
+    <div class="knowledge-card empty-state">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot empty"></span>
+        <span class="knowledge-card-title">Compliance requirements</span>
+        <span class="knowledge-card-status status-empty">Not set up</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-empty-text">Licence numbers, insurance details, regulatory requirements for quotes. Would make your quotes more complete.</div>
+        <div class="knowledge-card-actions">
+          <button class="btn btn-accent">Set up</button>
+          <button class="btn btn-ghost">Not needed</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="knowledge-card empty-state">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot empty"></span>
+        <span class="knowledge-card-title">Quote template / branding</span>
+        <span class="knowledge-card-status status-empty">Not set up</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-empty-text">Your business logo, ABN, payment terms, standard T&Cs. Quotes currently go out as plain text.</div>
+        <div class="knowledge-card-actions">
+          <button class="btn btn-accent">Set up</button>
+          <button class="btn btn-ghost">Later</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="knowledge-card empty-state">
+      <div class="knowledge-card-header">
+        <span class="knowledge-card-dot empty"></span>
+        <span class="knowledge-card-title">Preferred suppliers by job type</span>
+        <span class="knowledge-card-status status-empty">Not set up</span>
+      </div>
+      <div class="knowledge-card-body">
+        <div class="knowledge-empty-text">Which supplier for which job type. Would help me pick the right price list automatically.</div>
+        <div class="knowledge-card-actions">
+          <button class="btn btn-accent">Set up</button>
+          <button class="btn btn-ghost">Not needed</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="proto-nav"><a href="14-process-detail.html">&larr; Process Detail</a><span class="pn-t"><a href="index.html">P15 Knowledge Base</a></span><a href="16-teach-this.html">Teach This &rarr;</a></div><!-- pnav -->
+</body>
+</html>

@@ -1,14 +1,15 @@
 # Ditto — Current State
 
-**Last updated:** 2026-03-24
-**Current phase:** Phase 6 complete + Brief 037 complete (Integration Generation). 279 tests (20 test files).
+**Last updated:** 2026-03-25
+**Current phase:** Phase 6 complete + Brief 037 complete (Integration Generation). 306 tests (22 test files). Phase 10 in progress: Brief 039 (Web Foundation) complete + LLM config/setup system + CLI subscription streaming. Briefs 040 + 041 unblocked for parallel build. ADR-021 (Surface Protocol) accepted.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
 
 ## What's Working
 
-- **Storage** — SQLite + Drizzle ORM + better-sqlite3. WAL mode. Auto-created at `data/ditto.db`. (ADR-001)
+- **Web app (Brief 039)** — Next.js 15 App Router in `packages/web/`. Monorepo via `pnpm-workspace.yaml`. `pnpm dev` from root starts the web app. **Setup system:** first-run setup page at `/setup` with 5 connection methods (Claude CLI subscription, Codex/OpenAI CLI subscription, Anthropic API, OpenAI API, Ollama local). CLI auto-detection badges. Config persisted to `data/config.json`. Entry point routes unconfigured → setup, configured → conversation. **Self streaming:** `selfConverseStream()` async generator in `src/engine/self-stream.ts` yields text deltas + tool activity. `src/engine/llm-stream.ts` supports 5 providers: Anthropic SDK streaming, OpenAI SDK streaming, Ollama (OpenAI-compat), Claude CLI (`claude -p --verbose --output-format stream-json` NDJSON), Codex CLI (`codex exec --json` JSONL). Route Handler at `/api/chat` implements AI SDK data stream protocol for `useChat`. SSE at `/api/events` emits sanitized harness events. **Conversation UI:** message list with Self indicator dot, auto-resizing prompt input, calm pulsing typing indicator. 6 shadcn/ui primitives. Design tokens from visual identity spec (warm neutrals, terracotta accent, Inter font). Lazy engine imports (dynamic `import()`) avoid build-time SQLite conflicts. All engine calls server-side — no internals leak to browser.
+- **Storage** — SQLite + Drizzle ORM + better-sqlite3. WAL mode. Auto-created at `data/ditto.db`. Path resolved via `src/paths.ts` (`PROJECT_ROOT` anchored to monorepo root, not `process.cwd()`). (ADR-001)
 - **Process definitions** — 18 YAML processes in `processes/` (7 domain + 4 system + 7 standalone delegation roles). Parallel groups, depends_on, human steps, conditional routing (route_to/default_next). System processes have `system: true`. Standalone role processes (Brief 029, migrated Brief 031) are single-step `ai-agent` delegations with `config.role_contract` and `config.tools` (read-only or read-write).
 - **LLM provider abstraction (Briefs 029+032+033)** — `src/engine/llm.ts`. Multi-provider registry: Anthropic, OpenAI, Ollama (via OpenAI-compatible API). Ditto-native types (`LlmToolDefinition`, `LlmContentBlock`, `LlmMessage` etc.) — no SDK types leak beyond `llm.ts`. `createCompletion()`, `extractText()`, `extractToolUse()`, `getConfiguredModel()`, `getProviderName()`. Tool format translation (Anthropic ↔ OpenAI) internal. `initLlm()` startup validation — fails clearly if `LLM_PROVIDER` or `LLM_MODEL` not set. Per-provider cost tracking ($0 for Ollama), cost calculated on actual model from API response. `LlmCompletionResponse` includes actual `model` from API. No hardcoded default model or provider. Provenance: Vercel AI SDK pattern, 12-factor app, Insight-060, Insight-062.
 - **Model routing intelligence (Brief 033)** — `src/engine/model-routing.ts`. Step-level model hints (`fast`/`capable`/`default`) in process YAML `config.model_hint`. `resolveModel(hint)` maps to provider-specific models (Anthropic: Haiku/Opus, OpenAI: gpt-4o-mini/gpt-4o; Ollama falls back to default). Model recorded on every `stepRun` (both advance and pause paths). `generateModelRecommendations(db)` analyzes 20+ completed runs per (process, step, model): recommends cheaper model when quality comparable (within 5%), recommends upgrade when quality low (<80%). Current model determined from most recent 5 runs. Advisory only — no auto-switching. Process loader validates `model_hint` values. Provenance: Vercel AI SDK alias pattern, RouteLLM economics, process-level learned routing original to Ditto.
@@ -37,7 +38,7 @@
 - **Agent tools (Brief 031)** — 4 tools: read_file, search_files, list_files (read-only), write_file (read-write). Path traversal prevention, secret deny-list, symlink protection. Exported as `readOnlyTools` (3) and `readWriteTools` (4).
 - **DB schema enforcement** — `pnpm cli sync` runs drizzle-kit push. Handles first-run and evolution.
 - **Debt tracking** — `docs/debts/` markdown files. `pnpm cli debt` to list.
-- **Dev process** — 7 roles as skills. Brief template (with composition Level column, Insight-068). 44 active insights, 31 archived. 40 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
+- **Dev process** — 7 roles as skills. Brief template (with composition Level column, Insight-068). 63 active insight files (088-090 new this session, 085-087 from Designer Session 3). **Known issue:** 2 pre-existing number collisions at 071/072 (from separate sessions). Needs renumbering cleanup., 31 archived. 42 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
 - **Dev pipeline** — `claude -p` orchestrator + Telegram bot. Full Claude workspace on mobile. (Brief 015). Engine-integrated: `processes/dev-pipeline.yaml` runs 7 roles through the real harness with conditional routing (Brief 016c). Telegram bot routes free-text through the Conversational Self (Brief 030): `selfConverse()` assembles context, converses via LLM, delegates to dev roles via tool_use. Engine bridge (Brief 027) for explicit `/start` commands: `startProcessRun()` + `fullHeartbeat()` loop, review actions. Memory, trust, feedback all active.
 - **Review actions (Brief 027)** — `src/engine/review-actions.ts`. Shared approve/edit/reject logic extracted from CLI commands. Pure engine functions (no TTY, no process.exit). Step-level granularity via `findWaitingStepRun()`. Used by both CLI commands and Telegram bot.
 - **System agents (Brief 014a+014b+021)** — 4 system agents running through the harness pipeline: trust-evaluator (wraps Phase 3 code, spot-checked), intake-classifier (keyword matching, supervised), router (LLM-based via `llm.ts`, supervised), orchestrator (goal-directed — decomposes goals into tasks, routes around paused items, confidence-based stopping; supervised). `category: system` + `systemRole` on agents table. System agent registry dispatches via `script` executor + `systemAgent` config (Insight-044). `startSystemAgentRun()` for programmatic triggering.
@@ -56,6 +57,48 @@
 
 ## Recently Completed
 
+- **Post-039 bug fixes (2026-03-25)** — Three issues found and fixed during first live web app test:
+  1. **Monorepo DB path divergence:** Web app (cwd=`packages/web/`) created orphan DB at `packages/web/data/ditto.db` instead of root `data/ditto.db`. Fix: `src/paths.ts` module finds monorepo root by walking up to `package.json` with `name: "ditto"`. `src/db/index.ts` and `packages/web/lib/config.ts` now import `PROJECT_ROOT`/`DATA_DIR`/`DB_PATH` from paths.ts. Orphan `packages/web/data/` deleted, config migrated to root. Reviewed: PASS WITH FLAGS (3 low flags: dev-session.ts has duplicate DATA_DIR, process-loader.ts defaults could diverge, state not updated — all follow-up items).
+  2. **Claude CLI `--verbose` flag required:** `claude -p --output-format stream-json` now requires `--verbose`. Added to args in `llm-stream.ts`.
+  3. **Claude CLI stream-json format change:** Output changed from `{ type: "stream_event", event: { type: "content_block_delta" } }` to `{ type: "assistant", message: { content: [...] } }` + `{ type: "result", result: "..." }`. Updated parser in `spawnCliStream()` and tests in `llm-stream.test.ts`.
+  - Also fixed: `templates/invoice-follow-up.yaml` — commented out `source`/`output_delivery` referencing non-existent email/accounting integrations (was blocking `pnpm cli sync`).
+  - LLM abstraction layer audited: EXCELLENT. SDK types fully contained in `llm.ts`/`llm-stream.ts`. No leaks to callers. Web app has zero SDK knowledge.
+- **Brief 039 complete (Web Foundation, 2026-03-25)** — Next.js 15 App Router in `packages/web/`. Streaming conversation with the Self via Vercel AI SDK `useChat` + custom data stream protocol. Engine streaming adapters: `src/engine/self-stream.ts` (Self async generator) + `src/engine/llm-stream.ts` (Anthropic/OpenAI/Ollama streaming + Claude CLI + Codex CLI subscription streaming). Route Handlers: `/api/chat` (Self streaming), `/api/events` (SSE harness events). Conversation UI: message list with Self indicator dot, auto-resizing prompt input, calm pulsing typing indicator. 6 shadcn/ui primitives (Button, Card, Dialog, Input, Tabs, ScrollArea). Design tokens from visual identity spec baked into `globals.css` (warm neutrals, terracotta accent, Inter font, 4px spacing grid, elevation shadows). Entry point: state-based routing — unconfigured → setup page, configured → full-screen conversation (workspace deferred to 042). Monorepo via `pnpm-workspace.yaml`. Lazy engine imports to avoid build-time DB conflicts. No engine internals leak to browser. 14 AC, all pass (AC14 visual QA needs human). Reviewed: PASS WITH FLAGS (2 must-fix fixed: error message leak, SSE cancel cleanup; 2 should-fix fixed: dead imports, pricing dedup). Approved 2026-03-25.
+  - **Post-approval extension: LLM setup system + CLI subscription streaming.** Human feedback: subscription auth must be the primary connection path, not API keys. 5 connection methods: Claude CLI subscription, Codex/OpenAI CLI subscription, Anthropic API key, OpenAI API key, Ollama (local). Config persisted to `data/config.json`. Setup page at `/setup` with CLI auto-detection (shows "detected" badge when `claude`/`codex`/`ollama` available). `llm-stream.ts` extended with `streamClaudeCli()` (parses `claude -p --output-format stream-json` NDJSON) and `streamCodexCli()` (parses `codex exec --json` JSONL). `DITTO_CONNECTION` env var routes streaming to CLI subprocess vs API SDK. 27 new tests across 2 files (306 total, 22 test files). Provenance: OpenClaw model config patterns (JSON config, CLI auth, provider detection).
+- **ADR-021 accepted (Surface Protocol, 2026-03-25)** — The Self emits `ContentBlock[]` instead of `response: string`. 13 typed content blocks (text, review_card, status_card, actions, input_request, knowledge_citation, progress, data, image, code, reasoning_trace, suggestion, alert). Per-surface renderers (web=React components, Telegram=inline keyboards, CLI=formatted prompts, API=raw JSON). Action callbacks via `handleSurfaceAction()` — single entry point, namespaced action IDs, session-scoped validation. Security: action registry, input validation, credential scrubbing. Graceful degradation: unknown blocks fall back to text. Relationship to ADR-009: process outputs appear inside content blocks. Insight-092 captured (engine output is a protocol, not a string). Reviewed: PASS WITH FLAGS (3 should-fix all fixed: missing block types for visual/code/reasoning added, security section added, reference docs expanded).
+- **Architecture validation + integration auth design (approved 2026-03-24)** — Architect stress-tested architecture against 6 real businesses (Steven Leckie/real estate, Rawlinsons/QS, Delta Insurance, FICO/immigration, Abodo Wood/timber, Jay/clinical) with 33 processes. Key findings:
+  - Architecture validates strongly — all 33 processes map to the process definition structure. Trust tiers, implicit feedback, conversation-first UX all hold across all domains.
+  - 9 gaps identified (all extensions, not structural deficiencies): G1 document understanding (HIGH), G2 voice-to-text (MEDIUM), G3 file generation (MEDIUM), G4 deadlines/SLAs (MEDIUM), G5 entity-scoped instances (MEDIUM), G6 outcome feedback (MEDIUM), G7 cross-instance learning (MEDIUM), G8 data sensitivity classification (MEDIUM), G9 conversational integration auth (HIGH).
+  - Integration auth reality designed: 4 auth types analysed (OAuth2, API key, CLI, MCP). API keys get email working day one. OAuth needs managed cloud infrastructure. Secure masked input for credential entry. Credential reuse via copy (global scope rejected). `needs_connection` process state with graceful degradation.
+  - 3 new insights: 088 (document understanding is first-class gap), 089 (every process starts with an artifact), 090 (integration auth is a conversation moment).
+  - Reports: `docs/research/architecture-validation-real-world-use-cases.md`, `docs/research/integration-auth-reality.md`.
+  - Reviewed: PASS WITH FLAGS (both reports). All SHOULD-FIX flags addressed.
+- **Phase 10 design session (in progress, 2026-03-24)** — Major Designer session across two sub-sessions. Outputs:
+  - **Session 1** — Visual identity, UI build strategy, interaction model:
+    - Visual identity spec (`docs/research/visual-identity-design-system-ux.md` v2): Warm professional design system. Reviewed: PASS WITH FLAGS, fixed.
+    - UI build strategy (`docs/research/ui-build-strategy-ux.md` v2): Strategy D (design tokens → HTML prototypes → reference-driven build → visual QA). Reviewed: PASS WITH FLAGS, fixed.
+    - 7 early HTML prototypes (01-07) in `docs/prototypes/`. 28 reference images in `docs/references/`.
+    - Real-world persona stress test. Self meta-processes spec.
+    - 4 new insights: 079, 080, 081, 082. 2 new personas: Libby, Tim.
+  - **Session 2** — Prototype-first design, full user journey (current):
+    - **Prototype plan** (`docs/prototypes/PLAN.md`): 15 prototypes across 4 acts (Getting Started → Building Confidence → Trust Forming → Compound Effect). Sequenced into 4 sprints. Quality gates defined. Prototyping established as first-class gated process (Insight-084).
+    - **6 new prototypes built**: P08 day zero, P09 first conversation with knowledge capture, P10 first output (trust moment), P11 workspace emerges, P12 morning mobile (Rob), P13 daily workspace (Rob desktop).
+    - **3 new insights**: 083 (knowledge must be visible and traceable — provenance in outputs), 084 (prototyping is first-class process), plus research validated provenance gap across entire market.
+    - **Research**: First-output review UX (`docs/research/first-output-review-ux.md`): 12+ products surveyed. Key finding: nobody shows knowledge provenance in outputs — Ditto's "based on" strip is genuinely novel. Edit-as-teaching also novel.
+    - **Key design principles proven in prototypes**: (1) Knowledge visible everywhere — "based on" strip on outputs, knowledge panel/summary always accessible. (2) No chrome on day zero — workspace emerges from work. (3) Structure unfolds from chat, not configured. (4) Cognitive load on system, not user. (5) No jargon — zero mentions of agents, workflows, pipelines.
+    - **Existing prototypes 01-07**: Archived or kept as reference. Superseded by journey-ordered P08-P13.
+  - **Session 3** — Full journey prototypes + navigation architecture + composable UI pivot:
+    - **13 journey prototypes** (P08-P20) covering day zero through compound effect. All at Draft v1. Navigation bar injected linking all prototypes. Index page at `docs/prototypes/index.html`.
+    - **P13 (daily workspace) iterated 5 times** — through org-chart sidebar → flat list → pure nav links → three-column with Ditto right panel. Converged on: Left=navigation, Centre=canvas, Right=Ditto (alive, thinking, contextual), Bottom=chat input.
+    - **Sidebar architecture explored**: Inbox/Your Work/Processes/Knowledge → simplified to: Home, Inbox, Tasks, Projects, Processes + workspace switcher. Key learning: sidebar is NAVIGATION to views, not a content index. Must scale to 50+ processes.
+    - **Right column = Ditto** (not a chat panel): Always present, shows thinking for current context (what it checked, confidence level, knowledge used, similar past work), proactive suggestions. This IS the trust layer for human-in-the-loop verification.
+    - **Critical pivot: Composable UI, not fixed pages** (Insight-086). Static prototypes hit their limit. Designing fixed pages contradicts Ditto's architecture — the Self should compose the UI dynamically from universal components. Next step: component catalog + composition model + interactive prototype.
+    - **4 new insights**: 083 (knowledge visible and traceable), 084 (prototyping is first-class), 085 (six design gaps from v1 feedback), 086 (composable UI not fixed pages).
+    - **Research**: First-output review UX (`docs/research/first-output-review-ux.md`): 12+ products surveyed. Provenance gap validated — nobody shows knowledge inputs in outputs. Edit-as-teaching is novel.
+    - **Real-world test cases added to prototype plan** (from Architect session): Steven Leckie, Rawlinsons, Delta Insurance, FICO, Abodo, Jay/Status.
+    - **Key design decisions proven**: (1) "Based on" provenance strip on every output. (2) Workspace emerges from work, not configured. (3) Chat bar persistent bottom-centre. (4) Items clearly typed ("Quote to review" not "Henderson bathroom"). (5) Ditto alive in right column with pulsing dot.
+    - **What the 13 static prototypes become**: Composition references — visual targets for what specific Self-composed layouts should look like. P13=Home composition, P10=output review composition, P14=process detail composition, etc.
+    - **Next steps**: Define universal component catalog (display + input primitives). Define composition model (how Self decides what to show). Build interactive React prototype demonstrating composable UI with click-through navigation.
 - **Brief 037 complete** (Integration Generation: OpenAPI → Ditto YAML) — `ditto generate-integration` CLI command. `src/engine/integration-generator.ts` (~310 LOC): OpenAPI 3.x parse → $ref resolve → operation mapping → classify read/write → emit YAML. `src/cli/commands/generate-integration.ts` (~70 LOC). Dependencies: `@apidevtools/swagger-parser`, `openapi-types`. 22 new tests (279 total, 20 test files). Smoke test: Petstore spec → 19 tools, passes `pnpm cli sync`. Reviewed: PASS WITH FLAGS (2 flags fixed: PATCH skip warning added, `00-schema.yaml` updated with generation comment). Approved 2026-03-24.
 - **Brief 036 complete** (Process I/O: Triggers + Output Delivery, Phase 6c-2) — `src/engine/process-io.ts`: polling-based triggers (`startPolling`/`stopPolling`/`stopAllPolling`/`getPollingStatus`), output delivery (`deliverOutput`). `source` and `outputDelivery` fields on `processes` table. Process loader: `ProcessSourceConfig`/`ProcessOutputDeliveryConfig` types, `validateProcessIo()` validates service references against registry. Heartbeat: `deliverOutput()` called after run completion (trust gate passed). Output delivery payload includes collected approved step outputs + delivery params. CLI: `ditto trigger start/stop/status` (14 commands total). `templates/invoice-follow-up.yaml` updated with `source:` (email check) and `output_delivery:` (accounting post). 10 new tests (257 total, 19 test files). Reviewed: PASS WITH FLAGS (5 flags, all fixed: resolveServiceAuth comment added, outputs passed to delivery, capture bypass documented, approved-only test added, result filtering improved). Approved 2026-03-23. Phase 6 complete.
 - **Brief 035 complete** (Credential Vault + Auth Unification, Phase 6c-1) — `src/engine/credential-vault.ts`: AES-256-GCM encrypted credential storage, HKDF key derivation from `DITTO_VAULT_KEY`, per-(processId, service) scoping with UNIQUE constraint. Unified `resolveServiceAuth()`: vault-first, env-var fallback with deprecation warning. `credentials` table in schema. `processId` threaded through both execution paths: integration steps (`step-execution.ts` → `step-executor.ts` → `index.ts` → `cli.ts`/`rest.ts`) and tool use (`memory-assembly.ts` → `tool-resolver.ts` → `cli.ts`/`rest.ts`). `resolveAuth()` and `resolveRestAuth()` now async, backed by vault. CLI: `ditto credential add/list/remove` (masked input via @clack/prompts). 11 new tests (247 total, 18 test files). Reviewed: PASS WITH FLAGS (1 must-fix fixed: resolveServiceAuth silent catch; 2 should-fix fixed: UNIQUE constraint added, architecture.md + ADR-005 updated; 1 note acknowledged). Approved 2026-03-23.
@@ -87,7 +130,7 @@ Nothing.
 
 ## Known Debt
 
-Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables` SQL must be kept in sync with Drizzle schema manually (Flag 1 from review).
+Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables` SQL must be kept in sync with Drizzle schema manually (Flag 1 from review). `src/dev-session.ts` has duplicate `DATA_DIR` that should import from `paths.ts`. `src/engine/process-loader.ts` default dirs use `process.cwd()` — fine today but would need `PROJECT_ROOT` if web routes load processes directly. `llm-stream.ts` duplicates message/tool translation logic from `llm.ts` (DRY violation, no abstraction leak).
 
 ## Decisions Made
 
@@ -117,35 +160,110 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | Conversational Self (outermost harness, self memory scope, session persistence) | ADR-016 | Accepted |
 | Delegation weight classes (Inline/Light/Heavy, Claude vs Claude Code, runtime resolution) | ADR-017 | Accepted |
 | Standards library (quality profiles, baselines, risk thresholds, composition cascade) | ADR-019 | Accepted |
+| Runtime process adaptation (template durable, run-scoped overrides, `adapt_process` tool, optimistic locking) | ADR-020 | Accepted |
+| Surface protocol (13 typed content blocks, action callbacks, per-surface renderers, security model) | ADR-021 | Accepted |
 
 ## Active Briefs
 
 | Brief | Phase | Status |
 |-------|-------|--------|
-| 037 — Phase 10 MVP Dashboard (web workspace) | 10 | Design complete — UX interaction spec v3 at `docs/research/phase-10-mvp-dashboard-ux.md`. Reviewed: APPROVE WITH FLAGS (all flags resolved). Awaiting human approval, then Architect. |
+| 037 — Phase 10 MVP Dashboard (old draft) | 10 | Superseded by Brief 038 |
+| 038 — Phase 10 MVP Architecture (parent) | 10 | **Approved 2026-03-25.** Parent brief + 6 sub-briefs (039-044). 89 ACs total. Build order: 039 → (040 ∥ 041) → (044 ∥ 042 ∥ 043). |
+| 039 — Web Foundation | 10a | **Complete 2026-03-25.** 14/14 AC pass (AC14 visual QA needs human). Reviewed: PASS WITH FLAGS (4 flags, all fixed). |
+| 040 — Self Extensions | 10b | Ready (15 AC). **Unblocked.** |
+| 041 — Feed & Review | 10c | Ready (15 AC). **Unblocked.** Parallel with 040. |
+| 042 — Navigation & Detail | 10d | Ready (15 AC). After 041. |
+| 043 — Proactive Engine | 10e | Ready (14 AC). After 040. |
+| 044 — Onboarding Experience | 10f | Ready (16 AC). After 040. Requires ADR-020. |
 
 ## Next Steps
 
-1. **NOW: Phase 10 MVP Dashboard — Designer complete, Architect next.** UX interaction spec v3 at `docs/research/phase-10-mvp-dashboard-ux.md`. Key design decisions: conversation-first (Self is primary surface, dashboard earned through use), proactive attention management (5 dimensions + risk), progressive reveal (conversation → workspace), trust in natural language, implicit feedback chain. 8 new insights captured (070-077). Next: human approves design, then invoke `/dev-architect` for technical design and sub-briefs.
-2. **Phase 10 design session produced:**
-   - `docs/research/phase-10-mvp-dashboard-ux.md` — UX interaction spec v3 (conversation-first, dashboard-earned model). 10 sections: Self as primary surface, proactive attention engine, workspace progressive reveal, feed items, process detail, trust control, risk detection, engine view, entry point logic, architect recommendations.
-   - Insights: 070 (dashboard as proving ground), 071 (conversation-first work creation), 072 (processes as living roadmaps), 073 (user language not system language), 074 (Self as guide, cold start is conversation), 075 (conversation-first, dashboard earned), 076 (proactive attention management — 5 dimensions), 077 (risk detection as first-class concept).
-   - Brief 037 updated: persona count corrected (4 not 3).
-3. **Phase 10 prior research (still current):**
-   - `docs/research/phase-10-dashboard-workspace.md` — 10 products + AI Elements + rendering architecture.
-   - `docs/research/human-in-the-loop-interface-patterns.md` — 5-layer oversight stack, novel patterns.
-   - `docs/research/work-context-feed-patterns.md` — 11 feed products, feed UX mechanics.
-   - landscape.md updated: AG-UI upgraded to MEDIUM-HIGH, AI SDK Elements added as HIGH.
-4. **Standards Library — ADR-019 accepted.** Quality profiles as first-class YAML objects in `standards/`. Composition cascade (general → domain → process-level). Trailing window baselines. Risk thresholds for Insight-077. Research: `docs/research/standards-library-community-intelligence.md` + `docs/research/quality-standards-for-agent-execution.md`. Insights 077+078 updated. Build brief needed for Phase 10 MVP integration.
+1. **NOW: Build Briefs 040 + 041 in parallel.** Brief 039 (Web Foundation) complete. Next: invoke `/dev-builder` for Brief 040 (Self Extensions) and/or Brief 041 (Feed & Review). These can build in parallel. Then 044/042/043.
+2. **Phase 10 architecture produced this session (2026-03-25):**
+   - Parent brief 038 + 6 sub-briefs (039-044) — 89 acceptance criteria
+   - ADR-020 (Runtime Process Adaptation) — template durability + run-scoped overrides + `adapt_process` tool
+   - Insight-093 (Onboarding is deep intake) — 9-dimension user model, AI coaching, multi-session
+   - Insight-091 (Processes are mutable at runtime) — Self adapts YAML mid-flight via `definitionOverride`
+   - Research: `docs/research/onboarding-intake-coaching-patterns.md` — 14 patterns, 5 gaps (Superhuman, SPIN, progressive profiling, AI coaching, white-glove)
+   - Interaction spec: `docs/research/onboarding-interaction-spec-ux.md` — three-act onboarding (First Contact → First Value → Deepening)
+   - Insight numbering fixed: 085-087 duplicates resolved, our new insights numbered 091. Insight-090 collision (onboarding vs integration-auth) resolved: integration-auth stays 090, onboarding renumbered to 093.
+   - Brief 037 marked superseded
+3. **Key design decisions made:**
+   - Conversation-first, dashboard-earned (Self is primary surface)
+   - No separate API server (Next.js Server Actions call engine directly)
+   - Visual identity baked in from day 1 (design tokens, not default shadcn)
+   - Integration auth via conversation (API keys only MVP, OAuth Phase 11)
+   - Onboarding as native system process with runtime adaptation
+   - `adapt_process` writes to `processRuns.definitionOverride`, not canonical template
+   - AI coaching embedded in workflow, never blocking
+4. **Standards Library — ADR-019 accepted.** Build brief needed for Phase 10 MVP integration (deferred from this session — quality profiles render but don't execute in Phase 10).
 5. **Integration generation follow-ups:** LLM-assisted curation, PATCH method, generate 2-3 real integrations (Stripe, Xero, HubSpot).
-4. **Insight-064 active:** Benchmark Before Keep — metacognitive check handler must prove its value after 50 supervised runs.
-5. **STILL NEEDED:** Architecture.md babushka diagram + Layer 2 execution model rewrite.
-6. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047).
-7. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
-8. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8.
-9. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
-10. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
-11. **Insight-058/059:** Repos are process targets. Processes need context bindings.
+6. **Insight-064 active:** Benchmark Before Keep — metacognitive check handler must prove its value after 50 supervised runs.
+7. **STILL NEEDED:** Architecture.md babushka diagram + Layer 2 execution model rewrite.
+8. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047).
+9. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
+10. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8.
+11. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
+12. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+13. **Insight-058/059:** Repos are process targets. Processes need context bindings.
+
+## Documenter Retrospective (2026-03-25 — ADR-021 Surface Protocol)
+
+**What was produced this session:**
+1. User asked whether the engine is truly separate from the UI. Architect confirmed yes — engine is surface-agnostic today.
+2. User followed up: what does the engine actually emit? How would Telegram or another app interpret outputs? This revealed the gap — `selfConverse()` returns a plain string.
+3. Architect produced ADR-021 (Surface Protocol). 13 typed content blocks, per-surface renderers, action callback model, security model. Reviewed: PASS WITH FLAGS (3 should-fix all fixed: missing block types for visual/code/reasoning, security section for third-party consumers, expanded reference doc list).
+4. Insight-092 captured (engine output is a protocol, not a string).
+5. Documenter fixed Insight-090 numbering collision: integration-auth stays 090, onboarding renumbered to 093. Updated 6 files (briefs 038, 040, 043, research reports).
+
+**What worked:**
+- **User's question was the design trigger.** A seemingly simple verification question ("is the engine separate from the UI?") led to examining the actual output contract, which revealed a genuine architectural gap. This is the consultative framing working correctly — the Architect didn't assume the question was answered, but traced through the actual code to see what the engine really emits.
+- **Research grounded the design.** Five cross-surface systems surveyed (Adaptive Cards, Slack Block Kit, Telegram, Vercel AI SDK, Discord). The key pattern — semantic blocks with host-controlled rendering (Adaptive Cards) + typed tool-to-component mapping (Vercel AI SDK) — was a genuine synthesis, not an obvious choice.
+- **Review caught real gaps.** Missing block types for visual/code/reasoning trace outputs (architecture's Output Viewer has 6 presentation types), and the security implications of action callbacks for third-party API consumers. Both materially improved the ADR.
+
+**What surprised:**
+- **The Insight-090 collision was still present.** State.md claimed numbering was fixed but the collision (two files named 090-*) was still on disk. The coordination mechanism from the previous retro wasn't applied. This is the fourth numbering collision caught.
+
+**What to change:**
+- **Insight numbering audit should be in the Documenter checklist.** Every session, check `ls docs/insights/[0-9]*.md | sort` for duplicates. Don't trust prior session claims that collisions are fixed.
+- **ADR-021 follow-up needed.** The implementation brief for ContentBlock types should be written before or alongside the Phase 10 build — it affects how Brief 040 (Self Extensions) produces output and how Brief 041 (Feed & Review) consumes it. PM should triage sequencing.
+
+**Cross-cutting audit flags:**
+- Insight-090 collision: RESOLVED this session. Integration-auth = 090, onboarding = 093. 6 files updated.
+- Pre-existing 071/072 collision: STILL UNRESOLVED. Needs cleanup next session.
+- ADR-021 reference doc updates (architecture.md, human-layer.md, ADR-016, ADR-009): Noted in ADR, deferred to implementation brief.
+
+## Documenter Retrospective (2026-03-24 — Architecture Validation + Integration Auth Design)
+
+**What was produced this session:**
+1. Human provided 6 real businesses with 33 processes as stress test cases for Ditto's architecture.
+2. Architect produced architecture validation report (`docs/research/architecture-validation-real-world-use-cases.md`). Layer-by-layer analysis, 9 gaps identified. Reviewed: PASS WITH FLAGS (6 flags, 3 SHOULD-FIX all addressed).
+3. Human asked follow-up: "Does Ditto handle integration auth during process creation?" Architect identified this as a significant gap.
+4. Architect produced integration auth design (`docs/research/integration-auth-reality.md`). 4 auth types × 2 deployment tracks. Phased delivery. Reviewed: PASS WITH FLAGS (6 flags, 3 SHOULD-FIX all addressed).
+5. 3 new insights captured (088-090). Documenter caught and fixed numbering collision with Designer Session 3's insights (085-087).
+
+**What worked:**
+- **Real-world use cases revealed real gaps.** The human's stress test cases exposed G1 (document understanding) and G9 (conversational integration auth) as HIGH severity gaps that were invisible when only looking at the dev pipeline dogfood. Validating against real businesses is more valuable than validating against architecture abstractions.
+- **Architecture held up.** All 33 processes mapped to the process definition structure. All 9 gaps are extensions, not structural deficiencies. The six-layer model, process primitive, and trust tiers are robust across diverse domains. This is strong validation.
+- **The human's follow-up question was load-bearing.** The integration auth gap (G9) was flagged in the validation report but only at surface level. The human's "think through the reality" prompt forced genuine design work — OAuth registration, deployment track implications, secure credential input, phased delivery. This is exactly how the review loop should work: architecture → human challenge → deeper design.
+- **Review loop caught real issues.** Data sensitivity (G8) was missed by the Architect, caught by Reviewer. Global credential scope was correctly challenged and rejected. Secure credential input was flagged. The review process added genuine value.
+
+**What surprised:**
+- **Insight numbering collisions.** Three separate sessions (two Designer sessions + this Architect session) created insights 085-087 independently, producing 6 files with 3 duplicate numbers. Pre-existing collisions at 071/072 too. The brief numbering convention (sequential, never letter suffixes) works for briefs because they go through a single Architect. Insights are created by multiple roles across sessions — the sequential numbering scheme needs a coordination mechanism or a different approach.
+- **API keys cover more ground than expected.** The initial assumption was OAuth everywhere. The reality: API keys get email working day one for most businesses. OAuth is primarily for premium Gmail and social media. This pragmatic finding enabled a cleaner MVP phasing.
+
+**What to change:**
+- **Insight numbering needs a coordination mechanism.** Options: (a) check `ls docs/insights/*.md | tail -1` before creating new insights, (b) use a counter file, (c) use date-based numbering (YYYYMMDD-N). The current convention assumes sequential creation without collision. This has now failed three times. The Architect role command should include "check the latest insight number before creating new ones."
+- **Architecture validation should become a periodic practice.** This stress test was the first. It should happen whenever new use cases emerge or after major architecture changes. Consider making it a system process — the meta-process pattern applied to architecture itself.
+- **ADR-005 needs a Section 6** (Connection Setup) capturing the integration auth design. This was identified but deferred to when the Phase 10 brief is written. Don't lose track of this.
+
+**Cross-cutting audit flags:**
+- ADR-005: needs Section 6 (Connection Setup) — deferred to brief writing (Architect action)
+- Integration registry schema (`00-schema.yaml`): needs `connection:` section — deferred to brief writing (Architect action)
+- Insight numbering: 2 pre-existing collisions (071/072) need cleanup. 085-087 collision resolved (renumbered to 088-090). **Action for next session:** clean up 071/072 collision.
+- Architecture.md: no changes needed from this session's work (gaps are flagged via insights, not embedded in architecture.md yet)
+- Dictionary.md: no new terms introduced
+- Roadmap.md: no milestone reached — no update needed
 
 ## Documenter Retrospective (2026-03-24 — Brief 037 Build / Integration Generation)
 

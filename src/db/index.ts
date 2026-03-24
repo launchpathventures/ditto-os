@@ -14,13 +14,11 @@ import path from "path";
 import fs from "fs";
 import { execFileSync } from "child_process";
 import * as schema from "./schema";
-
-const DB_PATH = path.join(process.cwd(), "data", "ditto.db");
+import { DB_PATH, DATA_DIR, PROJECT_ROOT } from "../paths.js";
 
 // Auto-create data directory
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 const sqlite = new Database(DB_PATH);
@@ -46,7 +44,7 @@ export function ensureSchema(): void {
       "npx",
       ["drizzle-kit", "push", "--force"],
       {
-        cwd: process.cwd(),
+        cwd: PROJECT_ROOT,
         encoding: "utf-8",
         stdio: "pipe", // Capture output, don't spam console
         timeout: 30000,

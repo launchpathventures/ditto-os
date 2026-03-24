@@ -12,7 +12,7 @@
 
 ## Context
 
-Brief 040 adds basic versions of `get_briefing`, `detect_risks`, and `suggest_next` as Self tools. This brief makes them intelligent: the briefing weaves together process state, risks, and suggestions into a narrative. Risk detection identifies temporal, data staleness, and correction-pattern risks. The suggestion engine draws from the user model, industry patterns, and process maturity.
+Brief 040 delivers 6 Self tools for work creation, process definition, trust, capture, process detail, and integration auth. This brief adds the final 3 proactive tools: `get_briefing`, `detect_risks`, and `suggest_next` — the intelligence that makes the Self feel like a brilliant executive assistant. The briefing weaves together process state, risks, and suggestions into a narrative. Risk detection identifies temporal, data staleness, and correction-pattern risks. The suggestion engine draws from the user model, industry patterns, and process maturity.
 
 This is what makes the Self feel like a brilliant executive assistant rather than a chatbot. The Self doesn't just respond — it proactively manages focus, attention, opportunities, coverage gaps, and upcoming work (Insight-076).
 
@@ -62,9 +62,10 @@ When the user returns to Ditto, the Self delivers a contextual briefing that wea
 
 | File | Action |
 |------|--------|
-| `src/engine/self-tools/get-briefing.ts` | Rewrite: full briefing assembly with 5 dimensions + risk |
-| `src/engine/self-tools/detect-risks.ts` | Rewrite: temporal + data staleness + correction-pattern detection |
-| `src/engine/self-tools/suggest-next.ts` | Rewrite: draws from user model + pain points + industry patterns + maturity |
+| `src/engine/self-tools/get-briefing.ts` | Create: briefing tool with 5 dimensions + risk woven in |
+| `src/engine/self-tools/detect-risks.ts` | Create: temporal + data staleness + correction-pattern risk detection tool |
+| `src/engine/self-tools/suggest-next.ts` | Create: suggestion tool drawing from user model + pain points + industry patterns + maturity |
+| `src/engine/self-delegation.ts` | Modify: register 3 new proactive tools (total Self tools: 5 original + 6 from Brief 040 + 3 from this brief = 14) |
 | `src/engine/briefing-assembler.ts` | Create: queries DB for all briefing inputs (runs, items, risks, suggestions), produces structured briefing data |
 | `src/engine/risk-detector.ts` | Create: queries DB for risk signals, returns typed risk objects |
 | `src/engine/industry-patterns.ts` | Create: structured data file with business type → typical process patterns (trades, ecommerce, consulting). Used by suggest_next. |
@@ -94,7 +95,7 @@ When the user returns to Ditto, the Self delivers a contextual briefing that wea
 6. [ ] `risk-detector.ts` detects data staleness risks: integration sources with last successful poll > threshold
 7. [ ] `risk-detector.ts` detects correction-pattern risks: sliding window correction rate per process exceeding baseline
 8. [ ] Risk signals woven into briefing narrative — never uses the word "risk" (Insight-073)
-9. [ ] `suggest-next` draws from: user model stated pain points (first priority), process maturity signals (trust upgrades), industry patterns (coverage gaps)
+9. [ ] `suggest-next` draws from all 9 user model dimensions (Insight-093): problems + tasks (immediate), vision + goals (strategic), challenges + frustrations (what to avoid), concerns (trust calibration), work patterns (timing), industry patterns (coverage gaps), process maturity (trust upgrades)
 10. [ ] Suggestions capped: max 1-2 per briefing, zero during exceptions
 11. [ ] Self proactively delivers briefing when user returns (detects return via session gap or new page load)
 

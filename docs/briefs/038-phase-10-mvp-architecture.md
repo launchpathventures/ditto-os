@@ -27,7 +27,7 @@ Deliver a working web application where a non-technical user can: talk to their 
 
 ## Non-Goals
 
-- Native mobile app (Phase 13 — but responsive down to tablet)
+- Native mobile app (Phase 13 — but responsive down to tablet, breakpoints per UX spec 3.7)
 - Full 16 primitives and 8 views from human-layer.md (MVP cut)
 - Multi-tenancy / team management UX (Phase 13 — Nadia uses as single process owner)
 - Process discovery from organizational data (Phase 11)
@@ -38,6 +38,11 @@ Deliver a working web application where a non-technical user can: talk to their 
 - Capability map / systems view (MVP+1 — "How It Works" link is a placeholder)
 - Batch review ("Approve batch" / "Spot-check N") — deferred
 - Voice input (deferred — text-first MVP, voice is a future enhancement)
+- OAuth integration auth (Phase 11 — requires managed cloud infrastructure). MVP uses API key entry only (see G9 in architecture validation)
+- Standards library runtime (ADR-019) — quality profiles are designed but the engine runtime that evaluates them against process outputs is Phase 11. The web app can display quality criteria but doesn't execute quality profile checks.
+- Full composable UI where the Self dynamically composes layouts (Insight-086) — the MVP builds standard React components for the workspace shell. Self-driven content within conversation uses a component catalog (ADR-009 v2 pattern). Full composable layout composition is Phase 11+.
+
+**Note:** This parent brief (038) supersedes the earlier Brief 037 draft (`037-phase-10-mvp-dashboard.md`), which predates the UX v3 spec and architecture validation.
 
 ## Architecture Overview
 
@@ -81,6 +86,8 @@ ditto/
 | Process graph | @xyflow/react | depend (deferred) | For capability map in MVP+1. |
 | AI Elements | ~12 components | adopt | Conversation, Message, PromptInput, Reasoning, Plan, Task, Queue. Source-adopt from Vercel AI SDK Elements examples. |
 | json-render | Catalog/Registry/Renderer | adopt | For process output content within feed cards (ADR-009 v2). |
+| Visual identity | `docs/research/visual-identity-design-system-ux.md` | original | Warm professional design system: colour palette (warm neutrals + terracotta accent), Inter/JetBrains Mono typography, 8px spacing grid, elevation system. Baked into Tailwind/shadcn theme config as design tokens in `globals.css`. |
+| Build strategy | `docs/research/ui-build-strategy-ux.md` | original | Strategy D: design tokens → HTML prototypes as visual targets → reference-driven build → visual QA gate. HTML prototypes in `docs/prototypes/` are the pixel-level references the Builder works from. |
 
 ### Data Flow
 
@@ -130,16 +137,31 @@ The Self (ADR-016) currently has 5 tools: `start_dev_role`, `consult_role`, `app
 
 | Tool | Purpose | UX spec section |
 |------|---------|----------------|
-| `create_work_item` | Create work from conversation | 2.2 (work creation) |
-| `generate_process` | Define a process through conversation | 2.5 (process definition) |
-| `get_briefing` | Assemble the morning briefing | 2.1 (morning briefing) |
-| `quick_capture` | Store raw context for later classification | 2.6 (quick capture) |
-| `adjust_trust` | Change trust level on a process | 2.4 (trust changes) |
-| `get_process_detail` | Retrieve process detail for conversation | UX 2.3 (inline data) |
-| `detect_risks` | Surface risk signals from engine | UX 4.4.1 (risk detection) |
-| `suggest_next` | Draw from user model + industry patterns | UX 4.2 (proactive guidance) |
+| `create_work_item` | Create work from conversation | 2.2 (work creation) | Brief 040 |
+| `generate_process` | Define a process through conversation | 2.5 (process definition) | Brief 040 |
+| `quick_capture` | Store raw context for later classification | 2.6 (quick capture) | Brief 040 |
+| `adjust_trust` | Change trust level on a process | 2.4 (trust changes) | Brief 040 |
+| `get_process_detail` | Retrieve process detail for conversation | UX 2.3 (inline data) | Brief 040 |
+| `connect_service` | Guide user through integration auth (API key entry) | Integration auth research (G9) | Brief 040 |
+| `get_briefing` | Assemble the morning briefing | 2.1 (morning briefing) | Brief 043 |
+| `detect_risks` | Surface risk signals from engine | UX 4.4.1 (risk detection) | Brief 043 |
+| `suggest_next` | Draw from user model + industry patterns | UX 4.2 (proactive guidance) | Brief 043 |
 
 These tools are engine functions exposed to the Self via the existing tool_use mechanism. The Self decides when to call them based on conversation context.
+
+### Integration Auth (MVP Scope — G9)
+
+Architecture validation identified G9 (conversational integration auth) as HIGH severity. Every real process needs external system access. MVP scope: **API key entry only** (OAuth requires managed cloud infrastructure, deferred to Phase 11).
+
+The `connect_service` Self tool:
+1. Self detects a process needs an external service (e.g., "I'll need access to your Stripe account")
+2. Self explains what's needed and provides step-by-step setup guidance (stored in integration registry's `connection` metadata)
+3. Self presents a **masked input field** for the API key — key is never written to conversation history or activity logs
+4. Key goes directly to credential vault via `credentialVault.store()`
+5. Self verifies the connection by making a test call
+6. Self confirms: "Connected. I'll only use this for [process name]."
+
+This reuses the existing credential vault (Brief 035) but adds a conversational UX path. The integration registry is extended with `connection` metadata (auth_type, provider_name, setup_url, scopes).
 
 ### Risk Detection (MVP Scope)
 
@@ -153,26 +175,49 @@ Three risk types for MVP (Insight-077):
 
 Implementation: a `detectRisks()` engine function that queries the DB for these signals. The Self calls it during briefing assembly. Results are woven into the Self's narrative, not rendered as a separate UI.
 
-### User Model
+### User Model (Insight-093)
 
-The Self needs structured understanding of the user beyond freeform memories (UX spec recommendation 2). Implementation:
+The Self needs deep structured understanding of the user — not just business type and pain points, but enough to power proactive suggestions for weeks. Nine dimensions, populated progressively through multi-session intake:
 
 ```typescript
-// In user_preferences or a dedicated table
 interface UserModel {
+  // Captured first (immediate value — powers first process)
+  problems: string[];          // what's broken, what hurts
+  tasks: string[];             // what's on their plate right now
+  work: string[];              // how they actually do things today
+
+  // Captured early (first-week deepening)
   businessType?: string;       // "trades", "ecommerce", "consulting"
   businessSize?: string;       // "solo", "small (2-10)", "medium (10-50)"
   industry?: string;           // free text
-  statedPainPoints: string[];  // captured from onboarding conversation
-  workingPatterns: {           // learned from behavior
+  concerns: string[];          // worries about AI/automation → trust calibration
+  frustrations: string[];      // what they've tried that didn't work → what to avoid
+  communicationPreferences: {  // when, how, how much
     preferredSurface: "conversation" | "workspace";
-    activeHours?: string;      // e.g., "6am-7pm"
-    checkFrequency?: string;   // e.g., "morning + evening"
+    activeHours?: string;
+    checkFrequency?: string;
+    briefingVerbosity?: "detailed" | "concise";
   };
+
+  // Deepened across sessions (strategic guidance)
+  vision: string[];            // where they want to be
+  goals: string[];             // short and medium term
+  challenges: string[];        // what's hard, what fails
 }
 ```
 
-Populated progressively through the onboarding conversation and refined through observation. Stored as a structured memory entry (scope: `self`, type: `user_model`). The Self reads it at context assembly time.
+Populated progressively: most important first (problems, tasks for immediate value), deepened across sessions (vision, goals for strategic guidance). Stored as structured self-scoped memory. The Self reads it at context assembly time and draws from all 9 dimensions for proactive suggestions.
+
+### The Self as AI Coach (Insight-093)
+
+The Self doesn't just learn from the user — it teaches the user how to work effectively with AI:
+
+- **After corrections:** "When you tell me *why* you changed the labour estimate, I learn faster"
+- **After good teaching:** "You've taught me 4 things about bathroom quotes this week — here's what I know now"
+- **Setting expectations:** "I'll get the first few wrong — that's how I learn your standards"
+- **Showing the return:** Making accumulated knowledge visible so the user sees the payoff
+
+This is woven into natural conversation, not a separate mode. The cognitive framework (`cognitive/self.md`) should include AI coaching principles.
 
 ## Sub-Brief Decomposition
 
@@ -193,6 +238,9 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
  ├── 042 — Navigation & Detail (sidebar, process detail, trust control, engine view)
  │         Depends on 041. The workspace structure.
  │
+ ├── 044 — Onboarding Experience (onboarding YAML, adapt_process, conversation components, AI coaching)
+ │         Depends on 040. The first-run experience. Validates conversation-first model.
+ │
  └── 043 — Proactive Engine (briefing assembly, risk detection, user model, suggestion engine)
            Depends on 040. The intelligence layer.
 ```
@@ -201,7 +249,8 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 
 ```
 039 (Web Foundation)
- ├──→ 040 (Self Extensions) ──→ 043 (Proactive Engine)
+ ├──→ 040 (Self Extensions) ──→ 044 (Onboarding Experience)
+ │                          ──→ 043 (Proactive Engine)
  └──→ 041 (Feed & Review) ──→ 042 (Navigation & Detail)
 ```
 
@@ -209,22 +258,26 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 
 ### Sub-Brief Summaries
 
-**039 — Web Foundation** (~12 AC)
+**039 — Web Foundation** (~14 AC)
 - Next.js 15 project in `packages/web/`
-- shadcn/ui setup + Tailwind v4
+- shadcn/ui setup + Tailwind v4 + **design tokens from visual identity spec** (warm professional, not default shadcn)
 - Vercel AI SDK `useChat` connected to `selfConverse()`
 - Streaming adapter for the Self
 - Full-screen conversation UI (the day-1 experience)
 - Entry point routing (conversation-only vs workspace)
 - SSE event stream from harness events
+- HTML prototypes used as visual references during build (visual QA gate)
 - Smoke test: open app → Self greets → type message → Self responds
 
-**040 — Self Extensions** (~14 AC)
-- 8 new Self tools: create_work_item, generate_process, get_briefing, quick_capture, adjust_trust, get_process_detail, detect_risks, suggest_next
+**040 — Self Extensions** (~15 AC)
+- 6 new Self tools: create_work_item, generate_process, quick_capture, adjust_trust, get_process_detail, **connect_service** (conversational integration auth — API key entry)
 - Confirmation model for irreversible actions
-- Self's onboarding conversation flow (user model building)
-- Inline data rendering in conversation (tables, sparklines via components)
-- Smoke test: create work via conversation → Self generates process → output appears
+- **Deep intake onboarding** — multi-session, 9-dimension user model (not a thin form), Self drives and deepens across sessions (Insight-093)
+- **AI coaching** — Self teaches users to be better collaborators, woven into corrections and reviews (Insight-093)
+- Inline data rendering in conversation (tables, sparklines, structured cards via component catalog)
+- **Masked credential input** — API keys never touch conversation history
+- Smoke test: create work via conversation → Self generates process → connect service → output appears
+- Note: `get_briefing`, `detect_risks`, `suggest_next` moved to Brief 043 (no stub-then-rewrite)
 
 **041 — Feed & Review** (~15 AC)
 - Feed component with 6 item types (shift report, review, update, exception, insight, process output)
@@ -236,19 +289,31 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 - Interaction states (empty, loading, error, content, single-process)
 - Smoke test: run a process → output appears in feed → approve inline
 
-**042 — Navigation & Detail** (~13 AC)
+**042 — Navigation & Detail** (~15 AC)
 - Left sidebar (My Work, Recurring, Settings)
 - Process detail view — living roadmap variant + domain process variant
 - Trust control surface (natural language)
 - Engine View (developer mode — toggle, inline engine metadata)
 - Three-panel layout composition (sidebar + center + right panel)
 - Progressive reveal: workspace appears when Self suggests it
+- **Responsive breakpoints** (≥1280px three-panel; 1024-1279px icon rail; <1024px drawer/hamburger)
+- User preference persistence
 - Smoke test: click sidebar item → process detail loads → trust control works
 
-**043 — Proactive Engine** (~11 AC)
+**044 — Onboarding Experience** (~14 AC)
+- Onboarding as native system process (`processes/onboarding.yaml`)
+- `adapt_process` Self tool — runtime YAML mutation (Insight-091). Self adapts onboarding steps based on what it learns.
+- Knowledge synthesis card — shows what Self knows, completeness indicators, editable
+- Process-proposal-card — plain language steps, approve/adjust
+- AI coaching behavioural layer — woven into corrections and reviews
+- Heartbeat re-read verification (process definitions mutable at runtime)
+- Smoke test: new user → conversation → knowledge reflected → first process → first real work → coaching moment
+
+**043 — Proactive Engine** (~14 AC)
+- 3 new Self tools: `get_briefing`, `detect_risks`, `suggest_next` (full implementations, not stubs)
 - `assembleBriefing()` — shift report generation from process runs + work items
 - `detectRisks()` — temporal, data staleness, correction-pattern risk signals
-- User model: structured memory entry, populated from conversation
+- User model behaviour tracking: update working patterns from observed usage
 - `suggestNext()` — draws from user model + pain points + industry patterns + process maturity
 - Self weaves briefing + risks + suggestions into morning narrative
 - Smoke test: return to app → Self delivers briefing with risks + suggestions
@@ -304,21 +369,26 @@ cd packages/web && pnpm dev
 
 # 2. Open http://localhost:3000
 # 3. Self greets → have onboarding conversation → first process created
-# 4. Trigger a process run (via engine CLI or Self conversation)
-# 5. Return to app → Self delivers briefing with output for review
-# 6. Approve via conversation → output delivered
-# 7. Click "Show me everything" → workspace appears with feed
-# 8. Feed shows shift report + approved item
-# 9. Sidebar shows the process under "Recurring"
-# 10. Toggle Engine View → see routing/memory/cost metadata
+# 4. Self detects integration needed → guides API key entry → masked input → vault → verified
+# 5. Trigger a process run (via engine CLI or Self conversation)
+# 6. Return to app → Self delivers briefing with output for review
+# 7. Approve via conversation → output delivered
+# 8. Click "Show me everything" → workspace appears with feed
+# 9. Feed shows shift report + approved item
+# 10. Sidebar shows the process under "Recurring"
+# 11. Toggle Engine View → see routing/memory/cost metadata
+# 12. Resize to <1024px → responsive layout with hamburger + drawer
 ```
 
 ## After Completion
 
 1. Update `docs/state.md` with Phase 10 completion
 2. Update `docs/roadmap.md` — Phase 10 status to done
-3. Update `docs/architecture.md` — add Layer 6 web surface architecture
-4. Update ADR-016 — Self as primary surface, new tools, user model
-5. Update ADR-009 v2 — json-render implementation details
-6. Update ADR-011 — risk detection as attention model extension
-7. Phase retrospective: conversation-first bet validated? Engine gaps revealed?
+3. Update `docs/architecture.md`:
+   - Reconcile Layer 6 view compositions (current spec lists 8 views: Home, Review, Map, Process Detail, Setup, Team, Improvements, Capture) with the actual MVP model (conversation-only surface + workspace with feed/sidebar/detail). Note which spec views are aspirational vs implemented.
+   - Reconcile UI primitives: the separate Review Queue and Activity Feed primitives are merged into a single feed in the MVP. Document this as a design decision.
+4. Update ADR-016 — Self as primary surface, 14 tools (5 original + 6 Brief 040 + 3 Brief 043), user model, confirmation model, streaming adapter
+5. ~~Update ADR-009 v2~~ — json-render is deferred (not implemented in Phase 10). No ADR update needed until json-render is built.
+6. Update ADR-011 — risk detection as attention model extension (3 MVP risk types)
+7. Update ADR-005 — integration registry connection metadata extension
+8. Phase retrospective: conversation-first bet validated? Engine gaps revealed?

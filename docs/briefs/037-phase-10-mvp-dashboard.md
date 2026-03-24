@@ -1,7 +1,7 @@
 # Brief: Phase 10 MVP — The Living Workspace
 
 **Date:** 2026-03-24
-**Status:** draft (awaiting Designer + Architect)
+**Status:** superseded by Brief 038 (Phase 10 MVP Architecture parent brief)
 **Depends on:** Brief 035 (Credential Vault), Brief 036 (Process I/O) — both building in parallel
 **Unlocks:** Engine tuning driven by dashboard visibility (Insight-070), first real user-facing product
 

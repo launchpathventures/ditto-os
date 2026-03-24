@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ditto — Trust Upgrade (Rob's Phone)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .conversation {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+
+  .top-bar-back {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .top-bar-back svg { width: 20px; height: 20px; stroke-width: 2; }
+  .top-bar-title { font-size: 16px; font-weight: 600; flex: 1; }
+
+  .messages {
+    flex: 1;
+    padding: 12px 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .msg-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .msg-group.self { align-items: flex-start; }
+  .msg-group.user { align-items: flex-end; }
+
+  .sender {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .self-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .sender-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .msg {
+    max-width: 88%;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .msg-group.self .msg { padding: 2px 0 2px 14px; }
+
+  .msg-group.user .msg {
+    background: var(--accent-subtle);
+    padding: 10px 14px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg p + p { margin-top: 8px; }
+
+  /* ═══ THE TRUST EVIDENCE CARD ═══
+     This is how Ditto earns trust — with data, not promises.
+     Rob sees his actual track record, not a generic "you've been doing great."
+  */
+  .trust-evidence {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--accent);
+    border-radius: 14px;
+    padding: 18px;
+    margin-left: 14px;
+    max-width: 330px;
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .trust-evidence-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .trust-evidence-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  /* Track record — the evidence */
+  .track-record {
+    margin-bottom: 16px;
+  }
+
+  .track-record-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .track-record-row:last-child { border-bottom: none; }
+
+  .track-record-label { color: var(--text-secondary); }
+
+  .track-record-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .track-record-value.great { color: var(--positive); }
+
+  /* Quality bar */
+  .quality-visual {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--positive-subtle);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .quality-bar-track {
+    flex: 1;
+    height: 8px;
+    background: hsl(145 30% 85%);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .quality-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--positive);
+  }
+
+  .quality-pct {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--positive);
+  }
+
+  .quality-label {
+    font-size: 12px;
+    color: hsl(145 40% 30%);
+  }
+
+  /* What changes */
+  .trust-changes {
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  .trust-changes-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .change-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .change-check {
+    color: var(--positive);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .change-cross {
+    color: var(--text-muted);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* Safety net */
+  .safety-net {
+    padding: 10px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .safety-net strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .trust-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.12s;
+    -webkit-tap-highlight-color: transparent;
+    flex: 1;
+    text-align: center;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-strong); }
+
+  /* Confirmed state */
+  .confirmed {
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 85%);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-left: 14px;
+    max-width: 330px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .confirmed-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--positive);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .confirmed-text {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  .confirmed-text strong { font-weight: 600; }
+
+  .confirmed-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Input */
+  .bottom-input {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 12px);
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .input-container:focus-within { border-color: var(--accent); }
+
+  .input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .input-container input::placeholder { color: var(--text-muted); }
+
+  .send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .send-btn svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="conversation">
+
+  <div class="top-bar">
+    <button class="top-bar-back">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+      </svg>
+    </button>
+    <span class="top-bar-title">Ditto</span>
+  </div>
+
+  <div class="messages">
+
+    <!-- Context: morning brief, Ditto surfaces the suggestion -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+      <div class="msg">
+        <p>Morning Rob. Quick thing before your quotes — your quoting has been really solid lately. I think you could check less.</p>
+      </div>
+
+      <!-- THE EVIDENCE — not a vague suggestion, real data -->
+      <div class="trust-evidence">
+        <div class="trust-evidence-title">Your quoting track record</div>
+        <div class="trust-evidence-subtitle">Last 6 weeks</div>
+
+        <div class="quality-visual">
+          <div>
+            <div class="quality-pct">91%</div>
+            <div class="quality-label">clean rate</div>
+          </div>
+          <div class="quality-bar-track">
+            <div class="quality-bar-fill" style="width: 91%"></div>
+          </div>
+        </div>
+
+        <div class="track-record">
+          <div class="track-record-row">
+            <span class="track-record-label">Total quotes</span>
+            <span class="track-record-value">34</span>
+          </div>
+          <div class="track-record-row">
+            <span class="track-record-label">Approved without changes</span>
+            <span class="track-record-value great">31</span>
+          </div>
+          <div class="track-record-row">
+            <span class="track-record-label">You corrected</span>
+            <span class="track-record-value">3 (all labour — now fixed)</span>
+          </div>
+          <div class="track-record-row">
+            <span class="track-record-label">Last correction</span>
+            <span class="track-record-value">2 weeks ago</span>
+          </div>
+        </div>
+
+        <div class="trust-changes">
+          <div class="trust-changes-title">What would change</div>
+          <div class="change-item">
+            <span class="change-check">&#10003;</span>
+            <span>Routine residential quotes go out automatically</span>
+          </div>
+          <div class="change-item">
+            <span class="change-cross">&#10005;</span>
+            <span style="color: var(--text-primary); font-weight: 500;">You still review: commercial, over $20k, new customer types</span>
+          </div>
+          <div class="change-item">
+            <span class="change-check">&#10003;</span>
+            <span>You see everything in your morning update</span>
+          </div>
+        </div>
+
+        <div class="safety-net">
+          <strong>Safety net:</strong> If quality drops below 85%, I automatically go back to checking everything with you first.
+        </div>
+
+        <div class="trust-actions">
+          <button class="btn btn-primary">Try it</button>
+          <button class="btn btn-ghost">Not yet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rob decides -->
+    <div class="msg-group user">
+      <div class="msg">Yeah go for it</div>
+    </div>
+
+    <!-- Confirmed -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+
+      <div class="confirmed">
+        <div class="confirmed-check">&#10003;</div>
+        <div>
+          <div class="confirmed-text"><strong>Quoting upgraded to spot-checked.</strong> Routine residential quotes go out automatically. I'll flag anything unusual.</div>
+          <div class="confirmed-detail">You can change this back anytime from the Quoting process page.</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <p>Your morning update will still show everything that went out. And I'll tell you if anything looks off. If you want to go back to checking everything, just say so.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom-input">
+    <div class="input-container">
+      <input type="text" placeholder="Tell Ditto something...">
+      <button class="send-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="proto-nav"><a href="16-teach-this.html">&larr; Teach This</a><span class="pn-t"><a href="index.html">P17 Trust Upgrade</a></span><a href="18-second-process.html">Second Process &rarr;</a></div><!-- pnav -->
+</body>
+</html>

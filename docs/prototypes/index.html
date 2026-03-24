@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Prototype Journey</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-subtle: hsl(24 60% 95%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 40px;
+  }
+
+  .act {
+    margin-bottom: 36px;
+  }
+
+  .act-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .proto-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-decoration: none;
+    transition: all 0.12s;
+  }
+
+  .proto-link:hover {
+    border-color: var(--accent);
+    box-shadow: 0 2px 10px hsl(24 80% 38% / 0.06);
+  }
+
+  .proto-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .proto-info { flex: 1; }
+
+  .proto-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .proto-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .proto-persona {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .archived {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .archived-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+
+  .archived-link {
+    display: inline-block;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    margin: 2px;
+    border-radius: 4px;
+    transition: all 0.12s;
+  }
+
+  .archived-link:hover {
+    color: var(--text-secondary);
+    background: var(--surface);
+  }
+
+  .start-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding: 12px 24px;
+    background: var(--accent);
+    color: white;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.12s;
+  }
+
+  .start-btn:hover { background: hsl(24 80% 32%); }
+  .start-btn svg { width: 18px; height: 18px; stroke-width: 2; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1>Ditto Prototypes</h1>
+  <p class="subtitle">Walk the user journey from day zero through months of use. Open each in order — or jump to any screen.</p>
+
+  <a href="08-day-zero.html" class="start-btn">
+    Start the journey
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+  </a>
+
+  <div style="height: 32px;"></div>
+
+  <div class="act">
+    <div class="act-title">Act 1 — Getting Started (Libby, Week 0)</div>
+    <a class="proto-link" href="08-day-zero.html">
+      <span class="proto-num">08</span>
+      <div class="proto-info">
+        <div class="proto-name">Day Zero</div>
+        <div class="proto-desc">First screen. No chrome. "What's taking up your time?"</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+    <a class="proto-link" href="09-first-conversation.html">
+      <span class="proto-num">09</span>
+      <div class="proto-info">
+        <div class="proto-name">First Conversation</div>
+        <div class="proto-desc">Structured intake. Knowledge captured live. Plan proposed.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+    <a class="proto-link" href="10-first-output.html">
+      <span class="proto-num">10</span>
+      <div class="proto-info">
+        <div class="proto-name">First Output</div>
+        <div class="proto-desc">5 Instagram posts. "Based on" provenance. Edit-as-teaching.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+    <a class="proto-link" href="11-workspace-emerges.html">
+      <span class="proto-num">11</span>
+      <div class="proto-info">
+        <div class="proto-name">Workspace Emerges</div>
+        <div class="proto-desc">Sidebar born from work. Journey visible. Next step clear.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+  </div>
+
+  <div class="act">
+    <div class="act-title">Act 2 — Building Confidence (Rob, Week 1-3)</div>
+    <a class="proto-link" href="12-morning-mobile.html">
+      <span class="proto-num">12</span>
+      <div class="proto-info">
+        <div class="proto-name">Morning Mobile</div>
+        <div class="proto-desc">Phone. Coffee. 3 minutes. Review, approve, done.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="13-daily-workspace.html">
+      <span class="proto-num">13</span>
+      <div class="proto-info">
+        <div class="proto-name">Daily Workspace</div>
+        <div class="proto-desc">Desktop daily driver. Multiple processes. Calm.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="14-process-detail.html">
+      <span class="proto-num">14</span>
+      <div class="proto-info">
+        <div class="proto-name">Process Detail</div>
+        <div class="proto-desc">How it works, how it's going, what it uses, trust level.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="15-knowledge-base.html">
+      <span class="proto-num">15</span>
+      <div class="proto-info">
+        <div class="proto-name">Knowledge Base</div>
+        <div class="proto-desc">"What I know" — browse, edit, see connections and gaps.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+  </div>
+
+  <div class="act">
+    <div class="act-title">Act 3 — Trust Forming (Rob, Month 1-2)</div>
+    <a class="proto-link" href="16-teach-this.html">
+      <span class="proto-num">16</span>
+      <div class="proto-info">
+        <div class="proto-name">Teach This</div>
+        <div class="proto-desc">Correction pattern spotted. One tap to make it permanent.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="17-trust-upgrade.html">
+      <span class="proto-num">17</span>
+      <div class="proto-info">
+        <div class="proto-name">Trust Upgrade</div>
+        <div class="proto-desc">Evidence-based. Safety net explained. User decides.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="18-second-process.html">
+      <span class="proto-num">18</span>
+      <div class="proto-info">
+        <div class="proto-name">Second Process</div>
+        <div class="proto-desc">Knowledge reuse visible. 2 min setup. Immediate value.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+  </div>
+
+  <div class="act">
+    <div class="act-title">Act 4 — The Compound Effect (Jordan, Month 3+)</div>
+    <a class="proto-link" href="19-multi-process-workspace.html">
+      <span class="proto-num">19</span>
+      <div class="proto-info">
+        <div class="proto-name">Multi-Process Workspace</div>
+        <div class="proto-desc">4 processes, 3 departments. Impact report for leadership.</div>
+      </div>
+      <span class="proto-persona">Jordan</span>
+    </a>
+    <a class="proto-link" href="20-something-wrong.html">
+      <span class="proto-num">20</span>
+      <div class="proto-info">
+        <div class="proto-name">Something Went Wrong</div>
+        <div class="proto-desc">Calm problem surfacing. Auto-downgrade. Recovery path clear.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+  </div>
+
+  <div class="archived">
+    <div class="archived-title">Earlier Explorations (reference only)</div>
+    <a class="archived-link" href="01-conversation-surface.html">01 Conversation</a>
+    <a class="archived-link" href="02-workspace-feed.html">02 Workspace Feed</a>
+    <a class="archived-link" href="03-process-detail.html">03 Process Detail</a>
+    <a class="archived-link" href="04-onboarding.html">04 Onboarding v1</a>
+    <a class="archived-link" href="04-onboarding-v2.html">04 Onboarding v2</a>
+    <a class="archived-link" href="05-strategy-session.html">05 Strategy Session</a>
+    <a class="archived-link" href="06-knowledge-capture.html">06 Knowledge Capture</a>
+    <a class="archived-link" href="07-guided-unfolding.html">07 Guided Unfolding</a>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Onboarding: Libby's First Contact</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .conversation-wrapper {
+    max-width: 640px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
+  }
+
+  .conversation-messages {
+    flex: 1;
+    padding: 60px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Process indicator — subtle, informational */
+  .process-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--surface);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--text-muted);
+    width: fit-content;
+    margin: 0 auto 32px;
+  }
+
+  .process-indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: subtlePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes subtlePulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* Message groups */
+  .message-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 20px;
+  }
+
+  .message-group.self { align-items: flex-start; }
+  .message-group.user { align-items: flex-end; }
+
+  .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .sender-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .timestamp {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    padding-left: 16px;
+  }
+
+  .message-group.user .timestamp {
+    padding-left: 0;
+    padding-right: 4px;
+    text-align: right;
+  }
+
+  .message {
+    max-width: 85%;
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .message-group.self .message {
+    padding: 2px 0 2px 16px;
+  }
+
+  .message-group.user .message {
+    background: var(--accent-subtle);
+    padding: 10px 16px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message p + p { margin-top: 10px; }
+
+  /* ═══════════════════════════════════════════
+     KNOWLEDGE SYNTHESIS CARD
+     Catalog component: knowledge-synthesis-card
+     Produced by: onboarding process
+  ═══════════════════════════════════════════ */
+  .knowledge-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 12px 0 4px 16px;
+    max-width: 480px;
+  }
+
+  .knowledge-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .knowledge-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .knowledge-card-badge {
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-subtle);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 500;
+  }
+
+  .knowledge-entry {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .knowledge-entry:last-of-type {
+    border-bottom: none;
+  }
+
+  .knowledge-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  .knowledge-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  .knowledge-value.developing {
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .knowledge-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.3;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-secondary:hover { background: var(--surface); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+  }
+  .btn-ghost:hover { color: var(--text-primary); background: var(--surface); }
+
+  /* Prompt input */
+  .input-wrapper {
+    position: sticky;
+    bottom: 0;
+    padding: 16px 0 24px;
+    background: linear-gradient(transparent, var(--bg) 16px);
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
+  }
+
+  .input-textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: transparent;
+    resize: none;
+    min-height: 24px;
+    max-height: 144px;
+  }
+
+  .input-textarea::placeholder { color: var(--text-muted); }
+
+  .input-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-bottom: 2px;
+  }
+
+  .input-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .input-icon-btn:hover { color: var(--text-secondary); background: var(--surface); }
+  .input-icon-btn svg { width: 20px; height: 20px; stroke-width: 1.5; }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .send-btn:hover { background: var(--accent-hover); }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
+
+  @media (max-width: 768px) {
+    .conversation-wrapper { padding: 0 16px; }
+    .message { max-width: 92%; }
+    .knowledge-card { margin-left: 8px; max-width: 100%; }
+    .input-wrapper { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="conversation-wrapper">
+  <div class="conversation-messages">
+
+    <!-- Process indicator -->
+    <div class="process-indicator">
+      <span class="process-indicator-dot"></span>
+      Getting to know you
+    </div>
+
+    <!-- Self: Opening -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>Hi, I'm your Self — think of me as a colleague who'll learn how your world works and help you run it.</p>
+        <p>Everything we talk about, I remember. You won't have to repeat yourself or start from scratch. Over time I'll get better at helping you because I'll actually understand your business, your clients, and how you work.</p>
+        <p>What brings you here? What are you building — or trying to get off the ground?</p>
+      </div>
+    </div>
+
+    <!-- User: Libby introduces herself -->
+    <div class="message-group user">
+      <div class="message">
+        <p>I'm a doula and I'm trying to launch an online education and coaching business. But I'm also a mum and everything's scattered. I've been using ChatGPT but every conversation starts from scratch and it doesn't know anything about my business.</p>
+      </div>
+    </div>
+
+    <!-- Self: Acknowledges, starts exploring -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>That "starting from scratch" feeling is exactly what I'm here to fix. Everything you tell me — about your business, your clients, your voice, your family — I keep and build on.</p>
+        <p>So you're a doula moving into education and coaching. Tell me more — who are you trying to help? What does your ideal client look like, even if it's just a rough picture?</p>
+      </div>
+    </div>
+
+    <!-- User: Describes ideal client -->
+    <div class="message-group user">
+      <div class="message">
+        <p>First-time mums mainly. Professional women in their 30s who research everything but are overwhelmed by all the conflicting advice. They want someone who's calm, practical, and won't judge them for not knowing things.</p>
+      </div>
+    </div>
+
+    <!-- Self: Reflects + probes -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>"Won't judge them for not knowing things" — that's a powerful positioning. It tells me your brand isn't clinical or authoritative, it's safe and empathetic.</p>
+        <p>How do you naturally talk to these women? If one of them came to you anxious about birth, what's the first thing you'd want them to feel?</p>
+      </div>
+    </div>
+
+    <!-- User: Voice revelation -->
+    <div class="message-group user">
+      <div class="message">
+        <p>Safe. And that it's ok to not have all the answers. I'm not woo-woo and I'm not clinical. I've been where they are and I know what actually helps vs what just sounds good on Instagram.</p>
+      </div>
+    </div>
+
+    <!-- Self: More questions -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>"Not woo-woo, not clinical, been where they are." That's your voice — warm, practical, experienced. I'll use that for everything I help you create.</p>
+        <p>Where are you at right now with the business? Still in the thinking stage, or have you started putting things out there?</p>
+      </div>
+    </div>
+
+    <!-- User: Current stage -->
+    <div class="message-group user">
+      <div class="message">
+        <p>Bit of both. I'm doing courses to learn the coaching side. I've been posting a bit on Instagram but it's not consistent and I'm not sure my messaging is right. I sent a survey to friends and some friends-of-friends to test the idea. And I want to build a landing page to capture interest.</p>
+      </div>
+    </div>
+
+    <!-- Self: Reflects back with knowledge synthesis card -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>Great — you're further along than you think. Let me play back what I'm taking away so far. Tell me if I'm getting it right:</p>
+      </div>
+
+      <!-- ═══ CATALOG COMPONENT: knowledge-synthesis-card ═══ -->
+      <div class="knowledge-card">
+        <div class="knowledge-card-header">
+          <span class="knowledge-card-title">What I'm learning</span>
+          <span class="knowledge-card-badge">Building up</span>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">You</div>
+          <div class="knowledge-value">Doula, transitioning to online education and coaching</div>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">Ideal client</div>
+          <div class="knowledge-value">First-time mums, professional women 30s, researched everything, overwhelmed, want practical not theoretical support</div>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">Brand voice</div>
+          <div class="knowledge-value">Warm, empathetic, practical. Not clinical, not woo-woo. "I've been where you are" energy. Safe, non-judgmental.</div>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">Current stage</div>
+          <div class="knowledge-value">Learning (coaching courses). Testing (Instagram posts, surveys to friends + N+1). Building (landing page planned).</div>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">First priorities</div>
+          <div class="knowledge-value developing">Consistent social media content, messaging that resonates, landing page with waitlist</div>
+        </div>
+
+        <div class="knowledge-entry">
+          <div class="knowledge-label">Also managing</div>
+          <div class="knowledge-value developing">Mum life — separate workspace, will explore later</div>
+        </div>
+
+        <div class="knowledge-card-actions">
+          <button class="btn btn-primary">This looks right</button>
+          <button class="btn btn-secondary">Let me adjust</button>
+        </div>
+      </div>
+
+      <div class="message">
+        <p>Anything I'm missing or getting wrong?</p>
+      </div>
+    </div>
+
+    <!-- User: Confirms + adds -->
+    <div class="message-group user">
+      <div class="message">
+        <p>That's pretty spot on. I'd also add that I want to eventually build a course and offer 1-on-1 coaching, but that's down the track. Right now I just need help with content that sounds like me.</p>
+      </div>
+    </div>
+
+    <!-- Self: Suggests next step -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+      <div class="message">
+        <p>Noted — course and coaching are on the horizon, content is the immediate need.</p>
+        <p>Here's what I'd suggest as a starting point: I'll draft 5 Instagram posts that test your core messages with your ideal client. You'll see them in your voice — and if anything feels off, tell me and I'll learn from it.</p>
+        <p>I can also set up your family workspace whenever you're ready — meal planning, weekly rhythms, that kind of thing. Completely separate from the business side.</p>
+        <p>Want to start with the Instagram posts, or is there something else on your mind first?</p>
+      </div>
+      <div class="message">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+          <button class="btn btn-primary">Let's do the Instagram posts</button>
+          <button class="btn btn-secondary">Set up family workspace first</button>
+          <button class="btn btn-ghost">Something else</button>
+        </div>
+      </div>
+      <div class="timestamp">10:14 am</div>
+    </div>
+
+  </div>
+
+  <!-- Prompt input -->
+  <div class="input-wrapper">
+    <div class="input-container">
+      <textarea class="input-textarea" rows="1" placeholder="What's on your mind?"></textarea>
+      <div class="input-actions">
+        <button class="input-icon-btn" title="Voice">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </button>
+        <button class="input-icon-btn" title="Attach">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+          </svg>
+        </button>
+        <button class="send-btn" title="Send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const textarea = document.querySelector('.input-textarea');
+  textarea.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 144) + 'px';
+  });
+</script>
+
+</body>
+</html>

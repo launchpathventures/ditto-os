@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Day Zero</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══════════════════════════════════════════
+     THE WHOLE SCREEN — NOTHING BUT THIS
+     No sidebar. No nav. No chrome. Just Ditto.
+  ═══════════════════════════════════════════ */
+  .day-zero {
+    max-width: 580px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 24px;
+  }
+
+  /* ═══ The opening — feels like meeting someone ═══ */
+  .welcome {
+    margin-bottom: 48px;
+  }
+
+  .welcome-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .welcome-mark span {
+    color: white;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+
+  .welcome-heading {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    margin-bottom: 12px;
+  }
+
+  .welcome-body {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    max-width: 460px;
+  }
+
+  /* ═══ The question — not "how can I help" ═══
+     Specific. Directional. Shows this isn't a blank canvas. */
+  .opening-prompt {
+    margin-bottom: 40px;
+  }
+
+  .opening-prompt-text {
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  /* Quick-start options — for people who freeze at blank inputs */
+  .quick-starts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .quick-start {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+
+  .quick-start:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  .quick-start:active {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  .quick-start-emoji {
+    font-size: 20px;
+    flex-shrink: 0;
+    width: 28px;
+    text-align: center;
+  }
+
+  .quick-start-text {
+    flex: 1;
+  }
+
+  .quick-start-label {
+    font-weight: 500;
+  }
+
+  .quick-start-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* ═══ The input — warm, inviting, not intimidating ═══ */
+  .opening-input {
+    position: relative;
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
+  }
+
+  .input-textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: transparent;
+    resize: none;
+    min-height: 24px;
+    max-height: 120px;
+  }
+
+  .input-textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-bottom: 2px;
+  }
+
+  .input-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .input-icon-btn:hover {
+    color: var(--text-secondary);
+    background: var(--surface);
+  }
+
+  .input-icon-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.5;
+  }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .send-btn:hover { background: var(--accent-hover); }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
+
+  .input-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* ═══ Footer — minimal, trustworthy ═══ */
+  .day-zero-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .day-zero-footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  .day-zero-footer a:hover {
+    color: var(--text-secondary);
+  }
+
+  /* ═══ Responsive ═══ */
+  @media (max-width: 768px) {
+    .day-zero {
+      padding: 0 20px;
+      justify-content: flex-start;
+      padding-top: 15vh;
+    }
+
+    .welcome-heading {
+      font-size: 24px;
+    }
+
+    .quick-start {
+      padding: 12px 14px;
+    }
+  }
+
+  @media (max-height: 700px) {
+    .day-zero {
+      justify-content: flex-start;
+      padding-top: 8vh;
+    }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="day-zero">
+
+  <!-- The opening — no chrome, no sidebar, just this -->
+  <div class="welcome">
+    <div class="welcome-mark"><span>d</span></div>
+    <h1 class="welcome-heading">Hi. I'm Ditto.</h1>
+    <p class="welcome-body">I'll learn how your world works and help you run it. Everything we talk about stays — I don't forget, I don't start over.</p>
+  </div>
+
+  <!-- The question — specific, not open-ended -->
+  <div class="opening-prompt">
+    <p class="opening-prompt-text">What's taking up too much of your time right now?</p>
+
+    <!-- Quick starts — for people who don't know what to type -->
+    <div class="quick-starts">
+      <button class="quick-start">
+        <span class="quick-start-emoji">&#9999;&#65039;</span>
+        <div class="quick-start-text">
+          <div class="quick-start-label">I write the same things over and over</div>
+          <div class="quick-start-desc">Quotes, emails, content, reports</div>
+        </div>
+      </button>
+      <button class="quick-start">
+        <span class="quick-start-emoji">&#128269;</span>
+        <div class="quick-start-text">
+          <div class="quick-start-label">I check everything because I don't trust anyone else to</div>
+          <div class="quick-start-desc">Quality control, reviews, approvals</div>
+        </div>
+      </button>
+      <button class="quick-start">
+        <span class="quick-start-emoji">&#128161;</span>
+        <div class="quick-start-text">
+          <div class="quick-start-label">I'm building something and don't know where to start</div>
+          <div class="quick-start-desc">New business, product, project</div>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- The input — always available -->
+  <div class="opening-input">
+    <div class="input-container">
+      <textarea class="input-textarea" rows="1" placeholder="Or just tell me what's on your mind..."></textarea>
+      <div class="input-actions">
+        <button class="input-icon-btn" title="Voice">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </button>
+        <button class="send-btn" title="Send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="input-hint">Talk, type, or tap — whatever's easiest</div>
+  </div>
+
+</div>
+
+<div class="day-zero-footer">
+  <a href="#">How Ditto works</a>
+</div>
+
+<script>
+  const textarea = document.querySelector('.input-textarea');
+  textarea.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  // Quick starts populate the input
+  document.querySelectorAll('.quick-start').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const label = btn.querySelector('.quick-start-label').textContent;
+      textarea.value = label;
+      textarea.focus();
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      // Highlight the selected one
+      document.querySelectorAll('.quick-start').forEach(b => b.style.borderColor = '');
+      btn.style.borderColor = 'var(--accent)';
+    });
+  });
+</script>
+
+<div class="proto-nav"><span class="pn-d">&larr;</span><span class="pn-t"><a href="index.html">P08 Day Zero</a></span><a href="09-first-conversation.html">First Conversation &rarr;</a></div><!-- pnav -->
+</body>
+</html>

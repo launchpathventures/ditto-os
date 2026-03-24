@@ -22,19 +22,20 @@ trigger:
   description: Run weekly or when overdue invoices are detected
 
 # Process I/O (Brief 036): external source and output delivery
-source:
-  service: email
-  action: check_inbox
-  params:
-    filter: "subject:invoice OR subject:overdue"
-    unread_only: true
-  intervalMs: 300000  # 5 minutes
-
-output_delivery:
-  service: accounting
-  action: post_invoice_status
-  params:
-    format: summary
+# source and output_delivery commented out until email/accounting integrations exist
+# source:
+#   service: email
+#   action: check_inbox
+#   params:
+#     filter: "subject:invoice OR subject:overdue"
+#     unread_only: true
+#   intervalMs: 300000  # 5 minutes
+#
+# output_delivery:
+#   service: accounting
+#   action: post_invoice_status
+#   params:
+#     format: summary
 
 inputs:
   - name: invoiceData

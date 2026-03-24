@@ -100,6 +100,8 @@ The workspace layout with sidebar navigation ("My Work" / "Recurring" / "How It 
 11. [ ] Engine View active: feed cards show footer with routing/agent/cost/timing; process detail shows full execution trace
 12. [ ] Three-panel layout: sidebar (w-64) + center (flex-1) + right panel (w-80, collapsible)
 13. [ ] Progressive reveal: new users see conversation-only; Self can trigger workspace transition; user preference persisted
+14. [ ] Responsive breakpoints (UX spec 3.7): ≥1280px full three-panel; 1024–1279px sidebar collapses to icon rail; <1024px Self panel becomes overlay/drawer, sidebar becomes hamburger
+15. [ ] User preference for surface mode (conversation vs workspace) persisted in DB (user_preferences table or self-scoped memory)
 
 ## Review Process
 

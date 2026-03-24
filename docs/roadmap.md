@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-03-24
-**Current phase:** Phase 6 complete + Brief 037 (Integration Generation). 279 tests (20 test files). PM triages next work.
+**Last updated:** 2026-03-25
+**Current phase:** Phase 10 in progress. Brief 039 (Web Foundation) complete — web app running, Self streaming, setup page, 5 LLM connection methods (CLI subscriptions + API keys + Ollama). 306 tests (22 test files). Briefs 040 + 041 unblocked for parallel build.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -465,6 +465,11 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | "Teach this" (bridge feedback to learning) | human-layer.md | Original |
 | "Approve batch" / "Spot-check N" | human-layer.md | Original |
 | Progressive disclosure (boiling frog) | human-layer.md | Original |
+| **Surface Protocol (ADR-021)** | | |
+| Self emits typed ContentBlock[] (13 block types, not string) | ADR-021 | Original — Adaptive Cards (pattern), Vercel AI SDK (pattern), Slack/Telegram (pattern) |
+| Per-surface renderers (web=React, Telegram=inline keyboards, CLI=prompts) | ADR-021 | Original |
+| Action callbacks via handleSurfaceAction() — single entry point | ADR-021 | Slack action_id + Telegram callback_data (pattern) |
+| Graceful degradation — unknown blocks fall back to text | ADR-021 | Adaptive Cards fallbackText (pattern) |
 | **Composition + Output principles (ADR-009 v2)** | | |
 | Process output schemas (5 destination types, static/dynamic lifecycle) | ADR-009 v2, Insight-066 | Original + json-render spec types (adopt) |
 | Catalog-constrained view rendering (catalog → registry → renderer) | ADR-009 v2 | json-render (adopt, not depend — Insight-068) |

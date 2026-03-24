@@ -32,8 +32,11 @@ A working Next.js application where the user opens `localhost:3000`, the Self gr
 1. `docs/briefs/038-phase-10-mvp-architecture.md` — parent brief architecture
 2. `docs/research/phase-10-mvp-dashboard-ux.md` — UX spec (sections 1, 2, 5)
 3. `docs/research/phase-10-dashboard-workspace.md` — AI SDK Elements research
-4. `src/engine/self.ts` — existing Self implementation
-5. `src/engine/events.ts` — existing harness event emitter
+4. `docs/research/visual-identity-design-system-ux.md` — colour palette, typography, spacing, elevation, component styling. Design tokens for `globals.css`
+5. `docs/research/ui-build-strategy-ux.md` — build workflow: design tokens → HTML prototypes → reference-driven build → visual QA
+6. `docs/prototypes/` — HTML prototypes as pixel-level visual references (P08-P20)
+7. `src/engine/self.ts` — existing Self implementation
+8. `src/engine/events.ts` — existing harness event emitter
 
 ## Constraints
 
@@ -42,7 +45,7 @@ A working Next.js application where the user opens `localhost:3000`, the Self gr
 - MUST use shadcn/ui for all UI primitives
 - MUST use Tailwind CSS v4
 - MUST NOT modify existing engine code beyond adding thin streaming adapters
-- MUST NOT introduce authentication — single-user MVP
+- MUST NOT introduce authentication — single-user MVP. Note: `/api/chat` and `/api/events` endpoints are open in MVP (acceptable for localhost). These MUST be auth-gated before any network-exposed deployment.
 - MUST NOT create a separate API server — use Next.js Server Actions and Route Handlers
 - MUST default to conversation-only layout for new users
 - MUST thread a `userId` parameter (default: `"default"`) to not preclude future auth
@@ -57,6 +60,7 @@ A working Next.js application where the user opens `localhost:3000`, the Self gr
 | Vercel AI SDK v5 | Vercel | depend | `useChat`, streaming |
 | TanStack Query v5 | TanStack | depend | Data fetching, SSE |
 | Conversation UI | AI SDK Elements (Conversation, Message, PromptInput) | adopt | Source-adopt ~3 components |
+| Visual identity design tokens | `docs/research/visual-identity-design-system-ux.md` | original | Warm professional palette, typography, spacing baked into Tailwind theme |
 | SSE pattern | Paperclip | pattern | Event stream for real-time updates |
 
 ## What Changes (Work Products)
@@ -105,6 +109,8 @@ A working Next.js application where the user opens `localhost:3000`, the Self gr
 10. [ ] `userId` parameter defaults to `"default"` and threads through Self and engine calls
 11. [ ] Engine credentials and internals never reach the browser — all engine calls are server-side
 12. [ ] `pnpm-workspace.yaml` configures monorepo, `pnpm dev` from root starts the web app
+13. [ ] Design tokens from visual identity spec baked into `globals.css`: colour palette (warm neutrals + terracotta accent), Inter font, 8px spacing grid, elevation shadows. App does NOT look like default shadcn.
+14. [ ] HTML prototypes in `docs/prototypes/` used as visual references — Builder screenshots and compares during implementation (visual QA gate per build strategy)
 
 ## Review Process
 

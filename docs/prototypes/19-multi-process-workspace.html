@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Multi-Process Workspace (Jordan, 4 Processes)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --negative: hsl(0 65% 50%);
+    --negative-subtle: hsl(0 50% 96%);
+    --sidebar-bg: hsl(38 16% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 240px 1fr 320px;
+    height: 100vh;
+  }
+
+  /* ═══ SIDEBAR — multiple departments now ═══ */
+  .sidebar {
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-header {
+    padding: 0 18px 16px;
+  }
+
+  .sidebar-logo {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .sidebar-tagline {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .sidebar-section { padding: 0 10px; margin-bottom: 4px; }
+
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 14px 8px 6px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    font-size: 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+    min-height: 34px;
+  }
+
+  .sidebar-item:hover { background: hsl(40 12% 91%); }
+  .sidebar-item.active {
+    background: var(--surface-raised);
+    box-shadow: 0 1px 2px hsl(30 10% 15% / 0.04);
+    font-weight: 500;
+  }
+
+  .sidebar-item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sidebar-dot.healthy { background: var(--positive); }
+  .sidebar-dot.attention { background: var(--accent); }
+  .sidebar-dot.warning { background: var(--caution); }
+  .sidebar-dot.problem { background: var(--negative); }
+
+  .sidebar-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-text);
+    background: var(--accent);
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0 6px;
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-footer {
+    padding: 0 10px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .sidebar-footer .sidebar-item {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  /* ═══ CENTRE FEED ═══ */
+  .feed {
+    overflow-y: auto;
+    padding: 28px 28px 48px;
+  }
+
+  .feed::-webkit-scrollbar { width: 6px; }
+  .feed::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  .feed-inner {
+    max-width: 660px;
+    margin: 0 auto;
+  }
+
+  /* Brief */
+  .brief {
+    background: var(--surface-raised);
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .brief-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .brief-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .brief-body {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .brief-body p + p { margin-top: 8px; }
+  .brief-body strong { font-weight: 600; }
+
+  /* Department metrics */
+  .dept-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .dept-metric {
+    text-align: center;
+  }
+
+  .dept-metric-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .dept-metric-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Process health row — compact for multi-process */
+  .health-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .health-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: box-shadow 0.15s;
+  }
+
+  .health-card:hover { box-shadow: 0 2px 8px hsl(30 10% 15% / 0.05); }
+
+  .health-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .health-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .health-card-status {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .hstatus-good { background: var(--positive-subtle); color: var(--positive); }
+  .hstatus-attention { background: var(--caution-subtle); color: hsl(38 60% 35%); }
+  .hstatus-problem { background: var(--negative-subtle); color: var(--negative); }
+  .hstatus-new { background: var(--accent-subtle); color: var(--accent); }
+
+  .health-card-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  .health-card-dept {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Section label */
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+    margin-top: 4px;
+  }
+
+  /* Feed cards */
+  .feed-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .feed-card.urgent { border-left: 3px solid var(--accent); }
+  .feed-card.warning { border-left: 3px solid var(--caution); }
+  .feed-card.problem { border-left: 3px solid var(--negative); }
+
+  .feed-card-inner { padding: 14px 16px; }
+
+  .feed-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .feed-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .feed-card-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-review { background: var(--accent-subtle); color: var(--accent); }
+  .badge-info { background: var(--caution-subtle); color: hsl(38 60% 35%); }
+  .badge-fail { background: var(--negative-subtle); color: var(--negative); }
+
+  .feed-card-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .feed-card-body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .feed-card-dept {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  .feed-card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Impact card — Jordan's leadership value */
+  .impact-card {
+    background: var(--accent-subtle);
+    border: 1px solid hsl(24 60% 88%);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+
+  .impact-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .impact-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .impact-stat {
+    text-align: center;
+    padding: 10px;
+    background: var(--surface-raised);
+    border-radius: 8px;
+  }
+
+  .impact-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .impact-stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .impact-note {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* ═══ RIGHT PANEL ═══ */
+  .self-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .self-panel-header {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .self-panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .self-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 14px;
+  }
+
+  .self-messages::-webkit-scrollbar { width: 4px; }
+  .self-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .panel-msg {
+    line-height: 1.55;
+    color: var(--text-primary);
+    padding-left: 12px;
+  }
+
+  .panel-msg.from-user {
+    background: var(--accent-subtle);
+    padding: 8px 12px;
+    border-radius: 14px;
+    align-self: flex-end;
+    max-width: 85%;
+    padding-left: 12px;
+  }
+
+  .panel-msg .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
+  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+  .self-panel-input {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .panel-input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .panel-input-container:focus-within { border-color: var(--accent); }
+
+  .panel-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .panel-input-container input::placeholder { color: var(--text-muted); }
+
+  .panel-send {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
+
+  @media (max-width: 1100px) {
+    .workspace { grid-template-columns: 230px 1fr; }
+    .self-panel { display: none; }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="workspace">
+
+  <!-- ═══ SIDEBAR — Jordan has processes across 3 departments ═══ -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">Ditto</div>
+      <div class="sidebar-tagline">5 things across 3 teams</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Needs you</div>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Reference check results</span>
+        <span class="sidebar-count">2</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Month-end reconciliation</span>
+        <span class="sidebar-count">1</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Weekly report failed</span>
+        <span class="sidebar-dot problem"></span>
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Processes</div>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">HR — Reference checks</span>
+        <span class="sidebar-dot healthy"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Finance — Reconciliation</span>
+        <span class="sidebar-dot healthy"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Ops — Weekly reports</span>
+        <span class="sidebar-dot problem"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">IT — Ticket triage</span>
+        <span class="sidebar-dot attention"></span>
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+      <a class="sidebar-item active" href="#">
+        <span class="sidebar-item-text">Home</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">What I know</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Impact report</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══ CENTRE FEED ═══ -->
+  <main class="feed">
+    <div class="feed-inner">
+
+      <!-- Brief — cross-department -->
+      <div class="brief">
+        <div class="brief-header">
+          <span class="self-dot"></span>
+          <span class="brief-label">This morning</span>
+        </div>
+        <div class="brief-body">
+          <p><strong>3 things across HR and Finance.</strong> 2 reference checks are ready. Month-end reconciliation found 3 exceptions. Ops weekly report failed — the data source changed, I need your help.</p>
+        </div>
+        <div class="dept-metrics">
+          <div class="dept-metric">
+            <div class="dept-metric-value">12</div>
+            <div class="dept-metric-label">Ref checks (total)</div>
+          </div>
+          <div class="dept-metric">
+            <div class="dept-metric-value">3</div>
+            <div class="dept-metric-label">Recon exceptions</div>
+          </div>
+          <div class="dept-metric">
+            <div class="dept-metric-value">47</div>
+            <div class="dept-metric-label">Tickets triaged</div>
+          </div>
+          <div class="dept-metric">
+            <div class="dept-metric-value">8.5d</div>
+            <div class="dept-metric-label">Saved this month</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Process health grid -->
+      <div class="health-row">
+        <div class="health-card">
+          <div class="health-card-top">
+            <div class="health-card-title">Reference checks</div>
+            <span class="health-card-status hstatus-good">Strong</span>
+          </div>
+          <div class="health-card-body">12 completed, 10 clean. Turnaround: 1 day (was 5).</div>
+          <div class="health-card-dept">HR</div>
+        </div>
+        <div class="health-card">
+          <div class="health-card-top">
+            <div class="health-card-title">Reconciliation</div>
+            <span class="health-card-status hstatus-good">Running</span>
+          </div>
+          <div class="health-card-body">Month-end in progress. 3 exceptions flagged.</div>
+          <div class="health-card-dept">Finance</div>
+        </div>
+        <div class="health-card">
+          <div class="health-card-top">
+            <div class="health-card-title">Weekly reports</div>
+            <span class="health-card-status hstatus-problem">Failed</span>
+          </div>
+          <div class="health-card-body">Data source API changed. Needs your input.</div>
+          <div class="health-card-dept">Ops</div>
+        </div>
+        <div class="health-card">
+          <div class="health-card-top">
+            <div class="health-card-title">Ticket triage</div>
+            <span class="health-card-status hstatus-new">2 weeks old</span>
+          </div>
+          <div class="health-card-body">47 triaged. Accuracy improving — 89% match.</div>
+          <div class="health-card-dept">IT</div>
+        </div>
+      </div>
+
+      <!-- Needs attention -->
+      <div class="section-label">Needs you</div>
+
+      <div class="feed-card problem">
+        <div class="feed-card-inner">
+          <div class="feed-card-top">
+            <div class="feed-card-title">Weekly reports can't run</div>
+            <span class="feed-card-badge badge-fail">Failed</span>
+          </div>
+          <div class="feed-card-subtitle">Ops &middot; Failed last night</div>
+          <div class="feed-card-body">
+            The Salesforce export endpoint changed. I can't pull this week's pipeline data. I need the new URL or API key.
+          </div>
+          <div class="feed-card-dept">Affects: Ops weekly report &middot; 3 department heads waiting</div>
+        </div>
+        <div class="feed-card-actions">
+          <button class="btn btn-primary">Fix this now</button>
+          <button class="btn btn-ghost">I'll handle it manually</button>
+        </div>
+      </div>
+
+      <div class="feed-card urgent">
+        <div class="feed-card-inner">
+          <div class="feed-card-top">
+            <div class="feed-card-title">2 reference checks ready</div>
+            <span class="feed-card-badge badge-review">Review</span>
+          </div>
+          <div class="feed-card-subtitle">HR &middot; For Sarah Chen and Marcus Webb</div>
+          <div class="feed-card-body">
+            All 3 referees responded for both candidates. No concerns flagged. Summaries ready for hiring managers.
+          </div>
+        </div>
+        <div class="feed-card-actions">
+          <button class="btn btn-primary">Review &amp; send</button>
+          <button class="btn btn-ghost">View details</button>
+        </div>
+      </div>
+
+      <div class="feed-card warning">
+        <div class="feed-card-inner">
+          <div class="feed-card-top">
+            <div class="feed-card-title">3 reconciliation exceptions</div>
+            <span class="feed-card-badge badge-info">Exceptions</span>
+          </div>
+          <div class="feed-card-subtitle">Finance &middot; Month-end March</div>
+          <div class="feed-card-body">
+            $2,340 unmatched across 3 transactions. 2 look like timing differences (will clear). 1 needs investigation — vendor invoice doesn't match PO.
+          </div>
+        </div>
+        <div class="feed-card-actions">
+          <button class="btn btn-primary">Review exceptions</button>
+          <button class="btn btn-ghost">Show all matches</button>
+        </div>
+      </div>
+
+      <!-- Impact — Jordan's leadership ammunition -->
+      <div class="impact-card">
+        <div class="impact-title">Your impact this month</div>
+        <div class="impact-stats">
+          <div class="impact-stat">
+            <div class="impact-stat-value">8.5</div>
+            <div class="impact-stat-label">Person-days saved</div>
+          </div>
+          <div class="impact-stat">
+            <div class="impact-stat-value">4x</div>
+            <div class="impact-stat-label">Faster ref checks</div>
+          </div>
+          <div class="impact-stat">
+            <div class="impact-stat-value">3</div>
+            <div class="impact-stat-label">Departments served</div>
+          </div>
+          <div class="impact-stat">
+            <div class="impact-stat-value">89%</div>
+            <div class="impact-stat-label">Ticket triage accuracy</div>
+          </div>
+        </div>
+        <div class="impact-note">Reference checks: 5 days &rarr; 1 day. Reconciliation: 2 person-days &rarr; 3 hours. This data is ready to present to leadership whenever you need it.</div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ═══ RIGHT PANEL ═══ -->
+  <aside class="self-panel">
+    <div class="self-panel-header">
+      <span class="self-dot"></span>
+      <span class="self-panel-title">Ditto</span>
+    </div>
+
+    <div class="self-messages">
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        Morning Jordan. The Salesforce issue is the urgent one — 3 department heads are expecting their weekly report today. The ref checks and recon can wait until after.
+      </div>
+
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        On the positive side — your leadership meeting is Thursday. The impact numbers are strong. Want me to put together a one-pager?
+      </div>
+
+      <div class="panel-msg from-user">
+        Yeah, do the one-pager. I'll fix the Salesforce thing now.
+      </div>
+
+      <div class="panel-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Ditto</span>
+        </div>
+        On it. I'll have the impact summary in your review queue by lunch. For Salesforce — when you've got the new endpoint, just paste it here and I'll reconnect the report.
+      </div>
+    </div>
+
+    <div class="self-panel-input">
+      <div class="panel-input-container">
+        <input type="text" placeholder="What's on your mind?">
+        <button class="panel-send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<div class="proto-nav"><a href="18-second-process.html">&larr; Second Process</a><span class="pn-t"><a href="index.html">P19 Multi-Process</a></span><a href="20-something-wrong.html">Something Wrong &rarr;</a></div><!-- pnav -->
+</body>
+</html>

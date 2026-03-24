@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Chat Seed → Process Unfolds</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrapper {
+    max-width: 660px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
+  }
+
+  .flow {
+    flex: 1;
+    padding: 48px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ═══ Messages (minimal — chat is the seed, not the focus) ═══ */
+  .msg { max-width: 85%; font-size: 15px; line-height: 1.6; }
+  .msg.self { padding: 2px 0 2px 16px; }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent-subtle);
+    padding: 10px 16px;
+    border-radius: 18px 18px 4px 18px;
+  }
+
+  .msg p + p { margin-top: 8px; }
+
+  .sender {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .sender-label { font-size: 13px; font-weight: 500; color: var(--text-muted); }
+
+  /* ═══ Progress strip ═══ */
+  .progress-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .progress-strip-bar {
+    flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+    max-width: 180px;
+  }
+  .progress-strip-fill {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+  .progress-strip strong { color: var(--accent); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════
+     INPUT CARDS — catalog components that accept input
+     These are what the Self produces instead of text questions
+  ═══════════════════════════════════════════ */
+
+  .input-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-left: 16px;
+    max-width: 500px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .input-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .input-card.completed {
+    border-color: var(--positive);
+    background: var(--positive-subtle);
+  }
+
+  .input-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .input-card-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+
+  .input-card-status {
+    font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 6px;
+  }
+  .status-next { background: var(--accent-subtle); color: var(--accent); }
+  .status-done { background: var(--positive-subtle); color: var(--positive); }
+  .status-waiting { background: var(--surface); color: var(--text-muted); }
+
+  .input-card-context {
+    font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;
+  }
+
+  /* Select input */
+  .select-options {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .select-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s;
+    font-size: 14px;
+  }
+  .select-option:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .select-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+  .select-radio {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.12s;
+  }
+  .select-option.selected .select-radio {
+    border-color: var(--accent);
+  }
+  .select-radio-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .select-option.selected .select-radio-dot { opacity: 1; }
+  .select-option-content { flex: 1; }
+  .select-option-label { font-weight: 500; color: var(--text-primary); }
+  .select-option-desc { font-size: 13px; color: var(--text-muted); margin-top: 1px; }
+
+  /* Guided fields */
+  .guided-fields { display: flex; flex-direction: column; gap: 10px; }
+  .guided-field { display: flex; flex-direction: column; gap: 4px; }
+  .guided-field label {
+    font-size: 12px; font-weight: 500; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .guided-field input, .guided-field select {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px; color: var(--text-primary);
+    padding: 8px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px; background: var(--bg);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .guided-field input:focus, .guided-field select:focus {
+    border-color: var(--accent);
+  }
+  .guided-field input::placeholder { color: var(--text-muted); }
+
+  /* Tag picker */
+  .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.12s;
+    border: 1.5px solid var(--border);
+    background: var(--bg); color: var(--text-secondary);
+  }
+  .tag:hover { border-color: var(--border-strong); }
+  .tag.selected {
+    border-color: var(--accent); background: var(--accent-subtle); color: var(--accent);
+  }
+  .tag-custom {
+    border-style: dashed; color: var(--text-muted);
+  }
+
+  /* Comparison / "more like this" */
+  .comparison-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .comparison-option {
+    padding: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px; line-height: 1.5;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .comparison-option:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .comparison-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+  .comparison-label {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .comparison-option.selected .comparison-label { color: var(--accent); }
+
+  /* Card actions */
+  .input-card-actions {
+    display: flex; gap: 8px; margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .input-card-fallback {
+    font-size: 13px; color: var(--text-muted); margin-top: 10px;
+    text-align: center;
+  }
+  .input-card-fallback a {
+    color: var(--accent); text-decoration: none; font-weight: 500;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif; font-size: 13px; font-weight: 500;
+    border: none; border-radius: 8px; padding: 8px 16px;
+    cursor: pointer; transition: all 0.12s; line-height: 1.3;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* ═══ Completed card (collapsed) ═══ */
+  .completed-summary {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; margin-left: 16px; max-width: 500px;
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 88%);
+    border-radius: 10px;
+    font-size: 14px; color: var(--text-primary);
+  }
+  .completed-check {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--positive); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .completed-text { flex: 1; }
+  .completed-edit {
+    font-size: 12px; color: var(--text-muted); cursor: pointer;
+    text-decoration: none;
+  }
+  .completed-edit:hover { color: var(--accent); }
+
+  /* ═══ Prompt input ═══ */
+  .input-wrapper {
+    position: sticky; bottom: 0;
+    padding: 16px 0 24px;
+    background: linear-gradient(transparent, var(--bg) 16px);
+  }
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex; align-items: flex-end; gap: 10px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
+  }
+  .input-textarea {
+    flex: 1; border: none; outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5;
+    color: var(--text-primary); background: transparent;
+    resize: none; min-height: 24px; max-height: 144px;
+  }
+  .input-textarea::placeholder { color: var(--text-muted); }
+  .send-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    background: var(--accent); color: var(--accent-text);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .send-btn svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
+
+  @media (max-width: 768px) {
+    .wrapper { padding: 0 16px; }
+    .input-card, .completed-summary { margin-left: 8px; max-width: 100%; }
+    .comparison-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <div class="flow">
+
+    <!-- ═══ THE SEED: Libby's first message ═══ -->
+    <div class="msg user">
+      <p>I'm a doula trying to build an online education business and I don't know where to start. I'm also a mum and everything's scattered.</p>
+    </div>
+
+    <!-- ═══ THE SELF RECOGNISES → UNFOLDS ═══ -->
+    <div class="sender"><span class="dot"></span><span class="sender-label">Self</span></div>
+    <div class="msg self">
+      <p>I can help with that. Let me understand your world, then I'll suggest what to work on first. A few quick things:</p>
+    </div>
+
+    <!-- Progress strip -->
+    <div class="progress-strip">
+      <strong>Getting started</strong>
+      <div class="progress-strip-bar">
+        <div class="progress-strip-fill" style="width: 15%"></div>
+      </div>
+      1 of 6
+    </div>
+
+    <!-- ═══ INPUT CARD 1: Business stage (completed) ═══ -->
+    <div class="completed-summary">
+      <span class="completed-check">✓</span>
+      <span class="completed-text"><strong>Stage:</strong> Building — not yet launched</span>
+      <a class="completed-edit" href="#">edit</a>
+    </div>
+
+    <!-- ═══ INPUT CARD 2: Ideal client (completed) ═══ -->
+    <div class="completed-summary">
+      <span class="completed-check">✓</span>
+      <span class="completed-text"><strong>Ideal client:</strong> First-time mums, professional women 30s, overwhelmed, want practical not theoretical</span>
+      <a class="completed-edit" href="#">edit</a>
+    </div>
+
+    <!-- ═══ INPUT CARD 3: Brand voice — ACTIVE ═══ -->
+    <div class="sender"><span class="dot"></span><span class="sender-label">Self</span></div>
+    <div class="msg self">
+      <p>Now the important one — your voice. This shapes everything I create for you.</p>
+    </div>
+
+    <div class="input-card active">
+      <div class="input-card-header">
+        <span class="input-card-title">Your Voice</span>
+        <span class="input-card-status status-next">Defining</span>
+      </div>
+      <div class="input-card-context">
+        Which of these sounds most like you when you talk to a nervous first-time mum?
+      </div>
+
+      <div class="select-options">
+        <div class="select-option">
+          <div class="select-radio"><div class="select-radio-dot"></div></div>
+          <div class="select-option-content">
+            <div class="select-option-label">Reassuring expert</div>
+            <div class="select-option-desc">"Here's what the evidence says, and here's what I'd do"</div>
+          </div>
+        </div>
+        <div class="select-option selected">
+          <div class="select-radio"><div class="select-radio-dot"></div></div>
+          <div class="select-option-content">
+            <div class="select-option-label">Warm friend who's been there</div>
+            <div class="select-option-desc">"I've been where you are. You're doing great. Here's what helped me"</div>
+          </div>
+        </div>
+        <div class="select-option">
+          <div class="select-radio"><div class="select-radio-dot"></div></div>
+          <div class="select-option-content">
+            <div class="select-option-label">Straight talker</div>
+            <div class="select-option-desc">"Here's what actually works. Skip the fluff."</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-card-fallback">
+        <a href="#">Or describe it in your own words →</a>
+      </div>
+    </div>
+
+    <!-- ═══ SELF: Refines based on selection ═══ -->
+    <div class="sender"><span class="dot"></span><span class="sender-label">Self</span></div>
+    <div class="msg self">
+      <p>"Warm friend who's been there" — got it. Let me refine. Pick the 3 words that best describe how you want people to feel:</p>
+    </div>
+
+    <!-- ═══ INPUT CARD 3b: Brand words (tag picker) ═══ -->
+    <div class="input-card active">
+      <div class="input-card-header">
+        <span class="input-card-title">Brand Words</span>
+        <span class="input-card-status status-next">Pick 3</span>
+      </div>
+
+      <div class="tag-picker">
+        <span class="tag selected">Safe</span>
+        <span class="tag selected">Practical</span>
+        <span class="tag">Empowering</span>
+        <span class="tag selected">Real</span>
+        <span class="tag">Gentle</span>
+        <span class="tag">Confident</span>
+        <span class="tag">Calm</span>
+        <span class="tag">No-nonsense</span>
+        <span class="tag">Nurturing</span>
+        <span class="tag tag-custom">+ Add your own</span>
+      </div>
+
+      <div class="input-card-actions">
+        <button class="btn btn-primary">Confirm: Safe, Practical, Real</button>
+      </div>
+    </div>
+
+    <!-- ═══ SELF: Voice sample comparison ═══ -->
+    <div class="sender"><span class="dot"></span><span class="sender-label">Self</span></div>
+    <div class="msg self">
+      <p>Safe, practical, real. Last check — which of these sounds more like you?</p>
+    </div>
+
+    <!-- ═══ INPUT CARD 3c: Tone comparison ═══ -->
+    <div class="input-card active">
+      <div class="input-card-header">
+        <span class="input-card-title">Voice Check</span>
+        <span class="input-card-status status-next">Pick one</span>
+      </div>
+      <div class="input-card-context">
+        Imagine a first-time mum asks: "Is it normal to feel terrified about giving birth?"
+      </div>
+
+      <div class="comparison-grid">
+        <div class="comparison-option selected">
+          <div class="comparison-label">Option A</div>
+          "Completely normal. Most first-time mums feel exactly this way. The fear usually comes from not knowing what to expect — and that's something we can work on together."
+        </div>
+        <div class="comparison-option">
+          <div class="comparison-label">Option B</div>
+          "Oh absolutely! Birth can feel scary but it's also this incredible, transformative experience. Trust your body — it knows what to do. You've got this, mama!"
+        </div>
+      </div>
+
+      <div class="input-card-actions">
+        <button class="btn btn-primary">A — that's me</button>
+        <button class="btn btn-ghost">Neither — let me show you</button>
+      </div>
+    </div>
+
+    <!-- Progress strip — updated -->
+    <div class="progress-strip">
+      <strong>Getting started</strong>
+      <div class="progress-strip-bar">
+        <div class="progress-strip-fill" style="width: 55%"></div>
+      </div>
+      3 of 6 &middot; Voice almost done
+    </div>
+
+    <!-- ═══ Upcoming cards (visible but not yet active) ═══ -->
+    <div class="input-card" style="opacity: 0.5;">
+      <div class="input-card-header">
+        <span class="input-card-title">What's Eating Your Time?</span>
+        <span class="input-card-status status-waiting">Up next</span>
+      </div>
+      <div class="input-card-context" style="color: var(--text-muted);">
+        Rank the things taking most of your time — this helps me suggest where to start.
+      </div>
+    </div>
+
+    <div class="input-card" style="opacity: 0.35;">
+      <div class="input-card-header">
+        <span class="input-card-title">Your First Goal</span>
+        <span class="input-card-status status-waiting">After pain points</span>
+      </div>
+    </div>
+
+    <div class="input-card" style="opacity: 0.2;">
+      <div class="input-card-header">
+        <span class="input-card-title">Workspaces</span>
+        <span class="input-card-status status-waiting">Last step</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Prompt input — always available -->
+  <div class="input-wrapper">
+    <div class="input-container">
+      <textarea class="input-textarea" rows="1" placeholder="Or just tell me in your own words..."></textarea>
+      <button class="send-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Toggle select options
+  document.querySelectorAll('.select-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      opt.closest('.select-options').querySelectorAll('.select-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Toggle tags
+  document.querySelectorAll('.tag:not(.tag-custom)').forEach(tag => {
+    tag.addEventListener('click', () => tag.classList.toggle('selected'));
+  });
+
+  // Toggle comparison
+  document.querySelectorAll('.comparison-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      opt.closest('.comparison-grid').querySelectorAll('.comparison-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Textarea resize
+  const textarea = document.querySelector('.input-textarea');
+  textarea.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 144) + 'px';
+  });
+</script>
+
+</body>
+</html>

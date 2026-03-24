@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — First Conversation (Libby)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══════════════════════════════════════════
+     LAYOUT — Still no sidebar. It's too early.
+     Just the conversation + a knowledge panel
+     that slides in once things start being captured.
+  ═══════════════════════════════════════════ */
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .conversation-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Knowledge panel — hidden at first, slides in */
+  .knowledge-panel {
+    width: 320px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    transition: width 0.3s ease, opacity 0.3s ease;
+  }
+
+  .knowledge-panel.hidden {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    border: none;
+  }
+
+  .knowledge-panel-header {
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .knowledge-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .knowledge-panel-status {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .knowledge-panel-body {
+    padding: 16px 20px;
+    flex: 1;
+  }
+
+  /* Knowledge items — what Ditto knows, building up */
+  .knowledge-item {
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .knowledge-item:last-child {
+    border-bottom: none;
+  }
+
+  .knowledge-item-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .knowledge-item-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .knowledge-item-dot.captured { background: var(--positive); }
+  .knowledge-item-dot.partial { background: var(--accent); }
+  .knowledge-item-dot.empty { background: var(--border-strong); }
+
+  .knowledge-item-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  .knowledge-item-content {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-primary);
+  }
+
+  .knowledge-item-content.empty {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .knowledge-item-source {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .knowledge-item-edit {
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+    margin-left: 8px;
+    cursor: pointer;
+  }
+
+  .knowledge-item-edit:hover {
+    text-decoration: underline;
+  }
+
+  /* ═══ Saved badge — appears on messages that created knowledge ═══ */
+  .saved-signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--positive);
+    font-weight: 500;
+    margin-top: 6px;
+    padding-left: 16px;
+  }
+
+  .saved-signal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--positive);
+  }
+
+  /* ═══ CONVERSATION ═══ */
+  .conversation-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 24px;
+  }
+
+  .conversation-messages {
+    max-width: 580px;
+    margin: 0 auto;
+    padding: 48px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Message groups */
+  .message-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 18px;
+  }
+
+  .message-group.self { align-items: flex-start; }
+  .message-group.user { align-items: flex-end; }
+
+  .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .sender-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .message {
+    max-width: 85%;
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .message-group.self .message { padding: 2px 0 2px 16px; }
+
+  .message-group.user .message {
+    background: var(--accent-subtle);
+    padding: 10px 16px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message p + p { margin-top: 10px; }
+
+  /* ═══ STRUCTURED INPUT CARDS ═══ */
+  .input-card {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin: 4px 0 4px 16px;
+    max-width: 460px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .input-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .input-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .input-card-context {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+
+  /* Select options */
+  .select-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .select-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s;
+    font-size: 14px;
+  }
+
+  .select-option:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  .select-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  .select-radio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.12s;
+  }
+
+  .select-option.selected .select-radio { border-color: var(--accent); }
+
+  .select-radio-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .select-option.selected .select-radio-dot { opacity: 1; }
+
+  .select-option-label {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .select-option-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* Tag picker */
+  .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.12s;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--text-secondary);
+  }
+  .tag:hover { border-color: var(--border-strong); }
+  .tag.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  /* Comparison cards */
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .comparison-option {
+    padding: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .comparison-option:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  .comparison-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  .comparison-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .comparison-option.selected .comparison-label { color: var(--accent); }
+
+  /* Completed summary (collapsed card) */
+  .completed-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-left: 16px;
+    max-width: 460px;
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 88%);
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .completed-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--positive);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .completed-text { flex: 1; font-size: 13.5px; }
+  .completed-text strong { font-weight: 600; }
+
+  .completed-edit {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .completed-edit:hover { color: var(--accent); }
+
+  /* Card fallback */
+  .input-card-fallback {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  .input-card-fallback a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  /* Card actions */
+  .input-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ═══ PROCESS PROPOSAL ═══ */
+  .process-proposal {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--accent);
+    border-radius: 14px;
+    padding: 20px;
+    margin: 8px 0 4px 16px;
+    max-width: 460px;
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .proposal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .proposal-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .proposal-steps {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .proposal-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .proposal-step:last-child { border-bottom: none; }
+
+  .step-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .step-icon.done { background: var(--positive); color: white; }
+  .step-icon.next { background: var(--accent); color: white; }
+  .step-icon.upcoming {
+    background: var(--surface);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-muted);
+  }
+
+  .step-text { flex: 1; color: var(--text-primary); }
+  .step-text.done { color: var(--text-secondary); }
+  .step-text.next { font-weight: 500; color: var(--accent); }
+  .step-text.upcoming { color: var(--text-muted); }
+
+  .proposal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Progress strip */
+  .progress-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .progress-strip-bar {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 160px;
+  }
+
+  .progress-strip-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .progress-strip strong { color: var(--accent); font-weight: 600; }
+
+  /* ═══ Buttons ═══ */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.12s;
+    line-height: 1.3;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* ═══ Prompt input ═══ */
+  .input-wrapper {
+    position: sticky;
+    bottom: 0;
+    padding: 16px 24px 24px;
+    background: linear-gradient(transparent, var(--bg) 16px);
+  }
+
+  .prompt-container {
+    max-width: 580px;
+    margin: 0 auto;
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .prompt-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
+  }
+
+  .prompt-textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: transparent;
+    resize: none;
+    min-height: 24px;
+    max-height: 120px;
+  }
+
+  .prompt-textarea::placeholder { color: var(--text-muted); }
+
+  .prompt-send {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .prompt-send svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
+
+  /* ═══ Responsive ═══ */
+  @media (max-width: 960px) {
+    .knowledge-panel { display: none; }
+  }
+
+  @media (max-width: 768px) {
+    .conversation-scroll { padding: 0 16px; }
+    .input-wrapper { padding: 16px 16px 24px; }
+    .message { max-width: 92%; }
+    .input-card, .completed-summary, .process-proposal { margin-left: 8px; max-width: 100%; }
+    .comparison-grid { grid-template-columns: 1fr; }
+  }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ═══════════════════════════════════════
+       CONVERSATION PANE
+  ═══════════════════════════════════════ -->
+  <div class="conversation-pane">
+    <div class="conversation-scroll">
+      <div class="conversation-messages">
+
+        <!-- ═══ Libby tapped "I'm building something" on day zero ═══ -->
+        <div class="message-group user">
+          <div class="message">
+            <p>I'm a doula building an online education business and I don't know where to start. Everything's scattered.</p>
+          </div>
+        </div>
+
+        <!-- ═══ Self recognises, starts gathering ═══ -->
+        <div class="message-group self">
+          <div class="sender-row">
+            <span class="self-dot"></span>
+            <span class="sender-name">Ditto</span>
+          </div>
+          <div class="message">
+            <p>I can help with that. Let me understand your world first, then I'll suggest what to tackle and in what order. A few quick things:</p>
+          </div>
+        </div>
+
+        <!-- Progress strip — shows we're moving somewhere -->
+        <div class="progress-strip">
+          <strong>Understanding you</strong>
+          <div class="progress-strip-bar">
+            <div class="progress-strip-fill" style="width: 10%"></div>
+          </div>
+          Step 1
+        </div>
+
+        <!-- ═══ INPUT CARD: Who are you building for? ═══ -->
+        <div class="completed-summary">
+          <span class="completed-check">&#10003;</span>
+          <span class="completed-text"><strong>You:</strong> Doula building online education + coaching. Mum.</span>
+          <a class="completed-edit" href="#">edit</a>
+        </div>
+
+        <!-- Saved signal — knowledge was captured -->
+        <div class="saved-signal">
+          <span class="saved-signal-dot"></span>
+          Saved to your profile
+        </div>
+
+        <!-- ═══ INPUT CARD: Who's your ideal client? (completed) ═══ -->
+        <div class="completed-summary">
+          <span class="completed-check">&#10003;</span>
+          <span class="completed-text"><strong>Your client:</strong> First-time mums, professional women 30s, overwhelmed, want practical not theory</span>
+          <a class="completed-edit" href="#">edit</a>
+        </div>
+
+        <div class="saved-signal">
+          <span class="saved-signal-dot"></span>
+          Saved — this shapes everything I create for you
+        </div>
+
+        <!-- Updated progress -->
+        <div class="progress-strip">
+          <strong>Understanding you</strong>
+          <div class="progress-strip-bar">
+            <div class="progress-strip-fill" style="width: 45%"></div>
+          </div>
+          Voice is next
+        </div>
+
+        <!-- ═══ Self: Transition to voice ═══ -->
+        <div class="message-group self">
+          <div class="sender-row">
+            <span class="self-dot"></span>
+            <span class="sender-name">Ditto</span>
+          </div>
+          <div class="message">
+            <p>Good. Now the important one — your voice. This shapes every piece of content, every email, everything I write for you. Which of these sounds most like you?</p>
+          </div>
+        </div>
+
+        <!-- ═══ INPUT CARD: Voice archetype (active) ═══ -->
+        <div class="input-card active">
+          <div class="input-card-title">Your voice</div>
+          <div class="input-card-context">When a nervous first-time mum asks you for help, how do you naturally talk to her?</div>
+
+          <div class="select-options">
+            <div class="select-option">
+              <div class="select-radio"><div class="select-radio-dot"></div></div>
+              <div>
+                <div class="select-option-label">Reassuring expert</div>
+                <div class="select-option-desc">"Here's what the evidence says, and here's what I'd do"</div>
+              </div>
+            </div>
+            <div class="select-option selected">
+              <div class="select-radio"><div class="select-radio-dot"></div></div>
+              <div>
+                <div class="select-option-label">Warm friend who's been there</div>
+                <div class="select-option-desc">"I've been where you are. You're doing great. Here's what helped me"</div>
+              </div>
+            </div>
+            <div class="select-option">
+              <div class="select-radio"><div class="select-radio-dot"></div></div>
+              <div>
+                <div class="select-option-label">Straight talker</div>
+                <div class="select-option-desc">"Here's what actually works. Skip the rest."</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-card-fallback">
+            <a href="#">Or describe it in your own words</a>
+          </div>
+        </div>
+
+        <!-- ═══ Self refines — asks for brand words ═══ -->
+        <div class="message-group self">
+          <div class="sender-row">
+            <span class="self-dot"></span>
+            <span class="sender-name">Ditto</span>
+          </div>
+          <div class="message">
+            <p>"Warm friend who's been there" — that fits what you told me about being non-judgmental and practical. Let me narrow it down. Pick the 3 words that feel most like your brand:</p>
+          </div>
+        </div>
+
+        <!-- ═══ INPUT CARD: Brand words (tag picker) ═══ -->
+        <div class="input-card active">
+          <div class="input-card-title">Your brand in 3 words</div>
+          <div class="input-card-context">These will guide your content tone, your landing page, everything.</div>
+
+          <div class="tag-picker">
+            <span class="tag selected">Safe</span>
+            <span class="tag selected">Practical</span>
+            <span class="tag">Empowering</span>
+            <span class="tag selected">Real</span>
+            <span class="tag">Gentle</span>
+            <span class="tag">Confident</span>
+            <span class="tag">Calm</span>
+            <span class="tag">Nurturing</span>
+          </div>
+
+          <div class="input-card-actions">
+            <button class="btn btn-primary">Confirm: Safe, Practical, Real</button>
+          </div>
+        </div>
+
+        <!-- ═══ Self: Voice check with real examples ═══ -->
+        <div class="message-group self">
+          <div class="sender-row">
+            <span class="self-dot"></span>
+            <span class="sender-name">Ditto</span>
+          </div>
+          <div class="message">
+            <p>Last check. A first-time mum asks: "Is it normal to feel terrified about giving birth?" Which response sounds more like you?</p>
+          </div>
+        </div>
+
+        <!-- ═══ INPUT CARD: Voice comparison ═══ -->
+        <div class="input-card active">
+          <div class="comparison-grid">
+            <div class="comparison-option selected">
+              <div class="comparison-label">This one</div>
+              "Completely normal. Most first-time mums feel exactly this way. The fear usually comes from not knowing what to expect — and that's fixable."
+            </div>
+            <div class="comparison-option">
+              <div class="comparison-label">Or this</div>
+              "Oh absolutely! Birth can feel scary but it's also incredible. Trust your body — it knows what to do. You've got this, mama!"
+            </div>
+          </div>
+
+          <div class="input-card-actions">
+            <button class="btn btn-primary">First one — that's me</button>
+            <button class="btn btn-ghost">Neither — let me show you</button>
+          </div>
+        </div>
+
+        <!-- Voice completed + saved signal -->
+        <div class="completed-summary">
+          <span class="completed-check">&#10003;</span>
+          <span class="completed-text"><strong>Your voice:</strong> Warm, practical, experienced. Safe &middot; Practical &middot; Real. Not woo-woo, not clinical.</span>
+          <a class="completed-edit" href="#">edit</a>
+        </div>
+
+        <div class="saved-signal">
+          <span class="saved-signal-dot"></span>
+          Saved — I'll use this voice in everything I write for you
+        </div>
+
+        <!-- ═══════════════════════════════════════
+             THE TRANSITION — Self has enough. Proposes a plan.
+        ═══════════════════════════════════════ -->
+
+        <div class="message-group self">
+          <div class="sender-row">
+            <span class="self-dot"></span>
+            <span class="sender-name">Ditto</span>
+          </div>
+          <div class="message">
+            <p>I've got a clear picture of you, your client, and your voice. Here's what I'd suggest working through — each step builds on the last:</p>
+          </div>
+
+          <!-- ═══ PROCESS PROPOSAL ═══ -->
+          <div class="process-proposal">
+            <div class="proposal-title">Getting your business out there</div>
+            <div class="proposal-subtitle">Based on what you've told me</div>
+
+            <div class="proposal-steps">
+              <div class="proposal-step">
+                <div class="step-icon done">&#10003;</div>
+                <span class="step-text done">Understand you and your client</span>
+              </div>
+              <div class="proposal-step">
+                <div class="step-icon done">&#10003;</div>
+                <span class="step-text done">Define your voice</span>
+              </div>
+              <div class="proposal-step">
+                <div class="step-icon next">3</div>
+                <span class="step-text next">5 Instagram posts to test your message</span>
+              </div>
+              <div class="proposal-step">
+                <div class="step-icon upcoming">4</div>
+                <span class="step-text upcoming">Landing page with waitlist</span>
+              </div>
+              <div class="proposal-step">
+                <div class="step-icon upcoming">5</div>
+                <span class="step-text upcoming">Content plan for the first month</span>
+              </div>
+            </div>
+
+            <div class="proposal-actions">
+              <button class="btn btn-primary">Start with Instagram posts</button>
+              <button class="btn btn-secondary">Adjust this plan</button>
+            </div>
+          </div>
+
+          <div class="message">
+            <p>Steps 1 and 2 are done. The Instagram posts are the fastest way to test if your voice resonates — you'll have real posts in about 10 minutes that you can put out today.</p>
+            <p>Everything I create from here uses your voice and your client profile. If they drift, correct me — I'll learn and it'll stick.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Prompt input -->
+    <div class="input-wrapper">
+      <div class="prompt-container">
+        <textarea class="prompt-textarea" rows="1" placeholder="Or just tell me what you'd rather work on..."></textarea>
+        <button class="prompt-send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       KNOWLEDGE PANEL — What Ditto now knows
+       This appeared after the first piece of
+       knowledge was captured. Not before.
+  ═══════════════════════════════════════ -->
+  <div class="knowledge-panel">
+    <div class="knowledge-panel-header">
+      <span class="knowledge-panel-title">What I know</span>
+      <span class="knowledge-panel-status">Just started</span>
+    </div>
+
+    <div class="knowledge-panel-body">
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot captured"></span>
+          <span class="knowledge-item-label">You</span>
+        </div>
+        <div class="knowledge-item-content">
+          Doula building online education and coaching business. Also a mum. Everything's currently scattered.
+        </div>
+        <div class="knowledge-item-source">
+          From your first message
+          <a class="knowledge-item-edit" href="#">edit</a>
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot captured"></span>
+          <span class="knowledge-item-label">Your ideal client</span>
+        </div>
+        <div class="knowledge-item-content">
+          First-time mums. Professional women in their 30s. Research everything but overwhelmed. Want someone calm, practical, non-judgmental.
+        </div>
+        <div class="knowledge-item-source">
+          From our conversation
+          <a class="knowledge-item-edit" href="#">edit</a>
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot captured"></span>
+          <span class="knowledge-item-label">Your voice</span>
+        </div>
+        <div class="knowledge-item-content">
+          Warm friend who's been there. Safe, practical, real. Not woo-woo, not clinical. Honest, not sugarcoated. "I've been where you are."
+        </div>
+        <div class="knowledge-item-source">
+          Built from 3 inputs
+          <a class="knowledge-item-edit" href="#">edit</a>
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot captured"></span>
+          <span class="knowledge-item-label">Stage</span>
+        </div>
+        <div class="knowledge-item-content">
+          Building. Not yet launched. Doing courses, posting on Instagram inconsistently, sent a survey.
+        </div>
+        <div class="knowledge-item-source">
+          From our conversation
+          <a class="knowledge-item-edit" href="#">edit</a>
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot empty"></span>
+          <span class="knowledge-item-label">Pricing</span>
+        </div>
+        <div class="knowledge-item-content empty">
+          Not yet discussed
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot empty"></span>
+          <span class="knowledge-item-label">Competitors</span>
+        </div>
+        <div class="knowledge-item-content empty">
+          Not yet discussed
+        </div>
+      </div>
+
+      <div class="knowledge-item">
+        <div class="knowledge-item-header">
+          <span class="knowledge-item-dot empty"></span>
+          <span class="knowledge-item-label">Course structure</span>
+        </div>
+        <div class="knowledge-item-content empty">
+          Not yet discussed
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Toggle select options
+  document.querySelectorAll('.select-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      opt.closest('.select-options').querySelectorAll('.select-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Toggle tags
+  document.querySelectorAll('.tag').forEach(tag => {
+    tag.addEventListener('click', () => tag.classList.toggle('selected'));
+  });
+
+  // Toggle comparison
+  document.querySelectorAll('.comparison-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      opt.closest('.comparison-grid').querySelectorAll('.comparison-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Textarea resize
+  const textarea = document.querySelector('.prompt-textarea');
+  textarea.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+</script>
+
+<div class="proto-nav"><a href="08-day-zero.html">&larr; Day Zero</a><span class="pn-t"><a href="index.html">P09 First Conversation</a></span><a href="10-first-output.html">First Output &rarr;</a></div><!-- pnav -->
+</body>
+</html>

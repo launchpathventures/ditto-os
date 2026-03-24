@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ditto — Second Process (Rob Adds Follow-ups)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .conversation {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+
+  .top-bar-title { font-size: 16px; font-weight: 600; flex: 1; }
+
+  .messages {
+    flex: 1;
+    padding: 12px 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .msg-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .msg-group.self { align-items: flex-start; }
+  .msg-group.user { align-items: flex-end; }
+
+  .sender {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .self-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .sender-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .msg {
+    max-width: 88%;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .msg-group.self .msg { padding: 2px 0 2px 14px; }
+
+  .msg-group.user .msg {
+    background: var(--accent-subtle);
+    padding: 10px 14px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg p + p { margin-top: 8px; }
+
+  /* ═══ KNOWLEDGE REUSE SIGNAL ═══
+     When Ditto uses existing knowledge for the new process,
+     the user SEES it happening. Not invisible reuse.
+  */
+  .reuse-signal {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    margin-left: 14px;
+    max-width: 310px;
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 88%);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+  }
+
+  .reuse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--positive);
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  .reuse-signal strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  /* ═══ PROCESS PROPOSAL — simpler for second process ═══ */
+  .process-card {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--accent);
+    border-radius: 14px;
+    padding: 18px;
+    margin-left: 14px;
+    max-width: 330px;
+    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+  }
+
+  .process-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .process-card-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  .process-steps {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .process-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .process-step:last-child { border-bottom: none; }
+
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1.5px solid var(--border-strong);
+    color: var(--text-muted);
+  }
+
+  .step-text { color: var(--text-primary); flex: 1; }
+  .step-meta { font-size: 12px; color: var(--text-muted); }
+
+  .process-card-note {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .process-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  /* ═══ SETTINGS CARD — quick config, not a form ═══ */
+  .settings-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-left: 14px;
+    max-width: 330px;
+  }
+
+  .settings-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-label { color: var(--text-primary); }
+
+  .setting-value {
+    font-weight: 500;
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .settings-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Confirmed */
+  .confirmed {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    margin-left: 14px;
+    max-width: 330px;
+    background: var(--positive-subtle);
+    border: 1px solid hsl(145 40% 85%);
+    border-radius: 12px;
+  }
+
+  .confirmed-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--positive);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .confirmed-text {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  .confirmed-text strong { font-weight: 600; }
+
+  .confirmed-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.12s;
+    -webkit-tap-highlight-color: transparent;
+    flex: 1;
+    text-align: center;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--accent-text); }
+  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+
+  /* Input */
+  .bottom-input {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 12px);
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .input-container:focus-within { border-color: var(--accent); }
+
+  .input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .input-container input::placeholder { color: var(--text-muted); }
+
+  .send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .send-btn svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
+/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+</style>
+</head>
+<body>
+
+<div class="conversation">
+
+  <div class="top-bar">
+    <span class="self-dot" style="width: 8px; height: 8px;"></span>
+    <span class="top-bar-title">Ditto</span>
+  </div>
+
+  <div class="messages">
+
+    <!-- Rob initiates — the compound effect starts with a complaint -->
+    <div class="msg-group user">
+      <div class="msg">I'm losing jobs because I don't follow up on quotes fast enough. The guy who calls back first gets the job.</div>
+    </div>
+
+    <!-- Ditto recognises and proposes — fast, because it already knows Rob -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+      <div class="msg">
+        <p>I can handle that. I already have your customer info and quoting history — so I know who's been quoted and when.</p>
+      </div>
+
+      <!-- Knowledge reuse — Rob sees his existing data being used -->
+      <div class="reuse-signal">
+        <span class="reuse-dot"></span>
+        <span><strong>Already know:</strong> 12 customers, 34 quotes, response times, contact details — all from your quoting process</span>
+      </div>
+
+      <div class="msg">
+        <p>Here's what I'd set up:</p>
+      </div>
+
+      <!-- Process proposal — simpler than onboarding because Rob already trusts Ditto -->
+      <div class="process-card">
+        <div class="process-card-title">Quote follow-ups</div>
+        <div class="process-card-subtitle">Automatic — you review before sending</div>
+
+        <div class="process-steps">
+          <div class="process-step">
+            <div class="step-num">1</div>
+            <span class="step-text">Quote goes 3 days without a response</span>
+          </div>
+          <div class="process-step">
+            <div class="step-num">2</div>
+            <span class="step-text">I draft a follow-up email or text</span>
+          </div>
+          <div class="process-step">
+            <div class="step-num">3</div>
+            <span class="step-text">You approve it (or I send automatically once you trust it)</span>
+          </div>
+          <div class="process-step">
+            <div class="step-num">4</div>
+            <span class="step-text">If still no reply after 7 days, I flag it for a call</span>
+          </div>
+        </div>
+
+        <div class="process-card-note">
+          I'll use your existing customer data and quote history. No setup needed — just tell me the timing and tone.
+        </div>
+
+        <div class="process-card-actions">
+          <button class="btn btn-primary">Set it up</button>
+          <button class="btn btn-ghost">Adjust</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rob says yes -->
+    <div class="msg-group user">
+      <div class="msg">Yeah do it. Make the follow-ups pretty casual — these are tradies and homeowners, not corporates.</div>
+    </div>
+
+    <!-- Quick config — not a form, just confirming the key settings -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+      <div class="msg">
+        <p>Got it — casual tone. Let me confirm the rules:</p>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Follow-up rules</div>
+        <div class="setting-row">
+          <span class="setting-label">First follow-up</span>
+          <span class="setting-value">3 days</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Second follow-up</span>
+          <span class="setting-value">7 days</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Flag for a call</span>
+          <span class="setting-value">10 days</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Tone</span>
+          <span class="setting-value">Casual, friendly</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Channel</span>
+          <span class="setting-value">Text first, email backup</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">You review</span>
+          <span class="setting-value">Every follow-up (for now)</span>
+        </div>
+        <div class="settings-card-actions">
+          <button class="btn btn-primary">Looks right</button>
+          <button class="btn btn-secondary">Change something</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rob confirms -->
+    <div class="msg-group user">
+      <div class="msg">Looks good</div>
+    </div>
+
+    <!-- Confirmed + immediate value -->
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+
+      <div class="confirmed">
+        <div class="confirmed-check">&#10003;</div>
+        <div>
+          <div class="confirmed-text"><strong>Follow-ups are live.</strong> I'll check your outstanding quotes every morning and draft follow-ups for any that are overdue.</div>
+          <div class="confirmed-detail">Uses your customer data from Quoting &middot; Supervised — you approve each one</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <p>Already found 3 quotes with no response — Henderson (4 days), Acme (6 days), and Blake (3 days). Want me to draft follow-ups for those now?</p>
+      </div>
+    </div>
+
+    <div class="msg-group user">
+      <div class="msg">Yeah go</div>
+    </div>
+
+    <div class="msg-group self">
+      <div class="sender">
+        <span class="self-dot"></span>
+        <span class="sender-label">Ditto</span>
+      </div>
+      <div class="msg">
+        <p>Done — 3 follow-up texts drafted. They're in your review queue. That took about 2 minutes to set up because I already knew your customers and your voice.</p>
+        <p>Your morning update now covers both quoting and follow-ups.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom-input">
+    <div class="input-container">
+      <input type="text" placeholder="Tell Ditto something...">
+      <button class="send-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="proto-nav"><a href="17-trust-upgrade.html">&larr; Trust Upgrade</a><span class="pn-t"><a href="index.html">P18 Second Process</a></span><a href="19-multi-process-workspace.html">Multi-Process &rarr;</a></div><!-- pnav -->
+</body>
+</html>
