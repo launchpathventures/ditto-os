@@ -400,11 +400,12 @@ export const memoryTypeValues = [
   "preference",
   "context",
   "skill",
+  "user_model",
 ] as const;
 export type MemoryType = (typeof memoryTypeValues)[number];
 
 /** Memory source values */
-export const memorySourceValues = ["feedback", "human", "system"] as const;
+export const memorySourceValues = ["feedback", "human", "system", "conversation"] as const;
 export type MemorySource = (typeof memorySourceValues)[number];
 
 /**

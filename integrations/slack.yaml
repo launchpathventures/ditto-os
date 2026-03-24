@@ -14,6 +14,11 @@ interfaces:
     headers:
       Content-Type: application/json; charset=utf-8
 preferred: rest
+connection:
+  auth_type: bearer_token
+  provider_name: Slack
+  setup_url: https://api.slack.com/apps
+  setup_instructions: "Create a Slack app at api.slack.com/apps. Under OAuth & Permissions, add the scopes you need (channels:read, chat:write, search:read). Install to your workspace and copy the Bot User OAuth Token."
 
 tools:
   - name: search_messages

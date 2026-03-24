@@ -69,6 +69,18 @@ export interface IntegrationTool {
   execute: ToolExecuteConfig;
 }
 
+/** Connection metadata for conversational service setup (Brief 040, AC13) */
+export interface ConnectionMetadata {
+  /** Auth type: api_key, oauth2, cli_login, mcp */
+  auth_type: string;
+  /** Human-readable provider name */
+  provider_name: string;
+  /** URL where the user can get credentials */
+  setup_url?: string;
+  /** Step-by-step setup instructions */
+  setup_instructions?: string;
+}
+
 export interface IntegrationDefinition {
   service: string;
   description: string;
@@ -79,6 +91,8 @@ export interface IntegrationDefinition {
   };
   preferred: "cli" | "mcp" | "rest";
   tools?: IntegrationTool[];
+  /** Connection metadata for conversational setup (Brief 040) */
+  connection?: ConnectionMetadata;
 }
 
 // ============================================================

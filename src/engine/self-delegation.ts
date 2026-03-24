@@ -5,12 +5,20 @@
  * to dev pipeline roles via structured tool_use — preventing prompt
  * injection from triggering process runs.
  *
- * Each tool maps to an existing engine function:
+ * Original 5 tools (Brief 030, ADR-016):
  * - start_dev_role → startProcessRun() + fullHeartbeat()
  * - consult_role → createCompletion() with role contract (Inline weight, Brief 034a)
  * - approve_review → approveRun()
  * - edit_review → editRun()
  * - reject_review → rejectRun()
+ *
+ * 6 new tools (Brief 040 — Self Extensions):
+ * - create_work_item → workItems table + intake-classifier
+ * - generate_process → process YAML generation + validation + DB save
+ * - quick_capture → lightweight capture + auto-classify
+ * - adjust_trust → trust state evidence + tier change (requires confirmation)
+ * - get_process_detail → process detail with trust data + recent runs
+ * - connect_service → integration auth guidance + credential vault
  *
  * Provenance: Anthropic SDK tool use pattern (Brief 030, ADR-016).
  * Consultation pattern: ADR-017 Inline weight class (Brief 034a, Insight-063).
@@ -22,6 +30,13 @@ import type { LlmToolDefinition } from "./llm";
 import { createCompletion, extractText } from "./llm";
 import { startProcessRun, fullHeartbeat } from "./heartbeat";
 import { approveRun, editRun, rejectRun, getWaitingStepOutput } from "./review-actions";
+import { handleCreateWorkItem } from "./self-tools/create-work-item";
+import { handleGenerateProcess } from "./self-tools/generate-process";
+import { handleQuickCapture } from "./self-tools/quick-capture";
+import { handleAdjustTrust } from "./self-tools/adjust-trust";
+import { handleGetProcessDetail } from "./self-tools/get-process-detail";
+import { handleConnectService } from "./self-tools/connect-service";
+import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
 
 // ============================================================
 // Tool Definitions (Ditto-native format)
@@ -138,6 +153,171 @@ export const selfTools: LlmToolDefinition[] = [
       required: ["role", "question"],
     },
   },
+  // ============================================================
+  // Brief 040 — Self Extension Tools
+  // ============================================================
+  {
+    name: "create_work_item",
+    description:
+      "Create a new work item from the user's natural language description. The item is auto-classified (task, question, goal, insight, outcome) via the intake classifier. Use when the user describes something they need done, a question they need answered, or a goal they want to achieve.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Natural language description of the work item",
+        },
+        goalContext: {
+          type: "string",
+          description: "Optional: what goal this work serves",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "generate_process",
+    description:
+      "Generate a new process definition from a conversational description. First call with save=false to preview the YAML. Then call again with save=true after the user confirms. IRREVERSIBLE when save=true — always preview first and get user confirmation.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: {
+          type: "string",
+          description: "Human-readable process name (e.g., 'Quote Generation')",
+        },
+        description: {
+          type: "string",
+          description: "What this process does",
+        },
+        steps: {
+          type: "array",
+          description: "Array of step definitions",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Step identifier (kebab-case)" },
+              name: { type: "string", description: "Human-readable step name" },
+              executor: { type: "string", description: "ai-agent, human, script, or integration" },
+              description: { type: "string" },
+              instructions: { type: "string", description: "For human steps: what the user needs to do" },
+            },
+            required: ["id", "name", "executor"],
+          },
+        },
+        trustTier: {
+          type: "string",
+          description: "Initial trust tier: supervised (default), spot_checked, autonomous, critical",
+        },
+        save: {
+          type: "boolean",
+          description: "false=preview YAML, true=save to database. Always preview first.",
+        },
+      },
+      required: ["name", "description", "steps", "save"],
+    },
+  },
+  {
+    name: "quick_capture",
+    description:
+      "Capture a quick note, observation, or piece of information. Stores it as a work item and auto-classifies. Use when the user says 'remember that...', 'note that...', or drops a quick piece of context.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: {
+          type: "string",
+          description: "The text to capture",
+        },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "adjust_trust",
+    description:
+      "Propose or apply a trust tier change for a process. IRREVERSIBLE — always call first with confirmed=false to get the proposal with evidence, present it to the user, and only call with confirmed=true after explicit user confirmation.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Process slug to adjust trust for",
+        },
+        newTier: {
+          type: "string",
+          description: "Target trust tier: supervised, spot_checked, autonomous, critical",
+        },
+        reason: {
+          type: "string",
+          description: "Why this change is appropriate",
+        },
+        confirmed: {
+          type: "boolean",
+          description: "false=propose with evidence, true=apply after user confirms",
+        },
+      },
+      required: ["processSlug", "newTier", "reason", "confirmed"],
+    },
+  },
+  {
+    name: "get_process_detail",
+    description:
+      "Get detailed information about a process: its steps, trust data, recent runs, correction rates, and trend. Returns structured data for inline rendering. Use when the user asks about a process or you need data to support a decision.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Process slug to get details for",
+        },
+      },
+      required: ["processSlug"],
+    },
+  },
+  {
+    name: "connect_service",
+    description:
+      "Guide the user through connecting an external service (GitHub, Slack, etc.). Use action='check' to list available services, action='guide' to show setup instructions and trigger the secure credential input, action='verify' to check if credentials are stored.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        service: {
+          type: "string",
+          description: "Service name from the integration registry",
+        },
+        processSlug: {
+          type: "string",
+          description: "Process that needs this service (for credential scoping)",
+        },
+        action: {
+          type: "string",
+          enum: ["check", "guide", "verify"],
+          description: "check=list services, guide=setup instructions, verify=check credentials",
+        },
+      },
+      required: ["service", "action"],
+    },
+  },
+  {
+    name: "update_user_model",
+    description:
+      "Store something you've learned about the user across one of 9 dimensions: problems, tasks, work, challenges, communication, frustrations, vision, goals, concerns. Populate progressively — prioritize problems and tasks first (immediate value), deepen into vision and goals across sessions. Call this whenever you learn something meaningful about who the user is and what they need.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        dimension: {
+          type: "string",
+          enum: USER_MODEL_DIMENSIONS as unknown as string[],
+          description: "Which dimension of understanding this fills",
+        },
+        content: {
+          type: "string",
+          description: "What you learned (concise, factual)",
+        },
+      },
+      required: ["dimension", "content"],
+    },
+  },
 ];
 
 // ============================================================
@@ -187,6 +367,77 @@ export async function executeDelegation(
         toolInput.question as string,
         toolInput.context as string | undefined,
       );
+
+    // Brief 040 — Self Extension Tools
+    case "create_work_item":
+      return await handleCreateWorkItem({
+        content: toolInput.content as string,
+        goalContext: toolInput.goalContext as string | undefined,
+      });
+
+    case "generate_process":
+      return await handleGenerateProcess({
+        name: toolInput.name as string,
+        description: toolInput.description as string,
+        steps: toolInput.steps as Array<{
+          id: string;
+          name: string;
+          executor: string;
+          description?: string;
+          instructions?: string;
+          config?: Record<string, unknown>;
+          tools?: string[];
+          input_fields?: Array<{ name: string; type: string; label?: string; required?: boolean }>;
+        }>,
+        trustTier: toolInput.trustTier as string | undefined,
+        save: toolInput.save as boolean,
+      });
+
+    case "quick_capture":
+      return await handleQuickCapture({
+        text: toolInput.text as string,
+      });
+
+    case "adjust_trust":
+      return await handleAdjustTrust({
+        processSlug: toolInput.processSlug as string,
+        newTier: toolInput.newTier as string,
+        reason: toolInput.reason as string,
+        confirmed: toolInput.confirmed as boolean,
+      });
+
+    case "get_process_detail":
+      return await handleGetProcessDetail({
+        processSlug: toolInput.processSlug as string,
+      });
+
+    case "connect_service":
+      return await handleConnectService({
+        service: toolInput.service as string,
+        processSlug: toolInput.processSlug as string | undefined,
+        action: toolInput.action as "check" | "guide" | "verify",
+      });
+
+    case "update_user_model": {
+      try {
+        await updateUserModel(
+          "default", // userId — matches the default in conversation
+          toolInput.dimension as UserModelDimension,
+          toolInput.content as string,
+        );
+        return {
+          toolName: "update_user_model",
+          success: true,
+          output: `Stored: [${toolInput.dimension}] ${toolInput.content}`,
+        };
+      } catch (err) {
+        return {
+          toolName: "update_user_model",
+          success: false,
+          output: `Failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
 
     default:
       return {

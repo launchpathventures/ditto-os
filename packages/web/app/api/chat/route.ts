@@ -93,6 +93,28 @@ export async function POST(req: Request) {
               );
               break;
 
+            case "structured-data":
+              controller.enqueue(
+                encoder.encode(
+                  encodeData({ type: "structured-data", data: event.data }),
+                ),
+              );
+              break;
+
+            case "credential-request":
+              controller.enqueue(
+                encoder.encode(
+                  encodeData({
+                    type: "credential-request",
+                    service: event.service,
+                    processSlug: event.processSlug,
+                    fieldLabel: event.fieldLabel,
+                    placeholder: event.placeholder,
+                  }),
+                ),
+              );
+              break;
+
             case "status":
               controller.enqueue(
                 encoder.encode(

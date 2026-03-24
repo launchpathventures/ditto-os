@@ -15,6 +15,11 @@ interfaces:
     env_vars:
       - GH_TOKEN       # Optional — gh CLI falls back to interactive auth
 preferred: cli
+connection:
+  auth_type: api_key
+  provider_name: GitHub
+  setup_url: https://github.com/settings/tokens
+  setup_instructions: "Create a personal access token at GitHub Settings → Developer settings → Personal access tokens. Select the scopes you need (repo, issues, pull requests)."
 
 tools:
   - name: search_issues

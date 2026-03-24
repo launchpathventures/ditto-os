@@ -44,6 +44,8 @@ export type SelfStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call-start"; toolName: string; toolCallId: string }
   | { type: "tool-call-result"; toolCallId: string; result: string }
+  | { type: "structured-data"; data: Record<string, unknown> }
+  | { type: "credential-request"; service: string; processSlug: string | null; fieldLabel: string; placeholder: string }
   | { type: "status"; message: string }
   | { type: "finish"; sessionId: string; delegationsExecuted: number; consultationsExecuted: number; costCents: number };
 
@@ -208,6 +210,30 @@ export async function* selfConverseStream(
         toolCallId: toolUse.id,
         result: result.output.slice(0, 500), // Truncate for the stream
       };
+
+      // Emit structured data for tools that return JSON (Brief 040, AC8)
+      if (result.success && result.output.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(result.output) as Record<string, unknown>;
+
+          // Credential request needs special frontend handling (AC11-12)
+          if (parsed.credentialRequest && typeof parsed.credentialRequest === "object") {
+            const cred = parsed.credentialRequest as Record<string, unknown>;
+            yield {
+              type: "credential-request",
+              service: cred.service as string,
+              processSlug: (cred.processSlug as string) ?? null,
+              fieldLabel: (cred.fieldLabel as string) ?? "API Key",
+              placeholder: (cred.placeholder as string) ?? "",
+            };
+          }
+
+          // Emit all structured tool results for inline rendering
+          yield { type: "structured-data", data: parsed };
+        } catch {
+          // Not valid JSON — skip structured data emission
+        }
+      }
 
       toolResults.push({
         type: "tool_result",

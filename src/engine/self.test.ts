@@ -295,14 +295,23 @@ describe("loadSessionTurns", () => {
 // ============================================================
 
 describe("selfTools", () => {
-  it("defines all five delegation and consultation tools", () => {
-    expect(selfTools).toHaveLength(5);
+  it("defines all delegation, consultation, and workspace tools", () => {
+    expect(selfTools).toHaveLength(12);
     const names = selfTools.map((t) => t.name);
+    // Original 5
     expect(names).toContain("start_dev_role");
     expect(names).toContain("approve_review");
     expect(names).toContain("edit_review");
     expect(names).toContain("reject_review");
     expect(names).toContain("consult_role");
+    // Brief 040 — 7 new tools
+    expect(names).toContain("create_work_item");
+    expect(names).toContain("generate_process");
+    expect(names).toContain("quick_capture");
+    expect(names).toContain("adjust_trust");
+    expect(names).toContain("get_process_detail");
+    expect(names).toContain("connect_service");
+    expect(names).toContain("update_user_model");
   });
 
   it("start_dev_role accepts all 7 roles", () => {
@@ -423,8 +432,8 @@ describe("assembleSelfContext", () => {
 // ============================================================
 
 describe("consult_role tool definition", () => {
-  it("selfTools contains 5 tools including consult_role", () => {
-    expect(selfTools).toHaveLength(5);
+  it("selfTools contains 12 tools including consult_role", () => {
+    expect(selfTools).toHaveLength(12);
     const names = selfTools.map((t) => t.name);
     expect(names).toContain("consult_role");
   });

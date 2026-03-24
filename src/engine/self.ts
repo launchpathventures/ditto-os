@@ -38,6 +38,7 @@ import {
   type SessionTurn,
 } from "./self-context";
 import { selfTools, executeDelegation } from "./self-delegation";
+import { getUserModelSummary } from "./user-model";
 
 // ============================================================
 // Constants
@@ -112,6 +113,12 @@ export async function assembleSelfContext(
     sections.push(`<memories>\n${memories}\n</memories>`);
   }
 
+  // User model — structured understanding across 9 dimensions
+  const userModelSummary = await getUserModelSummary(userId);
+  if (userModelSummary) {
+    sections.push(`<user_model>\n${userModelSummary}\n</user_model>`);
+  }
+
   // Work state snapshot
   sections.push(
     `<work_state>\n${workState.details}\n</work_state>`,
@@ -120,15 +127,20 @@ export async function assembleSelfContext(
   // Delegation guidance — when to use tools vs respond directly
   sections.push(
     `<delegation_guidance>
-You have tools to delegate work and consult teammates.
+You have tools to delegate work, manage processes, and help the user build their workspace.
 
 **Delegation** (start_dev_role) spawns a full process run — expensive (~1-5 min). Use ONLY when the human is requesting actual work that needs a specific role's expertise.
 
-**Consultation** (consult_role) is a quick perspective check — cheap (~10 sec, one LLM call). Use when you want a second opinion before committing to a direction:
-- You're unsure which role is right for a task
-- The human's request could be interpreted multiple ways
-- A delegation result surprised you
-- You're synthesizing conflicting outputs
+**Consultation** (consult_role) is a quick perspective check — cheap (~10 sec, one LLM call). Use when you want a second opinion before committing to a direction.
+
+**Workspace tools** — use these to help the user work:
+- create_work_item: When the user describes something to be done
+- generate_process: When defining a new process (preview first, then save)
+- quick_capture: When the user drops a note or observation
+- adjust_trust: When proposing trust tier changes (propose first, confirm, then apply)
+- get_process_detail: When showing process status, trust data, recent runs
+- connect_service: When an integration needs connecting
+- update_user_model: When you learn something about the user
 
 Do NOT delegate or consult for:
 - Greetings, casual conversation, or check-ins
@@ -137,7 +149,31 @@ Do NOT delegate or consult for:
 - Anything you can answer from your loaded context
 
 When the human's first message is casual, respond conversationally. Be the competent teammate — you don't need to call in a specialist to say good morning.
+
+**CONFIRMATION MODEL — CRITICAL:**
+These tools are IRREVERSIBLE and require explicit user confirmation before executing:
+- adjust_trust with confirmed=true (always call with confirmed=false first to show evidence)
+- generate_process with save=true (always preview first with save=false)
+- connect_service action='guide' (shows credential input — user controls submission)
+For these tools, always: (1) present what you intend to do, (2) show the evidence/preview, (3) wait for the user to explicitly say "yes", "go ahead", "do it", or similar. Never assume confirmation from ambiguous input.
 </delegation_guidance>`,
+  );
+
+  // Onboarding and coaching guidance (Insight-093, AC9, AC10)
+  sections.push(
+    `<onboarding_guidance>
+**For new users (empty user model):**
+Drive a multi-session deep intake. First session: understand their problems and immediate tasks (enough to create their first process and deliver value). Subsequent sessions: deepen into vision, goals, challenges. Ask open questions, pick up signals, suggest where to start. Use update_user_model to store what you learn.
+
+**For returning users:**
+Continue building understanding. Notice gaps in the user model and naturally explore them in conversation.
+
+**AI coaching (woven in, never a separate mode):**
+When the user corrects your output, naturally teach: "When you tell me *why* you changed that, I learn faster."
+When you notice learning accumulating: "You've taught me 4 things this week — here's what I know now."
+When reviewing work: explain what knowledge you used and where it came from.
+This builds trust through transparency and helps users become better AI collaborators.
+</onboarding_guidance>`,
   );
 
   // Surface context

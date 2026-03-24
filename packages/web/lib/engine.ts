@@ -24,10 +24,12 @@ export type { HarnessEvent } from "../../../src/engine/events";
  * skipped — the streaming adapter spawns CLI tools directly.
  */
 export async function getEngine() {
-  const [selfStream, events, llm] = await Promise.all([
+  const [selfStream, events, llm, feedAssembler, reviewActions] = await Promise.all([
     import("../../../src/engine/self-stream"),
     import("../../../src/engine/events"),
     import("../../../src/engine/llm"),
+    import("../../../src/engine/feed-assembler"),
+    import("../../../src/engine/review-actions"),
   ]);
 
   // Initialize LLM provider for API connections.
@@ -46,5 +48,9 @@ export async function getEngine() {
     selfConverseStream: selfStream.selfConverseStream,
     harnessEvents: events.harnessEvents,
     initLlm: llm.initLlm,
+    assembleFeed: feedAssembler.assembleFeed,
+    approveRun: reviewActions.approveRun,
+    editRun: reviewActions.editRun,
+    rejectRun: reviewActions.rejectRun,
   };
 }
