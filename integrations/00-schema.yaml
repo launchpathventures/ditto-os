@@ -5,6 +5,10 @@
 #
 # Provenance: ADR-005 (multi-protocol, multi-purpose integration architecture)
 # Pattern: Mirrors process definition declarations (git-tracked, declarative)
+#
+# Integrations can be generated from OpenAPI specs:
+#   ditto generate-integration --spec <file|url> --service <name>
+# See Brief 037 for details.
 
 required_fields:
   - service      # Unique service identifier (e.g., "github", "google-workspace")

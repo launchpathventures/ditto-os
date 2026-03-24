@@ -1,7 +1,7 @@
 # Ditto — Current State
 
-**Last updated:** 2026-03-23
-**Current phase:** Phase 6 complete (External Integrations). Briefs 024+025+035+036 all done. 257 tests (19 test files).
+**Last updated:** 2026-03-24
+**Current phase:** Phase 6 complete + Brief 037 complete (Integration Generation). 279 tests (20 test files).
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -18,7 +18,8 @@
 - **Integration infrastructure (Briefs 024+025+035+036)** — `integrations/` directory with YAML registry files (Insight-007). Registry loader (`src/engine/integration-registry.ts`) parses, validates, caches by service name. Supports tool definitions in YAML: `IntegrationTool` type with name, description, parameters, execute config (CLI command template or REST endpoint). `getIntegrationTools(service)` export. CLI protocol handler (`src/engine/integration-handlers/cli.ts`) executes via child_process.exec with retry (3 attempts, 1s/2s/4s backoff), JSON parsing, credential scrubbing. REST protocol handler (`src/engine/integration-handlers/rest.ts`) — native `fetch`, GET/POST/PUT/DELETE, auth header injection, credential scrubbing on all paths. `integration` executor type in step-executor switch. **Credential vault (Brief 035):** `src/engine/credential-vault.ts` — AES-256-GCM encrypted at rest, HKDF key derivation, per-(processId, service) scoping with UNIQUE constraint. Unified `resolveServiceAuth()`: vault-first, env-var fallback with deprecation warning. `processId` threaded through both execution paths (integration steps + tool use). CLI: `ditto credential add/list/remove`. `credentials` table in schema. Harness logs `integration.call` activities. Schema: `integrationService`/`integrationProtocol`/`toolCalls` on stepRuns. **Process I/O (Brief 036):** `src/engine/process-io.ts` — polling-based triggers (`startPolling`/`stopPolling`/`getPollingStatus`) and output delivery (`deliverOutput`). `source` and `outputDelivery` fields on `processes` table + `ProcessSourceConfig`/`ProcessOutputDeliveryConfig` types. Process loader validates service refs via `validateProcessIo()`. Heartbeat calls `deliverOutput()` after run completes (trust gate passed). Delivery payload includes collected approved step outputs + params. CLI: `ditto trigger start/stop/status`. Polling creates work items with `triggeredBy: "trigger"`. (ADR-005, Insight-065)
 - **Agent tool use (Brief 025)** — Step-level `tools: [service.tool_name]` in process YAML. Tool resolver (`src/engine/tool-resolver.ts`) maps qualified names to `LlmToolDefinition[]` + execution dispatch function. Memory-assembly handler resolves tools → `HarnessContext.resolvedTools`. Claude adapter merges integration tools with codebase tools; dispatches integration calls via `executeIntegrationTool()`, codebase calls via existing `executeTool()`. Tool calls logged on `stepRuns.toolCalls` (name, args, resultSummary, timestamp). Process loader validates `service.tool_name` format against registry at sync time. Tools are Ditto-native (`LlmToolDefinition`), works with any LLM provider — MCP deferred (Insight-065). 2 integrations with tools: GitHub (4 CLI tools), Slack (2 REST tools). Provenance: ADR-005, Insight-065, Nango git-tracked approach.
 - **Process loader** — YAML parsing, parallel_group containers, dependency validation, cycle detection, integration step validation (config.service required). Supports route_to, default_next, retry_on_failure fields (Brief 016b). Source/output_delivery validation against integration registry (Brief 036).
-- **CLI** — citty + @clack/prompts. 14 commands: sync, start, heartbeat, status, review, approve, edit, reject, trust, capture, complete, debt, credential (add/list/remove), trigger (start/stop/status). TTY-aware, --json on listings. Unified task surface.
+- **Integration generation (Brief 037)** — `ditto generate-integration --spec <file|url> --service <name>`. Parses OpenAPI 3.x spec (via `@apidevtools/swagger-parser`), emits valid Ditto integration YAML. Generate-then-curate pattern (Neon/Taskade). REST protocol only. Maps: operationId→snake_case name, summary→description, params→flat parameters, method→execute config. Classifies tools as read-only (GET) or write (POST/PUT/DELETE). PATCH skipped with warning. Handles: $ref resolution, nested object flattening (warns >1 level), missing operationId (skip+warn), deprecated ops (skip+warn), file upload (skip+warn), duplicate names (method prefix), enum values (in description), empty parameters (`{}`). Auth as placeholder only. Header comments with source, date, tool count, curation reminder. Provenance: Composio/Taskade/FastMCP/Neon patterns, Insight-071, Insight-072.
+- **CLI** — citty + @clack/prompts. 15 commands: sync, start, heartbeat, status, review, approve, edit, reject, trust, capture, complete, debt, credential (add/list/remove), trigger (start/stop/status), generate-integration. TTY-aware, --json on listings. Unified task surface.
 - **Work items** — workItems table (type, status, goalAncestry, assignedProcess, spawnedFrom). Conditional flow (Insight-039).
 - **Harness pipeline** — 7 handlers: memory-assembly → step-execution → metacognitive-check → review-pattern → routing → trust-gate → feedback-recorder. Metacognitive check (Brief 034b): post-execution self-review via LLM (maxTokens: 512). Auto-enabled for supervised+critical tiers, opt-in for others via `harness.metacognitive: true`. Flags issues for human review; does not re-execute. Shared `parseHarnessConfig()` in `harness-config.ts`. Review-pattern handler guards prior flags and merges reviewDetails. Routing handler (Brief 016b) evaluates route_to conditions via substring matching (Mode 1).
 - **Trust gate** — 4 tiers: supervised, spot-checked (~20%), autonomous, critical. Deterministic SHA-256 sampling. Confidence override: `low` always pauses regardless of tier (ADR-011, Brief 016d).
@@ -36,7 +37,7 @@
 - **Agent tools (Brief 031)** — 4 tools: read_file, search_files, list_files (read-only), write_file (read-write). Path traversal prevention, secret deny-list, symlink protection. Exported as `readOnlyTools` (3) and `readWriteTools` (4).
 - **DB schema enforcement** — `pnpm cli sync` runs drizzle-kit push. Handles first-run and evolution.
 - **Debt tracking** — `docs/debts/` markdown files. `pnpm cli debt` to list.
-- **Dev process** — 7 roles as skills. Brief template (with composition Level column, Insight-068). 40 active insights, 31 archived. 35 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
+- **Dev process** — 7 roles as skills. Brief template (with composition Level column, Insight-068). 44 active insights, 31 archived. 40 research reports. 12-point review checklist. Distributed knowledge maintenance (Insight-043): each role maintains docs it reads, Documenter does cross-cutting audit.
 - **Dev pipeline** — `claude -p` orchestrator + Telegram bot. Full Claude workspace on mobile. (Brief 015). Engine-integrated: `processes/dev-pipeline.yaml` runs 7 roles through the real harness with conditional routing (Brief 016c). Telegram bot routes free-text through the Conversational Self (Brief 030): `selfConverse()` assembles context, converses via LLM, delegates to dev roles via tool_use. Engine bridge (Brief 027) for explicit `/start` commands: `startProcessRun()` + `fullHeartbeat()` loop, review actions. Memory, trust, feedback all active.
 - **Review actions (Brief 027)** — `src/engine/review-actions.ts`. Shared approve/edit/reject logic extracted from CLI commands. Pure engine functions (no TTY, no process.exit). Step-level granularity via `findWaitingStepRun()`. Used by both CLI commands and Telegram bot.
 - **System agents (Brief 014a+014b+021)** — 4 system agents running through the harness pipeline: trust-evaluator (wraps Phase 3 code, spot-checked), intake-classifier (keyword matching, supervised), router (LLM-based via `llm.ts`, supervised), orchestrator (goal-directed — decomposes goals into tasks, routes around paused items, confidence-based stopping; supervised). `category: system` + `systemRole` on agents table. System agent registry dispatches via `script` executor + `systemAgent` config (Insight-044). `startSystemAgentRun()` for programmatic triggering.
@@ -55,6 +56,7 @@
 
 ## Recently Completed
 
+- **Brief 037 complete** (Integration Generation: OpenAPI → Ditto YAML) — `ditto generate-integration` CLI command. `src/engine/integration-generator.ts` (~310 LOC): OpenAPI 3.x parse → $ref resolve → operation mapping → classify read/write → emit YAML. `src/cli/commands/generate-integration.ts` (~70 LOC). Dependencies: `@apidevtools/swagger-parser`, `openapi-types`. 22 new tests (279 total, 20 test files). Smoke test: Petstore spec → 19 tools, passes `pnpm cli sync`. Reviewed: PASS WITH FLAGS (2 flags fixed: PATCH skip warning added, `00-schema.yaml` updated with generation comment). Approved 2026-03-24.
 - **Brief 036 complete** (Process I/O: Triggers + Output Delivery, Phase 6c-2) — `src/engine/process-io.ts`: polling-based triggers (`startPolling`/`stopPolling`/`stopAllPolling`/`getPollingStatus`), output delivery (`deliverOutput`). `source` and `outputDelivery` fields on `processes` table. Process loader: `ProcessSourceConfig`/`ProcessOutputDeliveryConfig` types, `validateProcessIo()` validates service references against registry. Heartbeat: `deliverOutput()` called after run completion (trust gate passed). Output delivery payload includes collected approved step outputs + delivery params. CLI: `ditto trigger start/stop/status` (14 commands total). `templates/invoice-follow-up.yaml` updated with `source:` (email check) and `output_delivery:` (accounting post). 10 new tests (257 total, 19 test files). Reviewed: PASS WITH FLAGS (5 flags, all fixed: resolveServiceAuth comment added, outputs passed to delivery, capture bypass documented, approved-only test added, result filtering improved). Approved 2026-03-23. Phase 6 complete.
 - **Brief 035 complete** (Credential Vault + Auth Unification, Phase 6c-1) — `src/engine/credential-vault.ts`: AES-256-GCM encrypted credential storage, HKDF key derivation from `DITTO_VAULT_KEY`, per-(processId, service) scoping with UNIQUE constraint. Unified `resolveServiceAuth()`: vault-first, env-var fallback with deprecation warning. `credentials` table in schema. `processId` threaded through both execution paths: integration steps (`step-execution.ts` → `step-executor.ts` → `index.ts` → `cli.ts`/`rest.ts`) and tool use (`memory-assembly.ts` → `tool-resolver.ts` → `cli.ts`/`rest.ts`). `resolveAuth()` and `resolveRestAuth()` now async, backed by vault. CLI: `ditto credential add/list/remove` (masked input via @clack/prompts). 11 new tests (247 total, 18 test files). Reviewed: PASS WITH FLAGS (1 must-fix fixed: resolveServiceAuth silent catch; 2 should-fix fixed: UNIQUE constraint added, architecture.md + ADR-005 updated; 1 note acknowledged). Approved 2026-03-23.
 - **Brief 025 complete** (Integration Tools + Agent Tool Use, Phase 6b) — Ditto-native integration tools (Insight-065): tool definitions in integration YAML, tool resolver (`src/engine/tool-resolver.ts`) maps `service.tool_name` → `LlmToolDefinition[]` + dispatch. REST handler (`src/engine/integration-handlers/rest.ts`): native fetch, auth injection, credential scrubbing. Memory-assembly handler resolves step tools → `HarnessContext.resolvedTools`. Claude adapter merges integration + codebase tools, dispatches via `executeIntegrationTool()`. `toolCalls` JSON field on stepRuns, recorded in both advance/pause paths. Process loader validates `service.tool_name` format against registry. GitHub integration: 4 CLI-backed tools. Slack integration: 2 REST-backed tools. MCP deferred (Insight-065). 18 new tests (236 total, 17 test files). Reviewed: PASS WITH FLAGS (1 must-fix fixed: REST success path credential scrubbing; 2 should-fix: REST error scrubbing fixed, architecture.md deferred to Documenter; 2 notes acknowledged). Approved 2026-03-23.
@@ -114,26 +116,86 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | Meta process architecture (4 meta processes + cognitive framework environment) | ADR-015 | Accepted |
 | Conversational Self (outermost harness, self memory scope, session persistence) | ADR-016 | Accepted |
 | Delegation weight classes (Inline/Light/Heavy, Claude vs Claude Code, runtime resolution) | ADR-017 | Accepted |
+| Standards library (quality profiles, baselines, risk thresholds, composition cascade) | ADR-019 | Accepted |
 
 ## Active Briefs
 
-No active briefs. Phase 6 complete. PM triages next work.
+| Brief | Phase | Status |
+|-------|-------|--------|
+| 037 — Phase 10 MVP Dashboard (web workspace) | 10 | Design complete — UX interaction spec v3 at `docs/research/phase-10-mvp-dashboard-ux.md`. Reviewed: APPROVE WITH FLAGS (all flags resolved). Awaiting human approval, then Architect. |
 
 ## Next Steps
 
-1. **Phase 6 complete.** All external integration briefs done (024+025+035+036).
-2. **Insight-070 captured:** Dashboard as engine proving ground. Phase 10 moves immediately after Phase 6c. Future engine phases (7, 8, Cognitive A1) prioritized by what the dashboard reveals.
-3. **Phase 10 research complete:** `docs/research/phase-10-dashboard-workspace.md`. Reviewed: PASS WITH FLAGS (all fixed). landscape.md updated (AG-UI → MEDIUM-HIGH).
-4. **Integration generation research complete:** `docs/research/api-to-tool-generation.md`. OpenAPI→YAML codegen (~200 LOC), generate-then-curate pattern, fastify-swagger convention for Ditto-built apps. CLI-first validated by market (Insight-065 confirmed). Needs brief (037?) after Phase 6 closes.
-5. **Insights 071+072 active:** No hand authoring (generation is the creation path). Sufficiently detailed spec is code (generation must use structured sources). Together constrain the integration+process generation design.
-6. **Insight-064 active:** Benchmark Before Keep — metacognitive check handler must prove its value after 50 supervised runs.
-7. **STILL NEEDED:** Architecture.md babushka diagram + Layer 2 execution model rewrite.
-8. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047). Integration generation brief strengthens the case.
-9. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
-10. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8.
-11. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
-12. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
-13. **Insight-058/059:** Repos are process targets. Processes need context bindings.
+1. **NOW: Phase 10 MVP Dashboard — Designer complete, Architect next.** UX interaction spec v3 at `docs/research/phase-10-mvp-dashboard-ux.md`. Key design decisions: conversation-first (Self is primary surface, dashboard earned through use), proactive attention management (5 dimensions + risk), progressive reveal (conversation → workspace), trust in natural language, implicit feedback chain. 8 new insights captured (070-077). Next: human approves design, then invoke `/dev-architect` for technical design and sub-briefs.
+2. **Phase 10 design session produced:**
+   - `docs/research/phase-10-mvp-dashboard-ux.md` — UX interaction spec v3 (conversation-first, dashboard-earned model). 10 sections: Self as primary surface, proactive attention engine, workspace progressive reveal, feed items, process detail, trust control, risk detection, engine view, entry point logic, architect recommendations.
+   - Insights: 070 (dashboard as proving ground), 071 (conversation-first work creation), 072 (processes as living roadmaps), 073 (user language not system language), 074 (Self as guide, cold start is conversation), 075 (conversation-first, dashboard earned), 076 (proactive attention management — 5 dimensions), 077 (risk detection as first-class concept).
+   - Brief 037 updated: persona count corrected (4 not 3).
+3. **Phase 10 prior research (still current):**
+   - `docs/research/phase-10-dashboard-workspace.md` — 10 products + AI Elements + rendering architecture.
+   - `docs/research/human-in-the-loop-interface-patterns.md` — 5-layer oversight stack, novel patterns.
+   - `docs/research/work-context-feed-patterns.md` — 11 feed products, feed UX mechanics.
+   - landscape.md updated: AG-UI upgraded to MEDIUM-HIGH, AI SDK Elements added as HIGH.
+4. **Standards Library — ADR-019 accepted.** Quality profiles as first-class YAML objects in `standards/`. Composition cascade (general → domain → process-level). Trailing window baselines. Risk thresholds for Insight-077. Research: `docs/research/standards-library-community-intelligence.md` + `docs/research/quality-standards-for-agent-execution.md`. Insights 077+078 updated. Build brief needed for Phase 10 MVP integration.
+5. **Integration generation follow-ups:** LLM-assisted curation, PATCH method, generate 2-3 real integrations (Stripe, Xero, HubSpot).
+4. **Insight-064 active:** Benchmark Before Keep — metacognitive check handler must prove its value after 50 supervised runs.
+5. **STILL NEEDED:** Architecture.md babushka diagram + Layer 2 execution model rewrite.
+6. **Planned:** PM triages whether process-analyst system agent should move from Phase 11 to Phase 7-8 (Insight-047).
+7. **Deferred:** Brief 016 AC17 (Telegram event subscription) — follow-up after live engine validation.
+8. **Deferred:** Cognitive model fields (ADR-013) — deferred to Phase 8.
+9. **Deferred:** Attention model extensions (ADR-011) — digest mode, silence-as-feature. Needs 3+ autonomous processes.
+10. **Planned:** Knowledge lifecycle meta-process design (Insight-042)
+11. **Insight-058/059:** Repos are process targets. Processes need context bindings.
+
+## Documenter Retrospective (2026-03-24 — Brief 037 Build / Integration Generation)
+
+**What was produced this session:**
+1. PM triaged post-Phase 6 work. Recommended Phase 10 Dashboard as #1, Integration Generation as #2. Human overrode: Integration Generation first (dashboard research still in progress).
+2. Architect designed Brief 037 (Integration Generation: OpenAPI → Ditto YAML). Single brief, 16 ACs, one subsystem. Reviewed: PASS WITH FLAGS (2 SHOULD-FIX fixed). Approved.
+3. Builder implemented Brief 037: `src/engine/integration-generator.ts` (~310 LOC), `src/cli/commands/generate-integration.ts` (~70 LOC), 22 new tests. Build reviewed: PASS WITH FLAGS (MUST-FIX: PATCH skip + SHOULD-FIX: 00-schema.yaml — both fixed).
+4. Smoke test: Petstore spec → 19 tools generated, passes `pnpm cli sync`. 279 tests total (20 files).
+
+**What worked:**
+- **Research→Design→Build pipeline was clean.** Research was already done (`api-to-tool-generation.md`). The Architect had a clear blueprint. The Builder implemented in one pass with no ambiguities. The generate-then-curate pattern from Neon was the right design choice — no over-engineering.
+- **Existing integration registry was the acceptance test.** The constraint "generated YAML must pass `validateIntegration()` without modification" made the goal concrete. The test that round-trips through emit→parse→validate is the right integration test.
+- **Brief sizing was perfect.** 16 ACs, one subsystem (~380 LOC total including tests), one focused session. No sub-briefs needed.
+
+**What surprised:**
+- **PATCH gap.** The integration registry validator only accepts GET/POST/PUT/DELETE — no PATCH. This was not flagged during the Architect's design because the registry types were written during Phase 6 when hand-written integrations didn't need PATCH. The Reviewer caught this at build time. This is a known debt: adding PATCH to the registry validator is a small engine change for a future brief.
+- **Long descriptions from verbose specs.** The Petstore spec has a multi-paragraph `info.description`. The generator faithfully includes it, producing a very long `description:` line. Not a bug — the generate-then-curate model handles it — but worth noting for UX when LLM-assisted curation is added.
+
+**What to change:**
+- **ADR-005 needs a "Creation Path" section.** The ADR currently describes how integrations are *consumed* (registry, protocols, auth) but is silent on how they're *created*. Insight-071 flagged this; Brief 037 delivered the first creation path. The Architect should update ADR-005 next session.
+- **Architecture.md Layer 2 integration section** needs the same "creation path" addition (Insight-071 "Where It Should Land").
+
+**Cross-cutting audit flags:**
+- ADR-005: missing creation path section (Architect action)
+- Architecture.md: Layer 2 integration section doesn't mention generation (Architect action)
+- Insights 071+072: partially delivered (generation exists) but not absorbed — remain active until doc updates land
+
+## Documenter Retrospective (2026-03-23 — Brief 036 Build / Phase 6 Completion)
+
+**What was produced this session:**
+1. Builder implemented Brief 036: `src/engine/process-io.ts` (polling triggers, output delivery), `ProcessSourceConfig`/`ProcessOutputDeliveryConfig` types, `validateProcessIo()`, `source`/`outputDelivery` DB columns, heartbeat hook for output delivery after run completion, `ditto trigger start/stop/status` CLI commands, `templates/invoice-follow-up.yaml` updated with source + output_delivery. 10 new tests (257 total, 19 test files).
+2. Builder review: PASS WITH FLAGS (5 flags, all fixed: resolveServiceAuth comment added, outputs passed to delivery handler, capture bypass documented as intentional, approved-only test added, result filtering improved from single-key check to any-truthy-value).
+3. Brief 036 moved to `docs/briefs/complete/`. Parent briefs 023 + 026 also moved — Phase 6 fully complete.
+4. Roadmap Phase 6 "Process I/O" section updated with done statuses.
+5. Dictionary: "Process I/O" entry added.
+6. State.md: Phase 6 completion reflected across all sections (current phase, active briefs cleared, What's Working updated, CLI count → 14, test count → 257/19).
+
+**What worked:**
+- **The brief was well-scoped.** Process I/O is the kind of feature that could sprawl (webhooks, rich output schemas, event-driven triggers) but the brief constrained it to polling + delivery with clear non-goals. This let the Builder execute in a single pass.
+- **Reviewer caught real issues.** Flag #2 (outputs not passed to delivery handler) was a functional gap — the delivery call was structurally correct but would have sent empty payloads to external systems. Five flags total, all addressable without rework.
+- **Transitive architecture worked.** The existing integration handler infrastructure (executeIntegration → protocol handlers → resolveServiceAuth) meant process-io.ts didn't need to duplicate any auth logic. The same code path that handles integration steps handles triggers and delivery.
+
+**What surprised:**
+- **Phase 6 is done.** Four briefs (024, 025, 035, 036) plus ADR-005 over a single extended session. The integration layer went from nothing to registry + CLI handler + REST handler + tools + credential vault + polling + delivery. The sub-phasing strategy (along dependency seams) was correct — each brief was buildable without rework.
+
+**What to change:**
+- **The `command` field as data carrier is a debt.** Output delivery encodes its payload as JSON appended to the command string because `IntegrationStepConfig` has no data payload field. This works but is inelegant — a `payload` or `data` field on the config would be cleaner. Not worth an ADR but should be cleaned up when the integration interface next evolves.
+- **No insight captured this session.** The work was execution-focused — the design decisions were all made in ADR-005 and the brief. This is expected for the final sub-brief in a well-designed phase.
+
+---
 
 ## Documenter Retrospective (2026-03-23 — Integration Generation Architecture)
 

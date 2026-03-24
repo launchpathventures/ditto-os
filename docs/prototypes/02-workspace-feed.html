@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Workspace Feed + Three-Panel Layout</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --caution-subtle: hsl(48 60% 95%);
+    --negative: hsl(0 65% 50%);
+    --sidebar-bg: hsl(38 16% 95%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════════════
+     THREE-PANEL LAYOUT
+  ═══════════════════════════════════════════ */
+  .workspace {
+    display: grid;
+    grid-template-columns: 240px 1fr 340px;
+    height: 100vh;
+  }
+
+  /* ═══════════════════════════════════════════
+     LEFT SIDEBAR
+  ═══════════════════════════════════════════ */
+  .sidebar {
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-header {
+    padding: 0 20px 16px;
+  }
+
+  .sidebar-logo {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .sidebar-status {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .sidebar-section {
+    padding: 0 12px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 8px 6px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    font-size: 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+    min-height: 38px;
+  }
+
+  .sidebar-item:hover {
+    background: hsl(40 12% 91%);
+  }
+
+  .sidebar-item.active {
+    background: var(--surface-raised);
+    box-shadow: 0 1px 2px hsl(30 10% 15% / 0.04);
+  }
+
+  .sidebar-item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.attention { background: var(--accent); }
+  .status-dot.healthy { background: var(--positive); }
+  .status-dot.warning { background: var(--caution); }
+
+  .sidebar-item .status-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    width: 18px;
+    text-align: center;
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-footer {
+    padding: 0 12px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .sidebar-footer .sidebar-item {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  /* ═══════════════════════════════════════════
+     CENTRE PANEL — FEED
+  ═══════════════════════════════════════════ */
+  .feed-panel {
+    overflow-y: auto;
+    padding: 32px 32px 48px;
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .feed-panel::-webkit-scrollbar { width: 6px; }
+  .feed-panel::-webkit-scrollbar-track { background: transparent; }
+  .feed-panel::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 3px;
+  }
+
+  /* ═══ Shift Report (Morning Brief) ═══ */
+  .shift-report {
+    background: var(--surface-raised);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .shift-report-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .shift-report-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .shift-report-body {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .shift-report-body p + p {
+    margin-top: 10px;
+  }
+
+  .shift-report-body strong {
+    font-weight: 600;
+  }
+
+  .shift-report-metrics {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .metric-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .sparkline-inline {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .sparkline-inline span {
+    display: inline-block;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 1px;
+    opacity: 0.6;
+  }
+
+  /* ═══ Feed Cards ═══ */
+  .feed-card {
+    background: var(--surface-raised);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+  }
+
+  .feed-card:hover {
+    box-shadow: 0 2px 10px hsl(30 10% 15% / 0.05);
+  }
+
+  /* Left accent bar via border */
+  .feed-card.needs-attention {
+    border-left: 3px solid var(--accent);
+  }
+
+  .feed-card.something-off {
+    border-left: 3px solid var(--caution);
+  }
+
+  .feed-card.insight {
+    background: var(--accent-subtle);
+    border-left: 3px solid hsl(24 60% 80%);
+  }
+
+  .feed-card-inner {
+    padding: 18px 20px;
+  }
+
+  .feed-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .feed-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .feed-card-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-attention {
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  .badge-warning {
+    background: var(--caution-subtle);
+    color: hsl(38 60% 35%);
+  }
+
+  .feed-card-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .feed-card-body {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  .feed-card-body p + p {
+    margin-top: 6px;
+  }
+
+  /* Card details grid */
+  .card-details {
+    display: flex;
+    gap: 20px;
+    margin: 10px 0;
+    font-size: 14px;
+  }
+
+  .card-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .card-detail-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card-detail-value {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* Self aside in card */
+  .card-aside {
+    background: hsl(24 50% 97%);
+    border-left: 2px solid hsl(24 60% 80%);
+    padding: 8px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 10px 0;
+    line-height: 1.5;
+  }
+
+  /* Card actions */
+  .feed-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    line-height: 1.3;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-secondary:hover {
+    background: var(--surface);
+    border-color: var(--text-muted);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 7px 10px;
+  }
+  .btn-ghost:hover {
+    color: var(--text-primary);
+    background: var(--surface);
+  }
+
+  /* ═══ Status Cards (Cockpit-inspired) ═══ */
+  .status-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .status-card {
+    background: var(--surface-raised);
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+  }
+
+  .status-card-header {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .status-card-header.healthy { color: var(--positive); }
+  .status-card-header.watching { color: hsl(210 50% 50%); }
+  .status-card-header.attention { color: var(--caution); }
+
+  .status-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .status-card-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+  }
+
+  /* ═══════════════════════════════════════════
+     RIGHT PANEL — SELF (compact conversation)
+  ═══════════════════════════════════════════ */
+  .self-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .self-panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .self-panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .self-panel-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 14px;
+  }
+
+  .self-panel-messages::-webkit-scrollbar { width: 4px; }
+  .self-panel-messages::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 2px;
+  }
+
+  .panel-msg {
+    line-height: 1.55;
+    color: var(--text-primary);
+  }
+
+  .panel-msg.self-msg {
+    padding-left: 12px;
+  }
+
+  .panel-msg.user-msg {
+    background: var(--accent-subtle);
+    padding: 8px 12px;
+    border-radius: 14px;
+    align-self: flex-end;
+    max-width: 85%;
+    font-size: 14px;
+  }
+
+  .panel-msg .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+
+  .panel-msg .sender-row .self-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .panel-msg .sender-row .sender-name {
+    font-size: 11px;
+  }
+
+  /* Panel input */
+  .self-panel-input {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .panel-input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .panel-input-container:focus-within {
+    border-color: var(--accent);
+  }
+
+  .panel-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .panel-input-container input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .panel-send-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .panel-send-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+    margin-left: 1px;
+  }
+</style>
+</head>
+<body>
+
+<div class="workspace">
+
+  <!-- ═══════════════════════════════════════════
+       LEFT SIDEBAR
+  ═══════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">Ditto</div>
+      <div class="sidebar-status">2 things need you</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">My Work</div>
+      <a class="sidebar-item active" href="#">
+        <span class="sidebar-item-text">Henderson quote</span>
+        <span class="status-dot attention"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">CRM research</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Wilson follow-up</span>
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Recurring</div>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Quoting</span>
+        <span class="status-dot healthy"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Follow-ups</span>
+        <span class="status-dot healthy"></span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Supplier tracking</span>
+        <span class="status-dot warning"></span>
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">How It Works</span>
+      </a>
+      <a class="sidebar-item" href="#">
+        <span class="sidebar-item-text">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       CENTRE FEED
+  ═══════════════════════════════════════════ -->
+  <main class="feed-panel">
+
+    <!-- Shift Report -->
+    <div class="shift-report">
+      <div class="shift-report-header">
+        <span class="self-dot"></span>
+        <span class="shift-report-title">This morning</span>
+      </div>
+      <div class="shift-report-body">
+        <p><strong>2 quotes ready for you.</strong> Henderson bathroom ($14,200) and Wilson kitchen ($8,900). Henderson's labour might be low &mdash; I'd check it.</p>
+        <p>Follow-ups are running fine. 3 sent yesterday, 1 response received.</p>
+        <p>Supplier tracking flagged: copper prices up 8% this week. Your last 2 quotes used the old prices.</p>
+      </div>
+      <div class="shift-report-metrics">
+        <div class="metric">
+          <span class="metric-value">5</span>
+          <span class="metric-label">Quotes this week</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">4</span>
+          <span class="metric-label">Approved clean</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">$68k</span>
+          <span class="metric-label">Total quoted</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Cards (Cockpit-inspired) -->
+    <div class="status-cards">
+      <div class="status-card">
+        <div class="status-card-header healthy">Strong</div>
+        <div class="status-card-title">Quoting</div>
+        <div class="status-card-body">31 of 34 approved clean. Ready for less oversight.</div>
+      </div>
+      <div class="status-card">
+        <div class="status-card-header healthy">Running smooth</div>
+        <div class="status-card-title">Follow-ups</div>
+        <div class="status-card-body">3 sent yesterday. 1 response. On track.</div>
+      </div>
+      <div class="status-card">
+        <div class="status-card-header attention">Heads up</div>
+        <div class="status-card-title">Supplier tracking</div>
+        <div class="status-card-body">Copper prices up 8%. 2 quotes may be underpriced.</div>
+      </div>
+      <div class="status-card">
+        <div class="status-card-header watching">Keep watching</div>
+        <div class="status-card-title">Invoicing</div>
+        <div class="status-card-body">5 of 5 sent this week. 2 marked paid.</div>
+      </div>
+    </div>
+
+    <!-- Feed Card: Needs Your Eye -->
+    <div class="feed-card needs-attention">
+      <div class="feed-card-inner">
+        <div class="feed-card-header">
+          <div class="feed-card-title">Henderson bathroom reno</div>
+          <span class="feed-card-badge badge-attention">Needs you</span>
+        </div>
+        <div class="feed-card-subtitle">Ready for you &middot; Drafted 2 hours ago</div>
+
+        <div class="card-details">
+          <div class="card-detail">
+            <span class="card-detail-label">Materials</span>
+            <span class="card-detail-value">$8,400</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Labour</span>
+            <span class="card-detail-value">18 hrs ($4,200)</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Margin</span>
+            <span class="card-detail-value">25%</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Total</span>
+            <span class="card-detail-value">$14,200</span>
+          </div>
+        </div>
+
+        <div class="card-aside">
+          Labour might be low for a bathroom &mdash; similar jobs averaged 22 hours.
+        </div>
+
+        <div class="feed-card-actions">
+          <button class="btn btn-primary">Approve &amp; send</button>
+          <button class="btn btn-secondary">Bump to 22 hrs</button>
+          <button class="btn btn-ghost">Discuss</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feed Card: Needs Your Eye (second) -->
+    <div class="feed-card needs-attention">
+      <div class="feed-card-inner">
+        <div class="feed-card-header">
+          <div class="feed-card-title">Wilson kitchen renovation</div>
+          <span class="feed-card-badge badge-attention">Needs you</span>
+        </div>
+        <div class="feed-card-subtitle">Ready for you &middot; Drafted 4 hours ago</div>
+
+        <div class="card-details">
+          <div class="card-detail">
+            <span class="card-detail-label">Materials</span>
+            <span class="card-detail-value">$4,800</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Labour</span>
+            <span class="card-detail-value">12 hrs ($2,400)</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Margin</span>
+            <span class="card-detail-value">25%</span>
+          </div>
+          <div class="card-detail">
+            <span class="card-detail-label">Total</span>
+            <span class="card-detail-value">$8,900</span>
+          </div>
+        </div>
+
+        <div class="feed-card-actions">
+          <button class="btn btn-primary">Approve &amp; send</button>
+          <button class="btn btn-secondary">Adjust</button>
+          <button class="btn btn-ghost">Discuss</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feed Card: Something's Off -->
+    <div class="feed-card something-off">
+      <div class="feed-card-inner">
+        <div class="feed-card-header">
+          <div class="feed-card-title">Supplier prices may be stale</div>
+          <span class="feed-card-badge badge-warning">Heads up</span>
+        </div>
+        <div class="feed-card-subtitle">Detected today &middot; Copper pricing</div>
+        <div class="feed-card-body">
+          <p>Copper prices went up 8% last week but your supplier price list is from 3 weeks ago. Your last 2 quotes used the old prices.</p>
+        </div>
+        <div class="feed-card-actions">
+          <button class="btn btn-secondary">Update prices</button>
+          <button class="btn btn-ghost">I'll handle it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feed Card: Insight -->
+    <div class="feed-card insight">
+      <div class="feed-card-inner">
+        <div class="feed-card-header">
+          <div class="feed-card-title">Your quoting is ready for less oversight</div>
+        </div>
+        <div class="feed-card-body">
+          <p>14 of the last 15 quotes went out without changes. I could start sending routine residential quotes automatically and just check with you on unusual jobs. You'd still see everything in your morning update.</p>
+        </div>
+        <div class="feed-card-actions">
+          <button class="btn btn-secondary">Try it</button>
+          <button class="btn btn-ghost">Not yet</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       RIGHT PANEL — SELF CONVERSATION
+  ═══════════════════════════════════════════ -->
+  <aside class="self-panel">
+    <div class="self-panel-header">
+      <span class="self-dot"></span>
+      <span class="self-panel-title">Self</span>
+    </div>
+
+    <div class="self-panel-messages">
+      <div class="panel-msg self-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Self</span>
+        </div>
+        Morning Rob. Henderson quote and Wilson quote are ready. Copper prices are up &mdash; you might want to check the supplier list.
+      </div>
+
+      <div class="panel-msg user-msg">
+        Show me Henderson
+      </div>
+
+      <div class="panel-msg self-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Self</span>
+        </div>
+        Henderson bathroom reno &mdash; $14,200. I've got it in the feed on the left. Labour's at 18 hours but bathrooms usually take 22. Want me to bump it?
+      </div>
+
+      <div class="panel-msg user-msg">
+        Yeah bump it and send
+      </div>
+
+      <div class="panel-msg self-msg">
+        <div class="sender-row">
+          <span class="self-dot"></span>
+          <span class="sender-name">Self</span>
+        </div>
+        Done &mdash; $15,140, sent to Henderson. I'll use 22 hours for bathrooms from now on. Anything else before you head to site?
+      </div>
+    </div>
+
+    <div class="self-panel-input">
+      <div class="panel-input-container">
+        <input type="text" placeholder="What's on your mind?">
+        <button class="panel-send-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+</body>
+</html>

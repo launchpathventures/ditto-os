@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-03-23
-**Current phase:** Brief 035 complete (Credential Vault). Brief 036 (Process I/O) unblocked. 247 tests (18 test files).
+**Last updated:** 2026-03-24
+**Current phase:** Phase 6 complete + Brief 037 (Integration Generation). 279 tests (20 test files). PM triages next work.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -260,6 +260,22 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | External calls traverse harness pipeline (trust gate, audit) | done | ADR-005 | Harness pipeline (existing) | Existing pipeline handles integration steps |
 | Integration call logging in activity table | done | ADR-005 | Feedback recorder (existing) | `src/engine/harness-handlers/feedback-recorder.ts` |
 | ADR-005 formalised | done | — | — | `docs/adrs/005-integration-architecture.md` (accepted) |
+
+---
+
+## Integration Generation (Brief 037, post-Phase 6)
+
+**Objective:** Auto-generate Ditto integration YAMLs from OpenAPI specs. First generation path (Insight-071, Insight-072).
+**Re-entry condition:** Phase 6 integration registry working ✓
+
+| Capability | Status | Source doc | Build from | Deliverable |
+|-----------|--------|-----------|------------|-------------|
+| `ditto generate-integration` CLI command | done | Brief 037, Insight-071/072 | Taskade/Neon/FastMCP codegen patterns | `src/engine/integration-generator.ts`, `src/cli/commands/generate-integration.ts` |
+| OpenAPI 3.x parse + $ref resolution | done | Brief 037 | `@apidevtools/swagger-parser` (depend) | `src/engine/integration-generator.ts` |
+| Operation → tool mapping (operationId, params, method) | done | Brief 037, research report | Universal pipeline pattern | `src/engine/integration-generator.ts` |
+| Read/write tool classification (GET vs mutation) | done | Brief 037 | FastMCP `from_openapi()` pattern | Comment annotations in generated YAML |
+| LLM-assisted curation (`--curate` flag) | not started | Brief 037 non-goals | Neon recommendation | Re-entry: after manual curation proves the workflow |
+| MCP schema ingestion | deferred | Insight-065 | — | Re-entry: when MCP stabilises |
 
 ---
 

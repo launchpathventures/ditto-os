@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Conversation Surface</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --caution: hsl(48 85% 50%);
+    --negative: hsl(0 65% 50%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══════════════════════════════════════════
+     CONVERSATION CONTAINER
+     Full-screen, centred, with breathing room
+  ═══════════════════════════════════════════ */
+  .conversation-wrapper {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
+  }
+
+  .conversation-messages {
+    flex: 1;
+    padding: 48px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ═══════════════════════════════════════════
+     MESSAGE GROUPS
+     Messages from the same sender cluster together
+  ═══════════════════════════════════════════ */
+  .message-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 18px;
+  }
+
+  .message-group.self {
+    align-items: flex-start;
+  }
+
+  .message-group.user {
+    align-items: flex-end;
+  }
+
+  /* Sender indicator row */
+  .sender-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .self-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .sender-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.01em;
+  }
+
+  .timestamp {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    padding-left: 16px;
+  }
+
+  .message-group.user .timestamp {
+    padding-left: 0;
+    padding-right: 4px;
+    text-align: right;
+  }
+
+  /* ═══════════════════════════════════════════
+     MESSAGE BUBBLES
+     Self: no bubble, just text on the page
+     User: subtle warm background
+  ═══════════════════════════════════════════ */
+  .message {
+    max-width: 85%;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .message-group.self .message {
+    padding: 2px 0 2px 16px;
+    /* No bubble — Self's messages feel like a document */
+  }
+
+  .message-group.user .message {
+    background: var(--accent-subtle);
+    padding: 10px 16px;
+    border-radius: 18px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message p + p {
+    margin-top: 10px;
+  }
+
+  /* ═══════════════════════════════════════════
+     INLINE WORK ITEM CARD
+     Embedded in conversation — quote summary
+  ═══════════════════════════════════════════ */
+  .work-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 8px 0 4px 16px;
+    max-width: 440px;
+    transition: box-shadow 0.15s ease;
+  }
+
+  .work-card:hover {
+    box-shadow: 0 2px 8px hsl(30 10% 15% / 0.06);
+  }
+
+  .work-card-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .work-card-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .work-card-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .work-card-detail-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .work-card-detail-value {
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  /* Self's aside / callout within a card */
+  .self-aside {
+    background: hsl(24 50% 97%);
+    border-left: 2px solid hsl(24 60% 80%);
+    padding: 8px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 10px 0;
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════
+     ACTION BUTTONS
+     Inline in conversation or in cards
+  ═══════════════════════════════════════════ */
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .work-card .action-buttons {
+    margin-top: 12px;
+  }
+
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.3;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-secondary:hover {
+    background: var(--surface);
+    border-color: var(--text-muted);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+  }
+  .btn-ghost:hover {
+    color: var(--text-primary);
+    background: var(--surface);
+  }
+
+  /* ═══════════════════════════════════════════
+     INLINE DATA — sparklines, tables, progress
+  ═══════════════════════════════════════════ */
+  .inline-sparkline {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 4px 0;
+  }
+
+  .sparkline-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 16px;
+  }
+
+  .sparkline-bars span {
+    display: inline-block;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 1px;
+    opacity: 0.7;
+  }
+
+  .inline-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .progress-bar {
+    flex: 1;
+    max-width: 180px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-fill.positive { background: var(--positive); }
+
+  /* ═══════════════════════════════════════════
+     PROMPT INPUT
+     Sticky bottom, the primary interaction
+  ═══════════════════════════════════════════ */
+  .input-wrapper {
+    position: sticky;
+    bottom: 0;
+    padding: 16px 0 24px;
+    background: linear-gradient(transparent, var(--bg) 16px);
+  }
+
+  .input-container {
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
+  }
+
+  .input-textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: transparent;
+    resize: none;
+    min-height: 24px;
+    max-height: 144px;
+  }
+
+  .input-textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-bottom: 2px;
+  }
+
+  .input-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .input-icon-btn:hover {
+    color: var(--text-secondary);
+    background: var(--surface);
+  }
+
+  .input-icon-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.5;
+  }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .send-btn:hover {
+    background: var(--accent-hover);
+  }
+
+  .send-btn:active {
+    transform: scale(0.95);
+  }
+
+  .send-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+    margin-left: 1px;
+  }
+
+  /* ═══════════════════════════════════════════
+     TYPING INDICATOR
+  ═══════════════════════════════════════════ */
+  .typing-indicator {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 4px 16px;
+    height: 28px;
+  }
+
+  .typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: typingPulse 1.4s ease-in-out infinite;
+  }
+
+  .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes typingPulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.9; }
+  }
+
+  /* ═══════════════════════════════════════════
+     RESPONSIVE — Mobile (375px)
+  ═══════════════════════════════════════════ */
+  @media (max-width: 768px) {
+    .conversation-wrapper {
+      padding: 0 16px;
+    }
+
+    .conversation-messages {
+      padding-top: 24px;
+    }
+
+    .message {
+      max-width: 92%;
+    }
+
+    .work-card {
+      margin-left: 8px;
+      max-width: 100%;
+    }
+
+    .action-buttons {
+      flex-direction: column;
+    }
+
+    .action-buttons .btn {
+      text-align: center;
+      padding: 10px 16px;
+    }
+
+    .input-wrapper {
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="conversation-wrapper">
+  <div class="conversation-messages">
+
+    <!-- ═══ SELF: Morning briefing ═══ -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+
+      <div class="message">
+        <p>Morning Rob. Two things:</p>
+      </div>
+
+      <!-- Inline work card: Henderson quote -->
+      <div class="work-card">
+        <div class="work-card-title">Henderson bathroom reno</div>
+        <div class="work-card-subtitle">Ready for you &middot; Drafted 2 hours ago</div>
+
+        <div class="work-card-details">
+          <div>
+            <div class="work-card-detail-label">Materials</div>
+            <div class="work-card-detail-value">$8,400</div>
+          </div>
+          <div>
+            <div class="work-card-detail-label">Labour</div>
+            <div class="work-card-detail-value">18 hrs ($4,200)</div>
+          </div>
+          <div>
+            <div class="work-card-detail-label">Margin</div>
+            <div class="work-card-detail-value">25%</div>
+          </div>
+          <div>
+            <div class="work-card-detail-label">Total</div>
+            <div class="work-card-detail-value">$14,200</div>
+          </div>
+        </div>
+
+        <div class="self-aside">
+          Labour might be low for a bathroom &mdash; similar jobs averaged 22 hours.
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary">Approve &amp; send</button>
+          <button class="btn btn-secondary">Bump to 22 hrs</button>
+          <button class="btn btn-ghost">Show detail</button>
+        </div>
+      </div>
+
+      <div class="message">
+        <p>Wilson follow-up went out yesterday &mdash; no reply yet. I'll nudge them again Friday if we don't hear back.</p>
+      </div>
+
+      <div class="message">
+        <p>Everything else is running fine.</p>
+        <div class="inline-sparkline">
+          This week:
+          <span class="sparkline-bars">
+            <span style="height: 4px"></span>
+            <span style="height: 7px"></span>
+            <span style="height: 10px"></span>
+            <span style="height: 8px"></span>
+            <span style="height: 14px"></span>
+            <span style="height: 12px"></span>
+            <span style="height: 16px"></span>
+          </span>
+          5 quotes sent, 4 approved clean
+        </div>
+      </div>
+
+      <div class="timestamp">6:32 am</div>
+    </div>
+
+    <!-- ═══ USER: Quick response ═══ -->
+    <div class="message-group user">
+      <div class="message">
+        <p>Bump Henderson to 22 hours and send</p>
+      </div>
+      <div class="timestamp">6:33 am</div>
+    </div>
+
+    <!-- ═══ SELF: Confirmation ═══ -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+
+      <div class="message">
+        <p>Done &mdash; $15,140, sent to Henderson. I'll remember bathrooms need more hours.</p>
+      </div>
+
+      <div class="message">
+        <p>By the way, that's the third time you've bumped bathroom labour. Want me to use 22 hours as the starting point for bathrooms from now on?</p>
+      </div>
+
+      <div class="message">
+        <div class="action-buttons">
+          <button class="btn btn-secondary">Yeah, good idea</button>
+          <button class="btn btn-ghost">Not yet</button>
+        </div>
+      </div>
+
+      <div class="timestamp">6:33 am</div>
+    </div>
+
+    <!-- ═══ USER: Confirms ═══ -->
+    <div class="message-group user">
+      <div class="message">
+        <p>Yeah do that</p>
+      </div>
+    </div>
+
+    <!-- ═══ SELF: Acknowledged + trust suggestion ═══ -->
+    <div class="message-group self">
+      <div class="sender-row">
+        <span class="self-dot"></span>
+        <span class="sender-name">Self</span>
+      </div>
+
+      <div class="message">
+        <p>Done. Bathroom jobs start at 22 hours from now on.</p>
+      </div>
+
+      <div class="message">
+        <p>Quick thing &mdash; your quoting has been solid lately:</p>
+        <div class="inline-progress">
+          Last 15 quotes:
+          <div class="progress-bar">
+            <div class="progress-fill positive" style="width: 93%"></div>
+          </div>
+          14 clean, 1 corrected
+        </div>
+        <p>I could start sending routine residential quotes automatically and just check with you on commercial ones and anything over $20k. You'd still see everything in your morning update. Want to try that?</p>
+      </div>
+
+      <div class="message">
+        <div class="action-buttons">
+          <button class="btn btn-secondary">Go for it</button>
+          <button class="btn btn-ghost">Nah, keep showing me everything</button>
+        </div>
+      </div>
+
+      <div class="timestamp">6:34 am</div>
+    </div>
+
+    <!-- Typing indicator -->
+    <!-- <div class="message-group self">
+      <div class="typing-indicator">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
+    </div> -->
+
+  </div>
+
+  <!-- ═══ PROMPT INPUT ═══ -->
+  <div class="input-wrapper">
+    <div class="input-container">
+      <textarea class="input-textarea" rows="1" placeholder="What's on your mind?"></textarea>
+      <div class="input-actions">
+        <button class="input-icon-btn" title="Voice">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </button>
+        <button class="input-icon-btn" title="Attach">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+          </svg>
+        </button>
+        <button class="send-btn" title="Send">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Auto-resize textarea
+  const textarea = document.querySelector('.input-textarea');
+  textarea.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 144) + 'px';
+  });
+</script>
+
+</body>
+</html>

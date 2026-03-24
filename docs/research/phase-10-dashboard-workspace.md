@@ -139,9 +139,39 @@ This research covers four dimensions:
 - Step progress indicators for long-running processes
 - Transparency of showing agent work builds trust — calibrate visibility to trust tier
 
+### 1.8 Paperclip (Deep Dive — github.com/paperclipai/paperclip)
+
+**What it is:** 31.8k-star agent orchestration platform. Human user is "the Board"; agents are employees. Ditto already borrows heavily from Paperclip (goal ancestry, heartbeat, audit log, adapter interface).
+
+**Tech stack:** React 19, Vite, TanStack React Query v5, Tailwind v4, Radix UI, shadcn/ui pattern (evidenced by `components.json`, `@/components/ui/`, CVA + clsx + tailwind-merge), Lucide icons, dnd-kit (Kanban), cmdk (command palette). No client state library — React Query for server state, React context for UI state.
+
+**Layout:** Three-column: CompanyRail (72px, Discord-style company switcher with live status badges) + Sidebar (240px collapsible, sections: Dashboard/Inbox/Work/Projects/Agents/Company) + Main content + PropertiesPanel (320px, togglable right slide-in).
+
+**Key UI patterns:**
+
+- **Org chart (`/org`, `OrgChart.tsx`):** Custom SVG canvas with hand-rolled pan/zoom. Recursive `layoutForest()` tree layout. Agent cards (200x100px) show: icon with colored status dot (cyan=running, green=active, yellow=paused, red=error, gray=terminated), name, role, adapter type. Click navigates to agent detail. Zoom controls: +, -, Fit.
+
+- **Issues as universal work unit:** Kanban board with drag-and-drop between status columns (backlog/todo/in_progress/in_review/blocked/done/cancelled) using dnd-kit. Live agent indicator (cyan pulse dot) on issues with active runs. Issue detail: inline editing, comment threads, LiveRunWidget (embedded real-time agent transcript), ActivityRow timeline (inline audit trail).
+
+- **Approvals:** Card-based layout with type icon. Three actions: **Approve** (green), **Reject** (red), **Request Revision** (outline). Comment thread below. Post-approval: green banner with CTA to linked issue/agent. Budget approvals redirect to `/costs`.
+
+- **Activity feed (`Activity.tsx`):** Filterable event stream. Each row: actor identity (agent/System/Board), natural-language verb (30+ action types), entity reference, timestamp. Appears both as standalone page AND inline on entity detail pages.
+
+- **Real-time:** SSE-based `LiveUpdatesProvider` → React Query cache invalidation + toast notifications (throttled: max 3 per 10s). `ActiveAgentsPanel` on dashboard: grid of agent cards with pulsing indicators + embedded transcript streaming (5-entry limit, compact). `LiveRunWidget` on issue detail: per-issue runs with 8-entry transcript, 3s refresh, Stop button. CompanyRail badges poll every 10-15s.
+
+- **Budget controls (`Costs.tsx`):** Multi-tab: provider breakdown, biller breakdown, timeline, budget policies. `BudgetPolicyCard`: scope (agent/project/company), observed vs budget metrics, color-coded progress bar (emerald/amber/red), status badges (Healthy/Warning/Hard Stop/Paused), inline budget editing. Budget incidents surface as red dashboard banner. Agents auto-pause on budget violation — Board must raise budget to resume.
+
+- **Goal ancestry:** Recursive collapsible `GoalTree` with indentation (depth * 16px). Levels: mission → objective → initiative. Each node: expand button, level label, title, status badge. Goals → Sub-Goals → Projects → Issues navigated by drilling down.
+
+- **Governance metaphor:** `Identity` component renders human actors as "Board" throughout. Agents = employees. Approval gates for hiring, budgets. This reinforces the organizational metaphor at the UI level.
+
+**Patterns for Ditto:** Paperclip validates the three-column layout with right-side properties panel. The SSE + React Query cache invalidation pattern is the practical real-time mechanism (simpler than WebSocket for most updates). The Kanban + inline editing + comment threads pattern works for work items. The "Board" identity metaphor is interesting but Ditto's "team member" framing (quiet, reliable) differs — the user is a collaborator, not a board. Budget controls as hard stops with visible enforcement validate ADR-011's attention model. The inline audit trail (on entity pages, not just a separate view) is worth replicating.
+
 ---
 
 ## 2. Human-in-the-Loop Oversight UX
+
+**Companion report:** `docs/research/human-in-the-loop-interface-patterns.md` provides deep coverage of context overload, orientation, attention management, decision fatigue, and novel oversight patterns. Key findings synthesized here; see the full report for detail.
 
 ### 2.1 Trust and Autonomy Calibration
 
@@ -443,7 +473,217 @@ The following capabilities from Ditto's design have no direct precedent in surve
 
 ---
 
-## 7. Existing Research Status
+## 7. AI SDK Elements — Component Library Deep Dive
+
+**Source:** github.com/vercel/ai-elements (1.8k stars, Apache 2.0)
+**Distribution:** shadcn/ui custom registry — components copied into project via CLI, fully owned and modifiable.
+**Composition level: adopt** — copy source files, adapt for Ditto's domain.
+
+### 7.1 Library Overview
+
+47+ pre-built React components across five categories: chatbot (17), code (15), voice (6), workflow (7), utilities (2). Built on React 19, Tailwind v4, shadcn/ui, @xyflow/react. Every component follows the **compound component pattern** (context provider + composable sub-components).
+
+### 7.2 Chatbot Example — Conversation Quality Patterns
+
+**Source:** `packages/examples/src/chatbot.tsx`
+
+**Layout:** Single-column — `Conversation` (scrollable message area) above `PromptInput` (rich compound input) with `Suggestions` between them.
+
+**Components and patterns:**
+
+- **Conversation + Message + MessageResponse:** Streaming markdown rendering via `streamdown` library (code blocks, math, mermaid, CJK). `MessageBranch` supports multiple response versions with prev/next navigation (like ChatGPT's regenerate). User messages right-aligned pill, assistant messages left-aligned.
+- **Reasoning:** Collapsible chain-of-thought display. Auto-opens when streaming starts, auto-closes 1 second after completion. Shows duration. `Shimmer` effect during streaming. Built on Radix Collapsible.
+- **Sources:** Collapsible citations panel. "Used N sources" trigger with individual source links. Animated slide transitions.
+- **PromptInput:** Three-zone compound input: Header (attachments), Body (textarea), Footer (tools row + submit). Supports global file drop, clipboard paste, screenshot capture. Action menu dropdown for attachment. `SpeechInput` for voice-to-text in tools row.
+- **ModelSelector:** Command-palette style model picker built on cmdk. Groups by provider (OpenAI, Anthropic, Google) with logos. Renders in PromptInput footer.
+- **Tool calls:** MCP tool call rendering with states: input-available → streaming → output-available → error.
+
+**Patterns for Ditto:** Reasoning component maps to showing agent reasoning on process steps. Sources maps to Self referencing process data and past corrections. Message branching for Self proposing alternative process plans. PromptInput's compound structure is the conversation input surface — voice for quick capture, attachments for context.
+
+### 7.3 IDE Example — Multi-Panel Workspace Blueprint
+
+**Source:** `packages/examples/src/demo-cursor.tsx`
+
+This is the most architecturally relevant example for Ditto. Demonstrates a Cursor-like AI workspace.
+
+**Layout (three-panel):**
+```
+┌─────────────┬──────────────────────┬──────────────────┐
+│ LEFT (w-64) │ CENTER (flex-1)      │ RIGHT (w-80)     │
+│             │                      │                  │
+│ FileTree    │ CodeBlock            │ Plan             │
+│ (navigation │ (primary content)    │ (what AI plans)  │
+│  hierarchy) │                      │                  │
+│             │                      │ Queue            │
+│             ├──────────────────────┤ (what's pending) │
+│             │ Terminal             │                  │
+│             │ (streaming output)   │ Conversation     │
+│             │                      │ (chat with AI)   │
+│             │                      │                  │
+│             │                      │ PromptInput      │
+└─────────────┴──────────────────────┴──────────────────┘
+```
+
+**Ditto translation:**
+```
+┌─────────────┬──────────────────────┬──────────────────┐
+│ LEFT        │ CENTER               │ RIGHT            │
+│             │                      │                  │
+│ My Work     │ Feed / Work Surface  │ Current Plan     │
+│ (goals,     │ (scrollable,         │ (living roadmap  │
+│  recurring  │  contextual,         │  for active work)│
+│  work,      │  actionable)         │                  │
+│  capability │                      │ Needs Attention  │
+│  map)       │ OR                   │ (pending reviews,│
+│             │                      │  actions)        │
+│             │ Process Detail       │                  │
+│             │ (drill-in view)      │ Self             │
+│             │                      │ (conversation)   │
+│             │                      │                  │
+│             │                      │ PromptInput      │
+└─────────────┴──────────────────────┴──────────────────┘
+```
+
+**Key insight from IDE example:** The right sidebar hierarchy — **Plan → Queue → Chat** — creates a clear structure-before-conversation flow. The AI's work is visible (plan, tasks) above the conversation. Applied to Ditto: the user sees the plan for their active work, what needs their attention, and the conversation surface — in that order.
+
+**Components used:** FileTree (hierarchical navigation), CodeBlock (primary content), Terminal (streaming output with ANSI support), Plan (collapsible steps with streaming shimmer), Task (nested in Plan, with status and affected files), Queue (pending/completed sections with dot indicators), Checkpoint (conversation bookmarks for restoring state), Conversation + Message (right sidebar chat), PromptInput (minimal — textarea + submit).
+
+### 7.4 v0 Clone Example — Conversation-Driven Work Surface
+
+**Source:** `packages/examples/src/v0-clone.tsx`
+
+**Layout:** 50/50 horizontal split — conversation left, live preview right.
+
+**Pattern for Ditto:** This is Primitive 8 (Conversation Thread / Explore Mode) from human-layer.md. User describes work on the left, the generated living roadmap builds on the right using Plan + Task components. Same dual-pane pattern but instead of a web preview, Ditto shows the emerging process structure.
+
+**Components used:** Conversation + Message (left panel), WebPreview (right panel — in Ditto this becomes the Plan/Process Builder view), PromptInput (minimal), Suggestions (shown before first interaction).
+
+### 7.5 Additional Components Relevant to Ditto
+
+| Component | Category | Ditto Use |
+|-----------|----------|-----------|
+| **Confirmation** | Chatbot | Review/approval flow: approve/reject buttons → outcome display. Maps to trust gate review. |
+| **Chain of Thought** | Chatbot | Step-by-step reasoning with status indicators (complete/active/pending). Agent transparency on demand. |
+| **Queue** | Chatbot | Flexible list with collapsible sections, status indicators, action buttons. Feed/review queue basis. |
+| **Task** | Chatbot | Collapsible task lists with pending/in-progress/completed/error status. Process step display. |
+| **Plan** | Chatbot | Multi-step execution plans with collapsible sections, streaming shimmer. Living roadmap view. |
+| **Checkpoint** | Chatbot | Conversation bookmarks. Session restore points in Self conversation. |
+| **Attachments** | Chatbot | File display with grid/inline/list layouts, hover previews. Context in feed items and conversation. |
+| **Context** | Chatbot | Token count + cost visualization. Engine proving ground detail. |
+| **Agent** | Code | Agent config display: model, system instructions, tools accordion, output schema. Agent card basis. |
+| **Canvas + Node + Edge** | Workflow | @xyflow/react wrapper. Process graph, capability map visualization. |
+| **Controls + Toolbar** | Workflow | Zoom/fit-view controls, node-attached action toolbars for graph view. |
+| **Terminal** | Code | Streaming output with ANSI support. Process execution log display. |
+
+---
+
+## 8. Rendering Architecture — Three Layers
+
+The dashboard has three distinct rendering concerns, each served by a different technology:
+
+### Layer 1: Workspace Chrome (Standard React + AI Elements)
+
+The app's own UI — navigation, layout, feed, conversation, process cards, review flows. Built with:
+- **shadcn/ui** primitives (Card, Tabs, Sidebar, Button, Dialog)
+- **AI SDK Elements** adopted components (Plan, Task, Queue, Confirmation, Conversation, PromptInput, etc.)
+- Standard React component registry for feed items (discriminated union + type-keyed renderer)
+
+This follows ADR-009 Principle D: "No ViewSpec protocol for the app's own UI — standard React."
+
+### Layer 2: Process Output Content (json-render catalog)
+
+When a process produces a `view`-type output (dashboard, report, data visualization), that content renders via json-render's catalog → registry → renderer pattern. This appears **inside** workspace components (e.g., inside a feed card or a process detail view).
+
+- **Catalog:** Per-process vocabulary of allowed components (Zod-validated)
+- **Registry:** React implementations mapping catalog types to shadcn/ui components
+- **Renderer:** Tree-walker that resolves element references, evaluates state bindings, renders via registry
+- **Streaming:** JSON Patch (RFC 6902) for progressive rendering of individual output views
+- **Trust governance:** Trust tiers modulate catalog richness (ADR-009 Section 4)
+
+Source: json-render (Vercel Labs) `packages/core/src/schema.ts`, `packages/core/src/types.ts`, `packages/react/src/renderer.tsx`. Composition level: **adopt** per ADR-009 v2.
+
+### Layer 3: Conversational UI (Vercel AI SDK)
+
+The Self's conversation interface. Built with:
+- **Vercel AI SDK** `useChat` hook for streaming conversation management
+- **AI Elements** Conversation, Message, Reasoning, Sources components for rendering
+- **Generative UI** pattern: Self's tool calls render as React components (e.g., calling `show_process_plan` renders a Plan component inline in conversation)
+
+The Self can pull process outputs (Layer 2) into conversation for discussion — rendering them inline via the same json-render registry (ADR-009 Section 5).
+
+### How the Layers Compose
+
+```
+┌─────────────────────────────────────────────────┐
+│ Layer 1: Workspace Chrome (React + AI Elements) │
+│  ┌────────────────────┐  ┌───────────────────┐  │
+│  │ Feed Card          │  │ Process Detail    │  │
+│  │  ┌──────────────┐  │  │  ┌─────────────┐  │  │
+│  │  │ Layer 2:     │  │  │  │ Layer 2:    │  │  │
+│  │  │ json-render  │  │  │  │ json-render │  │  │
+│  │  │ (process     │  │  │  │ (process    │  │  │
+│  │  │  output)     │  │  │  │  output)    │  │  │
+│  │  └──────────────┘  │  │  └─────────────┘  │  │
+│  └────────────────────┘  └───────────────────┘  │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │ Layer 3: Conversation (AI SDK + Elements)  │  │
+│  │  Self response with inline json-render     │  │
+│  │  output pulled into conversation           │  │
+│  └────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Component Dependency Stack
+
+```
+DEPEND (npm install — mature, governed)
+├── @xyflow/react ──────── Process graph, capability map (MIT, 26k+ stars)
+├── shadcn/ui ──────────── Base primitives: Card, Tabs, Sidebar, Button, Dialog
+├── Vercel AI SDK v6 ───── useChat, streaming, tool call rendering
+├── Next.js (App Router) ─ Server Components, Server Actions, streaming
+├── TanStack Query v5 ──── Data fetching, cache invalidation (Paperclip pattern)
+├── Tailwind CSS v4 ────── Styling
+└── React 19 ───────────── Framework
+
+ADOPT (copy source, own it — Apache 2.0 / immature for dependency)
+├── AI SDK Elements ────── ~12 components: Plan, Task, Queue, Confirmation,
+│                          Conversation, Message, PromptInput, Reasoning,
+│                          Chain of Thought, Attachments, Canvas/Node/Edge,
+│                          Checkpoint, Context, Agent
+└── json-render ────────── Catalog → Registry → Renderer for process outputs
+                           (Vercel Labs, v0.x, per ADR-009 v2)
+
+PATTERN (study approach, implement our way)
+├── AG-UI event taxonomy ─ Lifecycle + content + state + activity + reasoning
+│                          events (evaluate: adopt protocol vs pattern-only)
+└── Paperclip UI ───────── Three-column layout, SSE + React Query cache
+                           invalidation, inline audit trail, budget enforcement
+```
+
+---
+
+## 10. Design Insights Captured This Session
+
+Four insights emerged during this research session that are hard design constraints for Phase 10:
+
+| # | Insight | Core Principle |
+|---|---------|---------------|
+| 070 | Dashboard as Engine Proving Ground | Build UI to prove the engine, not after proving it. The dashboard tells us what the engine needs next. |
+| 071 | Conversation-First Work Creation | Every piece of work starts as a conversation with the Self. Forms exist for power users, but conversation is the default path. |
+| 072 | Processes Are Living Roadmaps | Every piece of work gets a process (same YAML, same harness). Domain processes are pre-defined and repeatable. Generated processes are created on-demand as living roadmaps. The library is emergent — generated processes are kept, patterns detected, domain processes distilled from real work. |
+| 073 | User Language, Not System Language | The UI uses the user's words, not system vocabulary. No "goals," "tasks," "processes," "trust tiers" in the interface. The system classifies and structures invisibly. The user sees "Henderson quote — Friday" not "Task #47." |
+
+---
+
+## 11. Existing Research Status
+
+(Updated from Section 7)
+
+| Report | Relevance to Phase 10 | Status |
+|--------|----------------------|--------|
 
 | Report | Relevance to Phase 10 | Status |
 |--------|----------------------|--------|
@@ -471,9 +711,11 @@ The following capabilities from Ditto's design have no direct precedent in surve
 - Manus.ai — manus.ai
 - ClickUp AI — clickup.com
 
-**Frameworks and protocols:**
+**Frameworks and component libraries:**
 - Vercel AI SDK v6 — github.com/vercel/ai (sdk.vercel.ai/docs)
+- AI SDK Elements — github.com/vercel/ai-elements (elements.ai-sdk.dev)
 - shadcn/ui — ui.shadcn.com
+- @xyflow/react — github.com/xyflow/xyflow
 - AG-UI Protocol — docs.ag-ui.com, github.com/ag-ui-protocol/ag-ui
 - json-render — github.com/vercel-labs/json-render
 - Next.js App Router — nextjs.org/docs

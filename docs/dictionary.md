@@ -152,6 +152,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 - Layer: 2 (Agent) / Integration
 - Related: Integration Registry, resolveServiceAuth, ADR-005, Brokered Credentials
 
+**Integration Generation** — CLI tool (`ditto generate-integration`) that auto-generates Ditto integration YAML files from OpenAPI 3.x specs. Parses the spec, resolves $refs, maps operations to tools (operationId→name, params→parameters, method→execute config), classifies tools as read-only/write, and emits YAML in the same format as hand-written integrations. The generated YAML is the starting point; the human curates (generate-then-curate pattern). First automated creation path for integrations (Insight-071, Insight-072). Provenance: Taskade/Neon/FastMCP codegen patterns, Brief 037.
+- Layer: 2 (Agent) / Integration
+- Related: Integration Registry, Credential Vault, ADR-005, Insight-071, Insight-072
+
 **Crystallisation** — The transition from Explore Mode to Operate Mode, where a freeform conversation solidifies into a structured, repeatable process definition. The platform's signature moment.
 - Layer: 6 (Human)
 - Related: Explore Mode, Operate Mode, Conversation Thread, Process Builder

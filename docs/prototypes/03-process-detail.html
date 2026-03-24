@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ditto — Process Detail View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: hsl(40 20% 98%);
+    --surface: hsl(40 15% 96%);
+    --surface-raised: hsl(0 0% 100%);
+    --border: hsl(40 10% 90%);
+    --border-strong: hsl(40 8% 82%);
+    --text-primary: hsl(30 10% 15%);
+    --text-secondary: hsl(30 6% 40%);
+    --text-muted: hsl(30 4% 50%);
+    --accent: hsl(24 80% 38%);
+    --accent-hover: hsl(24 80% 32%);
+    --accent-subtle: hsl(24 60% 95%);
+    --accent-text: hsl(0 0% 100%);
+    --positive: hsl(145 55% 40%);
+    --positive-subtle: hsl(145 40% 95%);
+    --caution: hsl(48 85% 50%);
+    --selection: hsl(24 60% 90%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--selection); }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .detail-page {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ═══ Back link ═══ */
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 24px;
+    transition: color 0.12s;
+  }
+  .back-link:hover { color: var(--text-secondary); }
+  .back-link svg { width: 14px; height: 14px; }
+
+  /* ═══ Header ═══ */
+  .detail-header {
+    margin-bottom: 32px;
+  }
+
+  .detail-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .detail-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  .trust-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .trust-indicator a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .trust-indicator a:hover { text-decoration: underline; }
+
+  /* ═══ Sections ═══ */
+  .detail-section {
+    margin-bottom: 28px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 14px;
+  }
+
+  /* ═══ How It Works — Process Steps ═══ */
+  .process-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .process-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .step-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+    width: 24px;
+  }
+
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    background: var(--bg);
+    z-index: 1;
+  }
+
+  .step-dot.complete {
+    background: var(--positive);
+    border-color: var(--positive);
+  }
+
+  .step-dot.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .step-line {
+    width: 2px;
+    flex: 1;
+    min-height: 20px;
+    background: var(--border);
+  }
+
+  .step-dot.complete + .step-line { background: var(--positive); }
+
+  .step-content {
+    padding-bottom: 4px;
+  }
+
+  .step-label {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+
+  .step-label.muted { color: var(--text-muted); }
+  .step-label.active { font-weight: 500; color: var(--accent); }
+
+  .step-detail {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ═══ How It's Going — Performance ═══ */
+  .performance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .perf-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .perf-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .perf-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .perf-narrative {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .perf-narrative p + p {
+    margin-top: 8px;
+  }
+
+  /* Quality bar */
+  .quality-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0;
+  }
+
+  .quality-bar-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 60px;
+  }
+
+  .quality-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    max-width: 280px;
+  }
+
+  .quality-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--positive);
+    transition: width 0.4s ease;
+  }
+
+  .quality-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+
+  /* Sparkline row */
+  .sparkline-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .spark-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 24px;
+  }
+
+  .spark-bars span {
+    width: 6px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.5;
+  }
+
+  .spark-bars span.recent {
+    opacity: 0.85;
+  }
+
+  /* ═══ Recent Items ═══ */
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .recent-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.12s;
+    cursor: pointer;
+  }
+
+  .recent-item:hover {
+    background: var(--surface);
+  }
+
+  .recent-item-title {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+
+  .recent-item-meta {
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .recent-item-status {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .recent-item-status.pending { background: var(--accent); }
+  .recent-item-status.sent { background: var(--border-strong); }
+  .recent-item-status.approved { background: var(--positive); }
+
+  /* ═══ Trust Control ═══ */
+  .trust-control {
+    background: var(--accent-subtle);
+    border-radius: 10px;
+    padding: 16px 18px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+
+  .trust-control strong {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .trust-control-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .btn {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-secondary:hover { background: var(--surface-raised); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* ═══ Under the Hood (collapsed) ═══ */
+  .hood-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    transition: color 0.12s;
+  }
+
+  .hood-toggle:hover { color: var(--text-secondary); }
+  .hood-toggle svg { width: 14px; height: 14px; transition: transform 0.2s; }
+
+  .hood-content {
+    display: none;
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
+  .hood-content.open { display: block; }
+
+  .hood-row {
+    display: flex;
+    gap: 12px;
+    padding: 3px 0;
+  }
+
+  .hood-label {
+    color: var(--text-muted);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+
+  /* ═══ Responsive ═══ */
+  @media (max-width: 768px) {
+    .detail-page { padding: 24px 16px 60px; }
+    .detail-title { font-size: 20px; }
+    .performance-grid { grid-template-columns: 1fr 1fr; }
+    .quality-bar { max-width: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="detail-page">
+
+  <a href="#" class="back-link">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+    Back to feed
+  </a>
+
+  <!-- Header -->
+  <div class="detail-header">
+    <div class="detail-title">Quoting</div>
+    <div class="detail-subtitle">Running since 6 weeks ago &middot; 34 quotes completed</div>
+    <div class="trust-indicator">
+      You're checking everything &middot; <a href="#">Ready for less?</a>
+    </div>
+  </div>
+
+  <!-- How It Works -->
+  <div class="detail-section">
+    <div class="section-title">How it works</div>
+    <div class="process-steps">
+      <div class="process-step">
+        <div class="step-indicator">
+          <div class="step-dot complete"></div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-label">Quote request comes in</div>
+          <div class="step-detail">From email, text, or you telling me</div>
+        </div>
+      </div>
+      <div class="process-step">
+        <div class="step-indicator">
+          <div class="step-dot complete"></div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-label">I gather specs and current pricing</div>
+          <div class="step-detail">Reece + Tradelink price lists</div>
+        </div>
+      </div>
+      <div class="process-step">
+        <div class="step-indicator">
+          <div class="step-dot complete"></div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-label">Draft the quote</div>
+          <div class="step-detail">Materials + labour + 25% residential / 20% commercial</div>
+        </div>
+      </div>
+      <div class="process-step">
+        <div class="step-indicator">
+          <div class="step-dot active"></div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-label active">You review</div>
+          <div class="step-detail">2 quotes waiting right now</div>
+        </div>
+      </div>
+      <div class="process-step">
+        <div class="step-indicator">
+          <div class="step-dot"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-label muted">I send it to the customer</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- How It's Going -->
+  <div class="detail-section">
+    <div class="section-title">How it's going</div>
+
+    <div class="performance-grid">
+      <div class="perf-card">
+        <div class="perf-value">34</div>
+        <div class="perf-label">Total quotes</div>
+      </div>
+      <div class="perf-card">
+        <div class="perf-value">31</div>
+        <div class="perf-label">Approved clean</div>
+      </div>
+      <div class="perf-card">
+        <div class="perf-value">12 min</div>
+        <div class="perf-label">Avg draft time</div>
+      </div>
+    </div>
+
+    <div class="quality-bar-row">
+      <span class="quality-bar-label">Quality</span>
+      <div class="quality-bar">
+        <div class="quality-fill" style="width: 91%"></div>
+      </div>
+      <span class="quality-value">91%</span>
+    </div>
+
+    <div class="sparkline-row">
+      Weekly trend
+      <div class="spark-bars">
+        <span style="height: 6px"></span>
+        <span style="height: 9px"></span>
+        <span style="height: 8px"></span>
+        <span style="height: 12px"></span>
+        <span style="height: 16px" class="recent"></span>
+        <span style="height: 20px" class="recent"></span>
+        <span style="height: 18px" class="recent"></span>
+        <span style="height: 22px" class="recent"></span>
+        <span style="height: 24px" class="recent"></span>
+      </div>
+      improving
+    </div>
+
+    <div class="perf-narrative">
+      <p>Your corrections: mostly bathroom labour (3 of 3). I've fixed that &mdash; bathrooms now start at 22 hours.</p>
+    </div>
+  </div>
+
+  <!-- Recent -->
+  <div class="detail-section">
+    <div class="section-title">Recent</div>
+    <div class="recent-list">
+      <div class="recent-item">
+        <span class="recent-item-status pending"></span>
+        <span class="recent-item-title">Henderson bathroom</span>
+        <span class="recent-item-meta">$14,200 &middot; awaiting review</span>
+      </div>
+      <div class="recent-item">
+        <span class="recent-item-status pending"></span>
+        <span class="recent-item-title">Wilson kitchen</span>
+        <span class="recent-item-meta">$8,900 &middot; awaiting review</span>
+      </div>
+      <div class="recent-item">
+        <span class="recent-item-status approved"></span>
+        <span class="recent-item-title">Peters hot water</span>
+        <span class="recent-item-meta">$3,400 &middot; approved &amp; sent</span>
+      </div>
+      <div class="recent-item">
+        <span class="recent-item-status sent"></span>
+        <span class="recent-item-title">Acme office refit</span>
+        <span class="recent-item-meta">$22,500 &middot; sent, no response</span>
+      </div>
+      <div class="recent-item">
+        <span class="recent-item-status approved"></span>
+        <span class="recent-item-title">Blake ensuite</span>
+        <span class="recent-item-meta">$9,800 &middot; approved &amp; sent</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trust Control -->
+  <div class="detail-section">
+    <div class="trust-control">
+      <strong>You're currently checking every quote.</strong> Based on your track record (31 of 34 clean), you could check a sample instead. I'd still flag anything unusual &mdash; new customer types, big jobs, anything over $20k. And if things slip, I'll go back to checking everything with you first.
+      <div class="trust-control-actions">
+        <button class="btn btn-secondary">Try it</button>
+        <button class="btn btn-ghost">Not yet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Under the Hood -->
+  <div class="detail-section">
+    <button class="hood-toggle" onclick="this.querySelector('svg').style.transform = this.nextElementSibling.classList.toggle('open') ? 'rotate(90deg)' : ''; ">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+      </svg>
+      Under the hood
+    </button>
+    <div class="hood-content">
+      <div class="hood-row"><span class="hood-label">Agent</span> Claude Sonnet</div>
+      <div class="hood-row"><span class="hood-label">Avg cost</span> $0.08 per quote</div>
+      <div class="hood-row"><span class="hood-label">Routing</span> Matched by intent classifier</div>
+      <div class="hood-row"><span class="hood-label">Memory</span> 12 items (3 pricing, 4 past quotes, 5 customer context)</div>
+      <div class="hood-row"><span class="hood-label">Checks</span> pricing &#10003; margin &#10003; completeness &#10003;</div>
+      <div class="hood-row"><span class="hood-label">Trust</span> supervised (all outputs reviewed)</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -38,6 +38,13 @@
 - **Ditto relevance:** HIGH for Layer 6 (conversation layer). The multi-step generative UI pattern is how "chat with my business" works — user asks, agent calls processes, results stream as components. `useChat` is the interaction primitive for pervasive conversation (ADR-010).
 - **Limitation:** Frontend-focused. No built-in workflow engine, trust, or governance.
 
+**AI SDK Elements** — github.com/vercel/ai-elements
+- 1.8k stars | Active 2026 | TypeScript | Apache 2.0
+- 47+ pre-built React components for AI applications, distributed as shadcn/ui custom registry (copy into project, own the code). Five categories: chatbot (18), code (15), voice (6), workflow (7), utilities (2). Built on React 19, Tailwind v4, shadcn/ui, @xyflow/react.
+- Key components: **Confirmation** (approve/reject flow), **Task** (status-tracked task lists), **Plan** (collapsible step plans with streaming), **Chain of Thought** (reasoning steps), **Queue** (flexible list with sections/actions), **Agent** (agent config display), **Canvas/Node/Edge** (xyflow workflow visualization), **Attachments** (file display with grid/inline/list), **Checkpoint** (conversation bookmarks), **Context** (token/cost visualization).
+- **Ditto relevance:** HIGH for Phase 10. Multiple components map directly to Ditto needs: Confirmation → review/approval flow, Task → process step display, Plan → generated process (living roadmap) view, Queue → work feed, Canvas → capability map / process graph. Composition level: **adopt** — copy source files, adapt for Ditto's domain (trust tiers, process context, user language). The wrappers are thin (50-150 lines each); the real dependencies are @xyflow/react and shadcn/ui which are already in the stack.
+- **Limitation:** AI-chat oriented defaults — components assume a chat context. Ditto's work-surface-first model needs adaptation.
+
 **OpenUI** — github.com/thesysdev/openui
 - 2.1k stars | Active March 2026 | TypeScript
 - Streaming-first generative UI framework. OpenUI Lang: compact language for LLM-generated UI (67% fewer tokens than JSON). Progressive rendering. Component library constrained — LLM can only output defined components. Works with shadcn, Radix.
