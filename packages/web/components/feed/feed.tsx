@@ -12,9 +12,10 @@
 import { useMemo } from "react";
 import { useFeed } from "@/lib/feed-query";
 import { FeedItemRenderer } from "./item-registry";
+import { GroupedExceptionCard } from "./exception-item";
 import { FeedEmpty, FeedLoading, FeedError } from "./empty-state";
 import { PRIORITY_ORDER } from "@/lib/feed-types";
-import type { FeedItem, EntityGroup } from "@/lib/feed-types";
+import type { FeedItem, EntityGroup, ExceptionItem } from "@/lib/feed-types";
 
 /**
  * Group feed items by entity (work item), preserving ungrouped items.
@@ -86,6 +87,55 @@ function isEntityGroup(entry: EntityGroup | FeedItem): entry is EntityGroup {
   return "items" in entry && Array.isArray(entry.items);
 }
 
+/** Group consecutive exception items by process name (AC7). */
+interface ExceptionGroup {
+  type: "exception-group";
+  processName: string;
+  count: number;
+  commonExplanation: string;
+  items: ExceptionItem[];
+}
+
+type RenderEntry = FeedItem | EntityGroup | ExceptionGroup;
+
+function isExceptionGroup(entry: RenderEntry): entry is ExceptionGroup {
+  return "type" in entry && (entry as ExceptionGroup).type === "exception-group";
+}
+
+function groupExceptions(items: Array<EntityGroup | FeedItem>): RenderEntry[] {
+  const result: RenderEntry[] = [];
+  const exceptionsByProcess = new Map<string, ExceptionItem[]>();
+
+  for (const entry of items) {
+    if (!isEntityGroup(entry) && entry.itemType === "exception") {
+      const exc = entry as ExceptionItem;
+      const key = exc.data.processName;
+      const existing = exceptionsByProcess.get(key) ?? [];
+      existing.push(exc);
+      exceptionsByProcess.set(key, existing);
+    } else {
+      result.push(entry);
+    }
+  }
+
+  // Add grouped exceptions
+  for (const [processName, exceptions] of exceptionsByProcess) {
+    if (exceptions.length >= 2) {
+      result.push({
+        type: "exception-group",
+        processName,
+        count: exceptions.length,
+        commonExplanation: exceptions[0].data.explanation,
+        items: exceptions,
+      });
+    } else {
+      result.push(exceptions[0]);
+    }
+  }
+
+  return result;
+}
+
 /**
  * Date separator: shows "Today", "Yesterday", or the date.
  */
@@ -109,7 +159,8 @@ export function Feed() {
 
   const grouped = useMemo(() => {
     if (!data?.items) return [];
-    return groupByEntity(data.items);
+    const byEntity = groupByEntity(data.items);
+    return groupExceptions(byEntity);
   }, [data]);
 
   if (isLoading) return <FeedLoading />;
@@ -120,8 +171,19 @@ export function Feed() {
   let lastDate = "";
 
   return (
-    <div className="space-y-3 pb-8">
+    <div className="space-y-2 pb-8">
       {grouped.map((entry, idx) => {
+        if (isExceptionGroup(entry)) {
+          return (
+            <GroupedExceptionCard
+              key={`exc-group-${entry.processName}`}
+              processName={entry.processName}
+              count={entry.count}
+              commonExplanation={entry.commonExplanation}
+            />
+          );
+        }
+
         if (isEntityGroup(entry)) {
           return (
             <div key={entry.entityId} className="space-y-2">

@@ -6,7 +6,7 @@ name: Dev Architect (Standalone)
 id: dev-architect-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Architect role. Designs solutions, produces briefs and ADRs.
   Used by the Conversational Self for single-role delegation.

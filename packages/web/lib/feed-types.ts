@@ -134,6 +134,8 @@ export interface ProcessOutputItem {
     outputType: string;
     summary: string;
     content: unknown;
+    /** Content blocks for structured rendering (Brief 045) */
+    blocks?: import("../../../src/engine/content-blocks").ContentBlock[];
   };
 }
 

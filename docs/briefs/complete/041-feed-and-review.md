@@ -29,6 +29,8 @@ A working feed component that renders 6 item types with inline actions, captures
 - Capability map (MVP+1)
 - Batch review ("Approve batch" / "Spot-check N")
 - json-render for process output content (deferred to when process outputs produce views)
+- Validation review variant for document-extracted data — split-pane cross-reference of extracted fields against source documents (depends on Insight-088 document understanding tools, Phase 11+). Pattern documented in `hark-patterns-brief-cross-reference-ux.md` for when capability arrives.
+- PDF export of decision outputs (requires document generation subsystem — MVP uses Markdown/text export)
 
 ## Inputs
 
@@ -60,6 +62,7 @@ A working feed component that renders 6 item types with inline actions, captures
 | Feedback capture | Existing `feedback-recorder.ts` | extend | Diffs from edits route to existing handler |
 | Priority ordering | Superhuman split inbox | pattern | Urgent/action above informational |
 | Review-in-feed | Original to Ditto | — | No separate review queue page |
+| Decision output rendering | Hark (gethark.ai) | pattern | Verdict bar + reasoning + data viz + export. Adapted for Ditto's review-in-feed model |
 
 ## What Changes (Work Products)
 
@@ -72,7 +75,8 @@ A working feed component that renders 6 item types with inline actions, captures
 | `packages/web/components/feed/work-update.tsx` | Create: Type 3 — progress update card |
 | `packages/web/components/feed/exception-item.tsx` | Create: Type 4 — exception/warning card |
 | `packages/web/components/feed/insight-item.tsx` | Create: Type 5 — insight/suggestion card (trust change proposals, "Teach this") |
-| `packages/web/components/feed/process-output.tsx` | Create: Type 6 — rendered process output card |
+| `packages/web/components/feed/process-output.tsx` | Create: Type 6 — rendered process output card (base variant) |
+| `packages/web/components/feed/decision-output.tsx` | Create: Type 6 decision variant — verdict bar + reasoning + supporting data + export (Markdown/text). Activates when output has decision structure (verdict, criteria, evidence). Provenance: Hark decision rendering pattern (gethark.ai) |
 | `packages/web/components/feed/review-editor.tsx` | Create: inline editor for text/table outputs with diff tracking |
 | `packages/web/components/feed/empty-state.tsx` | Create: empty/loading/error states per UX spec |
 | `packages/web/lib/feed-types.ts` | Create: TypeScript types for feed items (discriminated union) |
@@ -82,9 +86,9 @@ A working feed component that renders 6 item types with inline actions, captures
 
 ## User Experience
 
-- **Jobs affected:** Orient (shift report, updates), Review (inline approve/edit/reject), Decide (insights, "Teach this" prompts)
-- **Primitives involved:** Daily Brief (shift report card), Review Queue (inline in feed), Activity Feed (merged), Feedback Widget (conversational — "Teach this" prompt after edit patterns), Improvement Card (insight cards), Output Viewer (inline editor)
-- **Process-owner perspective:** Rob scrolls the feed → sees shift report "2 quotes ready" → taps review card → approves one, edits another → edits captured as feedback → after 3 similar edits, insight card appears: "Teach this?"
+- **Jobs affected:** Orient (shift report, updates), Review (inline approve/edit/reject, decision review), Decide (insights, "Teach this" prompts, decision evidence)
+- **Primitives involved:** Daily Brief (shift report card), Review Queue (inline in feed), Activity Feed (merged), Feedback Widget (conversational — "Teach this" prompt after edit patterns), Improvement Card (insight cards), Output Viewer (inline editor + decision variant)
+- **Process-owner perspective:** Rob scrolls the feed → sees shift report "2 quotes ready" → taps review card → approves one, edits another → edits captured as feedback → after 3 similar edits, insight card appears: "Teach this?" — Rob's quoting output shows as decision card: "Quote ready: $15,140" (green verdict bar) with reasoning ("Materials $8,400, labour 22hrs, 15% margin") and export action
 - **Interaction states (per UX spec 7.2):**
   - *Feed empty:* "Nothing here yet. Talk to Self to get started."
   - *Feed loading:* 3 skeleton cards
@@ -93,7 +97,10 @@ A working feed component that renders 6 item types with inline actions, captures
   - *Review card expanded:* Shows output with edit controls. Save/cancel.
   - *Review card approved:* Collapses to one line with ✓, slides down.
   - *Review card rejected:* Shows "Returned for revision" + reason.
-- **Designer input:** UX spec sections 1.2-1.4 (feed items), 3 (review flow), 7.2 (workspace states)
+  - *Decision output:* Verdict bar (green/amber/red) + reasoning. Approve/edit/reject + export.
+  - *Decision approved:* Verdict bar shows "Approved by [you]" + timestamp.
+  - *Decision exported:* "Copied" or "Downloaded" confirmation.
+- **Designer input:** UX spec sections 1.2-1.4 (feed items), 3 (review flow), 7.2 (workspace states), `hark-patterns-brief-cross-reference-ux.md` (Upgrade 4: Decision Output)
 
 ## Acceptance Criteria
 
@@ -104,14 +111,16 @@ A working feed component that renders 6 item types with inline actions, captures
 5. [ ] Exception card (Type 4) renders warning/error with natural language explanation + actions (investigate, pause, ask Self)
 6. [ ] Insight card (Type 5) renders pattern detection + evidence + actions (Teach this, No, Tell me more)
 7. [ ] Process output card (Type 6) renders summary + content area (placeholder for json-render)
-8. [ ] Entity grouping: updates for the same work item cluster together
-9. [ ] Inline review: approve calls `approveRun()` server-side, card collapses to confirmation. Note: `approveRun()` already records to activities table — the web path preserves this existing audit trail.
-10. [ ] Inline review: edit opens inline editor, saves diff, calls `editRun()` server-side with diff attached
-11. [ ] Inline review: reject shows reason input, calls `rejectRun()` server-side
-12. [ ] Feedback capture: edit diffs stored via existing `feedback-recorder.ts` pathway
-13. [ ] "Teach this" prompt: after detecting 3+ similar edits (pattern matching on correction type), insight card appears in feed
-14. [ ] Real-time: new items appear via SSE subscription (from Brief 039 event stream), insert at correct priority position
-15. [ ] `feed-assembler.ts` queries workItems + processRuns + stepRuns + activities and produces typed feed items
+8. [ ] Decision output variant (Type 6): when process output includes decision structure (verdict + criteria + evidence), renders verdict bar (status colour: green/amber/red), reasoning summary (1-3 sentences), supporting data, provenance footer (Insight-087). Actions: approve/edit/reject + export as Markdown/text
+9. [ ] Decision output export: copy as formatted text or download as Markdown. Full PDF export deferred (requires document generation subsystem)
+10. [ ] Entity grouping: updates for the same work item cluster together
+11. [ ] Inline review: approve calls `approveRun()` server-side, card collapses to confirmation. Note: `approveRun()` already records to activities table — the web path preserves this existing audit trail.
+12. [ ] Inline review: edit opens inline editor, saves diff, calls `editRun()` server-side with diff attached
+13. [ ] Inline review: reject shows reason input, calls `rejectRun()` server-side
+14. [ ] Feedback capture: edit diffs stored via existing `feedback-recorder.ts` pathway
+15. [ ] "Teach this" prompt: after detecting 3+ similar edits (pattern matching on correction type), insight card appears in feed
+16. [ ] Real-time: new items appear via SSE subscription (from Brief 039 event stream), insert at correct priority position
+17. [ ] `feed-assembler.ts` queries workItems + processRuns + stepRuns + activities and produces typed feed items
 
 ## Review Process
 

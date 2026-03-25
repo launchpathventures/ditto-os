@@ -6,7 +6,7 @@ name: Dev Reviewer (Standalone)
 id: dev-reviewer-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Reviewer role. Reviews code changes against architecture and checklist.
   Used by the Conversational Self for single-role delegation.

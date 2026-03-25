@@ -5,7 +5,7 @@ name: Human Step Test
 id: human-step-test
 version: 1
 status: active
-
+system: true
 description: >
   Simple process with a human step for smoke testing.
   Script step → human step → script step.

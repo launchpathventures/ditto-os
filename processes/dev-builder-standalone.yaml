@@ -6,7 +6,7 @@ name: Dev Builder (Standalone)
 id: dev-builder-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Builder role. Implements approved plans as code.
   Used by the Conversational Self for single-role delegation.

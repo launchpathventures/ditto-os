@@ -279,26 +279,29 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 - Smoke test: create work via conversation → Self generates process → connect service → output appears
 - Note: `get_briefing`, `detect_risks`, `suggest_next` moved to Brief 043 (no stub-then-rewrite)
 
-**041 — Feed & Review** (~15 AC)
+**041 — Feed & Review** (~17 AC)
 - Feed component with 6 item types (shift report, review, update, exception, insight, process output)
 - Feed item component registry (discriminated union)
 - Review flow: approve/edit/reject inline on feed cards
+- **Decision output variant** (Type 6): verdict bar + reasoning + supporting data + Markdown/text export. Provenance: Hark decision rendering pattern
 - Feedback capture from review actions (diff recording)
 - "Teach this" pattern detection prompt (UI only — Learning engine is Phase 8)
 - Entity grouping and priority ordering
-- Interaction states (empty, loading, error, content, single-process)
+- Interaction states (empty, loading, error, content, single-process, decision)
 - Smoke test: run a process → output appears in feed → approve inline
 
-**042 — Navigation & Detail** (~15 AC)
+**042 — Navigation & Detail** (~17 AC)
 - Left sidebar (My Work, Recurring, Settings)
-- Process detail view — living roadmap variant + domain process variant
+- Process detail view — living roadmap variant + domain process variant + **process runner variant**
+- **Process runner:** stepped navigation for active instances with 2+ pending human steps. Step sidebar (✓/→/⚠/○) + current step content. Provenance: Hark stepped-wizard pattern
+- **Activity log component:** reusable unified timeline of human + system actions, filterable, expandable. Appears in all process detail variants. Provenance: Hark activity log pattern
 - Trust control surface (natural language)
 - Engine View (developer mode — toggle, inline engine metadata)
 - Three-panel layout composition (sidebar + center + right panel)
 - Progressive reveal: workspace appears when Self suggests it
 - **Responsive breakpoints** (≥1280px three-panel; 1024-1279px icon rail; <1024px drawer/hamburger)
 - User preference persistence
-- Smoke test: click sidebar item → process detail loads → trust control works
+- Smoke test: click sidebar item → process detail loads → trust control works → process runner renders for multi-step instances
 
 **044 — Onboarding Experience** (~14 AC)
 - Onboarding as native system process (`processes/onboarding.yaml`)
@@ -330,6 +333,9 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 | AI SDK Elements | Vercel AI SDK examples | adopt | ~12 conversation/plan/task components. Apache 2.0. Adopt source, own it. |
 | json-render | Vercel Labs | adopt | Catalog/Registry/Renderer for process output. Apache 2.0. (ADR-009 v2) |
 | Three-column layout | Paperclip, Cursor | pattern | Layout structure adapted for Ditto's progressive reveal. |
+| Process runner (stepped wizard) | Hark (gethark.ai) | pattern | Stepped navigation for multi-step human processes (Brief 042) |
+| Activity log (unified timeline) | Hark (gethark.ai) | pattern | Human+system actions timeline, reusable component (Brief 042) |
+| Decision output rendering | Hark (gethark.ai) | pattern | Verdict bar + reasoning + data viz + export (Brief 041) |
 | SSE + React Query | Paperclip | pattern | Real-time feed updates via SSE, cache invalidation via React Query. |
 | Conversation-first entry point | Original to Ditto | — | No surveyed product uses conversation as default operating surface. |
 | Proactive attention management | Original to Ditto | — | 5 dimensions + risk detection woven into conversational briefing. |
@@ -342,7 +348,7 @@ This phase is split into 5 sub-briefs along natural dependency seams. Each is in
 - **Primitives involved:** Daily Brief (adapted as shift report), Process Card, Review Queue (inline in feed), Activity Feed (merged into feed), Feedback Widget (conversational), Conversation Thread (primary surface), Quick Capture (unified input), Trust Control (natural language), Performance Sparkline, Improvement Card (insights in feed)
 - **Process-owner perspective:** See UX interaction spec sections 1-6 for full persona journeys. Key: Rob approves quotes in 3 minutes from conversation. Lisa reviews content at her desk via workspace. Jordan proves value in 48 hours. Nadia governs team quality through briefings.
 - **Interaction states:** Defined in UX spec section 7 for all surfaces: conversation (6 states including confirmation pending), workspace (5 surfaces × 5 states).
-- **Designer input:** `docs/research/phase-10-mvp-dashboard-ux.md` v3 — conversation-first, dashboard-earned model. All 12 architect recommendations addressed.
+- **Designer input:** `docs/research/phase-10-mvp-dashboard-ux.md` v3 — conversation-first, dashboard-earned model. All 12 architect recommendations addressed. `docs/research/hark-patterns-brief-cross-reference-ux.md` — 3 upgrades from Hark patterns (process runner, activity log, decision output) absorbed into Briefs 041/042.
 
 ## Security Considerations
 

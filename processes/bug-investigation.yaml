@@ -6,7 +6,7 @@ name: Bug Investigation
 id: bug-investigation
 version: 1
 status: active
-
+system: true
 description: >
   Takes a bug report or failing test, reproduces the issue, traces
   the root cause, and proposes a fix with explanation. Human reviews

@@ -6,7 +6,7 @@ name: Dev Researcher (Standalone)
 id: dev-researcher-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Researcher role. Scouts existing solutions and patterns.
   Used by the Conversational Self for single-role delegation.

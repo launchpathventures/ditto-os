@@ -39,6 +39,7 @@ import {
 } from "./self-context";
 import { selfTools, executeDelegation } from "./self-delegation";
 import { getUserModelSummary } from "./user-model";
+import { assembleBriefing } from "./briefing-assembler";
 
 // ============================================================
 // Constants
@@ -142,6 +143,11 @@ You have tools to delegate work, manage processes, and help the user build their
 - connect_service: When an integration needs connecting
 - update_user_model: When you learn something about the user
 
+**Proactive tools** — use these to stay ahead:
+- get_briefing: When user returns (new session) — deliver a contextual briefing proactively
+- detect_risks: To check for operational signals (aging items, stale data, correction patterns)
+- suggest_next: To offer 1-2 suggestions (coverage gaps, trust upgrades). NEVER during exceptions.
+
 Do NOT delegate or consult for:
 - Greetings, casual conversation, or check-ins
 - Status questions (you already have work state above)
@@ -186,6 +192,37 @@ This builds trust through transparency and helps users become better AI collabor
     sections.push(
       `<previous_session>\n${previousSummary}\n</previous_session>`,
     );
+  }
+
+  // Briefing readiness signal — when user returns, Self should proactively brief
+  // AC11 (Brief 043): Self proactively delivers briefing on return
+  if (!resumed) {
+    try {
+      const briefing = await assembleBriefing(userId);
+      const hasBriefingContent =
+        briefing.focus.length > 0 ||
+        briefing.attention.length > 0 ||
+        briefing.upcoming.length > 0 ||
+        briefing.risks.length > 0 ||
+        briefing.stats.completedSinceLastVisit > 0;
+
+      if (hasBriefingContent) {
+        sections.push(
+          `<briefing_signal>
+The user just returned (new session). You SHOULD proactively deliver a briefing using the get_briefing tool. Weave the briefing data into a natural narrative — focus on what matters most, mention aging items naturally, never say the word "risk". Adapt length: ${briefing.userFamiliarity === "new" ? "be detailed and welcoming" : briefing.userFamiliarity === "developing" ? "moderate detail" : "be terse — they know the drill"}.
+</briefing_signal>`,
+        );
+      } else if (briefing.userFamiliarity === "new") {
+        // AC11 (Brief 044): Self speaks first for new users
+        sections.push(
+          `<first_session_signal>
+This is a brand new user with no work history. You MUST speak first — greet them warmly and start the onboarding conversation. Never present a blank input waiting for them. Follow the onboarding guidelines in your cognitive framework. Use update_user_model to store what you learn.
+</first_session_signal>`,
+        );
+      }
+    } catch {
+      // Briefing assembly failure is non-critical — Self works without it
+    }
   }
 
   // Budget check — truncate if over ~4K tokens

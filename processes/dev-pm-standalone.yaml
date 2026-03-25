@@ -6,7 +6,7 @@ name: Dev PM (Standalone)
 id: dev-pm-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone PM role. Triages and sequences work, produces recommendations.
   Used by the Conversational Self for single-role delegation.

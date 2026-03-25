@@ -36,6 +36,10 @@ import { handleQuickCapture } from "./self-tools/quick-capture";
 import { handleAdjustTrust } from "./self-tools/adjust-trust";
 import { handleGetProcessDetail } from "./self-tools/get-process-detail";
 import { handleConnectService } from "./self-tools/connect-service";
+import { handleGetBriefing } from "./self-tools/get-briefing";
+import { handleDetectRisks } from "./self-tools/detect-risks";
+import { handleSuggestNext } from "./self-tools/suggest-next";
+import { handleAdaptProcess } from "./self-tools/adapt-process";
 import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
 
 // ============================================================
@@ -318,6 +322,88 @@ export const selfTools: LlmToolDefinition[] = [
       required: ["dimension", "content"],
     },
   },
+  // ============================================================
+  // Brief 043 — Proactive Engine Tools
+  // ============================================================
+  {
+    name: "get_briefing",
+    description:
+      "Get a contextual briefing for the user. Assembles 5 dimensions: focus (what needs attention), attention (aging items), upcoming (predicted work), risk signals (woven naturally — NEVER use the word 'risk'), and suggestions. Call this proactively when a user returns after a session gap. Adapt briefing length: verbose for new users, terse for established users.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        userId: {
+          type: "string",
+          description: "User ID (defaults to 'default')",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "detect_risks",
+    description:
+      "Detect operational signals: temporal (aging items), data staleness (stale integration polls), correction patterns (high correction rates). Returns typed signals to weave into briefing. NEVER present these as 'risks' to the user — weave naturally into conversation.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        thresholds: {
+          type: "object",
+          description: "Optional override thresholds (temporalInactiveDays, dataStalenessHours, correctionRateBaseline, correctionMinRuns)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "suggest_next",
+    description:
+      "Generate 1-2 suggestions based on user model (9 dimensions), industry patterns (coverage gaps), and process maturity (trust upgrades). NEVER suggest during exceptions — fix those first. Suggestions are offered naturally, not as a list.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        userId: {
+          type: "string",
+          description: "User ID (defaults to 'default')",
+        },
+        hasExceptions: {
+          type: "boolean",
+          description: "If true, skip suggestions (exceptions active)",
+        },
+      },
+      required: [],
+    },
+  },
+  // ============================================================
+  // Brief 044 — Onboarding Experience Tool
+  // ============================================================
+  {
+    name: "adapt_process",
+    description:
+      "Adapt a running process definition at runtime. Writes a run-scoped override — the canonical template stays untouched. Use during onboarding to add industry-specific steps after learning about the user's business. Scoped to system processes only. Changes take effect on the next heartbeat iteration. ALWAYS provide the full adapted definition, not a diff.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        runId: {
+          type: "string",
+          description: "Process run ID to adapt",
+        },
+        adaptedDefinition: {
+          type: "object",
+          description: "Full adapted process definition (same shape as YAML). Must include steps array.",
+        },
+        reasoning: {
+          type: "string",
+          description: "Why this adaptation is being made (logged for audit)",
+        },
+        expectedVersion: {
+          type: "number",
+          description: "Expected version for optimistic locking (optional, prevents races)",
+        },
+      },
+      required: ["runId", "adaptedDefinition", "reasoning"],
+    },
+  },
 ];
 
 // ============================================================
@@ -416,6 +502,32 @@ export async function executeDelegation(
         service: toolInput.service as string,
         processSlug: toolInput.processSlug as string | undefined,
         action: toolInput.action as "check" | "guide" | "verify",
+      });
+
+    // Brief 043 — Proactive Engine Tools
+    case "get_briefing":
+      return await handleGetBriefing({
+        userId: toolInput.userId as string | undefined,
+      });
+
+    case "detect_risks":
+      return await handleDetectRisks({
+        thresholds: toolInput.thresholds as Record<string, number> | undefined,
+      });
+
+    case "suggest_next":
+      return await handleSuggestNext({
+        userId: toolInput.userId as string | undefined,
+        hasExceptions: toolInput.hasExceptions as boolean | undefined,
+      });
+
+    // Brief 044 — Onboarding Experience Tool
+    case "adapt_process":
+      return await handleAdaptProcess({
+        runId: toolInput.runId as string,
+        adaptedDefinition: toolInput.adaptedDefinition as Record<string, unknown>,
+        reasoning: toolInput.reasoning as string,
+        expectedVersion: toolInput.expectedVersion as number | undefined,
       });
 
     case "update_user_model": {

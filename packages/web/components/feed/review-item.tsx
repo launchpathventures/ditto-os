@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * Type 2: Review Card
+ * Type 2: Review Card — Compact
  *
- * Inline approve/edit/reject for process outputs waiting review.
- * Confidence indicator: green (high), amber (medium), no dot (low/null).
- * Calls server-side review actions via /api/feed POST.
+ * Inline approve/edit/reject. No heavy left border. Compact action text links.
+ * Confidence via small dot. Process name in neutral color.
  *
- * Provenance: Brief 041 AC3, AC9-12. Asana card actions pattern.
+ * Redesign AC9: Compact text links for actions.
+ * Redesign AC10: Process name neutral, status via icon.
+ *
+ * Provenance: Brief 041, workspace-layout-redesign-ux.md
  */
 
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useReviewAction } from "@/lib/feed-query";
 import { ReviewEditor } from "./review-editor";
 import type { ReviewItem as ReviewItemType } from "@/lib/feed-types";
@@ -28,7 +28,8 @@ export function ReviewCard({ item }: ReviewCardProps) {
   const [rejectReason, setRejectReason] = useState("");
   const reviewAction = useReviewAction();
 
-  const { processRunId, processName, stepName, outputText, confidence, flags } = item.data;
+  const { processRunId, processName, stepName, outputText, confidence, flags } =
+    item.data;
 
   const handleApprove = () => {
     reviewAction.mutate(
@@ -52,61 +53,54 @@ export function ReviewCard({ item }: ReviewCardProps) {
     );
   };
 
-  // Collapsed confirmation state
+  // Collapsed confirmation
   if (state === "approved") {
     return (
-      <Card className="opacity-70">
-        <CardContent className="py-3 flex items-center gap-2 text-sm text-positive">
-          <span className="text-base">&#10003;</span>
-          <span>
-            {processName} &mdash; {stepName} approved
-          </span>
-        </CardContent>
-      </Card>
+      <div className="py-2 px-3 flex items-center gap-2 text-sm text-positive opacity-70">
+        <span>✓</span>
+        <span>{processName} — approved</span>
+      </div>
     );
   }
 
   if (state === "rejected") {
     return (
-      <Card className="opacity-70">
-        <CardContent className="py-3 flex items-center gap-2 text-sm text-negative">
-          <span className="text-base">&#10005;</span>
-          <span>
-            {processName} &mdash; Returned for revision
-          </span>
-        </CardContent>
-      </Card>
+      <div className="py-2 px-3 flex items-center gap-2 text-sm text-text-muted opacity-70">
+        <span>↩</span>
+        <span>{processName} — returned for revision</span>
+      </div>
     );
   }
 
   return (
-    <Card className="border-l-4 border-l-caution">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base">{processName}</CardTitle>
-            <ConfidenceDot level={confidence} />
-          </div>
-          <span className="text-xs text-text-muted">{stepName}</span>
+    <div className="rounded-xl bg-surface-raised shadow-[var(--shadow-subtle)] overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ConfidenceDot level={confidence} />
+          <span className="text-sm font-medium text-text-primary">
+            {processName}
+          </span>
         </div>
-      </CardHeader>
+        <span className="text-xs text-text-muted">{stepName}</span>
+      </div>
 
-      <CardContent className="space-y-3">
-        {/* Flags */}
-        {flags && flags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {flags.map((flag, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center rounded-full bg-caution/10 px-2 py-0.5 text-xs text-text-secondary"
-              >
-                {flag}
-              </span>
-            ))}
-          </div>
-        )}
+      {/* Flags */}
+      {flags && flags.length > 0 && (
+        <div className="px-4 pb-2 flex flex-wrap gap-1">
+          {flags.map((flag, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center rounded-full bg-caution/10 px-2 py-0.5 text-[11px] text-text-secondary"
+            >
+              {flag}
+            </span>
+          ))}
+        </div>
+      )}
 
-        {/* Output preview or editor */}
+      {/* Content */}
+      <div className="px-4 pb-3">
         {state === "editing" ? (
           <ReviewEditor
             originalText={outputText}
@@ -116,75 +110,70 @@ export function ReviewCard({ item }: ReviewCardProps) {
           />
         ) : state === "rejecting" ? (
           <div className="space-y-2">
-            <p className="text-sm text-text-secondary whitespace-pre-line line-clamp-6">
+            <p className="text-sm text-text-secondary whitespace-pre-line line-clamp-4">
               {outputText}
             </p>
             <textarea
-              className="w-full rounded-lg border border-border bg-surface-raised p-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className="w-full rounded-lg border border-border bg-background p-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50"
               placeholder="Why are you returning this?"
-              rows={3}
+              rows={2}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
-            <div className="flex gap-2">
-              <Button
-                variant="destructive"
-                size="sm"
+            <div className="flex gap-3 text-sm">
+              <button
                 onClick={handleReject}
                 disabled={!rejectReason.trim() || reviewAction.isPending}
+                className="text-negative hover:text-negative/80 disabled:opacity-50 transition-colors"
               >
-                {reviewAction.isPending ? "Sending..." : "Return for revision"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+                {reviewAction.isPending ? "Sending..." : "Return"}
+              </button>
+              <button
                 onClick={() => setState("pending")}
+                className="text-text-muted hover:text-text-primary transition-colors"
               >
                 Cancel
-              </Button>
+              </button>
             </div>
           </div>
         ) : (
           <>
-            <p className="text-sm text-text-secondary whitespace-pre-line line-clamp-6">
+            <p className="text-sm text-text-secondary whitespace-pre-line line-clamp-4">
               {outputText}
             </p>
 
-            {/* Action buttons */}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
+            {/* Actions — compact text links (AC9) */}
+            <div className="flex gap-3 mt-2 text-sm">
+              <button
                 onClick={handleApprove}
                 disabled={reviewAction.isPending}
+                className="text-accent font-medium hover:text-accent-hover disabled:opacity-50 transition-colors"
               >
-                {reviewAction.isPending ? "Approving..." : "Approve"}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
+                {reviewAction.isPending ? "..." : "Approve"}
+              </button>
+              <button
                 onClick={() => setState("editing")}
+                className="text-text-muted hover:text-text-primary transition-colors"
               >
                 Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-text-muted"
+              </button>
+              <button
                 onClick={() => setState("rejecting")}
+                className="text-text-muted hover:text-text-primary transition-colors"
               >
-                Ask Self
-              </Button>
+                Ask Ditto
+              </button>
             </div>
           </>
         )}
 
         {reviewAction.isError && (
-          <p className="text-xs text-negative">
+          <p className="text-xs text-negative mt-1">
             {reviewAction.error?.message ?? "Something went wrong"}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -205,6 +194,5 @@ function ConfidenceDot({ level }: { level: string | null }) {
       />
     );
   }
-  // low or null — no dot
   return null;
 }

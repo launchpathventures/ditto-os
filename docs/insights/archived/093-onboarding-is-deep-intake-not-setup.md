@@ -3,7 +3,7 @@
 **Date:** 2026-03-24
 **Trigger:** Architect reality check on Phase 10 MVP brief — onboarding was treated as thin user model extraction
 **Layers affected:** L2 Agent (Self), L5 Learning (user model), L6 Human (onboarding UX)
-**Status:** active
+**Status:** absorbed — implemented in Brief 040 (Self Extensions): 9-dimension user model (`src/engine/user-model.ts`), `update_user_model` tool with progressive population, multi-session onboarding guidance in Self system prompt, AI coaching moments woven into system prompt. Remaining: cognitive/self.md coaching principles update (tracked as follow-up).
 
 ## The Insight
 

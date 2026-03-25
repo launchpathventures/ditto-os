@@ -12,6 +12,7 @@
 
 import { db, schema } from "../db";
 import { eq, and, desc, gte } from "drizzle-orm";
+import { updateWorkingPatterns } from "./user-model";
 
 const CHARS_PER_TOKEN = 4;
 
@@ -243,6 +244,10 @@ export async function getOrCreateSession(
 
     // Create new session
     const newSession = await createNewSession(userId, surface);
+
+    // Track working patterns on new session creation (Brief 043)
+    updateWorkingPatterns(userId, surface).catch(() => {});
+
     return { sessionId: newSession, resumed: false, previousSummary: summary };
   }
 
@@ -260,6 +265,12 @@ export async function getOrCreateSession(
     .limit(1);
 
   const newSession = await createNewSession(userId, surface);
+
+  // Track working patterns on new session creation (Brief 043)
+  updateWorkingPatterns(userId, surface).catch(() => {
+    // Non-critical — don't block session creation
+  });
+
   return {
     sessionId: newSession,
     resumed: false,

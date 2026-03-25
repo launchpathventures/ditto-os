@@ -35,6 +35,8 @@ import {
 } from "./self-context";
 import { selfTools, executeDelegation } from "./self-delegation";
 import { assembleSelfContext } from "./self";
+import type { ContentBlock } from "./content-blocks";
+import { registerBlockActions } from "./surface-actions";
 
 // ============================================================
 // Stream event types (for consumers)
@@ -43,8 +45,9 @@ import { assembleSelfContext } from "./self";
 export type SelfStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call-start"; toolName: string; toolCallId: string }
-  | { type: "tool-call-result"; toolCallId: string; result: string }
+  | { type: "tool-call-result"; toolCallId: string; result: string; blocks?: ContentBlock[] }
   | { type: "structured-data"; data: Record<string, unknown> }
+  | { type: "content-block"; block: ContentBlock }
   | { type: "credential-request"; service: string; processSlug: string | null; fieldLabel: string; placeholder: string }
   | { type: "status"; message: string }
   | { type: "finish"; sessionId: string; delegationsExecuted: number; consultationsExecuted: number; costCents: number };
@@ -205,18 +208,31 @@ export async function* selfConverseStream(
         });
       }
 
+      // Build content blocks from tool results (Brief 045)
+      const blocks = await toolResultToContentBlocks(toolUse.name, input, result);
+
       yield {
         type: "tool-call-result",
         toolCallId: toolUse.id,
-        result: result.output.slice(0, 500), // Truncate for the stream
+        result: result.output.slice(0, 500),
+        blocks,
       };
 
-      // Emit structured data for tools that return JSON (Brief 040, AC8)
+      // Register action IDs for session-scoped validation (AC14)
+      if (blocks.length > 0) {
+        registerBlockActions(blocks, context.sessionId);
+      }
+
+      // Emit individual content blocks for streaming
+      for (const block of blocks) {
+        yield { type: "content-block", block };
+      }
+
+      // Credential request needs special frontend handling (AC11-12)
       if (result.success && result.output.startsWith("{")) {
         try {
           const parsed = JSON.parse(result.output) as Record<string, unknown>;
 
-          // Credential request needs special frontend handling (AC11-12)
           if (parsed.credentialRequest && typeof parsed.credentialRequest === "object") {
             const cred = parsed.credentialRequest as Record<string, unknown>;
             yield {
@@ -228,10 +244,10 @@ export async function* selfConverseStream(
             };
           }
 
-          // Emit all structured tool results for inline rendering
+          // Backward compat: still emit structured-data for non-block consumers
           yield { type: "structured-data", data: parsed };
         } catch {
-          // Not valid JSON — skip structured data emission
+          // Not valid JSON — skip
         }
       }
 
@@ -261,4 +277,190 @@ export async function* selfConverseStream(
     consultationsExecuted,
     costCents: totalCostCents,
   };
+}
+
+// ============================================================
+// Tool result → ContentBlock mapping (Brief 045, AC12)
+// ============================================================
+
+import type {
+  StatusCardBlock,
+  ReviewCardBlock,
+  AlertBlock,
+  DataBlock,
+  GatheringIndicatorBlock,
+  ProcessProposalBlock,
+  KnowledgeSynthesisBlock,
+} from "./content-blocks";
+import { getUserModel } from "./user-model";
+import type { DelegationResult } from "./self-delegation";
+
+/**
+ * Convert a tool result into typed content blocks for surface rendering.
+ * Each tool declares its output block type.
+ */
+async function toolResultToContentBlocks(
+  toolName: string,
+  input: Record<string, unknown>,
+  result: DelegationResult,
+): Promise<ContentBlock[]> {
+  if (!result.success) return [];
+
+  switch (toolName) {
+    case "get_process_detail": {
+      // Try to parse structured output
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const block: StatusCardBlock = {
+          type: "status_card",
+          entityType: "process_run",
+          entityId: (input.processSlug as string) ?? "",
+          title: (parsed.name as string) ?? "Process",
+          status: (parsed.status as string) ?? "active",
+          details: {},
+        };
+        // Extract key-value details
+        if (parsed.trust && typeof parsed.trust === "object") {
+          const trust = parsed.trust as Record<string, unknown>;
+          if (trust.tier) block.details["Trust tier"] = String(trust.tier);
+          if (typeof trust.approvalRate === "number")
+            block.details["Approval rate"] = `${Math.round(trust.approvalRate * 100)}%`;
+          if (trust.trend) block.details["Trend"] = String(trust.trend);
+        }
+        if (parsed.stepsCount) block.details["Steps"] = String(parsed.stepsCount);
+        return [block];
+      } catch {
+        return [];
+      }
+    }
+
+    case "approve_review":
+    case "edit_review":
+    case "reject_review": {
+      const block: StatusCardBlock = {
+        type: "status_card",
+        entityType: "process_run",
+        entityId: (input.runId as string) ?? "",
+        title: "Review Action",
+        status: toolName === "approve_review"
+          ? "approved"
+          : toolName === "edit_review"
+            ? "edited"
+            : "rejected",
+        details: {
+          Action: toolName.replace("_review", ""),
+          Result: result.output.slice(0, 100),
+        },
+      };
+      return [block];
+    }
+
+    case "create_work_item":
+    case "quick_capture": {
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const block: StatusCardBlock = {
+          type: "status_card",
+          entityType: "work_item",
+          entityId: (parsed.id as string) ?? "",
+          title: (parsed.content as string)?.slice(0, 60) ?? "Work Item",
+          status: (parsed.classification as string) ?? "created",
+          details: {},
+        };
+        if (parsed.classification) block.details["Type"] = String(parsed.classification);
+        return [block];
+      } catch {
+        return [];
+      }
+    }
+
+    case "get_briefing": {
+      // Briefing is narrative text for the Self to weave.
+      // Also emit a knowledge synthesis card if the user model has entries
+      // — this gives the user visual confirmation of what Ditto knows.
+      const blocks: ContentBlock[] = [];
+      try {
+        const userId = (input.userId as string) ?? "default";
+        const model = await getUserModel(userId);
+        if (model.entries.length >= 2) {
+          const ksBlock: KnowledgeSynthesisBlock = {
+            type: "knowledge_synthesis",
+            entries: model.entries.map((e) => ({
+              dimension: e.dimension,
+              content: e.content,
+              confidence: e.confidence,
+            })),
+            totalDimensions: 9,
+          };
+          blocks.push(ksBlock);
+        }
+      } catch {
+        // Non-critical — skip knowledge synthesis card
+      }
+      return blocks;
+    }
+
+    case "update_user_model": {
+      // During onboarding, show a subtle gathering indicator
+      if (result.success) {
+        const block: GatheringIndicatorBlock = {
+          type: "gathering_indicator",
+          message: "Getting to know your business...",
+        };
+        return [block];
+      }
+      return [];
+    }
+
+    case "generate_process": {
+      // When previewing a process (save=false), emit a process proposal card
+      if (result.success && input.save === false) {
+        try {
+          const parsed = JSON.parse(result.output) as Record<string, unknown>;
+          const steps = (parsed.steps as Array<Record<string, unknown>>) ?? [];
+          const block: ProcessProposalBlock = {
+            type: "process_proposal",
+            name: (input.name as string) ?? "New Process",
+            description: (input.description as string) ?? undefined,
+            steps: steps.map((s) => ({
+              name: (s.name as string) ?? (s.id as string) ?? "Step",
+              description: s.description as string | undefined,
+              status: "pending" as const,
+            })),
+          };
+          return [block];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+
+    case "detect_risks": {
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const signals = parsed.signals as Array<Record<string, unknown>> | undefined;
+        if (signals && signals.length > 0) {
+          const block: DataBlock = {
+            type: "data",
+            format: "table",
+            title: "Operational Signals",
+            headers: ["Type", "Description", "Severity"],
+            data: signals.map((s) => ({
+              Type: String(s.type ?? ""),
+              Description: String(s.description ?? ""),
+              Severity: String(s.severity ?? ""),
+            })),
+          };
+          return [block];
+        }
+      } catch {
+        // Not parseable
+      }
+      return [];
+    }
+
+    default:
+      return [];
+  }
 }

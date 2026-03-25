@@ -11,7 +11,7 @@ name: Dev Pipeline
 id: dev-pipeline
 version: 1
 status: active
-
+system: true
 description: >
   The Ditto development pipeline. PM triages, researcher scouts,
   designer specs UX, architect writes briefs, builder implements,

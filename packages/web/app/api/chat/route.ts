@@ -1,160 +1,211 @@
 /**
- * Ditto Web — Chat Route Handler
+ * Ditto Web — Chat Route Handler (AI SDK v6)
  *
  * Connects the browser's useChat hook to the Self's streaming conversation.
- * Messages come in via POST, stream back via AI SDK data stream protocol.
+ * Uses AI SDK v6 UIMessageStream protocol — no hand-rolled encoding.
  *
- * All engine calls happen server-side. No engine internals leak to the client.
+ * SelfStreamEvents are mapped to UIMessageChunks via createUIMessageStream:
+ * - text-delta → text-start/text-delta/text-end
+ * - tool-call-start → tool-input-start + tool-input-available
+ * - tool-call-result → tool-output-available (with ContentBlock[] as output)
+ * - credential-request → data-credential-request custom part
+ * - status → data-status custom part
+ * - content-block → data-content-block custom part
  *
- * AC5: Route Handler at /api/chat connects useChat to selfConverseStream()
+ * AC3: Uses AI SDK v6 native streaming
+ * AC5: Route handler at /api/chat connects useChat to selfConverseStream()
  * AC11: Engine credentials and internals never reach the browser
+ *
+ * Provenance: AI SDK v6 createUIMessageStream, Brief 045.
  */
 
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { getEngine } from "@/lib/engine";
 import { loadConfig, applyConfigToEnv } from "@/lib/config";
-import type { SelfStreamEvent } from "@/lib/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // Self delegations can take time
-
-/**
- * AI SDK Data Stream Protocol format:
- * - Text: `0:${JSON.stringify(text)}\n`
- * - Data: `2:${JSON.stringify([data])}\n`
- * - Finish: `d:${JSON.stringify({finishReason: "stop"})}\n`
- */
-function encodeTextDelta(text: string): string {
-  return `0:${JSON.stringify(text)}\n`;
-}
-
-function encodeData(data: Record<string, unknown>): string {
-  return `2:${JSON.stringify([data])}\n`;
-}
-
-function encodeFinish(): string {
-  return `d:${JSON.stringify({ finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } })}\n`;
-}
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const messages: Array<{ role: string; content: string }> = body.messages || [];
+  const messages: Array<{ role: string; parts?: unknown[] }> = body.messages || [];
   const userId: string = body.userId || "default";
 
-  // Get the last user message
-  const lastMessage = messages.filter((m) => m.role === "user").pop();
-  if (!lastMessage) {
+  // Extract last user message text from v6 parts format
+  const lastUserMsg = messages.filter((m) => m.role === "user").pop();
+  if (!lastUserMsg) {
     return new Response("No user message", { status: 400 });
   }
 
-  // Apply LLM config from data/config.json
+  // v6 messages have parts array; extract text content
+  let userText = "";
+  if (lastUserMsg.parts && Array.isArray(lastUserMsg.parts)) {
+    for (const part of lastUserMsg.parts) {
+      const p = part as { type?: string; text?: string };
+      if (p.type === "text" && typeof p.text === "string") {
+        userText += p.text;
+      }
+    }
+  }
+  // Fallback: if parts didn't produce text, check for legacy content field
+  if (!userText) {
+    const legacy = lastUserMsg as { content?: string };
+    userText = legacy.content ?? "";
+  }
+
+  if (!userText) {
+    return new Response("No user message text", { status: 400 });
+  }
+
+  // Apply LLM config
   const config = loadConfig();
   if (!config) {
     return new Response("Not configured. Please complete setup.", { status: 503 });
   }
   applyConfigToEnv(config);
 
-  // Lazy-load engine to avoid build-time DB conflicts
+  // Lazy-load engine
   const { selfConverseStream } = await getEngine();
 
-  // Create a readable stream that yields AI SDK protocol chunks
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
+  // Create v6 UIMessageStream from SelfStreamEvents
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      let textPartId = "text-0";
+      let textStarted = false;
 
       try {
-        for await (const event of selfConverseStream(userId, lastMessage.content)) {
+        for await (const event of selfConverseStream(userId, userText)) {
           switch (event.type) {
-            case "text-delta":
-              controller.enqueue(encoder.encode(encodeTextDelta(event.text)));
+            case "text-delta": {
+              if (!textStarted) {
+                writer.write({ type: "text-start", id: textPartId });
+                textStarted = true;
+              }
+              writer.write({
+                type: "text-delta",
+                id: textPartId,
+                delta: event.text,
+              });
               break;
+            }
 
-            case "tool-call-start":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({
-                    type: "tool-call-start",
-                    toolName: event.toolName,
-                    toolCallId: event.toolCallId,
-                  }),
-                ),
-              );
+            case "tool-call-start": {
+              // Close current text part if open
+              if (textStarted) {
+                writer.write({ type: "text-end", id: textPartId });
+                textStarted = false;
+                textPartId = `text-${Date.now()}`;
+              }
+              // Emit tool input start + available (we have args immediately)
+              writer.write({
+                type: "tool-input-start",
+                toolCallId: event.toolCallId,
+                toolName: event.toolName,
+                dynamic: true,
+              });
+              writer.write({
+                type: "tool-input-available",
+                toolCallId: event.toolCallId,
+                toolName: event.toolName,
+                input: {},
+                dynamic: true,
+              });
               break;
+            }
 
-            case "tool-call-result":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({
-                    type: "tool-call-result",
-                    toolCallId: event.toolCallId,
-                    result: event.result,
-                  }),
-                ),
-              );
+            case "tool-call-result": {
+              // Emit tool output with content blocks as the typed output
+              writer.write({
+                type: "tool-output-available",
+                toolCallId: event.toolCallId,
+                output: {
+                  result: event.result,
+                  blocks: event.blocks ?? [],
+                },
+                dynamic: true,
+              });
               break;
+            }
 
-            case "structured-data":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({ type: "structured-data", data: event.data }),
-                ),
-              );
+            case "content-block": {
+              // Custom data part for content blocks
+              writer.write({
+                type: `data-content-block`,
+                id: `cb-${Date.now()}`,
+                data: event.block,
+              } as never); // Type assertion needed for custom data parts
               break;
+            }
 
-            case "credential-request":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({
-                    type: "credential-request",
-                    service: event.service,
-                    processSlug: event.processSlug,
-                    fieldLabel: event.fieldLabel,
-                    placeholder: event.placeholder,
-                  }),
-                ),
-              );
+            case "credential-request": {
+              writer.write({
+                type: `data-credential-request`,
+                id: `cred-${Date.now()}`,
+                data: {
+                  service: event.service,
+                  processSlug: event.processSlug,
+                  fieldLabel: event.fieldLabel,
+                  placeholder: event.placeholder,
+                },
+              } as never);
               break;
+            }
 
-            case "status":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({ type: "status", message: event.message }),
-                ),
-              );
+            case "status": {
+              writer.write({
+                type: `data-status`,
+                id: `status-${Date.now()}`,
+                data: { message: event.message },
+              } as never);
               break;
+            }
 
-            case "finish":
-              controller.enqueue(
-                encoder.encode(
-                  encodeData({
-                    type: "session",
-                    sessionId: event.sessionId,
-                    delegationsExecuted: event.delegationsExecuted,
-                    consultationsExecuted: event.consultationsExecuted,
-                  }),
-                ),
-              );
-              controller.enqueue(encoder.encode(encodeFinish()));
+            case "structured-data": {
+              // Legacy: still emit for backward compat during migration
+              writer.write({
+                type: `data-structured`,
+                id: `sd-${Date.now()}`,
+                data: event.data,
+              } as never);
               break;
+            }
+
+            case "finish": {
+              // Close any open text part
+              if (textStarted) {
+                writer.write({ type: "text-end", id: textPartId });
+                textStarted = false;
+              }
+              writer.write({
+                type: "finish",
+                finishReason: "stop",
+              });
+              break;
+            }
           }
         }
+
+        // Ensure text part is closed if stream ends without finish event
+        if (textStarted) {
+          writer.write({ type: "text-end", id: textPartId });
+        }
       } catch (error) {
-        // Log real error server-side, send generic message to client (AC11)
         console.error("[/api/chat] Stream error:", error);
-        controller.enqueue(
-          encoder.encode(encodeTextDelta("I ran into a problem processing your request. Please try again.")),
-        );
-        controller.enqueue(encoder.encode(encodeFinish()));
-      } finally {
-        controller.close();
+        // Emit error text
+        if (!textStarted) {
+          writer.write({ type: "text-start", id: textPartId });
+        }
+        writer.write({
+          type: "text-delta",
+          id: textPartId,
+          delta: "I ran into a problem processing your request. Please try again.",
+        });
+        writer.write({ type: "text-end", id: textPartId });
+        writer.write({ type: "finish", finishReason: "stop" });
       }
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "X-Vercel-AI-Data-Stream": "v1",
-    },
-  });
+  return createUIMessageStreamResponse({ stream });
 }

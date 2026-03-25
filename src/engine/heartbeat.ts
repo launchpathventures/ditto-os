@@ -551,7 +551,11 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     return { processRunId, stepsExecuted: 0, status: "failed", message: "Process definition not found" };
   }
 
-  const definition = process.definition as unknown as ProcessDefinition;
+  // Use run-scoped definition override if present (ADR-020, Brief 044)
+  // Re-read at each step boundary — Self may adapt the definition mid-run.
+  const definition = (run.definitionOverride
+    ? run.definitionOverride
+    : process.definition) as unknown as ProcessDefinition;
 
   // 3. Get current step states
   const existingStepRuns = await db

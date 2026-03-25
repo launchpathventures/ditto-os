@@ -117,6 +117,8 @@ function createTables(sqlite: Database.Database): void {
       total_cost_cents INTEGER DEFAULT 0,
       suspend_state TEXT,
       orchestrator_confidence TEXT,
+      definition_override TEXT,
+      definition_override_version INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 

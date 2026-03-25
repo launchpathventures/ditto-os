@@ -6,7 +6,7 @@ name: Code Review
 id: code-review
 version: 1
 status: active
-
+system: true
 description: >
   Multi-agent review pipeline. Convention checker, bug hunter, and
   security reviewer each examine code independently. Lead reviewer

@@ -6,7 +6,7 @@ name: Dev Designer (Standalone)
 id: dev-designer-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Designer role. Designs UX interaction specs.
   Used by the Conversational Self for single-role delegation.

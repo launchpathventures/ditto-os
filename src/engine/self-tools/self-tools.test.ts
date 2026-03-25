@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 12 tools (5 original + 7 new)", async () => {
+  it("has 16 tools (5 original + 7 Brief 040 + 3 Brief 043 + 1 Brief 044)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(12);
+    expect(selfTools).toHaveLength(16);
 
     const names = selfTools.map((t) => t.name);
     // Original 5
@@ -426,7 +426,7 @@ describe("selfTools definitions", () => {
     expect(names).toContain("edit_review");
     expect(names).toContain("reject_review");
     expect(names).toContain("consult_role");
-    // New 7 (6 from brief + update_user_model)
+    // Brief 040 (6 from brief + update_user_model)
     expect(names).toContain("create_work_item");
     expect(names).toContain("generate_process");
     expect(names).toContain("quick_capture");
@@ -434,6 +434,12 @@ describe("selfTools definitions", () => {
     expect(names).toContain("get_process_detail");
     expect(names).toContain("connect_service");
     expect(names).toContain("update_user_model");
+    // Brief 043 — Proactive Engine
+    expect(names).toContain("get_briefing");
+    expect(names).toContain("detect_risks");
+    expect(names).toContain("suggest_next");
+    // Brief 044 — Onboarding Experience
+    expect(names).toContain("adapt_process");
   });
 
   it("all tools have valid schemas", async () => {

@@ -6,7 +6,7 @@ name: Codebase Self-Improvement
 id: self-improvement
 version: 1
 status: active
-
+system: true
 description: >
   Weekly scan for improvements to tooling, dependencies, patterns,
   and approaches. Analyses correction patterns from feedback to
