@@ -166,6 +166,131 @@ export async function updateUserModel(
   }
 }
 
+// ============================================================
+// Behaviour Tracking (Brief 043)
+// ============================================================
+
+export interface WorkingPatterns {
+  /** Typical login times (hour of day, 0-23) */
+  typicalHours: number[];
+  /** Average check frequency (sessions per day) */
+  checkFrequency: number;
+  /** Preferred surface */
+  preferredSurface: "cli" | "telegram" | "web" | null;
+  /** Total sessions observed */
+  sessionsObserved: number;
+}
+
+/**
+ * Update working patterns from session data.
+ * Called on session creation to track when and how the user works.
+ */
+export async function updateWorkingPatterns(
+  userId: string,
+  surface: "cli" | "telegram" | "web",
+): Promise<void> {
+  const currentHour = new Date().getHours();
+
+  // Read existing patterns from a self-scoped memory
+  const [existing] = await db
+    .select()
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "self"),
+        eq(schema.memories.scopeId, userId),
+        eq(schema.memories.type, "context"),
+        like(schema.memories.content, "working_patterns:%"),
+        eq(schema.memories.active, true),
+      ),
+    )
+    .limit(1);
+
+  let patterns: WorkingPatterns;
+
+  if (existing) {
+    try {
+      const jsonStr = existing.content.slice("working_patterns:".length).trim();
+      patterns = JSON.parse(jsonStr);
+    } catch {
+      patterns = { typicalHours: [], checkFrequency: 0, preferredSurface: null, sessionsObserved: 0 };
+    }
+
+    // Update patterns
+    if (!patterns.typicalHours.includes(currentHour)) {
+      patterns.typicalHours.push(currentHour);
+      patterns.typicalHours.sort((a, b) => a - b);
+    }
+    patterns.sessionsObserved++;
+    // Simple frequency: sessions / days since first observed
+    const daysSinceFirst = Math.max(
+      1,
+      (Date.now() - (existing.createdAt instanceof Date
+        ? existing.createdAt.getTime()
+        : Number(existing.createdAt))) / (24 * 60 * 60 * 1000),
+    );
+    patterns.checkFrequency = Math.round(patterns.sessionsObserved / daysSinceFirst * 10) / 10;
+    // Track most used surface
+    patterns.preferredSurface = surface;
+
+    await db
+      .update(schema.memories)
+      .set({
+        content: `working_patterns:${JSON.stringify(patterns)}`,
+        reinforcementCount: existing.reinforcementCount + 1,
+        lastReinforcedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.memories.id, existing.id));
+  } else {
+    patterns = {
+      typicalHours: [currentHour],
+      checkFrequency: 1,
+      preferredSurface: surface,
+      sessionsObserved: 1,
+    };
+
+    await db.insert(schema.memories).values({
+      scopeType: "self",
+      scopeId: userId,
+      type: "context",
+      content: `working_patterns:${JSON.stringify(patterns)}`,
+      source: "system",
+      confidence: 0.5,
+      active: true,
+    });
+  }
+}
+
+/**
+ * Get working patterns for a user.
+ */
+export async function getWorkingPatterns(
+  userId: string,
+): Promise<WorkingPatterns | null> {
+  const [mem] = await db
+    .select({ content: schema.memories.content })
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "self"),
+        eq(schema.memories.scopeId, userId),
+        eq(schema.memories.type, "context"),
+        like(schema.memories.content, "working_patterns:%"),
+        eq(schema.memories.active, true),
+      ),
+    )
+    .limit(1);
+
+  if (!mem) return null;
+
+  try {
+    return JSON.parse(mem.content.slice("working_patterns:".length).trim());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Get a formatted summary of the user model for context injection.
  * Returns a concise text block suitable for the Self's system prompt.

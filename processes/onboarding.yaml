@@ -1,0 +1,152 @@
+# Ditto — System Process: Onboarding
+# A multi-step onboarding conversation that gets to know the user,
+# reflects understanding, proposes a first process, and delivers
+# first value — all within a single session.
+#
+# This process is adapted at runtime by the Self (via adapt_process)
+# to add industry-specific steps after learning about the user's business.
+# The template here is the starting scaffold — the Self makes it specific.
+#
+# Provenance: Superhuman white-glove onboarding (pattern), SPIN framework (pattern),
+#   Insight-091 (mutable processes), Insight-093 (onboarding is deep intake), Brief 044.
+
+name: Onboarding
+id: onboarding
+version: 1
+status: active
+system: true
+
+description: >
+  Get to know a new user, understand their business and pain points,
+  reflect that understanding, propose a first process, and deliver
+  real value in a single session. The Self adapts this process
+  at runtime based on what it learns.
+
+trigger:
+  type: event
+  event: user.first_session
+  description: Triggered when a new user starts their first conversation
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user starting onboarding
+
+steps:
+  - id: gather-basics
+    name: Gather Basics
+    executor: ai-agent
+    description: >
+      Learn who the user is: business type, size, role, and what brought them here.
+      Ask open questions. Listen for pain signals. Store learnings via update_user_model.
+    config:
+      model_hint: capable
+      role_contract: cognitive/self.md
+    outputs:
+      - user-context
+
+  - id: identify-first-pain
+    name: Identify First Pain Point
+    executor: ai-agent
+    description: >
+      Deep-dive into the most pressing problem. Understand the current workflow,
+      what's painful about it, and what good would look like. This becomes the
+      first process candidate.
+    config:
+      model_hint: capable
+      role_contract: cognitive/self.md
+    outputs:
+      - pain-analysis
+
+  - id: reflect-understanding
+    name: Reflect Understanding
+    executor: human
+    description: >
+      Present a knowledge synthesis card showing what the Self has learned.
+      The user confirms or corrects. Corrections are captured as feedback.
+    instructions: >
+      Review what Ditto has learned about your business so far.
+      Confirm if it's right, or correct anything that's off.
+    input_fields:
+      - name: confirmation
+        type: select
+        label: Does this look right?
+        required: true
+        options:
+          - "This looks right"
+          - "Let me fix something"
+      - name: corrections
+        type: text
+        label: What would you change?
+        required: false
+
+  - id: propose-first-process
+    name: Propose First Process
+    executor: ai-agent
+    description: >
+      Based on gathered context, propose a concrete first process.
+      Present as a process-proposal-card with plain language steps.
+      Wait for user approval before creating.
+    config:
+      model_hint: capable
+      role_contract: cognitive/self.md
+    outputs:
+      - process-proposal
+
+  - id: first-real-work
+    name: First Real Work
+    executor: ai-agent
+    description: >
+      Create the approved process, help the user submit their first
+      work item to it, and deliver the first output. This is the
+      moment Ditto proves value.
+    config:
+      model_hint: capable
+      role_contract: cognitive/self.md
+    outputs:
+      - first-output
+
+outputs:
+  - name: user-context
+    type: data
+    destination: system
+    description: Structured user understanding across 9 dimensions
+  - name: pain-analysis
+    type: data
+    destination: system
+    description: First pain point analysis with workflow details
+  - name: process-proposal
+    type: data
+    destination: system
+    description: Proposed first process definition
+  - name: first-output
+    type: data
+    destination: user
+    description: First real output from the user's first process
+
+quality_criteria:
+  - User's business is understood and reflected accurately
+  - First process maps to the user's most pressing pain point
+  - Value delivered within a single session (<20 minutes)
+  - No system vocabulary in any user-facing output
+
+feedback:
+  metrics:
+    - name: onboarding_completion
+      description: User completes full onboarding flow
+      target: ">80%"
+    - name: first_value_time
+      description: Time from first message to first output
+      target: "<20 minutes"
+  capture:
+    - Knowledge synthesis corrections
+    - Process proposal modifications
+    - First output edits
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "10 onboardings with >90% completion"
+      upgrade_to: spot_checked

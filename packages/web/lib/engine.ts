@@ -14,6 +14,29 @@
 export type { SelfContext, SelfConverseResult, SelfConverseCallbacks } from "../../../src/engine/self";
 export type { SelfStreamEvent } from "../../../src/engine/self-stream";
 export type { HarnessEvent } from "../../../src/engine/events";
+export type {
+  ContentBlock,
+  ContentBlockType,
+  ActionDef,
+  InputFieldDef,
+  TextBlock,
+  ReviewCardBlock,
+  StatusCardBlock,
+  ActionBlock,
+  InputRequestBlock,
+  KnowledgeCitationBlock,
+  ProgressBlock,
+  DataBlock,
+  ImageBlock,
+  CodeBlock,
+  ReasoningTraceBlock,
+  SuggestionBlock,
+  AlertBlock,
+  KnowledgeSynthesisBlock,
+  ProcessProposalBlock,
+  GatheringIndicatorBlock,
+} from "../../../src/engine/content-blocks";
+export { renderBlockToText } from "../../../src/engine/content-blocks";
 
 /**
  * Lazy-load engine modules to avoid build-time SQLite initialization.
@@ -24,12 +47,13 @@ export type { HarnessEvent } from "../../../src/engine/events";
  * skipped — the streaming adapter spawns CLI tools directly.
  */
 export async function getEngine() {
-  const [selfStream, events, llm, feedAssembler, reviewActions] = await Promise.all([
+  const [selfStream, events, llm, feedAssembler, reviewActions, surfaceActions] = await Promise.all([
     import("../../../src/engine/self-stream"),
     import("../../../src/engine/events"),
     import("../../../src/engine/llm"),
     import("../../../src/engine/feed-assembler"),
     import("../../../src/engine/review-actions"),
+    import("../../../src/engine/surface-actions"),
   ]);
 
   // Initialize LLM provider for API connections.
@@ -52,5 +76,7 @@ export async function getEngine() {
     approveRun: reviewActions.approveRun,
     editRun: reviewActions.editRun,
     rejectRun: reviewActions.rejectRun,
+    handleSurfaceAction: surfaceActions.handleSurfaceAction,
+    registerBlockActions: surfaceActions.registerBlockActions,
   };
 }

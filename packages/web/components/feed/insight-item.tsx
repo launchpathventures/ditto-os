@@ -1,17 +1,13 @@
 "use client";
 
 /**
- * Type 5: Insight Card
+ * Type 5: Insight Card — Compact
  *
- * Pattern detection + evidence + "Teach this" / No / Tell me more actions.
- * Appears when 3+ similar corrections detected (AC13).
- *
- * Provenance: Brief 041 AC6, AC13. Phase 8 "Teach this" precursor.
+ * Pattern detection + evidence + "Teach this" action.
+ * Provenance: Brief 041, workspace-layout-redesign-ux.md
  */
 
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import type { InsightItem as InsightItemType } from "@/lib/feed-types";
 
 interface InsightCardProps {
@@ -20,37 +16,39 @@ interface InsightCardProps {
 
 export function InsightCard({ item }: InsightCardProps) {
   const [dismissed, setDismissed] = useState(false);
-  const { processName, pattern, count, evidence } = item.data;
+  const { processName, count, evidence } = item.data;
 
   if (dismissed) return null;
 
   return (
-    <Card className="border-l-4 border-l-info">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Pattern detected</CardTitle>
-          <span className="text-xs text-text-muted">{processName}</span>
+    <div className="py-2.5 px-3 rounded-lg hover:bg-surface transition-colors">
+      <div className="flex items-start gap-2">
+        <span className="text-info text-sm flex-shrink-0 mt-0.5">💡</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-text-primary">
+            <span className="font-medium">{processName}</span>
+            {" — "}
+            <span className="text-text-secondary">{evidence}</span>
+          </p>
+          <p className="text-xs text-text-muted mt-0.5">
+            Seen {count} times. Should this become a rule?
+          </p>
+          <div className="flex gap-3 mt-1">
+            <button className="text-xs text-accent font-medium hover:text-accent-hover transition-colors">
+              Teach this
+            </button>
+            <button
+              className="text-xs text-text-muted hover:text-text-primary transition-colors"
+              onClick={() => setDismissed(true)}
+            >
+              No
+            </button>
+            <button className="text-xs text-text-muted hover:text-text-primary transition-colors">
+              Tell me more
+            </button>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-text-secondary">{evidence}</p>
-        <p className="text-xs text-text-muted">
-          Seen {count} times. Should this become a rule?
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm">Teach this</Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setDismissed(true)}
-          >
-            No
-          </Button>
-          <Button variant="ghost" size="sm" className="text-text-muted">
-            Tell me more
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

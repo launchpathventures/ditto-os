@@ -3,7 +3,7 @@
 **Date:** 2026-03-24
 **Trigger:** Architecture validation — tracing conversational process creation through to execution. Every real process needs external system access, but no design exists for how auth happens conversationally.
 **Layers affected:** L2 Agent (credential vault UX), L6 Human (Self's integration flow), L1 Process (integration dependency declaration)
-**Status:** active
+**Status:** absorbed — implemented in Brief 040 (Self Extensions): `connect_service` tool, `ConnectionMetadata` type on integration registry, masked credential input at `/api/credential`, conversational auth guidance in Self system prompt. Remaining: OAuth flow deferred to Phase 11 managed cloud.
 
 ## The Insight
 

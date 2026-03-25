@@ -10,6 +10,7 @@
 import { db, schema } from "../db";
 import { eq, desc, and, or, inArray } from "drizzle-orm";
 import { checkCorrectionPattern } from "./harness-handlers/feedback-recorder";
+import type { ContentBlock, ReviewCardBlock, AlertBlock, DataBlock } from "./content-blocks";
 
 // Feed item types are defined in packages/web/lib/feed-types.ts
 // We duplicate the minimal shape here to avoid cross-package imports from engine → web.
@@ -47,6 +48,7 @@ interface ReviewItem extends FeedItemBase {
     outputText: string;
     confidence: ConfidenceLevel | null;
     flags?: string[];
+    blocks?: ContentBlock[];
   };
 }
 
@@ -70,6 +72,7 @@ interface ExceptionItem extends FeedItemBase {
     stepId: string;
     errorMessage: string;
     explanation: string;
+    blocks?: ContentBlock[];
   };
 }
 
@@ -93,6 +96,7 @@ interface ProcessOutputItem extends FeedItemBase {
     outputType: string;
     summary: string;
     content: unknown;
+    blocks?: ContentBlock[];
   };
 }
 
@@ -281,6 +285,21 @@ async function assembleReviewItems(): Promise<ReviewItem[]> {
     // Find the work item entity this run belongs to
     const workItem = await findWorkItemForRun(run.id);
 
+    // Build content blocks for this review item (Brief 045, AC10)
+    const reviewBlock: ReviewCardBlock = {
+      type: "review_card",
+      processRunId: run.id,
+      stepName: waitingStep?.stepId ?? "unknown",
+      outputText: outputText || "(no output)",
+      confidence: (waitingStep?.confidenceLevel as ConfidenceLevel) ?? null,
+      actions: [
+        { id: `review.approve.${run.id}`, label: "Approve", style: "primary" },
+        { id: `review.edit.${run.id}`, label: "Edit", style: "secondary" },
+        { id: `review.reject.${run.id}`, label: "Reject", style: "danger" },
+      ],
+      knowledgeUsed: flags.length > 0 ? flags : undefined,
+    };
+
     items.push({
       itemType: "review",
       id: `review-${run.id}`,
@@ -295,6 +314,7 @@ async function assembleReviewItems(): Promise<ReviewItem[]> {
         outputText: outputText || "(no output)",
         confidence: (waitingStep?.confidenceLevel as ConfidenceLevel) ?? null,
         flags: flags.length > 0 ? flags : undefined,
+        blocks: [reviewBlock],
       },
     });
   }
@@ -400,6 +420,17 @@ async function assembleExceptions(): Promise<ExceptionItem[]> {
 
     const workItem = await findWorkItemForRun(run.id);
 
+    // Build alert block for exception (Brief 045, AC10)
+    const alertBlock: AlertBlock = {
+      type: "alert",
+      severity: "error",
+      title: proc?.name ?? "Process Error",
+      content: `Error at step "${failedStep?.stepId ?? "unknown"}": ${failedStep?.error ?? "Unknown error"}`,
+      actions: [
+        { id: `exception.investigate.${run.id}`, label: "Investigate" },
+      ],
+    };
+
     items.push({
       itemType: "exception",
       id: `exception-${run.id}`,
@@ -413,6 +444,7 @@ async function assembleExceptions(): Promise<ExceptionItem[]> {
         stepId: failedStep?.stepId ?? "unknown",
         errorMessage: failedStep?.error ?? "Unknown error",
         explanation: `${proc?.name ?? "A process"} encountered an error at step "${failedStep?.stepId ?? "unknown"}".`,
+        blocks: [alertBlock],
       },
     });
   }

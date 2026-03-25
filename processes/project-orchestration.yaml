@@ -6,7 +6,7 @@ name: Project Orchestration
 id: project-orchestration
 version: 1
 status: active
-
+system: true
 description: >
   The meta-process that monitors all other processes and projects.
   Produces a daily brief with priorities, risks, and recommendations.

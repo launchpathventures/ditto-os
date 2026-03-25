@@ -50,7 +50,7 @@ Three **activity contexts** coexist (not hard mode switches):
 | Context | Good for | Interface |
 |---------|----------|-----------|
 | **Analyze** | Understanding how the org actually works — connecting to systems, surfacing patterns, validating reality vs. design | Connected data views, pattern reports, gap alerts |
-| **Explore** | Defining and refining processes — guided by evidence from Analyze or from a blank canvas | Conversation + Process Builder (dual pane) |
+| **Explore** | Defining and refining processes — guided by evidence from Analyze or from a blank canvas | Conversation in centre column + Process Builder in right panel (Brief 046) |
 | **Operate** | Execution, monitoring, review, improvement | Process graph, queues, brief, metrics |
 
 The magic is in the **transitions**: Analyze surfaces what's really happening → Explore crystallises that into process definitions → Operate runs them. And conversation flows across all three.
@@ -718,7 +718,7 @@ Three activity contexts coexist (not hard mode switches):
 | **Review** | Unified Task Surface (full) + Output Viewer + Feedback Widget | Anyone reviewing or completing work |
 | **Map** | Process Graph (full screen, three layers: goals → processes → live state) — primary navigation | Everyone — the "see my business operating" view |
 | **Process Detail** | Process Card (expanded) + Activity Feed + Performance Sparklines + Trust Control | Process owner |
-| **Setup** | Conversation Thread + Process Builder (dual pane) | New process creation |
+| **Setup** | Conversation Thread (centre) + Process Builder (right panel) | New process creation |
 | **Team** | Agent Cards + Performance Sparklines + cost summary | Managers |
 | **Improvements** | Improvement Cards + Performance trends | Process owners, analysts |
 | **Capture** | Quick Capture (full screen) | Mobile, on-the-go |

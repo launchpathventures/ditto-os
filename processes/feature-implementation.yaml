@@ -6,7 +6,7 @@ name: Feature Implementation
 id: feature-implementation
 version: 1
 status: active
-
+system: true
 description: >
   Takes a feature brief or PRD and produces working, reviewed,
   tested code. The planner architects the approach, the builder

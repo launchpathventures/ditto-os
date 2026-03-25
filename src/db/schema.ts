@@ -261,6 +261,15 @@ export const processRuns = sqliteTable("process_runs", {
   orchestratorConfidence: text("orchestrator_confidence")
     .$type<"high" | "medium" | "low">(),
 
+  // Runtime process adaptation (ADR-020, Brief 044)
+  // Run-scoped definition override — template stays durable, run gets adapted version.
+  // Optimistic locking via version counter for concurrent adaptation safety.
+  definitionOverride: text("definition_override", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
+  definitionOverrideVersion: integer("definition_override_version")
+    .notNull()
+    .default(0),
+
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

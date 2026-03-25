@@ -1,16 +1,16 @@
 import { redirect } from "next/navigation";
-import { ConversationPage } from "./conversation-page";
 import { isConfigured, loadConfig, applyConfigToEnv } from "@/lib/config";
+import { EntryPoint } from "./entry-point";
 
 /**
  * Ditto Entry Point
  *
  * State-based routing:
  * - No config → redirect to /setup
- * - Configured → full-screen conversation (Self greets)
+ * - Configured → progressive reveal (conversation-only or workspace)
  *
- * AC9: Entry point routes based on user state.
- * AC10: userId defaults to "default".
+ * Brief 042 AC15: Progressive reveal — new users see conversation-only;
+ * Self can trigger workspace transition; user preference persisted.
  */
 
 export const dynamic = "force-dynamic";
@@ -26,5 +26,7 @@ export default function Home() {
     applyConfigToEnv(config);
   }
 
-  return <ConversationPage userId="default" />;
+  // Server-side: check if user has active processes
+  // Pass this to the client for progressive reveal decision
+  return <EntryPoint userId="default" />;
 }

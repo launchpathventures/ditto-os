@@ -40,7 +40,7 @@ Different phases of work need different interfaces. Ditto encodes this directly:
 | Mode | Interface | When |
 |------|-----------|------|
 | **Analyze** | Connected data views, pattern reports, gap alerts | Understanding how the org actually works — onboarding, ongoing analysis, validation |
-| **Explore** | Conversation Thread + Process Builder (dual pane) | Defining and refining processes — guided by evidence from Analyze or from a blank canvas |
+| **Explore** | Conversation Thread (centre column) + Process Builder (right panel) | Defining and refining processes — guided by evidence from Analyze or from a blank canvas |
 | **Operate** | Dashboard, queues, cards, metrics | Daily use, monitoring, reviewing, deciding |
 
 The magic is in the **transitions**: Analyze surfaces what's really happening → Explore crystallises that into process definitions → Operate runs them. The user can enter at any mode — Analyze for evidence-first discovery, Explore for conversation-first definition, Operate for daily execution. Analyze is not a one-time onboarding step; it's a mode the user returns to whenever they want Ditto to look at how things are actually working.
@@ -372,7 +372,7 @@ This is NOT a chatbot. It's a guided conversation that progressively builds stru
 ```
 
 **Key design decisions:**
-- **Dual pane**: conversation on the left, structure building on the right (or top/bottom on mobile)
+- **Three-panel layout**: conversation in the centre column, Process Builder in the right panel. Mobile: Process Builder deferred (conversation only). Brief 046 resolved this — the three-panel workspace maps "dual pane" across centre + right naturally.
 - **Every answer fills in a piece** of the process definition — the human sees their process taking shape as they talk
 - **One question at a time** — never overwhelm. The AI doesn't dump 10 questions.
 - **AI suggests based on industry knowledge**: "Most agencies also include nearby schools and transport — do you?"

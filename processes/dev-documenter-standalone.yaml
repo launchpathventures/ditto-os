@@ -6,7 +6,7 @@ name: Dev Documenter (Standalone)
 id: dev-documenter-standalone
 version: 2
 status: active
-
+system: true
 description: >
   Standalone Documenter role. Updates state, roadmap, captures insights, runs retrospective.
   Used by the Conversational Self for single-role delegation.

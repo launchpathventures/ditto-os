@@ -3,16 +3,17 @@
 /**
  * Type 6: Process Output Card
  *
- * Rendered process output with summary + content area.
- * Content area is a placeholder for json-render (deferred).
+ * Renders process outputs via block registry when blocks are available,
+ * falls back to text/JSON for legacy outputs.
  *
- * Provenance: Brief 041 AC7.
+ * AC9: Process outputs render via block registry instead of JSON.stringify
+ *
+ * Provenance: Brief 041 (original), Brief 045 (block registry migration).
  */
 
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import type { ProcessOutputItem as ProcessOutputItemType } from "@/lib/feed-types";
+import { BlockList } from "@/components/blocks/block-registry";
 
 interface ProcessOutputCardProps {
   item: ProcessOutputItemType;
@@ -20,36 +21,44 @@ interface ProcessOutputCardProps {
 
 export function ProcessOutputCard({ item }: ProcessOutputCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const { processName, outputName, outputType, summary, content } = item.data;
+  const { processName, outputName, summary, content, blocks } = item.data;
+  const hasBlocks = blocks && blocks.length > 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{processName}</CardTitle>
-          <span className="text-xs text-text-muted">{outputName}</span>
+    <div className="py-2.5 px-3 rounded-lg hover:bg-surface transition-colors">
+      <div className="flex items-start gap-2">
+        <span className="text-positive text-sm flex-shrink-0 mt-0.5">&#10003;</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-text-primary">
+            <span className="font-medium">{processName}</span>
+            {outputName && (
+              <span className="text-text-muted"> — {outputName}</span>
+            )}
+          </p>
+          <p className="text-xs text-text-secondary mt-0.5">{summary}</p>
+
+          <button
+            className="mt-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? "Hide" : "View content"}
+          </button>
+
+          {expanded && (
+            <div className="mt-2">
+              {hasBlocks ? (
+                <BlockList blocks={blocks} />
+              ) : (
+                <div className="rounded-lg bg-surface p-3 text-xs font-mono text-text-secondary max-h-48 overflow-y-auto whitespace-pre-wrap">
+                  {typeof content === "string"
+                    ? content
+                    : JSON.stringify(content, null, 2)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm text-text-secondary">{summary}</p>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-xs h-6 px-1"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Hide content" : "View content"}
-        </Button>
-
-        {expanded && (
-          <div className="rounded-md bg-surface p-3 text-xs font-mono text-text-secondary max-h-60 overflow-y-auto whitespace-pre-wrap">
-            {typeof content === "string"
-              ? content
-              : JSON.stringify(content, null, 2)}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

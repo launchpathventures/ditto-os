@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   try {
     // Lazy-load to avoid build-time DB conflicts
-    const { storeCredential } = await import("../../../../src/engine/credential-vault");
+    const { storeCredential } = await import("../../../../../src/engine/credential-vault");
 
     // Store credential — scoped to process if provided, otherwise global scope
     const credProcessId = processSlug ?? "__global__";

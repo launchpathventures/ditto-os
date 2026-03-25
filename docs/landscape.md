@@ -158,6 +158,18 @@
 
 ---
 
+## Decision Intelligence / Governance Layers
+
+**Hark** — gethark.ai
+- Commercial product | Active 2026 | Closed source
+- Decision intelligence layer that sits between AI models and real workflows. Model-agnostic (Claude, GPT, Gemini, Copilot). Four pillars: policy/rules enforcement, expert routing, accountability capture, audit evidence generation. "LLMs Reason. Hark Decides."
+- Production deployment at tier-one financial institutions (live mortgage workflow). Target: regulated industries (financial services, insurance, healthcare).
+- **UI patterns of interest:** Process-as-stepped-wizard (process definition generates navigable step sequence), document integrity checking (metadata analysis before content extraction), field-level human validation with source cross-reference (extracted value shown alongside source document), activity log as standard process component (human + system events in unified timeline), decision rendering with reasoning chain + supporting visualizations.
+- **Ditto relevance:** MEDIUM — not a build-from source (closed, commercial), but a strong **pattern** reference for how process execution UI should feel in regulated contexts. Six specific UI patterns extracted. Validates Insights 086 (composable UI — process-as-wizard is a valid composition), 087 (provenance — cross-reference pattern), 088 (document understanding — extends to integrity checking), 089 (artifact-first — documents are primary inputs). See `docs/research/hark-decision-intelligence-ui-patterns.md`.
+- **Limitation:** Closed source — pattern-only learning. Narrow scope (regulated decisions only). No progressive trust (fixed review points). No learning-from-corrections visible. Pre-designed process UIs, not composable.
+
+---
+
 ## Storage, CLI, and Infrastructure
 
 ### Storage
