@@ -1,7 +1,8 @@
 # Ditto — Prototype Plan
 
-**Date:** 2026-03-24
+**Date:** 2026-03-24 (updated 2026-03-26)
 **Status:** Active — prototyping is a first-class process (Insight-084)
+**Brand identity:** `.impeccable.md` is the authoritative design spec. Cool grey canvas, forest/emerald two-green palette, DM Sans, cardless typographic flow, Signature/Focus themes, living dot particles.
 **Gate:** All core journey prototypes must be approved before Phase 10 build brief is finalised
 
 ---
@@ -24,10 +25,11 @@ The user goes from "what is this?" to "this thing understands me and has a plan.
 
 | # | Prototype | Moment | Primary persona | Key design question | Status |
 |---|-----------|--------|----------------|-------------------|--------|
-| P08 | `08-day-zero.html` | First screen. Nothing exists yet. | Libby | Does this feel inviting without being generic? Does it avoid every "AI tool" cliché? | **Draft v1** |
-| P09 | `09-first-conversation.html` | First 10 minutes. Intake → structure emerges → plan proposed. | Libby | Does knowledge capture feel visible? Does the user know where they are? Does the process proposal feel earned, not scripted? | **Draft v1** |
-| P10 | `10-first-output.html` | Ditto produces something for the first time. | Libby | **THE trust moment.** Can the user see what knowledge went into this output? Can they edit it and feel heard? Does it feel like THEIR voice, not generic AI? | **Draft v1** |
-| P11 | `11-workspace-emerges.html` | After first output, the home screen has structure. | Libby | How does the workspace appear without overwhelming? How does it feel different from a dashboard? | **Draft v1** |
+| P08 | `08-day-zero.html` | First screen. Nothing exists yet. | Libby | Does this feel inviting without being generic? Does it avoid every "AI tool" cliché? | **v3** — palette ✓, theme toggle ✓, cardless ✓. No dots. |
+| P08a | `08a-intake-conversation.html` | Intake conversation — the onboarding IS the conversation. | Libby | Does knowledge capture feel visible? Does the process proposal feel earned? | **v7** — fully refined. Palette ✓, dots ✓, cardless ✓, centred 720px ✓. Reference prototype. |
+| P09 | `09-first-conversation.html` | First 10 minutes. Intake → structure emerges → plan proposed. | Libby | Does knowledge capture feel visible? Does the user know where they are? Does the process proposal feel earned, not scripted? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. |
+| P10 | `10-first-output.html` | Ditto produces something for the first time. | Libby | **THE trust moment.** Can the user see what knowledge went into this output? Can they edit it and feel heard? Does it feel like THEIR voice, not generic AI? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred ✓. |
+| P11 | `11-workspace-emerges.html` | After first output, the home screen has structure. | Libby | How does the workspace appear without overwhelming? How does it feel different from a dashboard? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. |
 
 **Act 1 proves:** Ditto is not ChatGPT. Within 15 minutes, the user has structured knowledge captured, a plan, and a first output — and they can SEE the connection between what they said and what was produced.
 
@@ -37,10 +39,10 @@ The user goes from "let me check everything" to "this is getting things right."
 
 | # | Prototype | Moment | Primary persona | Key design question | Status |
 |---|-----------|--------|----------------|-------------------|--------|
-| P12 | `12-morning-mobile.html` | Rob's morning. Phone. Coffee. 3 minutes. | Rob | Can Rob review a quote, approve it, and be done — all on a 375px screen? Does the morning brief feel like a competent colleague, not a notification dump? | **Draft v1** |
-| P13 | `13-daily-workspace.html` | The daily driver. Desktop. Multiple processes. | Rob / Lisa | Does this feel like a calm workspace, not a dashboard? Is the priority clear? Can the user act without hunting? | **Draft v1** |
-| P14 | `14-process-detail.html` | Drilling into one process. | Rob | Can a non-technical person understand how the process works, how it's performing, and what trust level means — without jargon? | **Draft v1** |
-| P15 | `15-knowledge-base.html` | "What does Ditto know about me?" Full knowledge view. | Libby / Lisa | Can the user browse, edit, and see connections? Does this feel like a living document, not a settings page? | **Draft v1** |
+| P12 | `12-morning-mobile.html` | Rob's morning. Phone. Coffee. 3 minutes. | Rob | Can Rob review a quote, approve it, and be done — all on a 375px screen? Does the morning brief feel like a competent colleague, not a notification dump? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Mobile 390px sim. |
+| P13 | `13-daily-workspace.html` | The daily driver. Desktop. Multiple processes. | Rob / Lisa | Does this feel like a calm workspace, not a dashboard? Is the priority clear? Can the user act without hunting? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Desktop multi-panel. |
+| P14 | `14-process-detail.html` | Drilling into one process. | Rob | Can a non-technical person understand how the process works, how it's performing, and what trust level means — without jargon? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. |
+| P15 | `15-knowledge-base.html` | "What does Ditto know about me?" Full knowledge view. | Libby / Lisa | Can the user browse, edit, and see connections? Does this feel like a living document, not a settings page? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. |
 
 **Act 2 proves:** The user feels in control. They can see what's happening, act on what matters, and trust that Ditto knows what it knows. The workspace is calm, not noisy.
 
@@ -50,9 +52,9 @@ The user goes from "I check everything" to "I check exceptions."
 
 | # | Prototype | Moment | Primary persona | Key design question | Status |
 |---|-----------|--------|----------------|-------------------|--------|
-| P16 | `16-teach-this.html` | User corrects an output. Ditto spots the pattern. "Teach this?" | Rob | Does this feel natural, not like a feedback form? Does the user understand what "teach this" means without explanation? | **Draft v1** |
-| P17 | `17-trust-upgrade.html` | "Your quoting has been solid. Want me to send routine ones automatically?" | Rob | Does the evidence feel trustworthy? Does the user feel in control of the decision? Does it feel earned, not pushy? | **Draft v1** |
-| P18 | `18-second-process.html` | Adding a second process. The compound effect begins. | Rob / Jordan | How does the workspace grow without becoming cluttered? Does shared knowledge flow naturally between processes? | **Draft v1** |
+| P16 | `16-teach-this.html` | User corrects an output. Ditto spots the pattern. "Teach this?" | Rob | Does this feel natural, not like a feedback form? Does the user understand what "teach this" means without explanation? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Mobile 390px sim. |
+| P17 | `17-trust-upgrade.html` | "Your quoting has been solid. Want me to send routine ones automatically?" | Rob | Does the evidence feel trustworthy? Does the user feel in control of the decision? Does it feel earned, not pushy? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Mobile 390px sim. |
+| P18 | `18-second-process.html` | Adding a second process. The compound effect begins. | Rob / Jordan | How does the workspace grow without becoming cluttered? Does shared knowledge flow naturally between processes? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Mobile 390px sim. |
 
 **Act 3 proves:** The system learns from the user's corrections, earns trust with evidence, and expands naturally. The user feels like they're managing a growing team, not configuring a growing system.
 
@@ -62,8 +64,8 @@ The user goes from "this handles my quoting" to "this runs my operations."
 
 | # | Prototype | Moment | Primary persona | Key design question | Status |
 |---|-----------|--------|----------------|-------------------|--------|
-| P19 | `19-multi-process-workspace.html` | 4+ processes running. The full workspace. | Jordan / Nadia | Does this still feel simple with multiple processes? Does the process graph help, not overwhelm? Does Nadia see her team, not just her own work? | **Draft v1** |
-| P20 | `20-something-wrong.html` | A process degrades. Trust auto-downgrades. Ditto surfaces it. | Rob / Nadia | Does the user feel informed, not alarmed? Is the degradation explanation clear? Does the recovery path feel obvious? | **Draft v1** |
+| P19 | `19-multi-process-workspace.html` | 4+ processes running. The full workspace. | Jordan / Nadia | Does this still feel simple with multiple processes? Does the process graph help, not overwhelm? Does Nadia see her team, not just her own work? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Desktop 3-col layout. |
+| P20 | `20-something-wrong.html` | A process degrades. Trust auto-downgrades. Ditto surfaces it. | Rob / Nadia | Does the user feel informed, not alarmed? Is the degradation explanation clear? Does the recovery path feel obvious? | **v2** — palette ✓, cardless ✓, theme toggle ✓, dots ✓. Mobile 390px sim. |
 
 **Act 4 proves:** Ditto scales from one process to many without losing simplicity. Problems surface calmly. The user manages exceptions, not operations.
 
@@ -75,8 +77,33 @@ These aren't journey moments — they're variants that must work across all mome
 
 | # | Prototype | What it covers | Status |
 |---|-----------|---------------|--------|
-| P21 | `21-mobile-workspace.html` | The workspace on a phone. Feed, review queue, quick capture. How does the three-panel collapse? | **Not started** |
-| P22 | `22-knowledge-in-output.html` | Close-up: an output with its "based on" provenance visible. The trust mechanism in detail. | **Not started** |
+| P00 | `00-workspace-shell.html` | The workspace shell — sidebar, centre, right panel. Structural reference. | **v1** — palette ✓, theme toggle ✓, cardless ✓, dots ✓. Sidebar active = straight border-left. |
+| P23 | `23-setup-connection.html` | Setup / connection screen — first-run LLM provider selection. | **v3** — palette ✓, cardless ✓, proto-nav ✓, theme toggle ✓, dots ✓ (States 1+5). |
+| P21 | `21-mobile-workspace.html` | The workspace on a phone. Feed, review queue, quick capture, process view. Rob Month 2+, 4 processes. | **v1** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, 390px sim. 4 states: Feed, Review, Capture, Process. |
+| P22 | `22-knowledge-in-output.html` | Close-up: an output with its "based on" provenance visible. The trust mechanism in detail. | **v1** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. 4 states: Summary, Expanded, Editing, Clinical (Jay). |
+| P14a | `14a-review-queue.html` | Lisa's dedicated review view. 8 items across 3 processes. Batch actions. | **v1** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. 2 states: Full queue, Urgent only. |
+| P27 | `27-process-flow-map.html` | Jordan's inter-process graph. Node-based layout with detail panel and impact view. | **v1** — palette ✓, cardless ✓, theme toggle ✓. Full-bleed layout. 3 states: Overview, Selected, Impact. |
+| P29 | `29-process-model-library.html` | Rob's capability catalog. Self recommends processes. Browse, detail, setup. | **v1** — palette ✓, cardless ✓, theme toggle ✓, dots ✓, centred 720px ✓. 4 states: Recommended, Browse, Detail, Setup. |
+
+---
+
+## Design System Compliance (2026-03-26)
+
+| Feature | P08 | P08a | P09 | P10 | P11 | P12 | P13 | P14 | P15 | P16 | P17 | P18 | P19 | P20 | P00 | P23 | P21 | P22 | P14a | P27 | P29 |
+|---------|-----|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|------|-----|-----|
+| Palette (#059669) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| DM Sans | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Theme toggle | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Dot particles | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
+| Cardless flow | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Centred 720px | ✗ | ✓ | ✓ | ✓ | ✓ | ~ | ~ | ✓ | ✓ | ~ | ~ | ~ | ~ | ~ | ✗ | ✗ | ~ | ✓ | ✓ | ✗ | ✓ |
+| Flat vivid buttons | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+**Fully compliant:** P08a (reference), P00, P09, P10, P11, P14, P15, P22, P14a, P29
+**Compliant (mobile — centred N/A):** P12, P16, P17, P18, P20, P21
+**Compliant (multi-panel — centred N/A):** P13, P19, P27
+**P23:** Now v3 with theme toggle + dots
+**P27:** No dots (full-bleed graph layout — N/A)
 
 ---
 
@@ -121,6 +148,11 @@ Build order is driven by dependency and user journey:
 13. P19 — Multi-process workspace
 14. P20 — Something went wrong
 15. P21 — Mobile workspace
+
+**Sprint 5: Cross-Cutting Views**
+16. P14a — Review queue (Lisa's dedicated review)
+17. P27 — Process flow map (Jordan's inter-process graph)
+18. P29 — Process model library (Rob's capability catalog)
 
 ---
 
@@ -196,7 +228,7 @@ Every prototype must pass before moving to the next:
 3. **Knowledge visibility:** Can the user see what Ditto knows, what it doesn't know, and what knowledge is being used in any output?
 4. **Progress clarity:** Does the user know where they are? What's done? What's next?
 5. **Mobile check:** Does it work at 375px? (For Act 1-2 prototypes)
-6. **Warm professional:** Does it match the visual identity spec? Cream, terracotta, Inter, quiet, warm?
+6. **Brand identity:** Does it match `.impeccable.md`? Cool grey canvas, forest/emerald green, DM Sans, cardless typographic flow, Signature/Focus themes?
 
 ---
 

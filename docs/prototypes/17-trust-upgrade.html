@@ -1,152 +1,185 @@
+<!-- v2 — Design system alignment: cardless flow, theme toggle, dot particles, 2026-03-26 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Ditto — Trust Upgrade (Rob's Phone)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P17 — Trust Upgrade | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 16px;
     -webkit-font-smoothing: antialiased;
+    font-size: 16px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Theme toggle */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    background: transparent; border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Mobile Viewport Simulation ===== */
+  .mobile-frame {
     max-width: 390px;
-    margin: 0 auto;
-    min-height: 100vh;
+    margin: 48px auto 0;
+    min-height: calc(100vh - 48px);
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
-  }
-
-  .conversation {
-    min-height: 100vh;
+    background: var(--bg);
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
+  /* ===== Top Bar ===== */
   .top-bar {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 14px 18px 10px;
     position: sticky;
-    top: 0;
+    top: 48px;
     background: var(--bg);
     z-index: 10;
   }
-
   .top-bar-back {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: none; background: transparent;
     color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     cursor: pointer;
   }
-
   .top-bar-back svg { width: 20px; height: 20px; stroke-width: 2; }
-  .top-bar-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .top-bar-title { font-size: 17px; font-weight: 600; flex: 1; letter-spacing: -0.02em; }
 
+  /* ===== Messages — clean, spacious ===== */
   .messages {
     flex: 1;
     padding: 12px 18px 24px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 20px;
   }
 
   .msg-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 10px;
   }
-
   .msg-group.self { align-items: flex-start; }
   .msg-group.user { align-items: flex-end; }
 
   .sender {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 2px;
   }
-
   .self-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--vivid);
   }
-
   .sender-label {
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 12px; font-weight: 500;
     color: var(--text-muted);
   }
 
   .msg {
-    max-width: 88%;
+    max-width: 92%;
     font-size: 15px;
-    line-height: 1.6;
+    line-height: 1.65;
+    color: var(--text-primary);
   }
-
-  .msg-group.self .msg { padding: 2px 0 2px 14px; }
-
+  .msg-group.self .msg { padding: 2px 0; }
   .msg-group.user .msg {
-    background: var(--accent-subtle);
-    padding: 10px 14px;
-    border-radius: 18px;
-    border-bottom-right-radius: 4px;
+    background: var(--surface);
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
   }
-
   .msg p + p { margin-top: 8px; }
 
-  /* ═══ THE TRUST EVIDENCE CARD ═══
-     This is how Ditto earns trust — with data, not promises.
-     Rob sees his actual track record, not a generic "you've been doing great."
-  */
+  /* ═══════════════════════════════════════════════════
+     TRUST EVIDENCE — cardless typographic flow
+     Border-left accents, not boxed cards
+     ═══════════════════════════════════════════════════ */
+
   .trust-evidence {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--accent);
-    border-radius: 14px;
-    padding: 18px;
-    margin-left: 14px;
-    max-width: 330px;
-    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+    padding: 0;
+    max-width: 100%;
   }
 
   .trust-evidence-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .trust-evidence-subtitle {
@@ -155,360 +188,355 @@
     margin-bottom: 16px;
   }
 
-  /* Track record — the evidence */
-  .track-record {
-    margin-bottom: 16px;
-  }
-
-  .track-record-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-  }
-
-  .track-record-row:last-child { border-bottom: none; }
-
-  .track-record-label { color: var(--text-secondary); }
-
-  .track-record-value {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .track-record-value.great { color: var(--positive); }
-
-  /* Quality bar */
+  /* Quality bar — border-left accent, not boxed */
   .quality-visual {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 14px;
-    background: var(--positive-subtle);
-    border-radius: 8px;
+    gap: 12px;
+    padding: 10px 0 10px 14px;
+    border-left: 2px solid var(--positive);
     margin-bottom: 16px;
   }
-
-  .quality-bar-track {
-    flex: 1;
-    height: 8px;
-    background: hsl(145 30% 85%);
-    border-radius: 4px;
-    overflow: hidden;
+  .quality-pct {
+    font-size: 22px; font-weight: 700;
+    color: var(--positive); line-height: 1.1;
   }
-
+  .quality-label {
+    font-size: 12px; color: var(--positive);
+  }
+  .quality-bar-track {
+    flex: 1; height: 4px; background: var(--border);
+    border-radius: 2px; overflow: hidden;
+  }
   .quality-bar-fill {
-    height: 100%;
-    border-radius: 4px;
+    height: 100%; border-radius: 2px;
     background: var(--positive);
   }
 
-  .quality-pct {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--positive);
+  /* Track record — typographic flow, no card */
+  .track-record { margin-bottom: 16px; }
+  .track-record-row {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
   }
+  .track-record-row:last-child { border-bottom: none; }
+  .track-record-label { color: var(--text-secondary); }
+  .track-record-value { font-weight: 600; color: var(--text-primary); }
+  .track-record-value.great { color: var(--positive); }
 
-  .quality-label {
-    font-size: 12px;
-    color: hsl(145 40% 30%);
-  }
-
-  /* What changes */
+  /* What would change — border-left accent */
   .trust-changes {
     margin-bottom: 16px;
-    font-size: 14px;
-    line-height: 1.55;
-    color: var(--text-secondary);
+    padding-left: 14px;
+    border-left: 2px solid var(--vivid);
   }
-
   .trust-changes-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
   }
-
   .change-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 4px 0;
-  }
-
-  .change-check {
-    color: var(--positive);
-    font-size: 14px;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .change-cross {
-    color: var(--text-muted);
-    font-size: 14px;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  /* Safety net */
-  .safety-net {
-    padding: 10px 12px;
-    background: var(--surface);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-secondary);
+    display: flex; align-items: flex-start;
+    gap: 8px; padding: 3px 0;
+    font-size: 14px; color: var(--text-secondary);
     line-height: 1.5;
-    margin-bottom: 16px;
   }
+  .change-check { color: var(--positive); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .change-cross { color: var(--text-muted); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .change-item .keep { color: var(--text-primary); font-weight: 500; }
 
-  .safety-net strong {
-    color: var(--text-primary);
-    font-weight: 600;
+  /* Safety net — subtle, no box */
+  .safety-net {
+    font-size: 13px; color: var(--text-secondary);
+    line-height: 1.5; margin-bottom: 16px;
+    padding-left: 14px;
+    border-left: 2px solid var(--caution);
   }
+  .safety-net strong { color: var(--text-primary); font-weight: 600; }
 
-  .trust-actions {
-    display: flex;
-    gap: 8px;
-  }
+  /* Decision buttons — pill-shaped */
+  .trust-actions { display: flex; gap: 8px; }
 
+  /* ===== Buttons ===== */
   .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: all 0.12s;
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    border: none; border-radius: 99px;
+    padding: 10px 20px; cursor: pointer;
+    transition: all 0.12s; line-height: 1.3;
     -webkit-tap-highlight-color: transparent;
-    flex: 1;
-    text-align: center;
+    flex: 1; text-align: center;
   }
+  .btn-primary { background: var(--vivid); color: var(--accent-text); font-weight: 600; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:focus-visible { outline: 2px solid var(--vivid); outline-offset: 2px; }
+  .btn-ghost {
+    background: transparent; color: var(--text-secondary);
+    border: 1.5px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--text-primary); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-strong); }
-
-  /* Confirmed state */
+  /* ===== Confirmed — surface background hero moment ===== */
   .confirmed {
-    background: var(--positive-subtle);
-    border: 1px solid hsl(145 40% 85%);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-left: 14px;
-    max-width: 330px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 16px;
     display: flex;
     align-items: flex-start;
     gap: 10px;
   }
-
   .confirmed-check {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--positive);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--positive); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0;
   }
-
   .confirmed-text {
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.5;
+    font-size: 14px; color: var(--text-primary); line-height: 1.5;
   }
-
   .confirmed-text strong { font-weight: 600; }
-
   .confirmed-detail {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
   }
 
-  /* Input */
-  .bottom-input {
-    position: sticky;
-    bottom: 0;
+  /* ===== Input Bar with Dot Canvas ===== */
+  .input-bar {
+    position: sticky; bottom: 0;
     padding: 10px 14px max(14px, env(safe-area-inset-bottom));
     background: linear-gradient(transparent, var(--bg) 12px);
   }
-
   .input-container {
     background: var(--surface-raised);
     border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 10px 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    border-radius: var(--radius-lg);
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 8px;
   }
-
-  .input-container:focus-within { border-color: var(--accent); }
-
-  .input-container input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 15px;
-    color: var(--text-primary);
-    background: transparent;
+  .input-container:focus-within { border-color: var(--vivid); }
+  .input-dot {
+    width: 28px; height: 28px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
   }
-
-  .input-container input::placeholder { color: var(--text-muted); }
-
-  .send-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
+  .dots-field { display: block; border-radius: 50%; }
+  .input-field {
+    flex: 1; border: none; outline: none;
+    font-family: var(--font); font-size: 15px;
+    color: var(--text-primary); background: transparent;
+    resize: none; line-height: 1.4;
   }
+  .input-field::placeholder { color: var(--text-muted); }
 
-  .send-btn svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
 
-<div class="conversation">
-
-  <div class="top-bar">
-    <button class="top-bar-back">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-      </svg>
-    </button>
-    <span class="top-bar-title">Ditto</span>
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 3 &middot; <span>Trust Upgrade</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="16-teach-this.html" class="proto-arrow" aria-label="Previous: Teach This">&larr;</a>
+    <a href="18-second-process.html" class="proto-arrow" aria-label="Next: Second Process">&rarr;</a>
   </div>
+</nav>
 
-  <div class="messages">
+<div class="mobile-frame">
+  <main>
 
-    <!-- Context: morning brief, Ditto surfaces the suggestion -->
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
-      </div>
-      <div class="msg">
-        <p>Morning Rob. Quick thing before your quotes — your quoting has been really solid lately. I think you could check less.</p>
-      </div>
-
-      <!-- THE EVIDENCE — not a vague suggestion, real data -->
-      <div class="trust-evidence">
-        <div class="trust-evidence-title">Your quoting track record</div>
-        <div class="trust-evidence-subtitle">Last 6 weeks</div>
-
-        <div class="quality-visual">
-          <div>
-            <div class="quality-pct">91%</div>
-            <div class="quality-label">clean rate</div>
-          </div>
-          <div class="quality-bar-track">
-            <div class="quality-bar-fill" style="width: 91%"></div>
-          </div>
-        </div>
-
-        <div class="track-record">
-          <div class="track-record-row">
-            <span class="track-record-label">Total quotes</span>
-            <span class="track-record-value">34</span>
-          </div>
-          <div class="track-record-row">
-            <span class="track-record-label">Approved without changes</span>
-            <span class="track-record-value great">31</span>
-          </div>
-          <div class="track-record-row">
-            <span class="track-record-label">You corrected</span>
-            <span class="track-record-value">3 (all labour — now fixed)</span>
-          </div>
-          <div class="track-record-row">
-            <span class="track-record-label">Last correction</span>
-            <span class="track-record-value">2 weeks ago</span>
-          </div>
-        </div>
-
-        <div class="trust-changes">
-          <div class="trust-changes-title">What would change</div>
-          <div class="change-item">
-            <span class="change-check">&#10003;</span>
-            <span>Routine residential quotes go out automatically</span>
-          </div>
-          <div class="change-item">
-            <span class="change-cross">&#10005;</span>
-            <span style="color: var(--text-primary); font-weight: 500;">You still review: commercial, over $20k, new customer types</span>
-          </div>
-          <div class="change-item">
-            <span class="change-check">&#10003;</span>
-            <span>You see everything in your morning update</span>
-          </div>
-        </div>
-
-        <div class="safety-net">
-          <strong>Safety net:</strong> If quality drops below 85%, I automatically go back to checking everything with you first.
-        </div>
-
-        <div class="trust-actions">
-          <button class="btn btn-primary">Try it</button>
-          <button class="btn btn-ghost">Not yet</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Rob decides -->
-    <div class="msg-group user">
-      <div class="msg">Yeah go for it</div>
-    </div>
-
-    <!-- Confirmed -->
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
-      </div>
-
-      <div class="confirmed">
-        <div class="confirmed-check">&#10003;</div>
-        <div>
-          <div class="confirmed-text"><strong>Quoting upgraded to spot-checked.</strong> Routine residential quotes go out automatically. I'll flag anything unusual.</div>
-          <div class="confirmed-detail">You can change this back anytime from the Quoting process page.</div>
-        </div>
-      </div>
-
-      <div class="msg">
-        <p>Your morning update will still show everything that went out. And I'll tell you if anything looks off. If you want to go back to checking everything, just say so.</p>
-      </div>
-    </div>
-
-  </div>
-
-  <div class="bottom-input">
-    <div class="input-container">
-      <input type="text" placeholder="Tell Ditto something...">
-      <button class="send-btn">
+    <div class="top-bar">
+      <button class="top-bar-back" aria-label="Back">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
       </button>
+      <span class="top-bar-title">Ditto</span>
     </div>
-  </div>
 
+    <div class="messages">
+
+      <!-- Context: morning brief, Ditto surfaces the suggestion -->
+      <div class="msg-group self">
+        <div class="sender">
+          <span class="self-dot"></span>
+          <span class="sender-label">Ditto</span>
+        </div>
+        <div class="msg">
+          <p>Morning Rob. Quick thing before your quotes — your quoting has been really solid lately. I think you could check less.</p>
+        </div>
+
+        <!-- THE EVIDENCE — cardless typographic flow -->
+        <div class="trust-evidence">
+          <div class="trust-evidence-title">Your quoting track record</div>
+          <div class="trust-evidence-subtitle">Last 6 weeks</div>
+
+          <div class="quality-visual">
+            <div>
+              <div class="quality-pct">91%</div>
+              <div class="quality-label">clean rate</div>
+            </div>
+            <div class="quality-bar-track">
+              <div class="quality-bar-fill" style="width: 91%"></div>
+            </div>
+          </div>
+
+          <div class="track-record">
+            <div class="track-record-row">
+              <span class="track-record-label">Total quotes</span>
+              <span class="track-record-value">34</span>
+            </div>
+            <div class="track-record-row">
+              <span class="track-record-label">Approved without changes</span>
+              <span class="track-record-value great">31</span>
+            </div>
+            <div class="track-record-row">
+              <span class="track-record-label">You corrected</span>
+              <span class="track-record-value">3 (all labour — now fixed)</span>
+            </div>
+            <div class="track-record-row">
+              <span class="track-record-label">Last correction</span>
+              <span class="track-record-value">2 weeks ago</span>
+            </div>
+          </div>
+
+          <div class="trust-changes">
+            <div class="trust-changes-title">What would change</div>
+            <div class="change-item">
+              <span class="change-check">&#10003;</span>
+              <span>Routine residential quotes go out automatically</span>
+            </div>
+            <div class="change-item">
+              <span class="change-cross">&#10005;</span>
+              <span class="keep">You still review: commercial, over $20k, new customer types</span>
+            </div>
+            <div class="change-item">
+              <span class="change-check">&#10003;</span>
+              <span>You see everything in your morning update</span>
+            </div>
+          </div>
+
+          <div class="safety-net">
+            <strong>Safety net:</strong> If quality drops below 85%, I automatically go back to checking everything with you first.
+          </div>
+
+          <div class="trust-actions">
+            <button class="btn btn-primary">Try it</button>
+            <button class="btn btn-ghost">Not yet</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rob decides -->
+      <div class="msg-group user">
+        <div class="msg">Yeah go for it</div>
+      </div>
+
+      <!-- Confirmed -->
+      <div class="msg-group self">
+        <div class="sender">
+          <span class="self-dot"></span>
+          <span class="sender-label">Ditto</span>
+        </div>
+
+        <div class="confirmed">
+          <div class="confirmed-check">&#10003;</div>
+          <div>
+            <div class="confirmed-text"><strong>Quoting upgraded to spot-checked.</strong> Routine residential quotes go out automatically. I'll flag anything unusual.</div>
+            <div class="confirmed-detail">You can change this back anytime from the Quoting process page.</div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <p>Your morning update will still show everything that went out. And I'll tell you if anything looks off. If you want to go back to checking everything, just say so.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Spacer for input bar -->
+    <div style="height: 80px;"></div>
+
+    <!-- Input Bar with Dot Canvas -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Tell Ditto something..." aria-label="Message"></textarea>
+      </div>
+    </div>
+
+  </main>
 </div>
 
-<div class="proto-nav"><a href="16-teach-this.html">&larr; Teach This</a><span class="pn-t"><a href="index.html">P17 Trust Upgrade</a></span><a href="18-second-process.html">Second Process &rarr;</a></div><!-- pnav -->
+<script>
+  // ===== Ditto Dots — Input field particle fields =====
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR, size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35, phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { ctx.beginPath(); ctx.arc(cx + Math.cos(d.angle) * d.dist * 0.6, cy + Math.sin(d.angle) * d.dist * 0.6, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill(); }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000; ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const a = d.angle + t * d.speed; const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp; const r = Math.max(1, d.dist + breathe); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * (0.6 + Math.sin(t * 2.5 + d.phase) * 0.4); ctx.fill(); }
+      ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf = null; } });
+    observer.observe(canvas); draw();
+  }
+
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textareas
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
 </body>
 </html>

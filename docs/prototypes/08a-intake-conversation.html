@@ -1,0 +1,1453 @@
+<!-- v7 — Brand identity: banner motif background + dot particle system, 2026-03-26 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P08a — Intake Conversation | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font); background: var(--bg);
+    color: var(--text-primary); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+    overflow: hidden; font-size: 16px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* Content layers above background canvas, but stays transparent so ribbon shows through */
+  .proto-nav, .state-bar { position: relative; }
+  .proto-nav { z-index: 100; background: var(--bg); }
+  .state-bar { z-index: 99; background: var(--bg); }
+  .layout, .layout-artifact { z-index: 1; }
+
+  /* Ditto dot — the living particle field */
+  .ditto-dots {
+    display: inline-block; vertical-align: middle;
+  }
+  .ditto-dots canvas { display: block; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-muted); background: transparent;
+    border: none; border-radius: 99px;
+    padding: 6px 16px; cursor: pointer; transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); }
+  .state-btn.active {
+    color: #fff; background: var(--vivid);
+    font-weight: 600;
+  }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Layout: Conversation Mode ===== */
+  /* Content centres between left edge and knowledge panel (panel + ribbon on right) */
+  .layout {
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+  }
+  .convo-panel {
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+    background: transparent;
+  }
+  .convo-scroll {
+    flex: 1; overflow-y: auto; padding: 32px 24px 48px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .convo-scroll > .progress-track,
+  .convo-scroll > .messages,
+  .convo-scroll > .prompt-area { width: 100%; max-width: 720px; }
+
+  /* Knowledge panel — overlaps the ribbon on the far right */
+  .knowledge-panel {
+    position: fixed; top: 92px; right: 0; bottom: 0;
+    width: 320px; display: flex; flex-direction: column;
+    background: var(--surface-raised); border-left: 1px solid var(--border);
+    overflow-y: auto; z-index: 50;
+  }
+  .k-header { padding: 24px 24px 0; flex-shrink: 0; }
+  .k-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+  .k-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+  .k-content { flex: 1; overflow-y: auto; padding: 0 24px 24px; }
+
+  /* ===== Layout: Artifact Mode ===== */
+  .layout-artifact {
+    position: fixed; top: 92px; left: 0; right: 320px; bottom: 0;
+    display: flex; overflow: hidden;
+  }
+  .convo-thread {
+    width: 400px; flex-shrink: 0; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border-strong); background: var(--surface);
+    box-shadow: inset -1px 0 0 var(--border), 2px 0 8px rgba(26,26,26,0.04);
+  }
+  .convo-thread .convo-scroll { padding: 20px 16px 12px; align-items: stretch; }
+  .convo-thread .msg-bubble { font-size: 14px !important; }
+  .convo-thread .msg { gap: 4px; }
+  .convo-thread .messages { gap: 16px; }
+  .convo-thread .msg.user .msg-bubble {
+    background: var(--bg); padding: 12px 16px;
+    border-radius: var(--radius-lg);
+  }
+  .convo-thread .coaching-tip { font-size: 12px; padding: 8px 12px; }
+  .artifact-centre {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; overflow-y: auto; padding: 40px;
+  }
+  .artifact-centre-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 20px;
+  }
+
+  /* ===== Progress Track ===== */
+  .progress-track { display: flex; gap: 3px; margin-bottom: 20px; padding: 0 24px; }
+  .progress-segment {
+    flex: 1; height: 2px; border-radius: 1px; background: var(--border);
+    transition: background 0.3s; position: relative; cursor: default;
+  }
+  .progress-segment.done { background: var(--vivid); }
+  .progress-segment.active { background: var(--vivid); opacity: 0.4; }
+  .progress-segment .tooltip {
+    display: none; position: absolute; bottom: 10px; left: 50%;
+    transform: translateX(-50%); font-size: 10px; font-weight: 500;
+    color: var(--text-secondary); background: var(--bg);
+    padding: 2px 7px; border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-medium); white-space: nowrap; z-index: 10;
+  }
+  .progress-segment:hover .tooltip { display: block; }
+
+  /* ===== Messages — clean, spacious, no avatars ===== */
+  .messages { display: flex; flex-direction: column; gap: 32px; }
+  .msg { display: flex; flex-direction: column; }
+  .msg-avatar { display: none; }
+  .msg-sender { display: none; }
+  .msg-content { min-width: 0; }
+  .msg-bubble {
+    font-size: 16px; line-height: 1.75; color: var(--text-primary);
+  }
+  .msg.ditto .msg-bubble { padding: 0; }
+  .msg.user .msg-bubble {
+    background: var(--surface); padding: 16px 20px;
+    border-radius: var(--radius-lg);
+  }
+  .msg-bubble strong { font-weight: 600; }
+  .msg-bubble em { font-style: italic; color: var(--text-secondary); }
+
+  .coaching-tip {
+    margin-top: 12px; padding: 12px 16px;
+    background: var(--surface); border-radius: var(--radius-md);
+    font-size: 14px; color: var(--text-secondary); line-height: 1.55;
+  }
+  .coaching-tip strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════════════
+     CARDS — KILLED. No boxes. Content flows typographically.
+     ═══════════════════════════════════════════════════ */
+  .card {
+    margin-top: 20px; padding: 0;
+    background: none; border: none; border-radius: 0;
+  }
+  .card-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 10px;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card-label svg { display: none; }
+  .card-body {
+    font-size: 15px; line-height: 1.65; color: var(--text-secondary);
+  }
+  .card-body strong { font-weight: 600; color: var(--text-primary); }
+
+  /* Synthesis — blockquote treatment, orange accent */
+  .card--synthesis {
+    padding-left: 20px;
+    border-left: 2px solid var(--vivid);
+  }
+
+  /* Guided — pills float freely */
+  .card--guided { margin-top: 16px; }
+
+  /* Never — deep red left accent */
+  .card--never {
+    padding-left: 20px;
+    border-left: 2px solid var(--vivid-deep);
+  }
+  .card--never .card-label { color: var(--vivid-deep); }
+
+  /* Connect — subtle surface */
+  .card--connect {
+    padding: 24px; background: var(--surface);
+    border-radius: var(--radius-lg); margin-top: 16px;
+  }
+
+  /* Import — matches connect */
+  .card--import {
+    padding: 24px; background: var(--surface);
+    border-radius: var(--radius-lg); margin-top: 16px;
+  }
+
+  /* Process — the hero moment, but quiet */
+  .card--process {
+    padding: 32px; background: var(--surface);
+    border-radius: var(--radius-xl); margin-top: 20px;
+  }
+
+  /* Guided options — bold, clean pills */
+  .guided-question { font-size: 15px; font-weight: 500; color: var(--text-primary); margin-bottom: 12px; }
+  .guided-options { display: flex; flex-wrap: wrap; gap: 8px; }
+  .guided-option {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 8px 20px; border-radius: 99px;
+    border: 1.5px solid var(--border); background: var(--bg);
+    color: var(--text-primary); cursor: pointer; transition: all 0.12s;
+  }
+  .guided-option:hover { border-color: var(--accent); }
+  .guided-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .guided-option.selected {
+    border-color: var(--vivid); background: var(--vivid); color: #fff;
+  }
+
+  /* Connect rows */
+  .connect-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .connect-row:last-of-type { border-bottom: none; }
+  .connect-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    background: var(--bg);
+  }
+  .connect-icon.green { color: var(--positive); }
+  .connect-icon.blue { color: var(--info); }
+  .connect-icon.purple { color: #7c3aed; }
+  .connect-icon.orange { color: var(--text-primary); }
+  .connect-info { flex: 1; }
+  .connect-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .connect-desc { font-size: 13px; color: var(--text-muted); margin-top: 1px; }
+  .connect-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    padding: 6px 16px; border-radius: 99px;
+    border: 1.5px solid var(--border); background: var(--bg);
+    color: var(--text-primary); cursor: pointer; transition: all 0.12s;
+  }
+  .connect-btn:hover { border-color: var(--accent); }
+  .connect-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .connect-btn.connected {
+    border-color: var(--vivid); background: var(--vivid);
+    color: #fff; pointer-events: none;
+  }
+  .connect-skip {
+    font-size: 12px; color: var(--text-muted); text-align: center;
+    margin-top: 12px;
+  }
+
+  /* Process internals */
+  .process-header {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
+  }
+  .process-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    background: var(--vivid); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .process-title { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+  .process-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 1px; }
+  .process-steps { display: flex; flex-direction: column; gap: 2px; }
+  .process-steps-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 12px;
+  }
+  .step-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px; background: var(--bg);
+    border-radius: var(--radius-md);
+  }
+  .step-row--human {
+    background: var(--bg); border: 1.5px solid var(--accent);
+  }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent-subtle); color: var(--text-primary);
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .step-row--human .step-num { background: var(--accent); color: var(--accent-text); }
+  .step-text { flex: 1; }
+  .step-text-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .step-text-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .step-badge {
+    font-size: 11px; padding: 2px 10px; border-radius: 99px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .step-badge--ai { background: var(--vivid-subtle); color: var(--vivid); }
+  .step-badge--human { background: var(--accent); color: var(--accent-text); }
+  .step-arrow { display: flex; justify-content: center; padding: 2px 0; }
+
+  /* Process settings */
+  .process-settings {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+  }
+  .process-settings summary {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); cursor: pointer;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  .process-settings summary::before { content: '▸'; font-size: 10px; transition: transform 0.15s; }
+  .process-settings[open] summary::before { transform: rotate(90deg); }
+  .process-settings summary::-webkit-details-marker { display: none; }
+  .settings-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+  .setting-label { color: var(--text-secondary); }
+  .setting-options { display: flex; align-items: center; gap: 6px; }
+
+  .process-actions { display: flex; gap: 10px; margin-top: 24px; }
+
+  /* ===== Buttons — black is the new accent ===== */
+  .btn-accent {
+    font-family: var(--font); font-size: 14px; font-weight: 600;
+    padding: 10px 24px; border-radius: 99px; border: none;
+    background: var(--vivid); color: var(--accent-text);
+    cursor: pointer; transition: all 0.12s;
+  }
+  .btn-accent:hover { background: var(--vivid-deep); }
+  .btn-accent:focus-visible { outline: 2px solid var(--vivid); outline-offset: 2px; }
+  .btn-ghost {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 10px 20px; border-radius: 99px;
+    border: 1.5px solid var(--border); background: transparent;
+    color: var(--text-secondary); cursor: pointer; transition: all 0.12s;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--text-primary); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-sm { padding: 4px 12px; font-size: 13px; }
+
+  /* ===== Input bar ===== */
+  .input-bar {
+    padding: 12px 24px 48px; flex-shrink: 0;
+    display: flex; justify-content: center;
+    background: transparent;
+  }
+  .input-bar-narrow { padding: 10px 16px 14px; }
+  .input-container {
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface-raised); border: 1.5px solid var(--border);
+    border-radius: 24px; padding: 12px 18px;
+    transition: all 0.15s;
+    width: 100%; max-width: 720px;
+    box-shadow: var(--shadow-subtle);
+  }
+  .input-container:focus-within { border-color: var(--vivid); background: #fff; box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px;
+    color: var(--text-primary); outline: none;
+    resize: none; overflow: hidden;
+    min-height: 24px; max-height: 200px;
+    line-height: 1.5;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Knowledge Panel — clean, typographic ===== */
+  .k-card {
+    padding: 16px 0; border-bottom: 1px solid var(--border);
+    background: none; border-radius: 0;
+  }
+  .k-card:last-child { border-bottom: none; }
+  .k-card.building, .k-card.complete, .k-card.info-accent, .k-card.accent-highlight {
+    border-color: var(--border);
+  }
+  .k-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .k-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+  .k-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 8px;
+    border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .k-badge.done-badge { background: var(--positive-subtle); color: var(--positive); }
+  .k-badge.building-badge { background: var(--vivid-subtle); color: var(--vivid); }
+  .k-card-body { font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
+
+  .artifact-preview {
+    margin-top: 6px; padding: 0;
+    background: none; border: none; border-radius: 0;
+  }
+  .artifact-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+  .voice-trait { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; color: var(--text-primary); }
+  .voice-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .voice-dot.strong { background: var(--vivid); }
+  .voice-dot.emerging { background: var(--caution); }
+  .voice-dot.never { background: var(--vivid-deep); }
+  .voice-more { font-size: 12px; color: var(--text-muted); padding: 3px 0; }
+
+  /* "Still to explore" */
+  .k-explore { margin-bottom: 0; padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .k-explore summary {
+    font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  .k-explore summary::before { content: '▸'; font-size: 10px; transition: transform 0.15s; }
+  .k-explore[open] summary::before { transform: rotate(90deg); }
+  .k-explore summary::-webkit-details-marker { display: none; }
+  .k-explore-list { padding: 8px 0 0; }
+  .k-pending { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .k-pending-dot { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--border-strong); flex-shrink: 0; }
+  .k-pending-label { font-size: 13px; color: var(--text-muted); }
+
+  .confidence-meter { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .confidence-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .confidence-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .confidence-fill { height: 100%; border-radius: 2px; background: var(--vivid); transition: width 0.5s ease-out; }
+  .confidence-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+  /* ===== Artifact Output ===== */
+  .output-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: 36px;
+    max-width: 580px; width: 100%;
+  }
+  .output-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;
+  }
+  .output-header-left { display: flex; align-items: center; gap: 8px; }
+  .output-header-left .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vivid); }
+  .output-header-left span { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .output-badge {
+    font-size: 11px; padding: 3px 12px; border-radius: 99px;
+    background: var(--vivid-subtle); color: var(--vivid); font-weight: 600;
+  }
+  .output-body {
+    font-size: 16px; line-height: 1.8; color: var(--text-primary); white-space: pre-line;
+    margin-bottom: 24px;
+  }
+  .output-provenance { padding-top: 20px; border-top: 1px solid var(--border); }
+  .provenance-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; }
+  .provenance-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .provenance-tag {
+    font-size: 12px; padding: 4px 12px; border-radius: 99px;
+    background: var(--surface); color: var(--text-secondary);
+  }
+  .output-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .output-actions button {
+    font-family: var(--font); font-size: 14px; font-weight: 600;
+    padding: 10px 24px; border-radius: 99px; cursor: pointer; transition: all 0.12s;
+  }
+  .btn-approve { border: none; background: var(--vivid); color: var(--accent-text); }
+  .btn-approve:hover { background: var(--vivid-deep); }
+  .btn-edit { border: 1.5px solid var(--border); background: var(--bg); color: var(--text-primary); }
+  .btn-edit:hover { border-color: var(--accent); }
+  .btn-reject { border: 1.5px solid var(--border); background: var(--bg); color: var(--text-muted); }
+  .btn-reject:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .post-nav { display: flex; align-items: center; gap: 16px; margin-top: 28px; max-width: 580px; }
+  .post-nav-dots { display: flex; gap: 6px; }
+  .post-nav-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--border); cursor: pointer; transition: all 0.12s;
+  }
+  .post-nav-dot.active { background: var(--vivid); border-color: var(--vivid); }
+  .post-nav-dot.reviewed { background: var(--positive); border-color: var(--positive); }
+  .post-nav-label { font-size: 13px; color: var(--text-muted); }
+
+  /* ===== Entrance animation ===== */
+  @keyframes artifact-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  [data-view="artifact"].active .output-card { animation: artifact-enter 400ms ease-out both; }
+  [data-view="artifact"].active .post-nav { animation: artifact-enter 400ms ease-out 150ms both; }
+
+  /* State visibility */
+  .state-view { display: none; }
+  .state-view.active { display: flex; }
+
+  /* ===== Focus Theme — B&W, no ribbon ===== */
+  body.theme-focus {
+    --vivid: #111118;
+    --vivid-deep: #4A4A55;
+    --vivid-subtle: #E7E7EB;
+  }
+  body.theme-focus .state-btn.active {
+    background: var(--accent); color: var(--accent-text);
+  }
+  body.theme-focus .guided-option.selected {
+    border-color: var(--accent); background: var(--accent); color: var(--accent-text);
+  }
+  body.theme-focus .connect-btn.connected {
+    border-color: var(--accent); background: var(--accent); color: var(--accent-text);
+  }
+  body.theme-focus .process-icon {
+    background: var(--accent);
+  }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle {
+    display: flex; align-items: center; gap: 4px;
+    margin-left: 12px; padding-left: 12px;
+    border-left: 1px solid var(--border);
+  }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active {
+    color: var(--text-primary); border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Focus & reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Proto Nav -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1 · <span>Intake Conversation</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="08-day-zero.html" class="proto-arrow" aria-label="Previous: Day Zero">←</a>
+    <a href="09-first-conversation.html" class="proto-arrow" aria-label="Next: First Conversation">→</a>
+  </div>
+</nav>
+
+<!-- State Bar -->
+<div class="state-bar" role="tablist" aria-label="Intake stages">
+  <button class="state-btn active" role="tab" data-state="early" tabindex="0">Opening</button>
+  <button class="state-btn" role="tab" data-state="mid" tabindex="-1">Voice &amp; rules</button>
+  <button class="state-btn" role="tab" data-state="connect" tabindex="-1">Connect</button>
+  <button class="state-btn" role="tab" data-state="deep" tabindex="-1">Build process</button>
+  <button class="state-btn" role="tab" data-state="artifact" tabindex="-1">First output</button>
+</div>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════
+     STATE 1: Opening
+     ═══════════════════════════════════════════════════ -->
+<div class="layout state-view active" data-view="early" role="tabpanel">
+  <div class="convo-panel">
+    <div class="convo-scroll">
+      <div class="messages">
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">I'd like to spend a few minutes understanding you and your work. Not the surface stuff — the real picture. The better I understand, the more useful I'll be from day one.<br><br><strong>Let's start with the big picture: what's your business, and where are you trying to take it?</strong></div>
+          </div>
+        </div>
+
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">I'm a doula — I support women through pregnancy and birth. I've been doing it for 8 years. But I'm transitioning into online education. I want to teach other aspiring doulas and create courses about birth work, postpartum support, that kind of thing.</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">Eight years of hands-on experience. You're not leaving doula work behind — you're <em>scaling</em> it. The knowledge exists, the challenge is packaging.</div>
+            <div class="card card--synthesis">
+              <div class="card-label">Connecting the dots</div>
+              <div class="card-body">
+                <strong>You →</strong> Doula (8 yrs, active clients)<br>
+                <strong>Going →</strong> Online education (courses for aspiring doulas)<br>
+                <strong>Bottleneck →</strong> Knowledge extraction + content packaging<br><br>
+                Your credibility IS the product. Content has to sound like you teaching, not a generic course. Am I reading this right?
+              </div>
+            </div>
+            <div class="msg-bubble" style="margin-top: 20px;">
+              <strong>What's eating your time right now?</strong> Not what you wish you were doing — what actually takes too long each week?
+            </div>
+            <div class="card card--guided">
+              <div class="guided-question">What takes too long each week?</div>
+              <div class="guided-options">
+                <button class="guided-option">Social media posts</button>
+                <button class="guided-option selected">Course content</button>
+                <button class="guided-option">Client emails</button>
+                <button class="guided-option">Admin</button>
+                <button class="guided-option">Marketing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Or just tell me..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="knowledge-panel">
+    <div class="k-header">
+      <div class="k-title">Building your profile</div>
+      <div class="k-subtitle">I'm learning as we talk. This powers everything.</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-segment done"><span class="tooltip">Work</span></div>
+      <div class="progress-segment active"><span class="tooltip">Time sinks</span></div>
+      <div class="progress-segment"><span class="tooltip">Voice</span></div>
+      <div class="progress-segment"><span class="tooltip">Audience</span></div>
+      <div class="progress-segment"><span class="tooltip">Goals</span></div>
+      <div class="progress-segment"><span class="tooltip">Challenges</span></div>
+      <div class="progress-segment"><span class="tooltip">Prefs</span></div>
+      <div class="progress-segment"><span class="tooltip">Vision</span></div>
+      <div class="progress-segment"><span class="tooltip">Concerns</span></div>
+    </div>
+    <div class="k-content">
+      <div class="k-card complete">
+        <div class="k-card-header">
+          <div class="k-card-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            Your work
+          </div>
+          <span class="k-badge done-badge">Captured</span>
+        </div>
+        <div class="k-card-body">Doula, 8 yrs. Transitioning to online education — courses for aspiring doulas.</div>
+      </div>
+
+      <div class="k-card building">
+        <div class="k-card-header">
+          <div class="k-card-title">Your voice</div>
+          <span class="k-badge building-badge">Learning</span>
+        </div>
+        <div class="artifact-preview">
+          <div class="artifact-label">Voice profile (emerging)</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Direct but warm</div>
+          <div class="voice-trait"><span class="voice-dot emerging"></span> Natural softeners ("that kind of thing")</div>
+          <div class="voice-trait"><span class="voice-dot emerging"></span> Leads with relationship</div>
+        </div>
+      </div>
+
+      <details class="k-explore">
+        <summary>Still to explore (6)</summary>
+        <div class="k-explore-list">
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Ideal audience</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Goals — 12-month picture</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Challenges &amp; frustrations</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Communication preferences</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Vision</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Concerns about AI</div></div>
+        </div>
+      </details>
+
+      <div class="confidence-meter">
+        <div class="confidence-label"><span>How well I know you</span><span style="font-weight:700;">18%</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:18%"></div></div>
+        <div class="confidence-note">Usually takes 2-3 conversations to reach 80%+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     STATE 2: Voice & rules
+     ═══════════════════════════════════════════════════ -->
+<div class="layout state-view" data-view="mid" role="tabpanel">
+  <div class="convo-panel">
+    <div class="convo-scroll">
+      <div class="messages">
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">My ideal student is someone called to birth work but doesn't know where to start. Women in their late 20s to 40s, passionate but overwhelmed by the business side.</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="card card--synthesis">
+              <div class="card-label">Pattern I'm seeing</div>
+              <div class="card-body">
+                Your students are <strong>heart-first, business-second</strong>. They chose this because of personal experience, not a career calculation. Your content should:<br><br>
+                → <strong>Lead with stories</strong> (their journey mirrors yours)<br>
+                → <strong>Make business practical</strong> ("here's how I got my first 3 clients")<br>
+                → <strong>Validate the overwhelm</strong>
+              </div>
+            </div>
+            <div class="msg-bubble" style="margin-top: 20px;">
+              Most AI tools never ask this: <strong>what makes you cringe about AI-generated content?</strong> What's the thing that would make your content feel fake?
+            </div>
+          </div>
+        </div>
+
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">Oh god, the clinical tone. "Evidence-based practices suggest" — I want to throw my laptop. I say "bub" not "baby", "your body knows what to do" not "physiological birth processes". And I never use bullet points in Instagram posts.</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">This is exactly what I needed. I'm writing this down as <em>rules</em>, not suggestions:</div>
+            <div class="card card--never">
+              <div class="card-label">Your rules — not mine</div>
+              <div class="card-body">
+                ✕ Clinical/academic tone<br>
+                ✕ "Baby" → always "bub"<br>
+                ✕ Bullet points in Instagram posts<br>
+                ✕ Textbook framing<br><br>
+                ✓ Personal stories and real experiences<br>
+                ✓ Trust-based language ("your body knows")<br>
+                ✓ Conversational — like talking to a friend
+              </div>
+            </div>
+            <div class="msg-bubble" style="margin-top: 20px;">
+              I'll never use those patterns. And if I slip — tell me. Every correction makes me sharper. <strong>Where do you want to be in 12 months?</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Where do you want to be..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="knowledge-panel">
+    <div class="k-header">
+      <div class="k-title">Building your profile</div>
+      <div class="k-subtitle">Getting clearer with every answer.</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-segment done"><span class="tooltip">Work</span></div>
+      <div class="progress-segment done"><span class="tooltip">Time sinks</span></div>
+      <div class="progress-segment done"><span class="tooltip">Voice</span></div>
+      <div class="progress-segment done"><span class="tooltip">Audience</span></div>
+      <div class="progress-segment active"><span class="tooltip">Goals</span></div>
+      <div class="progress-segment"><span class="tooltip">Challenges</span></div>
+      <div class="progress-segment"><span class="tooltip">Prefs</span></div>
+      <div class="progress-segment"><span class="tooltip">Vision</span></div>
+      <div class="progress-segment"><span class="tooltip">Concerns</span></div>
+    </div>
+    <div class="k-content">
+      <div class="k-card complete">
+        <div class="k-card-header"><div class="k-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Your voice</div><span class="k-badge done-badge">Strong</span></div>
+        <div class="artifact-preview">
+          <div class="artifact-label">Brand voice profile</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Warm, personal, conversational</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> "Bub" not "baby" — always</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Stories over statistics</div>
+          <div class="voice-more">+3 more rules captured</div>
+        </div>
+      </div>
+
+      <div class="k-card complete">
+        <div class="k-card-header"><div class="k-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Audience</div><span class="k-badge done-badge">Captured</span></div>
+        <div class="k-card-body">Women 28-42, heart-first, overwhelmed by business. Need validation + practical wisdom.</div>
+      </div>
+
+      <div class="k-card building">
+        <div class="k-card-header"><div class="k-card-title">Content strategy</div><span class="k-badge building-badge">Forming</span></div>
+        <div class="k-card-body">Lead with stories. Make business practical, not strategic. Validate overwhelm.</div>
+      </div>
+
+      <details class="k-explore">
+        <summary>Still to explore (3)</summary>
+        <div class="k-explore-list">
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">12-month goals</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Challenges</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Preferences</div></div>
+        </div>
+      </details>
+
+      <div class="confidence-meter">
+        <div class="confidence-label"><span>How well I know you</span><span style="font-weight:700;">42%</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:42%"></div></div>
+        <div class="confidence-note">Strong start. One more conversation gets to 60%+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     STATE 3: Connect
+     ═══════════════════════════════════════════════════ -->
+<div class="layout state-view" data-view="connect" role="tabpanel">
+  <div class="convo-panel">
+    <div class="convo-scroll">
+      <div class="messages">
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">My biggest worry is that it'll sound generic. Like, people will read my posts and think "that's AI" and I'll lose credibility. My whole brand is authenticity.</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">That's exactly the right worry — and exactly why I asked about your voice rules first. Most AI tools skip that step. I won't publish anything you haven't reviewed, and your corrections literally rewrite my understanding.<br><br>I'm already building a picture of you, but I can learn <em>much</em> faster if I can see how you already work. <strong>You mentioned Google Calendar for client bookings and Notion for course planning.</strong> Want to connect those now?</div>
+            <div class="card card--connect">
+              <div class="card-label">Connect to learn faster</div>
+              <div class="connect-row">
+                <div class="connect-icon blue">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Google Calendar</div>
+                  <div class="connect-desc">I'll know when you're with clients vs. free for content work</div>
+                </div>
+                <button class="connect-btn connected">Connected</button>
+              </div>
+              <div class="connect-row">
+                <div class="connect-icon green">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Gmail</div>
+                  <div class="connect-desc">I'll learn how you communicate with clients and students</div>
+                </div>
+                <button class="connect-btn">Connect</button>
+              </div>
+              <div class="connect-row">
+                <div class="connect-icon purple">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M2 10h20"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Notion</div>
+                  <div class="connect-desc">I'll read your course notes and planning docs</div>
+                </div>
+                <button class="connect-btn">Connect</button>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">Your data stays yours. I only read what you connect — and you can disconnect anytime.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">And do you have any existing content I should learn from? Instagram posts you're proud of, course outlines, even voice memos — anything that shows how you naturally communicate.</div>
+            <div class="card card--import">
+              <div class="card-label">Import existing knowledge</div>
+              <div class="connect-row">
+                <div class="connect-icon orange">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Instagram posts</div>
+                  <div class="connect-desc">I'll study your best posts to learn your natural voice</div>
+                </div>
+                <button class="connect-btn">Import</button>
+              </div>
+              <div class="connect-row">
+                <div class="connect-icon blue">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Google Docs</div>
+                  <div class="connect-desc">Course outlines, guides, anything you've written</div>
+                </div>
+                <button class="connect-btn">Import</button>
+              </div>
+              <div class="connect-row">
+                <div class="connect-icon green">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </div>
+                <div class="connect-info">
+                  <div class="connect-name">Upload files</div>
+                  <div class="connect-desc">PDFs, docs, voice memos — drag and drop</div>
+                </div>
+                <button class="connect-btn">Browse</button>
+              </div>
+              <div class="connect-skip">You can always add more from Settings → Connections or Knowledge → Import</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Or just tell me where to find things..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="knowledge-panel">
+    <div class="k-header">
+      <div class="k-title">Building your profile</div>
+      <div class="k-subtitle">Connecting tools accelerates learning.</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-segment done"><span class="tooltip">Work</span></div>
+      <div class="progress-segment done"><span class="tooltip">Time sinks</span></div>
+      <div class="progress-segment done"><span class="tooltip">Voice</span></div>
+      <div class="progress-segment done"><span class="tooltip">Audience</span></div>
+      <div class="progress-segment active"><span class="tooltip">Goals</span></div>
+      <div class="progress-segment"><span class="tooltip">Challenges</span></div>
+      <div class="progress-segment"><span class="tooltip">Prefs</span></div>
+      <div class="progress-segment"><span class="tooltip">Vision</span></div>
+      <div class="progress-segment done"><span class="tooltip">Concerns</span></div>
+    </div>
+    <div class="k-content">
+      <div class="k-card complete">
+        <div class="k-card-header"><div class="k-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Voice</div><span class="k-badge done-badge">Strong</span></div>
+        <div class="artifact-preview">
+          <div class="artifact-label">Brand voice profile</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Warm, personal, conversational</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> "Bub" not "baby"</div>
+          <div class="voice-trait"><span class="voice-dot never"></span> NEVER clinical tone</div>
+        </div>
+      </div>
+
+      <div class="k-card info-accent">
+        <div class="k-card-header"><div class="k-card-title">Connected tools</div><span class="k-badge" style="background:var(--info-subtle);color:var(--info);">1 of 3</span></div>
+        <div class="k-card-body">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--positive);">✓</span> Google Calendar</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--text-muted);">○ Gmail</div>
+          <div style="display:flex;align-items:center;gap:6px;color:var(--text-muted);">○ Notion</div>
+        </div>
+      </div>
+
+      <details class="k-explore">
+        <summary>Still to explore (3)</summary>
+        <div class="k-explore-list">
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">12-month goals</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Challenges</div></div>
+          <div class="k-pending"><div class="k-pending-dot"></div><div class="k-pending-label">Preferences</div></div>
+        </div>
+      </details>
+
+      <div class="confidence-meter">
+        <div class="confidence-label"><span>How well I know you</span><span style="font-weight:700;">52%</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:52%"></div></div>
+        <div class="confidence-note">Each connected tool adds ~5-10%. Your calendar already helps.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     STATE 4: Build process
+     ═══════════════════════════════════════════════════ -->
+<div class="layout state-view" data-view="deep" role="tabpanel">
+  <div class="convo-panel">
+    <div class="convo-scroll">
+      <div class="messages">
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">In 12 months I want a signature course launched, a growing email list, and consistent social media without spending 5 hours a week on it.</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">Five hours a week on social. That's 260 hours a year — six working weeks. I've been reading your calendar and your Notion notes while we talked — and I think I can see your first process. Let me show you what I'm thinking:</div>
+          </div>
+        </div>
+
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="card card--process">
+              <div class="process-header">
+                <div class="process-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
+                </div>
+                <div>
+                  <div class="process-title">Social Content Creation</div>
+                  <div class="process-subtitle">Your first process with Ditto</div>
+                </div>
+              </div>
+
+              <div class="process-steps">
+                <div class="process-steps-label">How it works</div>
+
+                <div class="step-row">
+                  <div class="step-num">1</div>
+                  <div class="step-text">
+                    <div class="step-text-title">I draft 5 Instagram posts weekly</div>
+                    <div class="step-text-sub">Using: voice profile, Notion course notes, audience insights</div>
+                  </div>
+                  <span class="step-badge step-badge--ai">Ditto</span>
+                </div>
+
+                <div class="step-arrow"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--border-strong)" stroke-width="2" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+
+                <div class="step-row step-row--human">
+                  <div class="step-num">2</div>
+                  <div class="step-text">
+                    <div class="step-text-title">You review and correct each post</div>
+                    <div class="step-text-sub">Every edit teaches me — "too formal", "I'd say it this way"</div>
+                  </div>
+                  <span class="step-badge step-badge--human">You</span>
+                </div>
+
+                <div class="step-arrow"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--border-strong)" stroke-width="2" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+
+                <div class="step-row">
+                  <div class="step-num">3</div>
+                  <div class="step-text">
+                    <div class="step-text-title">I learn from your corrections and improve</div>
+                    <div class="step-text-sub">Next batch incorporates what you taught me. Quality compounds.</div>
+                  </div>
+                  <span class="step-badge step-badge--ai">Ditto</span>
+                </div>
+              </div>
+
+              <details class="process-settings">
+                <summary>Settings you control</summary>
+                <div class="settings-grid">
+                  <div class="setting-row">
+                    <span class="setting-label">Posts per batch</span>
+                    <div class="setting-options">
+                      <button class="btn-ghost btn-sm">3</button>
+                      <button class="btn-accent btn-sm">5</button>
+                      <button class="btn-ghost btn-sm">7</button>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <span class="setting-label">Frequency</span>
+                    <div class="setting-options">
+                      <button class="btn-accent btn-sm">Weekly</button>
+                      <button class="btn-ghost btn-sm">Twice weekly</button>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <span class="setting-label">Trust level</span>
+                    <div class="setting-options">
+                      <button class="btn-accent btn-sm">I review everything</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <div class="process-actions">
+                <button class="btn-accent">Create this process</button>
+                <button class="btn-ghost">Adjust something</button>
+              </div>
+            </div>
+
+            <div class="msg-bubble" style="margin-top: 20px;">
+              This is a starting point — you can always change these settings later. What matters now is getting you a first batch of posts so you can see how I write in your voice. Anything you'd change before we begin?
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Looks good, or tell me what to change..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="knowledge-panel">
+    <div class="k-header">
+      <div class="k-title">Ready to create</div>
+      <div class="k-subtitle">Connected tools are powering this process.</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-segment done"><span class="tooltip">Work</span></div>
+      <div class="progress-segment done"><span class="tooltip">Time sinks</span></div>
+      <div class="progress-segment done"><span class="tooltip">Voice</span></div>
+      <div class="progress-segment done"><span class="tooltip">Audience</span></div>
+      <div class="progress-segment done"><span class="tooltip">Goals</span></div>
+      <div class="progress-segment done"><span class="tooltip">Challenges</span></div>
+      <div class="progress-segment done"><span class="tooltip">Prefs</span></div>
+      <div class="progress-segment done"><span class="tooltip">Vision</span></div>
+      <div class="progress-segment done"><span class="tooltip">Concerns</span></div>
+    </div>
+    <div class="k-content">
+      <div class="k-card complete">
+        <div class="k-card-header"><div class="k-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Voice</div><span class="k-badge done-badge">Strong</span></div>
+        <div class="artifact-preview">
+          <div class="artifact-label">Brand voice profile</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Warm, personal, conversational</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> "Bub" not "baby"</div>
+          <div class="voice-trait"><span class="voice-dot never"></span> NEVER clinical tone</div>
+          <div class="voice-trait"><span class="voice-dot never"></span> NEVER IG bullet points</div>
+        </div>
+      </div>
+
+      <div class="k-card info-accent">
+        <div class="k-card-header"><div class="k-card-title">Connected tools</div><span class="k-badge" style="background:var(--positive-subtle);color:var(--positive);">Active</span></div>
+        <div class="k-card-body">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--positive);">✓</span> Google Calendar</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--positive);">✓</span> Notion — 12 course notes read</div>
+          <div style="display:flex;align-items:center;gap:6px;color:var(--text-muted);">○ Gmail — skipped for now</div>
+        </div>
+      </div>
+
+      <div class="k-card accent-highlight">
+        <div class="k-card-header"><div class="k-card-title">Process summary</div></div>
+        <div class="k-card-body" style="font-size: 13px; line-height: 1.6;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Time saved</span><strong>~4.5 hrs/wk</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Your role</span><strong>Review all</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>First output</span><strong>Right now</strong></div>
+        </div>
+      </div>
+
+      <div class="k-card">
+        <div class="k-card-header"><div class="k-card-title" style="color:var(--text-muted);">Knowledge used</div></div>
+        <div class="k-card-body">
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;"><span style="color:var(--positive);font-size:10px;">●</span> Voice profile (6 rules)</div>
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;"><span style="color:var(--positive);font-size:10px;">●</span> Audience definition</div>
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;"><span style="color:var(--info);font-size:10px;">●</span> 12 Notion course notes</div>
+          <div style="display:flex;align-items:center;gap:4px;"><span style="color:var(--info);font-size:10px;">●</span> Calendar patterns (Tue/Thu free)</div>
+        </div>
+      </div>
+
+      <div class="confidence-meter">
+        <div class="confidence-label"><span>How well I know you</span><span style="font-weight:700;">68%</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:68%"></div></div>
+        <div class="confidence-note">Strong enough for a great first batch. Each review pushes higher.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     STATE 5: Artifact Mode
+     ═══════════════════════════════════════════════════ -->
+<div class="layout-artifact state-view" data-view="artifact" role="tabpanel">
+
+  <div class="convo-thread">
+    <div class="convo-scroll">
+      <div class="messages">
+        <div class="msg user">
+          <div class="msg-content">
+            <div class="msg-bubble">Yes, go for it! Show me what you've got.</div>
+          </div>
+        </div>
+        <div class="msg ditto">
+          <div class="msg-content">
+            <div class="msg-bubble">Here's your first post. I used your voice profile and audience insights. Be honest — what feels right and what doesn't.</div>
+            <div class="coaching-tip">
+              <strong>Pro tip:</strong> Don't just fix words — tell me why. "I only use 'earthside' with other doulas" teaches me the rule, not just the edit.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar input-bar-narrow">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Tell me what you think..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="artifact-centre">
+    <div class="artifact-centre-label">
+      First output — Social Content Creation
+    </div>
+
+    <div class="output-card">
+      <div class="output-header">
+        <div class="output-header-left">
+          <span class="input-dot" style="width:20px;height:20px;"><canvas class="dots-field" aria-hidden="true"></canvas></span>
+          <span>Instagram Post 1 of 5</span>
+        </div>
+        <span class="output-badge">Draft</span>
+      </div>
+      <div class="output-body">I still remember the first time I held space for a birthing mama and thought "I have no idea what I'm doing."
+
+She was gripping my hand so hard I lost feeling in my fingers. Her partner was white as a sheet in the corner. The midwife was calm, the room was dim, and I was absolutely winging it.
+
+That was 8 years ago. And you know what? That bub came earthside beautifully. Not because I had all the answers, but because I showed up, I listened, and I trusted the process.
+
+If you're feeling called to this work but you're scared you're not ready — you're exactly where I was. And I promise you, readiness isn't something you wait for. It's something you build, one birth at a time.
+
+Tell me in the comments: what moment made you think "I want to do this"? 💛</div>
+      <div class="output-provenance">
+        <div class="provenance-label">Based on</div>
+        <div class="provenance-tags">
+          <span class="provenance-tag">Voice: personal stories first</span>
+          <span class="provenance-tag">Audience: aspiring doulas, validation-seeking</span>
+          <span class="provenance-tag">"Bub" not "baby"</span>
+          <span class="provenance-tag">No bullet points</span>
+        </div>
+      </div>
+      <div class="output-actions">
+        <button class="btn-approve">Approve</button>
+        <button class="btn-edit">Edit</button>
+        <button class="btn-reject">Not right</button>
+      </div>
+    </div>
+
+    <div class="post-nav">
+      <div class="post-nav-dots">
+        <div class="post-nav-dot active" title="Post 1 — viewing"></div>
+        <div class="post-nav-dot" title="Post 2"></div>
+        <div class="post-nav-dot" title="Post 3"></div>
+        <div class="post-nav-dot" title="Post 4"></div>
+        <div class="post-nav-dot" title="Post 5"></div>
+      </div>
+      <span class="post-nav-label">Post 1 of 5 · Took ~10 seconds (would have taken you ~45 min)</span>
+    </div>
+  </div>
+
+  <div class="knowledge-panel">
+    <div class="k-header">
+      <div class="k-title">Profile powering this output</div>
+      <div class="k-subtitle">Your feedback on these posts will make me better.</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-segment done"><span class="tooltip">Work</span></div>
+      <div class="progress-segment done"><span class="tooltip">Time sinks</span></div>
+      <div class="progress-segment done"><span class="tooltip">Voice</span></div>
+      <div class="progress-segment done"><span class="tooltip">Audience</span></div>
+      <div class="progress-segment done"><span class="tooltip">Goals</span></div>
+      <div class="progress-segment done"><span class="tooltip">Challenges</span></div>
+      <div class="progress-segment done"><span class="tooltip">Prefs</span></div>
+      <div class="progress-segment active"><span class="tooltip">Vision</span></div>
+      <div class="progress-segment done"><span class="tooltip">Concerns</span></div>
+    </div>
+    <div class="k-content">
+      <div class="k-card complete">
+        <div class="k-card-header"><div class="k-card-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--positive)" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Voice rules applied</div><span class="k-badge done-badge">Active</span></div>
+        <div class="artifact-preview">
+          <div class="artifact-label">Used in Post 1</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Personal story opening ✓</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> "Bub" not "baby" ✓</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> No bullet points ✓</div>
+          <div class="voice-trait"><span class="voice-dot strong"></span> Warm, conversational ✓</div>
+        </div>
+      </div>
+
+      <div class="k-card building">
+        <div class="k-card-header"><div class="k-card-title">Social Content</div><span class="k-badge building-badge">Running</span></div>
+        <div class="k-card-body"><strong>Post 1 of 5</strong> delivered<br>Trust level: Check everything<br>Time saved: ~40 min</div>
+      </div>
+
+      <div class="confidence-meter">
+        <div class="confidence-label"><span>How well I know you</span><span style="font-weight:700;">64%</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:64%"></div></div>
+        <div class="confidence-note">Your review of these 5 posts will push to 70%+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+  // ═══════════════════════════════════════════════════
+  // BACKGROUND BANNER MOTIF — Ditto's signature
+  // Grey canvas | ruby stripe | orange block
+  // Living dots float across the colored bands
+  // ═══════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════
+  // DITTO DOTS — Input field particle fields
+  // ═══════════════════════════════════════════════════
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+
+    // Static fallback for reduced motion
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity * pulse;
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+
+    // Pause when not visible
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+
+  // Init all dot fields
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Re-init on state change (new canvases become visible)
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      stateViews.forEach(v => v.classList.remove('active'));
+      const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+      if (target) {
+        target.classList.add('active');
+        // Re-init dots that just became visible
+        setTimeout(() => target.querySelectorAll('.dots-field').forEach(initDots), 50);
+      }
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  document.querySelectorAll('.guided-option').forEach(opt => {
+    opt.addEventListener('click', () => opt.classList.toggle('selected'));
+  });
+
+  // Auto-resize textareas
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    });
+  });
+
+  // Theme toggle — Signature (orange/ruby) vs Focus (B&W)
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') {
+        document.body.classList.add('theme-focus');
+      } else {
+        document.body.classList.remove('theme-focus');
+      }
+    });
+  });
+</script>
+</body>
+</html>

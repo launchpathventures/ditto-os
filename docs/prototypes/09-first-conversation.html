@@ -1,1058 +1,952 @@
+<!-- Build-Ready v2, 2026-03-27 — Second Conversation (Libby returns) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — First Conversation (Libby)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P09 — Second Conversation | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 16px;
     -webkit-font-smoothing: antialiased;
   }
-
-  /* ═══════════════════════════════════════════
-     LAYOUT — Still no sidebar. It's too early.
-     Just the conversation + a knowledge panel
-     that slides in once things start being captured.
-  ═══════════════════════════════════════════ */
-  .layout {
-    display: flex;
-    min-height: 100vh;
-  }
-
-  .conversation-pane {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  /* Knowledge panel — hidden at first, slides in */
-  .knowledge-panel {
-    width: 320px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--border);
-    background: var(--surface-raised);
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    transition: width 0.3s ease, opacity 0.3s ease;
-  }
-
-  .knowledge-panel.hidden {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
-    border: none;
-  }
-
-  .knowledge-panel-header {
-    padding: 20px 20px 14px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .knowledge-panel-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .knowledge-panel-status {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .knowledge-panel-body {
-    padding: 16px 20px;
-    flex: 1;
-  }
-
-  /* Knowledge items — what Ditto knows, building up */
-  .knowledge-item {
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .knowledge-item:last-child {
-    border-bottom: none;
-  }
-
-  .knowledge-item-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
-  }
-
-  .knowledge-item-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .knowledge-item-dot.captured { background: var(--positive); }
-  .knowledge-item-dot.partial { background: var(--accent); }
-  .knowledge-item-dot.empty { background: var(--border-strong); }
-
-  .knowledge-item-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-  }
-
-  .knowledge-item-content {
-    font-size: 14px;
-    line-height: 1.55;
-    color: var(--text-primary);
-  }
-
-  .knowledge-item-content.empty {
-    font-style: italic;
-    color: var(--text-muted);
-    font-size: 13px;
-  }
-
-  .knowledge-item-source {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-
-  .knowledge-item-edit {
-    font-size: 11px;
-    color: var(--accent);
-    text-decoration: none;
-    margin-left: 8px;
-    cursor: pointer;
-  }
-
-  .knowledge-item-edit:hover {
-    text-decoration: underline;
-  }
-
-  /* ═══ Saved badge — appears on messages that created knowledge ═══ */
-  .saved-signal {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--positive);
-    font-weight: 500;
-    margin-top: 6px;
-    padding-left: 16px;
-  }
-
-  .saved-signal-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--positive);
-  }
-
-  /* ═══ CONVERSATION ═══ */
-  .conversation-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 24px;
-  }
-
-  .conversation-messages {
-    max-width: 580px;
-    margin: 0 auto;
-    padding: 48px 0 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  /* Message groups */
-  .message-group {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-bottom: 18px;
-  }
-
-  .message-group.self { align-items: flex-start; }
-  .message-group.user { align-items: flex-end; }
-
-  .sender-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-
-  .self-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-  }
-
-  .sender-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-
-  .message {
-    max-width: 85%;
-    font-size: 15.5px;
-    line-height: 1.65;
-    color: var(--text-primary);
-  }
-
-  .message-group.self .message { padding: 2px 0 2px 16px; }
-
-  .message-group.user .message {
-    background: var(--accent-subtle);
-    padding: 10px 16px;
-    border-radius: 18px;
-    border-bottom-right-radius: 4px;
-  }
-
-  .message p + p { margin-top: 10px; }
-
-  /* ═══ STRUCTURED INPUT CARDS ═══ */
-  .input-card {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin: 4px 0 4px 16px;
-    max-width: 460px;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-
-  .input-card.active {
-    border-color: var(--accent);
-    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
-  }
-
-  .input-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-
-  .input-card-context {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 14px;
-    line-height: 1.5;
-  }
-
-  /* Select options */
-  .select-options {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .select-option {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.12s;
-    font-size: 14px;
-  }
-
-  .select-option:hover {
-    border-color: var(--border-strong);
-    background: var(--surface);
-  }
-
-  .select-option.selected {
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-  }
-
-  .select-radio {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid var(--border-strong);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all 0.12s;
-  }
-
-  .select-option.selected .select-radio { border-color: var(--accent); }
-
-  .select-radio-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    opacity: 0;
-    transition: opacity 0.12s;
-  }
-
-  .select-option.selected .select-radio-dot { opacity: 1; }
-
-  .select-option-label {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-
-  .select-option-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 1px;
-  }
-
-  /* Tag picker */
-  .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tag {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.12s;
-    border: 1.5px solid var(--border);
-    background: var(--bg);
-    color: var(--text-secondary);
-  }
-  .tag:hover { border-color: var(--border-strong); }
-  .tag.selected {
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-    color: var(--accent);
-  }
-
-  /* Comparison cards */
-  .comparison-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .comparison-option {
-    padding: 14px;
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .comparison-option:hover {
-    border-color: var(--border-strong);
-    background: var(--surface);
-  }
-
-  .comparison-option.selected {
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-  }
-
-  .comparison-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 6px;
-  }
-
-  .comparison-option.selected .comparison-label { color: var(--accent); }
-
-  /* Completed summary (collapsed card) */
-  .completed-summary {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    margin-left: 16px;
-    max-width: 460px;
-    background: var(--positive-subtle);
-    border: 1px solid hsl(145 40% 88%);
-    border-radius: 10px;
-    font-size: 14px;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-
-  .completed-check {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--positive);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    flex-shrink: 0;
-  }
-
-  .completed-text { flex: 1; font-size: 13.5px; }
-  .completed-text strong { font-weight: 600; }
-
-  .completed-edit {
-    font-size: 12px;
-    color: var(--text-muted);
-    cursor: pointer;
-    text-decoration: none;
-  }
-
-  .completed-edit:hover { color: var(--accent); }
-
-  /* Card fallback */
-  .input-card-fallback {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 12px;
-    text-align: center;
-  }
-
-  .input-card-fallback a {
-    color: var(--accent);
-    text-decoration: none;
-    font-weight: 500;
-  }
-
-  /* Card actions */
-  .input-card-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-  }
-
-  /* ═══ PROCESS PROPOSAL ═══ */
-  .process-proposal {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--accent);
-    border-radius: 14px;
-    padding: 20px;
-    margin: 8px 0 4px 16px;
-    max-width: 460px;
-    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
-  }
-
-  .proposal-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-
-  .proposal-subtitle {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-  }
-
-  .proposal-steps {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .proposal-step {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Skip Link ===== */
+  .skip-link {
+    position: absolute; top: -100%; left: 16px;
+    background: var(--accent); color: white;
+    padding: 8px 16px; border-radius: var(--radius-md);
+    z-index: 1000; font-size: 14px; text-decoration: none;
+  }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-dots { display: flex; gap: 6px; }
+  .proto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+  .proto-dot.active { background: var(--vivid); }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover:not(.disabled) { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow.disabled { opacity: 0.35; cursor: not-allowed; }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Workspace Shell ===== */
+  .workspace {
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden; transition: all 0.22s ease-in-out;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+
+  .collapse-btn {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s ease-out; flex-shrink: 0;
+  }
+  .collapse-btn:hover { background: var(--surface-raised); color: var(--text-secondary); }
+
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 6px; border-radius: 99px; margin-left: auto;
+  }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 24px;
+  }
+
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
+  }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .close-btn {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .close-btn:hover { background: var(--surface-raised); color: var(--text-secondary); }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Checklists --- */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+  .checklist-detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .metric { min-width: 80px; }
+  .metric-value { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .metric-trend { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 500; margin-left: 4px; }
+  .metric-trend.up { color: var(--positive); }
+  .metric-trend.down { color: var(--negative); }
+  .metric-trend.flat { color: var(--text-muted); }
+
+  /* --- Sparklines --- */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+  .sparkline.trend-down polyline { stroke: var(--negative); }
+  .sparkline.trend-flat polyline { stroke: var(--text-muted); }
+
+  /* --- Donut Charts --- */
+  .donut { width: 48px; height: 48px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 5; }
+  .donut .donut-track { stroke: var(--border); }
+  .donut .donut-fill { stroke: var(--vivid); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+  .donut-container { display: flex; align-items: center; gap: 12px; }
+  .donut-label { font-size: 14px; }
+  .donut-label strong { font-weight: 600; }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-heading {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; letter-spacing: -0.01em;
+  }
+
+  /* --- Feed Items (typographic flow, no cards) --- */
+  .feed-item {
+    padding: 16px 0; border-bottom: 1px solid var(--border);
+  }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; font-size: 13px;
+  }
+  .feed-process { color: var(--text-muted); font-weight: 500; }
+  .feed-time { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+  .feed-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .feed-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
   }
-
-  .proposal-step:last-child { border-bottom: none; }
-
-  .step-icon {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .step-icon.done { background: var(--positive); color: white; }
-  .step-icon.next { background: var(--accent); color: white; }
-  .step-icon.upcoming {
-    background: var(--surface);
-    border: 1.5px solid var(--border-strong);
-    color: var(--text-muted);
-  }
-
-  .step-text { flex: 1; color: var(--text-primary); }
-  .step-text.done { color: var(--text-secondary); }
-  .step-text.next { font-weight: 500; color: var(--accent); }
-  .step-text.upcoming { color: var(--text-muted); }
-
-  .proposal-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-  }
-
-  /* Progress strip */
-  .progress-strip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 16px;
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-  }
-
-  .progress-strip-bar {
-    flex: 1;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-    max-width: 160px;
-  }
-
-  .progress-strip-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-  }
-
-  .progress-strip strong { color: var(--accent); font-weight: 600; }
-
-  /* ═══ Buttons ═══ */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    cursor: pointer;
-    transition: all 0.12s;
-    line-height: 1.3;
-  }
-
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
   .btn-primary:hover { background: var(--accent-hover); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-  .btn-ghost:hover { color: var(--text-primary); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-vivid:hover { filter: brightness(0.9); }
 
-  /* ═══ Prompt input ═══ */
-  .input-wrapper {
-    position: sticky;
-    bottom: 0;
-    padding: 16px 24px 24px;
-    background: linear-gradient(transparent, var(--bg) 16px);
+  /* --- Accent Borders (content hierarchy) --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-deep { border-left: 2px solid var(--vivid-deep); padding-left: 12px; }
+  .accent-caution { border-left: 2px solid var(--caution); padding-left: 12px; }
+  .accent-negative { border-left: 2px solid var(--negative); padding-left: 12px; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px;
+  }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
+
+  /* --- Alert Block --- */
+  .alert {
+    padding: 10px 14px; border-radius: var(--radius-lg); font-size: 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .alert-warning { background: var(--caution-subtle); }
+  .alert-error { background: var(--negative-subtle); }
+  .alert-info { background: var(--info-subtle); }
+  .alert-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
+  }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+  .provenance a { color: var(--vivid-deep); text-decoration: none; }
+  .provenance a:hover { text-decoration: underline; }
+
+  /* --- Review Item --- */
+  .review-item { padding: 12px 0; }
+  .review-item + .review-item { border-top: 1px solid var(--border); }
+  .review-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .confidence-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .confidence-high { background: var(--positive); }
+  .confidence-medium { background: var(--caution); }
+  .confidence-low { background: var(--negative); }
+
+  /* --- Conversation Messages --- */
+  .msg { margin-bottom: 24px; }
+  .msg-user {
+    background: var(--surface); padding: 14px 18px;
+    border-radius: var(--radius-lg); font-size: 15px; line-height: 1.6;
+    max-width: 85%;
+  }
+  .msg-ditto { font-size: 15px; line-height: 1.7; color: var(--text-primary); }
+  .msg-ditto p { margin-bottom: 10px; }
+  .msg-ditto p:last-child { margin-bottom: 0; }
+  .msg-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 6px;
   }
 
-  .prompt-container {
-    max-width: 580px;
-    margin: 0 auto;
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    transition: border-color 0.2s, box-shadow 0.2s;
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
-
-  .prompt-container:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
-  }
-
-  .prompt-textarea {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    background: transparent;
-    resize: none;
-    min-height: 24px;
-    max-height: 120px;
-  }
-
-  .prompt-textarea::placeholder { color: var(--text-muted); }
-
-  .prompt-send {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .prompt-send svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
-
-  /* ═══ Responsive ═══ */
-  @media (max-width: 960px) {
-    .knowledge-panel { display: none; }
-  }
-
-  @media (max-width: 768px) {
-    .conversation-scroll { padding: 0 16px; }
-    .input-wrapper { padding: 16px 16px 24px; }
-    .message { max-width: 92%; }
-    .input-card, .completed-summary, .process-proposal { margin-left: 8px; max-width: 100%; }
-    .comparison-grid { grid-template-columns: 1fr; }
-  }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div class="layout">
-
-  <!-- ═══════════════════════════════════════
-       CONVERSATION PANE
-  ═══════════════════════════════════════ -->
-  <div class="conversation-pane">
-    <div class="conversation-scroll">
-      <div class="conversation-messages">
-
-        <!-- ═══ Libby tapped "I'm building something" on day zero ═══ -->
-        <div class="message-group user">
-          <div class="message">
-            <p>I'm a doula building an online education business and I don't know where to start. Everything's scattered.</p>
-          </div>
-        </div>
-
-        <!-- ═══ Self recognises, starts gathering ═══ -->
-        <div class="message-group self">
-          <div class="sender-row">
-            <span class="self-dot"></span>
-            <span class="sender-name">Ditto</span>
-          </div>
-          <div class="message">
-            <p>I can help with that. Let me understand your world first, then I'll suggest what to tackle and in what order. A few quick things:</p>
-          </div>
-        </div>
-
-        <!-- Progress strip — shows we're moving somewhere -->
-        <div class="progress-strip">
-          <strong>Understanding you</strong>
-          <div class="progress-strip-bar">
-            <div class="progress-strip-fill" style="width: 10%"></div>
-          </div>
-          Step 1
-        </div>
-
-        <!-- ═══ INPUT CARD: Who are you building for? ═══ -->
-        <div class="completed-summary">
-          <span class="completed-check">&#10003;</span>
-          <span class="completed-text"><strong>You:</strong> Doula building online education + coaching. Mum.</span>
-          <a class="completed-edit" href="#">edit</a>
-        </div>
-
-        <!-- Saved signal — knowledge was captured -->
-        <div class="saved-signal">
-          <span class="saved-signal-dot"></span>
-          Saved to your profile
-        </div>
-
-        <!-- ═══ INPUT CARD: Who's your ideal client? (completed) ═══ -->
-        <div class="completed-summary">
-          <span class="completed-check">&#10003;</span>
-          <span class="completed-text"><strong>Your client:</strong> First-time mums, professional women 30s, overwhelmed, want practical not theory</span>
-          <a class="completed-edit" href="#">edit</a>
-        </div>
-
-        <div class="saved-signal">
-          <span class="saved-signal-dot"></span>
-          Saved — this shapes everything I create for you
-        </div>
-
-        <!-- Updated progress -->
-        <div class="progress-strip">
-          <strong>Understanding you</strong>
-          <div class="progress-strip-bar">
-            <div class="progress-strip-fill" style="width: 45%"></div>
-          </div>
-          Voice is next
-        </div>
-
-        <!-- ═══ Self: Transition to voice ═══ -->
-        <div class="message-group self">
-          <div class="sender-row">
-            <span class="self-dot"></span>
-            <span class="sender-name">Ditto</span>
-          </div>
-          <div class="message">
-            <p>Good. Now the important one — your voice. This shapes every piece of content, every email, everything I write for you. Which of these sounds most like you?</p>
-          </div>
-        </div>
-
-        <!-- ═══ INPUT CARD: Voice archetype (active) ═══ -->
-        <div class="input-card active">
-          <div class="input-card-title">Your voice</div>
-          <div class="input-card-context">When a nervous first-time mum asks you for help, how do you naturally talk to her?</div>
-
-          <div class="select-options">
-            <div class="select-option">
-              <div class="select-radio"><div class="select-radio-dot"></div></div>
-              <div>
-                <div class="select-option-label">Reassuring expert</div>
-                <div class="select-option-desc">"Here's what the evidence says, and here's what I'd do"</div>
-              </div>
-            </div>
-            <div class="select-option selected">
-              <div class="select-radio"><div class="select-radio-dot"></div></div>
-              <div>
-                <div class="select-option-label">Warm friend who's been there</div>
-                <div class="select-option-desc">"I've been where you are. You're doing great. Here's what helped me"</div>
-              </div>
-            </div>
-            <div class="select-option">
-              <div class="select-radio"><div class="select-radio-dot"></div></div>
-              <div>
-                <div class="select-option-label">Straight talker</div>
-                <div class="select-option-desc">"Here's what actually works. Skip the rest."</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="input-card-fallback">
-            <a href="#">Or describe it in your own words</a>
-          </div>
-        </div>
-
-        <!-- ═══ Self refines — asks for brand words ═══ -->
-        <div class="message-group self">
-          <div class="sender-row">
-            <span class="self-dot"></span>
-            <span class="sender-name">Ditto</span>
-          </div>
-          <div class="message">
-            <p>"Warm friend who's been there" — that fits what you told me about being non-judgmental and practical. Let me narrow it down. Pick the 3 words that feel most like your brand:</p>
-          </div>
-        </div>
-
-        <!-- ═══ INPUT CARD: Brand words (tag picker) ═══ -->
-        <div class="input-card active">
-          <div class="input-card-title">Your brand in 3 words</div>
-          <div class="input-card-context">These will guide your content tone, your landing page, everything.</div>
-
-          <div class="tag-picker">
-            <span class="tag selected">Safe</span>
-            <span class="tag selected">Practical</span>
-            <span class="tag">Empowering</span>
-            <span class="tag selected">Real</span>
-            <span class="tag">Gentle</span>
-            <span class="tag">Confident</span>
-            <span class="tag">Calm</span>
-            <span class="tag">Nurturing</span>
-          </div>
-
-          <div class="input-card-actions">
-            <button class="btn btn-primary">Confirm: Safe, Practical, Real</button>
-          </div>
-        </div>
-
-        <!-- ═══ Self: Voice check with real examples ═══ -->
-        <div class="message-group self">
-          <div class="sender-row">
-            <span class="self-dot"></span>
-            <span class="sender-name">Ditto</span>
-          </div>
-          <div class="message">
-            <p>Last check. A first-time mum asks: "Is it normal to feel terrified about giving birth?" Which response sounds more like you?</p>
-          </div>
-        </div>
-
-        <!-- ═══ INPUT CARD: Voice comparison ═══ -->
-        <div class="input-card active">
-          <div class="comparison-grid">
-            <div class="comparison-option selected">
-              <div class="comparison-label">This one</div>
-              "Completely normal. Most first-time mums feel exactly this way. The fear usually comes from not knowing what to expect — and that's fixable."
-            </div>
-            <div class="comparison-option">
-              <div class="comparison-label">Or this</div>
-              "Oh absolutely! Birth can feel scary but it's also incredible. Trust your body — it knows what to do. You've got this, mama!"
-            </div>
-          </div>
-
-          <div class="input-card-actions">
-            <button class="btn btn-primary">First one — that's me</button>
-            <button class="btn btn-ghost">Neither — let me show you</button>
-          </div>
-        </div>
-
-        <!-- Voice completed + saved signal -->
-        <div class="completed-summary">
-          <span class="completed-check">&#10003;</span>
-          <span class="completed-text"><strong>Your voice:</strong> Warm, practical, experienced. Safe &middot; Practical &middot; Real. Not woo-woo, not clinical.</span>
-          <a class="completed-edit" href="#">edit</a>
-        </div>
-
-        <div class="saved-signal">
-          <span class="saved-signal-dot"></span>
-          Saved — I'll use this voice in everything I write for you
-        </div>
-
-        <!-- ═══════════════════════════════════════
-             THE TRANSITION — Self has enough. Proposes a plan.
-        ═══════════════════════════════════════ -->
-
-        <div class="message-group self">
-          <div class="sender-row">
-            <span class="self-dot"></span>
-            <span class="sender-name">Ditto</span>
-          </div>
-          <div class="message">
-            <p>I've got a clear picture of you, your client, and your voice. Here's what I'd suggest working through — each step builds on the last:</p>
-          </div>
-
-          <!-- ═══ PROCESS PROPOSAL ═══ -->
-          <div class="process-proposal">
-            <div class="proposal-title">Getting your business out there</div>
-            <div class="proposal-subtitle">Based on what you've told me</div>
-
-            <div class="proposal-steps">
-              <div class="proposal-step">
-                <div class="step-icon done">&#10003;</div>
-                <span class="step-text done">Understand you and your client</span>
-              </div>
-              <div class="proposal-step">
-                <div class="step-icon done">&#10003;</div>
-                <span class="step-text done">Define your voice</span>
-              </div>
-              <div class="proposal-step">
-                <div class="step-icon next">3</div>
-                <span class="step-text next">5 Instagram posts to test your message</span>
-              </div>
-              <div class="proposal-step">
-                <div class="step-icon upcoming">4</div>
-                <span class="step-text upcoming">Landing page with waitlist</span>
-              </div>
-              <div class="proposal-step">
-                <div class="step-icon upcoming">5</div>
-                <span class="step-text upcoming">Content plan for the first month</span>
-              </div>
-            </div>
-
-            <div class="proposal-actions">
-              <button class="btn btn-primary">Start with Instagram posts</button>
-              <button class="btn btn-secondary">Adjust this plan</button>
-            </div>
-          </div>
-
-          <div class="message">
-            <p>Steps 1 and 2 are done. The Instagram posts are the fastest way to test if your voice resonates — you'll have real posts in about 10 minutes that you can put out today.</p>
-            <p>Everything I create from here uses your voice and your client profile. If they drift, correct me — I'll learn and it'll stick.</p>
-          </div>
-        </div>
-
-      </div>
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Onboarding Journey · <span>Second Conversation</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
     </div>
-
-    <!-- Prompt input -->
-    <div class="input-wrapper">
-      <div class="prompt-container">
-        <textarea class="prompt-textarea" rows="1" placeholder="Or just tell me what you'd rather work on..."></textarea>
-        <button class="prompt-send">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
-      </div>
+    <div class="proto-dots" aria-label="Prototype progress">
+      <div class="proto-dot" aria-label="Day Zero"></div>
+      <div class="proto-dot" aria-label="Intake"></div>
+      <div class="proto-dot active" aria-label="Current: Second Conversation"></div>
+      <div class="proto-dot" aria-label="First Output"></div>
+      <div class="proto-dot" aria-label="Workspace Emerges"></div>
     </div>
+    <a href="08a-intake-conversation.html" class="proto-arrow" aria-label="Previous: Intake Conversation">&larr;</a>
+    <a href="10-first-output.html" class="proto-arrow" aria-label="Next: First Output">&rarr;</a>
   </div>
+</nav>
 
-  <!-- ═══════════════════════════════════════
-       KNOWLEDGE PANEL — What Ditto now knows
-       This appeared after the first piece of
-       knowledge was captured. Not before.
-  ═══════════════════════════════════════ -->
-  <div class="knowledge-panel">
-    <div class="knowledge-panel-header">
-      <span class="knowledge-panel-title">What I know</span>
-      <span class="knowledge-panel-status">Just started</span>
+<!-- State Toggle Bar -->
+<div class="state-bar" role="tablist" aria-label="Conversation states">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="morning" tabindex="0">Good morning</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="building" tabindex="-1">Building on yesterday</button>
+</div>
+
+<!-- Workspace -->
+<div class="workspace" role="tabpanel" id="main-content">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <div class="wordmark">Ditto</div>
+      <button class="collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" tabindex="0" role="button" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">2</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Work</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Centre -->
+  <main class="centre">
+
+    <!-- ═══ State 1: Good morning ═══ -->
+    <div class="centre-scroll state-content" id="state-morning">
+      <div class="centre-content">
+
+        <!-- Ditto greeting -->
+        <div class="msg">
+          <div class="msg-ditto">
+            <p style="font-size:18px; font-weight:600; letter-spacing:-0.01em; margin-bottom:16px;">Good morning, Libby.</p>
+            <p>I've been working on some things since we talked yesterday. I went through your Instagram content and picked up a lot about how you work with your clients.</p>
+          </div>
+        </div>
+
+        <!-- Overnight work summary -->
+        <div class="section-title" style="margin-top:8px;">What I worked on overnight</div>
+
+        <div class="feed-item">
+          <div class="feed-item-header">
+            <span class="feed-process">Content Analysis</span>
+            <span class="badge badge-positive">Complete</span>
+            <span class="feed-time">4h ago</span>
+          </div>
+          <div class="feed-title">Processed your Instagram content</div>
+          <div class="feed-body">I read through your last 6 months of posts, reels, and stories to understand your voice, topics, and how your audience responds.</div>
+
+          <div class="metric-row" style="margin-top:14px;">
+            <div class="metric">
+              <div class="metric-value">47</div>
+              <div class="metric-label">Posts analysed</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">12</div>
+              <div class="metric-label">Reels reviewed</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">8</div>
+              <div class="metric-label">Key topics found</div>
+            </div>
+          </div>
+
+          <div class="provenance" style="margin-top:8px;">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Source: @libby.doula Instagram, connected yesterday
+          </div>
+        </div>
+
+        <div class="feed-item">
+          <div class="feed-item-header">
+            <span class="feed-process">Pattern Recognition</span>
+            <span class="badge badge-positive">Complete</span>
+            <span class="feed-time">3h ago</span>
+          </div>
+          <div class="feed-title">Identified your content patterns</div>
+
+          <div style="margin-top:10px;">
+            <div class="field-table">
+              <span class="field-label">Top topic</span><span class="field-value">Postpartum recovery (38% of posts)</span>
+              <span class="field-label">Best engagement</span><span class="field-value">Personal stories + practical tips</span>
+              <span class="field-label">Posting rhythm</span><span class="field-value">3-4x/week, strongest on Tuesday/Thursday</span>
+              <span class="field-label">Audience response</span><span class="field-value">Questions in comments drive 2x more saves</span>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div class="progress-label"><span>Content library built</span><span>47 of ~60 pieces</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:78%;"></div></div>
+          </div>
+        </div>
+
+        <div class="feed-item">
+          <div class="feed-item-header">
+            <span class="feed-process">Voice Profile</span>
+            <span class="badge badge-vivid">Building</span>
+            <span class="feed-time">2h ago</span>
+          </div>
+          <div class="feed-title accent-vivid">Started building your voice profile</div>
+          <div class="feed-body">Based on your posts, I'm learning how you write. You use warm, direct language. You avoid clinical jargon unless you're explaining something specific. You often start with a personal moment, then pivot to practical advice.</div>
+
+          <div class="alert alert-info" style="margin-top:10px;">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <div>I'll need a few more conversations before I can confidently write in your voice. For now, everything I draft will come to you for review.</div>
+          </div>
+        </div>
+
+        <!-- Ditto follow-up message -->
+        <div class="msg" style="margin-top:24px;">
+          <div class="msg-ditto">
+            <p>I've got a few things ready to show you based on what I learned. Want to take a look?</p>
+          </div>
+        </div>
+
+        <!-- User reply -->
+        <div class="msg" style="margin-top:16px;">
+          <div class="msg-user">Yes! I'm curious what you picked up.</div>
+        </div>
+
+      </div>
     </div>
 
-    <div class="knowledge-panel-body">
+    <!-- ═══ State 2: Building on yesterday ═══ -->
+    <div class="centre-scroll state-content" id="state-building" style="display:none;">
+      <div class="centre-content">
 
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot captured"></span>
-          <span class="knowledge-item-label">You</span>
+        <!-- Ditto presents drafts -->
+        <div class="msg">
+          <div class="msg-ditto">
+            <p>Here's what I put together. These are drafts based on your top-performing content patterns. I've matched your voice as closely as I can, but you know your clients best.</p>
+          </div>
         </div>
-        <div class="knowledge-item-content">
-          Doula building online education and coaching business. Also a mum. Everything's currently scattered.
+
+        <div class="section-title" style="margin-top:8px;">Content suggestions for this week</div>
+
+        <!-- Review item 1 -->
+        <div class="review-item">
+          <div class="review-meta">
+            <span class="confidence-dot confidence-high"></span>
+            <span style="font-size:13px; font-weight:500;">High confidence</span>
+            <span class="badge badge-info">Tuesday post</span>
+            <span class="feed-time">You review</span>
+          </div>
+          <div class="feed-title">Postpartum recovery: the first 48 hours</div>
+          <div class="feed-body" style="margin-top:6px;">
+            <div class="accent-vivid">
+              <p style="margin-bottom:6px;"><em>"Nobody told me that the first two days home would feel like the longest of my life. Not because of the baby — because of my body..."</em></p>
+              <p>A practical post walking through what to actually expect in those first 48 hours. Covers physical recovery, emotional swings, and three things your partner can do that genuinely help.</p>
+            </div>
+          </div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Based on your March 12 post (428 saves) + client FAQ themes
+          </div>
+          <div class="action-row">
+            <button class="btn-vivid">Approve draft</button>
+            <button class="btn-secondary">Edit</button>
+            <button class="btn-secondary">Skip</button>
+          </div>
         </div>
-        <div class="knowledge-item-source">
-          From your first message
-          <a class="knowledge-item-edit" href="#">edit</a>
+
+        <!-- Review item 2 -->
+        <div class="review-item">
+          <div class="review-meta">
+            <span class="confidence-dot confidence-medium"></span>
+            <span style="font-size:13px; font-weight:500;">Medium confidence</span>
+            <span class="badge badge-info">Thursday reel</span>
+            <span class="feed-time">You review</span>
+          </div>
+          <div class="feed-title">3 questions to ask your doula before hiring</div>
+          <div class="feed-body" style="margin-top:6px;">
+            <div class="accent-deep">
+              <p style="margin-bottom:6px;">A short reel format — you speaking to camera, 45-60 seconds. Three questions potential clients should ask any doula, with your honest take on why each matters.</p>
+              <p style="margin-top:6px; font-size:13px; color:var(--text-muted);">This is a new format for you. Your audience data suggests reels with direct advice get 3x the reach of carousel posts.</p>
+            </div>
+          </div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Based on reel engagement data + competitor analysis
+          </div>
+          <div class="action-row">
+            <button class="btn-vivid">Approve draft</button>
+            <button class="btn-secondary">Edit</button>
+            <button class="btn-secondary">Skip</button>
+          </div>
+        </div>
+
+        <!-- Review item 3 -->
+        <div class="review-item">
+          <div class="review-meta">
+            <span class="confidence-dot confidence-high"></span>
+            <span style="font-size:13px; font-weight:500;">High confidence</span>
+            <span class="badge badge-neutral">Story series</span>
+            <span class="feed-time">You review</span>
+          </div>
+          <div class="feed-title">"Ask me anything" — client Q&A stories</div>
+          <div class="feed-body" style="margin-top:6px;">
+            <div class="accent-vivid">
+              <p>A 4-slide story series answering the most common questions from your DMs. I've drafted responses in your voice for the top 4 questions I found in your saved messages.</p>
+            </div>
+          </div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Based on DM patterns + your previous Q&A stories
+          </div>
+          <div class="action-row">
+            <button class="btn-vivid">Approve draft</button>
+            <button class="btn-secondary">Edit</button>
+            <button class="btn-secondary">Skip</button>
+          </div>
+        </div>
+
+        <!-- Suggestion block -->
+        <div class="suggestion" style="margin-top:20px;">
+          <div class="suggestion-label">Suggestion</div>
+          Your Tuesday/Thursday posting rhythm is strong. Want me to start preparing a weekly content calendar? I'd draft suggestions each Sunday evening for your review on Monday morning.
+          <div class="action-row" style="margin-top:8px;">
+            <button class="btn-vivid">Yes, set that up</button>
+            <button class="btn-secondary">Not yet</button>
+          </div>
+        </div>
+
+        <!-- Ditto follow-up -->
+        <div class="msg" style="margin-top:24px;">
+          <div class="msg-ditto">
+            <p>Everything I draft stays in "You review" mode until you tell me otherwise. As I learn more about what you approve and what you change, I'll get better at matching your voice.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Input bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Reply to Ditto..." aria-label="Message Ditto"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel" aria-label="Ditto context panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+      <button class="close-btn" aria-label="Close panel" title="Close panel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="right-panel-scroll">
+
+      <!-- About Libby -->
+      <div style="margin-bottom:20px;">
+        <div class="section-heading" style="font-size:14px;">What I know about Libby</div>
+        <div class="field-table" style="margin-top:8px;">
+          <span class="field-label">Role</span><span class="field-value">Doula (birth + postpartum)</span>
+          <span class="field-label">Practice</span><span class="field-value">Solo, Melbourne-based</span>
+          <span class="field-label">Clients/month</span><span class="field-value">3-4 active</span>
+          <span class="field-label">Main channel</span><span class="field-value">Instagram (@libby.doula)</span>
+          <span class="field-label">Content goal</span><span class="field-value">Build trust, attract enquiries</span>
         </div>
       </div>
 
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot captured"></span>
-          <span class="knowledge-item-label">Your ideal client</span>
-        </div>
-        <div class="knowledge-item-content">
-          First-time mums. Professional women in their 30s. Research everything but overwhelmed. Want someone calm, practical, non-judgmental.
-        </div>
-        <div class="knowledge-item-source">
-          From our conversation
-          <a class="knowledge-item-edit" href="#">edit</a>
+      <div class="nav-separator" style="margin:0 0 16px;"></div>
+
+      <!-- Voice profile -->
+      <div style="margin-bottom:20px;">
+        <div class="section-heading" style="font-size:14px;">Voice profile</div>
+        <ul class="checklist" style="margin-top:6px;">
+          <li class="checklist-item">
+            <span class="check-icon check-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div>
+              <div>Warm and direct</div>
+              <div class="checklist-detail">Uses "you" often, speaks like a friend</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div>
+              <div>Story-first structure</div>
+              <div class="checklist-detail">Personal moment, then practical advice</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div>
+              <div>Avoids clinical jargon</div>
+              <div class="checklist-detail">Explains terms when she must use them</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div>
+              <div>Humour style</div>
+              <div class="checklist-detail">Still learning — need more examples</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="nav-separator" style="margin:0 0 16px;"></div>
+
+      <!-- Content performance -->
+      <div style="margin-bottom:20px;">
+        <div class="section-heading" style="font-size:14px;">Content performance</div>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="38 62"/>
+            </svg>
+            <div class="donut-label"><strong>Postpartum</strong> — 38% of content
+              <svg class="sparkline trend-up" viewBox="0 0 48 18" style="margin-left:4px;"><polyline points="2,14 10,12 18,10 26,8 34,6 42,4 46,3"/></svg>
+            </div>
+          </div>
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="24 76" style="stroke:var(--positive);"/>
+            </svg>
+            <div class="donut-label"><strong>Birth prep</strong> — 24% of content
+              <svg class="sparkline trend-flat" viewBox="0 0 48 18" style="margin-left:4px;"><polyline points="2,10 10,9 18,10 26,9 34,10 42,9 46,10"/></svg>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot captured"></span>
-          <span class="knowledge-item-label">Your voice</span>
+      <div class="nav-separator" style="margin:0 0 16px;"></div>
+
+      <!-- Trust level -->
+      <div style="margin-bottom:20px;">
+        <div class="section-heading" style="font-size:14px;">Trust level</div>
+        <div style="margin-top:8px;">
+          <div class="progress-label"><span>You review</span><span>Day 2</span></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:10%; background:var(--caution);"></div></div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Everything I create comes to you for approval first. As we work together, you can choose to give me more autonomy.</div>
         </div>
-        <div class="knowledge-item-content">
-          Warm friend who's been there. Safe, practical, real. Not woo-woo, not clinical. Honest, not sugarcoated. "I've been where you are."
-        </div>
-        <div class="knowledge-item-source">
-          Built from 3 inputs
-          <a class="knowledge-item-edit" href="#">edit</a>
+        <div class="field-table" style="margin-top:12px; font-size:13px;">
+          <span class="field-label">Content drafts</span><span class="field-value"><span class="badge badge-caution">You review</span></span>
+          <span class="field-label">Posting</span><span class="field-value"><span class="badge badge-neutral">Not yet</span></span>
+          <span class="field-label">Client replies</span><span class="field-value"><span class="badge badge-neutral">Not yet</span></span>
         </div>
       </div>
 
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot captured"></span>
-          <span class="knowledge-item-label">Stage</span>
-        </div>
-        <div class="knowledge-item-content">
-          Building. Not yet launched. Doing courses, posting on Instagram inconsistently, sent a survey.
-        </div>
-        <div class="knowledge-item-source">
-          From our conversation
-          <a class="knowledge-item-edit" href="#">edit</a>
-        </div>
-      </div>
+      <div class="nav-separator" style="margin:0 0 16px;"></div>
 
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot empty"></span>
-          <span class="knowledge-item-label">Pricing</span>
-        </div>
-        <div class="knowledge-item-content empty">
-          Not yet discussed
-        </div>
-      </div>
-
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot empty"></span>
-          <span class="knowledge-item-label">Competitors</span>
-        </div>
-        <div class="knowledge-item-content empty">
-          Not yet discussed
-        </div>
-      </div>
-
-      <div class="knowledge-item">
-        <div class="knowledge-item-header">
-          <span class="knowledge-item-dot empty"></span>
-          <span class="knowledge-item-label">Course structure</span>
-        </div>
-        <div class="knowledge-item-content empty">
-          Not yet discussed
-        </div>
+      <!-- Session context -->
+      <div>
+        <div class="section-heading" style="font-size:14px;">This session</div>
+        <ul class="checklist" style="margin-top:6px;">
+          <li class="checklist-item">
+            <span class="check-icon check-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div>Showed overnight work</div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div>
+              <div>Review content suggestions</div>
+              <div class="checklist-detail">3 drafts waiting for Libby</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div>Set up content calendar</div>
+          </li>
+        </ul>
       </div>
 
     </div>
-  </div>
+  </aside>
 
 </div>
 
 <script>
-  // Toggle select options
-  document.querySelectorAll('.select-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      opt.closest('.select-options').querySelectorAll('.select-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
+  // ═══════ State toggles ═══════
+  const stateBtns = document.querySelectorAll('.state-btn');
+
+  function setState(state) {
+    document.querySelectorAll('.state-content').forEach(el => el.style.display = 'none');
+    const target = document.getElementById('state-' + state);
+    if (target) target.style.display = 'block';
+  }
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      setState(btn.dataset.state);
     });
   });
 
-  // Toggle tags
-  document.querySelectorAll('.tag').forEach(tag => {
-    tag.addEventListener('click', () => tag.classList.toggle('selected'));
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
   });
 
-  // Toggle comparison
-  document.querySelectorAll('.comparison-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      opt.closest('.comparison-grid').querySelectorAll('.comparison-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
+  document.querySelector('.close-btn').addEventListener('click', () => {
+    document.querySelector('.right-panel').style.width = '0';
+    document.querySelector('.right-panel').style.minWidth = '0';
+    document.querySelector('.right-panel').style.borderLeft = 'none';
+  });
+
+  // ═══════ Theme toggle ═══════
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
     });
   });
 
-  // Textarea resize
-  const textarea = document.querySelector('.prompt-textarea');
-  textarea.addEventListener('input', function() {
-    this.style.height = 'auto';
-    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  // ═══════ Textarea auto-resize ═══════
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    });
   });
+
+  // ═══════ Ditto Dots ═══════
+  const COLORS = ['#059669','#059669','#047857','#3D5A48','#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size/2, cy = size/2;
+    const count = Math.max(8, Math.round(size/3));
+    const maxR = size * 0.35;
+    const dots = Array.from({length:count}, (_,i) => ({
+      angle: (Math.PI*2/count)*i + Math.random()*0.3,
+      dist: 2 + Math.random()*maxR,
+      size: 1 + Math.random()*(size/16),
+      speed: 0.15 + Math.random()*0.35,
+      phase: Math.random()*Math.PI*2,
+      breathAmp: 1 + Math.random()*(maxR*0.3),
+      color: COLORS[Math.floor(Math.random()*COLORS.length)],
+      opacity: 0.5 + Math.random()*0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle)*d.dist*0.6;
+        const y = cy + Math.sin(d.angle)*d.dist*0.6;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now()/1000;
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const a = d.angle + t*d.speed;
+        const breathe = Math.sin(t*1.2+d.phase)*d.breathAmp;
+        const r = Math.max(1, d.dist+breathe);
+        const x = cx + Math.cos(a)*r;
+        const y = cy + Math.sin(a)*r;
+        const pulse = 0.6 + Math.sin(t*2.5+d.phase)*0.4;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity*pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
 </script>
-
-<div class="proto-nav"><a href="08-day-zero.html">&larr; Day Zero</a><span class="pn-t"><a href="index.html">P09 First Conversation</a></span><a href="10-first-output.html">First Output &rarr;</a></div><!-- pnav -->
 </body>
 </html>

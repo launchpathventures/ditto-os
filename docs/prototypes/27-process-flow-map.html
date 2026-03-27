@@ -1,0 +1,340 @@
+<!-- v1 — Process flow map: Jordan's inter-process graph, 2026-03-26 -->
+<!-- Production note: Current CSS Grid layout proves the concept but should evaluate graph visualization
+     libraries (React Flow / Xyflow) for production. CSS Grid won't scale past ~10 process nodes
+     with real dependency edges and dynamic layouts. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P27 — Process Flow Map | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh; font-size: 16px; overflow: hidden; }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .skip-link { position: absolute; top: -100px; left: 16px; background: var(--accent); color: var(--accent-text); padding: 8px 16px; border-radius: var(--radius-md); z-index: 200; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 8px; }
+
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.12s; }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Layout: graph + detail panel */
+  .layout { display: grid; grid-template-columns: 1fr 0; height: calc(100vh - 92px); margin-top: 92px; transition: grid-template-columns 0.25s ease-in-out; }
+  .layout.panel-open { grid-template-columns: 1fr 340px; }
+
+  /* Graph area */
+  .graph-area { position: relative; padding: 40px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+  /* Process nodes — positioned with CSS grid */
+  .graph-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto; gap: 60px 80px; position: relative; }
+
+  .process-node {
+    background: var(--surface-raised); border-radius: var(--radius-xl);
+    padding: 20px 24px; cursor: pointer; transition: all 0.15s;
+    border: 1.5px solid var(--border); position: relative; min-width: 200px;
+  }
+  .process-node:hover { border-color: var(--border-strong); box-shadow: var(--shadow-medium); }
+  .process-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .process-node.selected { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.12); }
+  .process-node.impact { border-color: var(--caution); background: var(--caution-subtle); }
+
+  .node-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .node-health { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .node-health.healthy { background: var(--positive); }
+  .node-health.attention { background: var(--caution); }
+  .node-health.failed { background: var(--negative); }
+  .node-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .node-stats { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .node-trust { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-subtle); color: var(--accent); display: inline-block; }
+
+  /* Connections — CSS lines */
+  .connections { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+  .connection-line {
+    position: absolute; background: var(--border-strong); height: 1px;
+    transform-origin: left center;
+  }
+  .connection-label {
+    position: absolute; font-size: 10px; color: var(--text-muted);
+    background: var(--bg); padding: 1px 6px; border-radius: 99px;
+    white-space: nowrap;
+  }
+  .connection-arrow { position: absolute; color: var(--border-strong); font-size: 12px; }
+
+  /* Detail panel */
+  .detail-panel {
+    border-left: 1px solid var(--border); background: var(--surface-raised);
+    padding: 24px; overflow-y: auto; display: none;
+  }
+  .layout.panel-open .detail-panel { display: block; }
+  .detail-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .detail-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+  .detail-section { margin-bottom: 20px; }
+  .detail-section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .detail-step { display: flex; gap: 10px; padding: 6px 0; font-size: 13px; }
+  .detail-step-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .detail-step-dot.complete { background: var(--positive); }
+  .detail-step-dot.active { background: var(--vivid); }
+  .detail-step-dot.pending { background: var(--border-strong); }
+  .detail-metrics { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  .detail-impact { border-left: 2px solid var(--vivid); padding-left: 12px; font-size: 13px; color: var(--text-secondary); }
+  .detail-link { font-size: 13px; color: var(--vivid-deep); font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; margin-top: 12px; }
+  .detail-link:hover { color: var(--vivid); }
+
+  .close-panel { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 4px; border-radius: var(--radius-sm); transition: color 0.12s; }
+  .close-panel:hover { color: var(--text-primary); }
+
+  /* Legend */
+  .legend { position: absolute; bottom: 24px; left: 40px; display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .state-view { display: none; }
+  .state-view.active { display: grid; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Process Flow Map — How Jordan's processes connect</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 4: Compound Effect · <span>Process Map</span></div>
+  <div class="proto-nav-right">
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="26-agent-team.html" class="proto-arrow" aria-label="Previous: Agent Team">←</a>
+    <a href="29-process-model-library.html" class="proto-arrow" aria-label="Next: Process Library">→</a>
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="overview" tabindex="0">Overview</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="selected" tabindex="-1">Node selected</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="impact" tabindex="-1">Impact view</button>
+</div>
+
+<!-- ═══ State 1: Overview ═══ -->
+<main class="layout state-view active" data-view="overview" id="main-content">
+  <div class="graph-area">
+    <div style="background:var(--info-subtle);border-radius:6px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--info);">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+      <span>Production: evaluate React Flow / Xyflow for graph rendering. CSS Grid proves the concept but won't scale past ~10 nodes with real dependency edges.</span>
+    </div>
+    <div class="graph-grid">
+      <div class="process-node" tabindex="0" role="button" aria-label="HR Reference Checking — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">HR Reference Checking</span></div>
+        <div class="node-stats">47 runs · 2 corrections</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node" tabindex="0" role="button" aria-label="Finance Reconciliation — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">Finance Reconciliation</span></div>
+        <div class="node-stats">89 runs · 5 corrections</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node" tabindex="0" role="button" aria-label="IT Ticket Triage — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">IT Ticket Triage</span></div>
+        <div class="node-stats">156 runs · 12 corrections</div>
+        <span class="node-trust">You review</span>
+      </div>
+
+      <div style="grid-column: 2;">
+        <div class="process-node" tabindex="0" role="button" aria-label="Weekly Department Reports — Needs attention" style="border-color: var(--caution);">
+          <div class="node-header"><span class="node-health attention"></span><span class="node-name">Weekly Department Reports</span></div>
+          <div class="node-stats">12 runs · 4 corrections · ⚠ formatting issues</div>
+          <span class="node-trust">You review</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background: var(--positive);"></span> Healthy</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--caution);"></span> Needs attention</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--negative);"></span> Failed</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--border-strong);"></span> Paused</div>
+    </div>
+  </div>
+</main>
+
+<!-- ═══ State 2: Node Selected ═══ -->
+<div class="layout panel-open state-view" data-view="selected">
+  <div class="graph-area">
+    <div class="graph-grid">
+      <div class="process-node selected" tabindex="0">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">HR Reference Checking</span></div>
+        <div class="node-stats">47 runs · 2 corrections</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node" tabindex="0" role="button" aria-label="Finance Reconciliation — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">Finance Reconciliation</span></div>
+        <div class="node-stats">89 runs · 5 corrections</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node" tabindex="0" role="button" aria-label="IT Ticket Triage — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">IT Ticket Triage</span></div>
+        <div class="node-stats">156 runs · 12 corrections</div>
+        <span class="node-trust">You review</span>
+      </div>
+
+      <div style="grid-column: 2;">
+        <div class="process-node" tabindex="0" role="button" aria-label="Weekly Department Reports — Needs attention" style="border-color: var(--caution);">
+          <div class="node-header"><span class="node-health attention"></span><span class="node-name">Weekly Department Reports</span></div>
+          <div class="node-stats">12 runs · 4 corrections</div>
+          <span class="node-trust">You review</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background: var(--positive);"></span> Healthy</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--caution);"></span> Needs attention</div>
+    </div>
+  </div>
+
+  <aside class="detail-panel" style="position: relative;" aria-label="Process detail">
+    <div class="detail-title">HR Reference Checking</div>
+    <div class="detail-subtitle">HR department · Running 6 weeks</div>
+
+    <div class="detail-section">
+      <div class="detail-section-label">How it works</div>
+      <div class="detail-step"><span class="detail-step-dot complete"></span> Candidate name + 3 referees submitted</div>
+      <div class="detail-step"><span class="detail-step-dot complete"></span> Email standard questionnaire to each referee</div>
+      <div class="detail-step"><span class="detail-step-dot complete"></span> Collate responses, flag concerns</div>
+      <div class="detail-step"><span class="detail-step-dot active"></span> Produce summary for hiring manager</div>
+      <div class="detail-step"><span class="detail-step-dot pending"></span> Feed HR section of weekly report</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-label">Track record</div>
+      <div class="detail-metrics">47 runs · 45 approved · 2 corrected (both formatting)<br>Turnaround: 1 day (was 5 days manual)<br>Trust: Spot check (earned after 30 clean runs)</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-label">Feeds into</div>
+      <div class="detail-impact">Weekly Department Reports — provides the HR section. If this process degrades, the weekly report HR section will use stale data.</div>
+    </div>
+
+    <a href="14-process-detail.html" class="detail-link">Open full detail →</a>
+  </aside>
+</div>
+
+<!-- ═══ State 3: Impact View ═══ -->
+<div class="layout state-view" data-view="impact">
+  <div class="graph-area">
+    <div class="graph-grid">
+      <div class="process-node" tabindex="0" role="button" aria-label="HR Reference Checking — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">HR Reference Checking</span></div>
+        <div class="node-stats">47 runs · 2 corrections</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node selected" tabindex="0" role="button" aria-label="Finance Reconciliation — Impact source">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">Finance Reconciliation</span></div>
+        <div class="node-stats">If this degrades...</div>
+        <span class="node-trust">Spot check</span>
+      </div>
+
+      <div class="process-node" tabindex="0" role="button" aria-label="IT Ticket Triage — Healthy">
+        <div class="node-header"><span class="node-health healthy"></span><span class="node-name">IT Ticket Triage</span></div>
+        <div class="node-stats">156 runs · 12 corrections</div>
+        <span class="node-trust">You review</span>
+      </div>
+
+      <div style="grid-column: 2;">
+        <div class="process-node impact" tabindex="0" role="button" aria-label="Weekly Department Reports — Would use stale data">
+          <div class="node-header"><span class="node-health attention"></span><span class="node-name">Weekly Department Reports</span></div>
+          <div class="node-stats">Finance section would use stale data</div>
+          <span class="node-trust">You review</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="position: absolute; bottom: 60px; left: 40px; right: 40px; border-left: 2px solid var(--caution); padding-left: 16px; font-size: 14px; color: var(--text-secondary);">
+      <strong style="color: var(--caution);">Impact:</strong> If Finance Reconciliation degrades, the Weekly Department Reports finance section will use stale data. The report would still generate but with an accuracy warning.
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background: var(--positive);"></span> Healthy</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--caution);"></span> Impacted</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      stateViews.forEach(v => v.classList.remove('active'));
+      const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+      if (target) target.classList.add('active');
+    });
+  });
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>

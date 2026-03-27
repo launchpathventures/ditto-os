@@ -1,0 +1,1408 @@
+<!-- Build-Ready v1, 2026-03-27 — Review Primitives: Three Modes -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P33 — Review Primitives | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Skip Link ===== */
+  .skip-link {
+    position: absolute; top: -100%; left: 16px;
+    background: var(--accent); color: white;
+    padding: 8px 16px; border-radius: var(--radius-md);
+    z-index: 1000; font-size: 14px; text-decoration: none;
+  }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover:not(.disabled) { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow.disabled { opacity: 0.35; cursor: not-allowed; }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Workspace Shell ===== */
+  .workspace {
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden; transition: all 0.22s ease-in-out;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge { font-size: 11px; font-weight: 600; line-height: 1; background: var(--negative); color: white; padding: 2px 6px; border-radius: 99px; margin-left: auto; }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-content { max-width: 720px; margin: 0 auto; padding: 32px 24px 24px; }
+
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
+  }
+  .right-panel.hidden { width: 0; min-width: 0; border-left: none; }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .close-btn {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .close-btn:hover { background: var(--surface-raised); color: var(--text-secondary); }
+  .close-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-heading {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; letter-spacing: -0.01em;
+  }
+
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-vivid:hover { filter: brightness(0.9); }
+
+  /* --- Accent Borders --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-caution { border-left: 2px solid var(--caution); padding-left: 12px; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px;
+  }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
+
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
+  }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+
+  /* --- Confidence Dots --- */
+  .confidence-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; vertical-align: middle; }
+  .confidence-high { background: var(--positive); }
+  .confidence-medium { background: var(--caution); }
+  .confidence-low { background: var(--negative); }
+
+  /* --- Data Tables --- */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .data-table th { text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .data-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .metric { min-width: 80px; }
+  .metric-value { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Donut Charts --- */
+  .donut { width: 48px; height: 48px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 5; }
+  .donut .donut-track { stroke: var(--border); }
+  .donut .donut-fill { stroke: var(--vivid); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+  .donut-container { display: flex; align-items: center; gap: 12px; }
+  .donut-label { font-size: 14px; }
+  .donut-label strong { font-weight: 600; }
+
+  /* --- Sparklines --- */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+
+  /* --- Checklist --- */
+  .checklist { list-style: none; }
+  .checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; font-size: 14px; line-height: 1.5; }
+  .check-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* ===== REVIEW RECORD COMPONENT ===== */
+
+  .review-record {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--surface-raised);
+  }
+  .review-record-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .review-record-header .confidence-dot { margin-right: 0; }
+  .review-record-type { font-weight: 600; color: var(--text-primary); }
+  .review-record-time { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+  .review-record-body { padding: 16px; }
+  .review-record-checks {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .review-check { display: inline-flex; align-items: center; gap: 4px; }
+  .review-check-pass { color: var(--positive); }
+  .review-check-warn { color: var(--caution); }
+  .review-record-actions {
+    display: flex; gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .review-record-provenance {
+    padding: 8px 16px;
+    font-size: 12px; color: var(--text-muted);
+    border-top: 1px solid var(--border);
+  }
+  .review-record-provenance svg { width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; color: var(--vivid-deep); }
+
+  /* --- Field table with per-field provenance --- */
+  .field-with-provenance { margin-bottom: 4px; }
+  .field-provenance {
+    font-size: 12px; color: var(--text-muted);
+    font-weight: 400;
+  }
+  .field-flag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+    color: var(--caution);
+  }
+
+  /* --- Content preview (for text-type reviews) --- */
+  .content-preview {
+    border-left: 3px solid var(--vivid-subtle);
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    background: var(--bg);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin-bottom: 12px;
+  }
+
+  /* --- Voice match bar --- */
+  .voice-match { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 8px; }
+  .voice-match-label { color: var(--text-muted); font-weight: 500; }
+  .voice-match-bar { width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .voice-match-fill { height: 100%; border-radius: 2px; background: var(--vivid); }
+  .voice-match-score { font-weight: 600; color: var(--vivid-deep); font-size: 12px; }
+
+  /* --- Action log table --- */
+  .action-log { width: 100%; font-size: 13px; }
+  .action-log td { padding: 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .action-log tr:last-child td { border-bottom: none; }
+  .action-log-name { font-weight: 500; color: var(--text-primary); white-space: nowrap; padding-right: 12px; }
+  .action-log-action { color: var(--text-secondary); padding-right: 12px; }
+  .action-log-preview { color: var(--text-muted); font-style: italic; padding-right: 12px; max-width: 200px; }
+  .action-log-status { white-space: nowrap; }
+
+  /* ===== REVIEW TABLE (Batch Mode) ===== */
+
+  .review-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .review-table th {
+    text-align: left; font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text-muted); padding: 8px 10px;
+    border-bottom: 2px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  .review-table td { padding: 10px 10px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+  .review-table tbody tr { transition: background 0.1s; }
+  .review-table tbody tr:hover { background: var(--surface); cursor: pointer; }
+  .review-table tr.flagged { border-left: 3px solid var(--caution); }
+  .review-table tr.flagged td:first-child { padding-left: 7px; }
+  .review-table .action-cell { display: flex; gap: 4px; }
+  .review-table .batch-row td {
+    background: var(--bg); font-weight: 500;
+    border-top: 2px solid var(--border-strong);
+    border-bottom: none;
+    padding: 12px 10px;
+  }
+  .review-table .margin-warn { color: var(--caution); font-weight: 600; }
+  .review-table .checks-pass { color: var(--positive); }
+  .review-table .checks-partial { color: var(--caution); }
+
+  .btn-icon {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface-raised); color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-icon:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-icon.approve:hover { background: var(--positive-subtle); color: var(--positive); border-color: var(--positive); }
+  .btn-icon.edit:hover { background: var(--info-subtle); color: var(--info); border-color: var(--info); }
+
+  /* ===== REVIEW DETAIL (Deep Mode) ===== */
+
+  .review-split {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .review-split-pane { background: var(--surface-raised); padding: 20px; }
+  .review-split-pane h3 {
+    font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; font-weight: 600;
+  }
+  .editable-field { cursor: pointer; border-bottom: 1px dashed var(--border); padding: 2px 0; }
+  .editable-field:hover { background: var(--vivid-subtle); }
+  .diff-old { text-decoration: line-through; color: var(--text-muted); margin-right: 8px; }
+  .diff-new { color: var(--vivid-deep); font-weight: 600; }
+
+  .source-block {
+    background: var(--bg); border-radius: var(--radius-md);
+    padding: 10px 14px; margin-bottom: 10px; font-size: 13px;
+  }
+  .source-block-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px;
+  }
+
+  .expanded-checks { margin-bottom: 16px; }
+  .expanded-check {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .expanded-check:last-child { border-bottom: none; }
+  .expanded-check-result { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .correction-capture {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px; margin-bottom: 16px;
+  }
+
+  .version-toggle {
+    display: flex; gap: 4px; margin-bottom: 12px;
+  }
+  .version-btn {
+    font-family: var(--font); font-size: 12px; font-weight: 500;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid var(--border); border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .version-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border-strong); }
+
+  /* ===== CONVERSATION FLOW ===== */
+
+  .chat-message {
+    margin-bottom: 16px;
+  }
+  .chat-message-ditto {
+    font-size: 15px; line-height: 1.6; color: var(--text-primary);
+  }
+  .chat-message-user {
+    font-size: 15px; line-height: 1.6; color: var(--text-primary);
+    background: var(--surface); border-radius: var(--radius-lg);
+    padding: 10px 16px;
+    max-width: 85%;
+  }
+  .chat-sender {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .chat-review-record {
+    margin: 16px 0;
+  }
+
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record:first-child { border-top:none; }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-status.info { background:var(--info-subtle); color:var(--info); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-checks { margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; }
+  .record-check { font-size:12px; }
+  .record-check.pass { color:var(--positive); }
+  .record-check.fail { color:var(--caution); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+
+  .block-itable { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-top:16px; }
+  .itable-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); }
+  .itable-title { font-size:14px; font-weight:500; color:var(--text-primary); }
+  .itable-summary { font-size:12px; color:var(--text-muted); }
+  .itable table { width:100%; border-collapse:collapse; font-size:13px; }
+  .itable th { padding:6px 12px; text-align:left; font-weight:500; font-size:12px; color:var(--text-secondary); background:var(--surface); border-bottom:1px solid var(--border); }
+  .itable th.right { text-align:right; }
+  .itable th.center { text-align:center; }
+  .itable td { padding:6px 12px; color:var(--text-primary); border-top:1px solid var(--border); }
+  .itable td.right { text-align:right; font-variant-numeric:tabular-nums; }
+  .itable td.center { text-align:center; }
+  .itable tr.flagged { border-left:2px solid var(--caution); }
+  .itable .row-action { color:var(--vivid); font-size:12px; font-weight:500; cursor:pointer; background:none; border:none; font-family:var(--font); }
+  .itable-batch { padding:8px 12px; border-top:1px solid var(--border); background:var(--surface); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Design Exploration · <span>Review Primitives</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="32-settings.html" class="proto-arrow" aria-label="Previous: P32 Settings">&#8592;</a>
+    <a href="35-improvements.html" class="proto-arrow" aria-label="Next: P35 Improvements">&#8594;</a>
+  </div>
+</nav>
+
+<!-- State Toggle Bar -->
+<div class="state-bar" role="tablist" aria-label="Review mode states">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="inline" tabindex="0">Review Record (Inline)</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="batch" tabindex="-1">Review Table (Batch)</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="detail" tabindex="-1">Review Detail (Deep)</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="conversation" tabindex="-1">In Conversation Flow</button>
+</div>
+
+<!-- Workspace -->
+<div class="workspace" role="tabpanel" id="main-content">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <div class="wordmark">Ditto</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">3</span>
+      </a>
+      <a class="nav-item active" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Review</span>
+        <span class="nav-badge">5</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Centre -->
+  <main class="centre">
+    <div class="centre-scroll">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- STATE 1: Review Record (Inline)        -->
+      <!-- ═══════════════════════════════════════ -->
+      <div class="centre-content state-content" id="state-inline">
+
+        <div style="margin-bottom:24px;">
+          <div class="section-heading">Review Records — Inline in Conversation</div>
+          <p style="font-size:14px; color:var(--text-secondary); margin-bottom:4px;">Structured review items rendered as rich records in the conversation flow — not text blobs with buttons.</p>
+        </div>
+
+        <!-- Example A: Quote review (data type) -->
+        <div class="chat-message">
+          <div class="chat-sender">Rob</div>
+          <div class="chat-message-user">Check the Henderson quote.</div>
+        </div>
+
+        <div class="chat-message">
+          <div class="chat-sender">Ditto</div>
+          <div class="chat-message-ditto" style="margin-bottom:12px;">Here's the Henderson bathroom quote, ready for your review.</div>
+        </div>
+
+        <div class="chat-review-record">
+          <div style="background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; padding:12px 16px;">
+            <div class="block-record" style="border-top:none; padding-top:0;">
+              <div class="record-header">
+                <span class="confidence-dot confidence-high"></span>
+                <span class="record-title">Quoting · Henderson bathroom</span>
+                <span class="record-subtitle" style="margin-left:auto;">2m ago</span>
+              </div>
+              <div class="record-fields">
+                <div class="record-field">
+                  <span class="record-field-label">Materials</span>
+                  <span class="record-field-value">$11,200</span>
+                  <span class="record-field-provenance">— PlaceMakers price list, Mar 25</span>
+                </div>
+                <div class="record-field">
+                  <span class="record-field-label">Labour</span>
+                  <span class="record-field-value">$5,800</span>
+                  <span class="record-field-provenance">— 18hrs @ $320/hr (your standard rate)</span>
+                </div>
+                <div class="record-field">
+                  <span class="record-field-label">Margin</span>
+                  <span class="record-field-value">7.6%</span>
+                  <span class="record-field-flag warning">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+                    Below your 8% target
+                  </span>
+                </div>
+                <div class="record-field">
+                  <span class="record-field-label">Total</span>
+                  <span class="record-field-value" style="font-size:16px;">$18,400</span>
+                </div>
+              </div>
+              <div class="record-checks">
+                <span class="record-check pass">&#10003; Pricing current</span>
+                <span class="record-check pass">&#10003; GST included</span>
+                <span class="record-check fail">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+                  Low margin
+                </span>
+              </div>
+              <div class="record-actions">
+                <button class="btn-vivid">Approve</button>
+                <button class="btn-secondary">Edit</button>
+                <button class="btn-secondary">Send back</button>
+              </div>
+              <div class="record-provenance">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px; margin-right:4px; color:var(--vivid-deep);"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                Based on: PlaceMakers prices (Mar 25), Henderson bathroom specs, your margin rules
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:32px;"></div>
+
+        <!-- Example B: Content draft review (text type) -->
+        <div class="chat-message">
+          <div class="chat-sender">Libby</div>
+          <div class="chat-message-user">How are those Instagram posts going?</div>
+        </div>
+
+        <div class="chat-message">
+          <div class="chat-sender">Ditto</div>
+          <div class="chat-message-ditto" style="margin-bottom:12px;">Post 3 of 5 is ready. Here's the draft for your review.</div>
+        </div>
+
+        <div class="chat-review-record">
+          <div style="background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; padding:12px 16px;">
+            <div class="block-record" style="border-top:none; padding-top:0;">
+              <div class="record-header">
+                <span class="confidence-dot confidence-medium"></span>
+                <span class="record-title">Content · Instagram post 3 of 5</span>
+                <span class="record-subtitle" style="margin-left:auto;">just now</span>
+              </div>
+              <div class="record-fields" style="margin-top:12px;">
+                <div class="content-preview">
+                  <p style="margin-bottom:8px;"><strong>Your body did something incredible.</strong></p>
+                  <p style="margin-bottom:8px;">Recovery isn't a race. The research shows that gentle movement in the first 6 weeks supports both your physical healing and your mental wellbeing — but only at your own pace.</p>
+                  <p style="margin-bottom:8px;">Three things that helped my clients most:</p>
+                  <p style="margin-bottom:4px;">1. Walking — even 10 minutes counts</p>
+                  <p style="margin-bottom:4px;">2. Pelvic floor activation (not crunches!)</p>
+                  <p style="margin-bottom:8px;">3. Breath work before bed</p>
+                  <p style="font-size:13px; color:var(--text-muted);">#postpartumrecovery #newmum #evidencebased #wellbeing</p>
+                </div>
+                <div class="voice-match">
+                  <span class="voice-match-label">Voice match</span>
+                  <div class="voice-match-bar"><div class="voice-match-fill" style="width:78%;"></div></div>
+                  <span class="voice-match-score">78%</span>
+                  <svg class="sparkline trend-up" viewBox="0 0 48 18" style="margin-left:4px;"><polyline points="2,14 10,12 18,10 26,9 34,7 42,5 46,4"/></svg>
+                </div>
+              </div>
+              <div class="record-checks">
+                <span class="record-check pass">&#10003; Tone matched</span>
+                <span class="record-check pass">&#10003; No medical claims</span>
+                <span class="record-check fail">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+                  Hashtags need review
+                </span>
+              </div>
+              <div class="record-actions">
+                <button class="btn-vivid">Approve &amp; post</button>
+                <button class="btn-secondary">Edit</button>
+                <button class="btn-secondary">Different angle</button>
+                <button class="btn-secondary">Regenerate</button>
+              </div>
+              <div class="record-provenance">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px; margin-right:4px; color:var(--vivid-deep);"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                Voice: warm, evidence-based · Audience: first-time mums · Source: your 'postpartum recovery' notes
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:32px;"></div>
+
+        <!-- Example C: Action review (action type) -->
+        <div class="chat-message">
+          <div class="chat-sender">Rob</div>
+          <div class="chat-message-user">Any follow-ups due?</div>
+        </div>
+
+        <div class="chat-message">
+          <div class="chat-sender">Ditto</div>
+          <div class="chat-message-ditto" style="margin-bottom:12px;">Two follow-ups triggered. One's been sent, one needs your review.</div>
+        </div>
+
+        <div class="chat-review-record">
+          <div style="background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; padding:12px 16px;">
+            <div class="block-record" style="border-top:none; padding-top:0;">
+              <div class="record-header">
+                <span class="confidence-dot confidence-high"></span>
+                <span class="record-title">Follow-ups · Overdue check</span>
+                <span class="record-subtitle" style="margin-left:auto;">6:30am</span>
+              </div>
+              <div class="record-fields" style="margin-top:12px;">
+                <table class="action-log">
+                  <tr>
+                    <td class="action-log-name">Park Ave kitchen</td>
+                    <td class="action-log-action">Sent follow-up email</td>
+                    <td class="action-log-preview">"Checking in on the quote..."</td>
+                    <td class="action-log-status"><span class="badge badge-positive">&#10003; Delivered</span></td>
+                  </tr>
+                  <tr>
+                    <td class="action-log-name">Wilson renovation</td>
+                    <td class="action-log-action">Draft follow-up</td>
+                    <td class="action-log-preview">"Hi Sarah, wanted to check..."</td>
+                    <td class="action-log-status"><span class="badge badge-caution">Needs review</span></td>
+                  </tr>
+                </table>
+              </div>
+              <div class="record-actions">
+                <button class="btn-vivid">Approve all sent</button>
+                <button class="btn-secondary">Review Wilson draft</button>
+              </div>
+              <div class="record-provenance">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px; margin-right:4px; color:var(--vivid-deep);"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                Rule: follow up after 5 business days if no response
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- STATE 2: Review Table (Batch)          -->
+      <!-- ═══════════════════════════════════════ -->
+      <div class="centre-content state-content" id="state-batch" style="display:none;">
+
+        <div style="margin-bottom:24px;">
+          <div class="section-heading">Batch Review — Table Mode</div>
+          <p style="font-size:14px; color:var(--text-secondary);">When there are multiple items of the same type, Ditto renders a table — not a feed of cards.</p>
+        </div>
+
+        <!-- Rob's quote review table -->
+        <div style="margin-bottom:32px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <div class="section-heading" style="margin-bottom:0;">5 quotes ready for review</div>
+            <span class="badge badge-caution">2 flagged</span>
+          </div>
+
+          <div class="block-itable" style="margin-top:0;">
+            <div class="itable-header">
+              <span class="itable-title">Quotes</span>
+              <span class="itable-summary">5 items · 2 flagged</span>
+            </div>
+            <div class="itable">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Amount</th>
+                    <th>Margin</th>
+                    <th>Confidence</th>
+                    <th>Checks</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="flagged">
+                    <td style="font-weight:500;">Henderson bathroom</td>
+                    <td>$18,400</td>
+                    <td style="color:var(--caution); font-weight:600;">7.6% <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-1px;color:var(--caution);"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td style="color:var(--caution);">2/3 &#10003;</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500;">Park Ave kitchen</td>
+                    <td>$24,100</td>
+                    <td>8.2%</td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td style="color:var(--positive);">3/3 &#10003;</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr class="flagged">
+                    <td style="font-weight:500;">Wilson kitchen</td>
+                    <td>$31,500</td>
+                    <td>9.1%</td>
+                    <td><span class="confidence-dot confidence-medium" style="margin-right:4px;"></span>Medium</td>
+                    <td style="color:var(--caution);">2/3 &#10003;</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500;">Thompson deck</td>
+                    <td>$8,200</td>
+                    <td>11.3%</td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td style="color:var(--positive);">3/3 &#10003;</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500;">Garcia bathroom</td>
+                    <td>$15,900</td>
+                    <td>8.0%</td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td style="color:var(--positive);">3/3 &#10003;</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="itable-batch">
+              <div style="display:flex; gap:8px;">
+                <button class="btn-vivid">Approve all clean (3)</button>
+                <button class="btn-secondary">Review flagged (2)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lisa's content review table -->
+        <div>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <div class="section-heading" style="margin-bottom:0;">4 Instagram posts for review</div>
+            <span class="badge badge-caution">2 need attention</span>
+          </div>
+
+          <div class="block-itable" style="margin-top:0;">
+            <div class="itable-header">
+              <span class="itable-title">Instagram posts</span>
+              <span class="itable-summary">4 items · 2 need attention</span>
+            </div>
+            <div class="itable">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Post</th>
+                    <th>Topic</th>
+                    <th>Voice match</th>
+                    <th>Confidence</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="font-weight:500;">Post 1 of 5</td>
+                    <td>Morning routine tips</td>
+                    <td style="color:var(--positive);">92%</td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500;">Post 2 of 5</td>
+                    <td>Sleep for new parents</td>
+                    <td style="color:var(--positive);">88%</td>
+                    <td><span class="confidence-dot confidence-high" style="margin-right:4px;"></span>High</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr class="flagged">
+                    <td style="font-weight:500;">Post 3 of 5</td>
+                    <td>Postpartum recovery</td>
+                    <td style="color:var(--caution);">78%</td>
+                    <td><span class="confidence-dot confidence-medium" style="margin-right:4px;"></span>Medium</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                  <tr class="flagged">
+                    <td style="font-weight:500;">Post 4 of 5</td>
+                    <td>Nutrition basics</td>
+                    <td style="color:var(--caution);">71%</td>
+                    <td><span class="confidence-dot confidence-medium" style="margin-right:4px;"></span>Medium</td>
+                    <td><div class="action-cell"><button class="btn-icon approve" title="Approve">&#10003;</button><button class="btn-icon edit" title="Edit">&#9998;</button></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="itable-batch">
+              <div style="display:flex; gap:8px;">
+                <button class="btn-vivid">Approve matched (2)</button>
+                <button class="btn-secondary">Review needs-attention (2)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- STATE 3: Review Detail (Deep)          -->
+      <!-- ═══════════════════════════════════════ -->
+      <div class="centre-content state-content" id="state-detail" style="display:none; max-width:960px;">
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+            <button class="btn-secondary" style="padding:4px 12px; font-size:12px;">&#8592; Back to table</button>
+            <div class="section-heading" style="margin-bottom:0;">Henderson bathroom — Edit quote</div>
+          </div>
+          <p style="font-size:14px; color:var(--text-secondary);">Deep review: see what Ditto used and edit the output side-by-side.</p>
+        </div>
+
+        <!-- Split view -->
+        <div class="review-split">
+          <!-- Left pane: What Ditto used -->
+          <div class="review-split-pane">
+            <h3>What Ditto used</h3>
+
+            <div class="source-block">
+              <div class="source-block-title">PlaceMakers price list</div>
+              <div class="field-table" style="font-size:13px;">
+                <span class="field-label">Vanity unit</span><span class="field-value">$2,400</span>
+                <span class="field-label">Tiles (12m&sup2;)</span><span class="field-value">$3,100</span>
+                <span class="field-label">Fixtures</span><span class="field-value">$1,850</span>
+                <span class="field-label">Plumbing supplies</span><span class="field-value">$1,620</span>
+                <span class="field-label">Misc materials</span><span class="field-value">$2,230</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Updated: 14 Mar 2025</div>
+            </div>
+
+            <div class="source-block">
+              <div class="source-block-title">Henderson bathroom specs</div>
+              <div style="font-size:13px; color:var(--text-secondary);">
+                Full bathroom reno, 8m&sup2;. Strip to frame, new waterproofing, retile, new vanity, toilet, shower. Client requested natural stone tiles.
+              </div>
+            </div>
+
+            <div class="source-block">
+              <div class="source-block-title">Your margin rules</div>
+              <div style="font-size:13px; color:var(--text-secondary);">
+                Minimum: <strong>8%</strong> · Target: <strong>10%</strong> · Exception: repeat customers at discretion
+              </div>
+            </div>
+
+            <div class="source-block">
+              <div class="source-block-title">Similar past quotes</div>
+              <div class="field-table" style="font-size:13px;">
+                <span class="field-label">Park Ave bathroom</span><span class="field-value">$21,300 — 8.2% margin</span>
+                <span class="field-label">Garcia bathroom</span><span class="field-value">$15,900 — 8.0% margin</span>
+                <span class="field-label">Taylor ensuite</span><span class="field-value">$12,800 — 9.4% margin</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right pane: Output (editable) -->
+          <div class="review-split-pane">
+            <h3>Output</h3>
+
+            <div class="version-toggle">
+              <button class="version-btn">v1 (original)</button>
+              <button class="version-btn active">v2 (your edit)</button>
+            </div>
+
+            <div class="field-table" style="gap:10px 16px; font-size:15px;">
+              <span class="field-label">Materials</span>
+              <span class="field-value"><span class="editable-field">$11,200</span></span>
+
+              <span class="field-label">Labour</span>
+              <span class="field-value">
+                <span class="diff-old">$5,800</span>
+                <span class="diff-new editable-field">$6,200</span>
+                <span style="font-size:11px; color:var(--text-muted); margin-left:4px;">+$400</span>
+              </span>
+
+              <span class="field-label">Hours</span>
+              <span class="field-value">
+                <span class="diff-old">18hrs</span>
+                <span class="diff-new editable-field">19.5hrs</span>
+              </span>
+
+              <span class="field-label">Margin</span>
+              <span class="field-value">
+                <span class="diff-old" style="font-size:13px;">7.6%</span>
+                <span class="diff-new" style="font-size:16px;">8.3%</span>
+                <span class="badge badge-positive" style="margin-left:6px;">Above target</span>
+              </span>
+
+              <span class="field-label">Total</span>
+              <span class="field-value" style="font-size:18px; font-weight:700;">
+                <span class="diff-old" style="font-size:14px;">$18,400</span>
+                $18,850
+              </span>
+            </div>
+
+            <div style="margin-top:20px;">
+              <div class="action-row" style="margin-top:0;">
+                <button class="btn-vivid">Approve v2</button>
+                <button class="btn-secondary">Revert to v1</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expanded checks -->
+        <div style="background:var(--surface-raised); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:16px; border:1px solid var(--border);">
+          <div class="section-title" style="margin-bottom:8px;">Pre-review checks (expanded)</div>
+          <div class="expanded-checks">
+            <div class="expanded-check">
+              <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div>
+                <div style="font-weight:500;">Pricing current</div>
+                <div class="expanded-check-result">All material prices verified against PlaceMakers list (14 Mar 2025). No items older than 30 days.</div>
+              </div>
+            </div>
+            <div class="expanded-check">
+              <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div>
+                <div style="font-weight:500;">GST included</div>
+                <div class="expanded-check-result">Total includes 15% GST. Breakdown: ex-GST $16,391, GST $2,459.</div>
+              </div>
+            </div>
+            <div class="expanded-check">
+              <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div>
+                <div style="font-weight:500;">Margin above minimum</div>
+                <div class="expanded-check-result">v2 margin (8.3%) now above your 8% minimum. Originally flagged at 7.6%.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Correction capture -->
+        <div class="correction-capture">
+          <div class="suggestion-label">Learning opportunity</div>
+          <p style="margin-bottom:8px;">You increased labour hours by 1.5hrs. Should I learn this pattern?</p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-vivid" style="font-size:12px; padding:4px 12px;">Teach this pattern</button>
+            <button class="btn-secondary" style="font-size:12px; padding:4px 12px;">Just this time</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- STATE 4: In Conversation Flow          -->
+      <!-- ═══════════════════════════════════════ -->
+      <div class="centre-content state-content" id="state-conversation" style="display:none;">
+
+        <div style="margin-bottom:24px;">
+          <div class="section-heading">In Conversation — Review Records in Flow</div>
+          <p style="font-size:14px; color:var(--text-secondary);">Review records appear naturally inside conversation threads, proving they work inline — not just as standalone screens.</p>
+        </div>
+
+        <!-- 1. Ditto greeting -->
+        <div class="chat-message">
+          <div class="chat-sender">Ditto</div>
+          <div class="chat-message-ditto">Good morning, Rob. 3 items need you today.</div>
+        </div>
+
+        <!-- 2. Review Record: Henderson compact -->
+        <div class="chat-review-record">
+          <div style="background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; padding:12px 16px;">
+            <div class="block-record" style="border-top:none; padding-top:0;">
+              <div class="record-header">
+                <span class="confidence-dot confidence-high"></span>
+                <span class="record-title">Quoting · Henderson bathroom</span>
+                <span class="record-subtitle" style="margin-left:auto;">2m ago</span>
+              </div>
+              <div class="record-fields">
+                <div style="display:flex; gap:20px; font-size:14px; flex-wrap:wrap; margin-top:8px;">
+                  <div><span class="record-field-label">Total </span><span class="record-field-value">$18,400</span></div>
+                  <div><span class="record-field-label">Margin </span><span class="record-field-value">7.6% <span class="record-field-flag warning" style="margin-left:4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span></span></div>
+                  <div><span class="record-field-label">Checks </span><span style="color:var(--caution); font-weight:500;">2/3</span></div>
+                </div>
+              </div>
+              <div class="record-actions">
+                <button class="btn-vivid">Approve</button>
+                <button class="btn-secondary">Edit</button>
+                <button class="btn-secondary">Send back</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Ditto follow-up message -->
+        <div class="chat-message">
+          <div class="chat-sender">Ditto</div>
+          <div class="chat-message-ditto">Henderson's margin is below target. I can adjust labour hours if you want.</div>
+        </div>
+
+        <!-- 4. Rob's reply -->
+        <div class="chat-message">
+          <div class="chat-sender">Rob</div>
+          <div class="chat-message-user">The margin is fine for this one, Henderson is a repeat customer.</div>
+        </div>
+
+        <!-- 5. Review Record: Wilson follow-up (action type) -->
+        <div class="chat-review-record">
+          <div style="background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; padding:12px 16px;">
+            <div class="block-record" style="border-top:none; padding-top:0;">
+              <div class="record-header">
+                <span class="confidence-dot confidence-high"></span>
+                <span class="record-title">Follow-up · Wilson renovation</span>
+                <span class="record-subtitle" style="margin-left:auto;">6:30am</span>
+              </div>
+              <div class="record-fields" style="margin-top:12px;">
+                <div class="content-preview" style="margin-bottom:0;">
+                  <p style="margin-bottom:4px; font-weight:500;">Draft email to Sarah Wilson</p>
+                  <p style="color:var(--text-secondary);">Hi Sarah, wanted to check in on the kitchen renovation quote I sent through last Tuesday. Happy to walk through any of the details or adjust the scope if your plans have changed. Let me know a good time to chat. Cheers, Rob</p>
+                </div>
+              </div>
+              <div class="record-actions">
+                <button class="btn-vivid">Send</button>
+                <button class="btn-secondary">Edit</button>
+                <button class="btn-secondary">Don't send</button>
+              </div>
+              <div class="record-provenance">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px; margin-right:4px; color:var(--vivid-deep);"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                Rule: follow up after 5 business days if no response · Tone: casual professional (from your sent emails)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Suggestion block: trust upgrade -->
+        <div style="margin-top:16px;">
+          <div class="suggestion">
+            <div class="suggestion-label">Trust pattern</div>
+            <p>I noticed you approve Henderson quotes without changes. After 5 more clean ones, I'll suggest moving Henderson jobs to spot-check instead of full review.</p>
+            <div style="margin-top:8px;">
+              <div class="progress-label"><span>Trust progress</span><span>Henderson jobs: 3/8 clean</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:37.5%;"></div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel" aria-label="Ditto context panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+      <button class="close-btn" aria-label="Close panel" title="Close panel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="right-panel-scroll">
+
+      <!-- Review stats -->
+      <div style="margin-bottom:20px;">
+        <div class="section-title">Review stats</div>
+        <div class="metric-row" style="margin-bottom:16px;">
+          <div class="metric">
+            <div class="metric-value" style="font-size:22px;">3/5</div>
+            <div class="metric-label">Reviewed today</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" style="font-size:22px;">87%</div>
+            <div class="metric-label">Approval rate</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" style="font-size:22px;">45s</div>
+            <div class="metric-label">Avg review time</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Donut: review outcomes -->
+      <div style="margin-bottom:20px;">
+        <div class="section-title">Review outcomes</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="85 15"/>
+            </svg>
+            <div class="donut-label"><strong>85%</strong> Approved</div>
+          </div>
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="12 88" style="stroke:var(--caution);"/>
+            </svg>
+            <div class="donut-label"><strong>12%</strong> Edited</div>
+          </div>
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="3 97" style="stroke:var(--negative);"/>
+            </svg>
+            <div class="donut-label"><strong>3%</strong> Sent back</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggestion -->
+      <div class="suggestion">
+        <div class="suggestion-label">Suggestion</div>
+        3 similar quotes approved unchanged this week — ready to move simple quotes to spot-check?
+        <div class="action-row" style="margin-top:8px;">
+          <button class="btn-vivid" style="font-size:12px; padding:4px 12px;">Tell me more</button>
+          <button class="btn-secondary" style="font-size:12px; padding:4px 12px;">Not now</button>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // ═══════ State toggles ═══════
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateContents = document.querySelectorAll('.state-content');
+
+  function setState(state) {
+    stateContents.forEach(el => { el.style.display = 'none'; });
+    const target = document.getElementById('state-' + state);
+    if (target) target.style.display = 'block';
+  }
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      setState(btn.dataset.state);
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  document.querySelector('.close-btn').addEventListener('click', () => {
+    document.querySelector('.right-panel').classList.add('hidden');
+  });
+
+  // ═══════ Theme toggle ═══════
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+
+  // ═══════ Textarea auto-resize ═══════
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    });
+  });
+
+  // ═══════ Ditto Dots ═══════
+  const COLORS = ['#059669','#059669','#047857','#3D5A48','#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size/2, cy = size/2;
+    const count = Math.max(8, Math.round(size/3));
+    const maxR = size * 0.35;
+    const dots = Array.from({length:count}, (_,i) => ({
+      angle: (Math.PI*2/count)*i + Math.random()*0.3,
+      dist: 2 + Math.random()*maxR,
+      size: 1 + Math.random()*(size/16),
+      speed: 0.15 + Math.random()*0.35,
+      phase: Math.random()*Math.PI*2,
+      breathAmp: 1 + Math.random()*(maxR*0.3),
+      color: COLORS[Math.floor(Math.random()*COLORS.length)],
+      opacity: 0.5 + Math.random()*0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle)*d.dist*0.6;
+        const y = cy + Math.sin(d.angle)*d.dist*0.6;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now()/1000;
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const a = d.angle + t*d.speed;
+        const breathe = Math.sin(t*1.2+d.phase)*d.breathAmp;
+        const r = Math.max(1, d.dist+breathe);
+        const x = cx + Math.cos(a)*r;
+        const y = cy + Math.sin(a)*r;
+        const pulse = 0.6 + Math.sin(t*2.5+d.phase)*0.4;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity*pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+</script>
+</body>
+</html>

@@ -1,397 +1,215 @@
+<!-- Build-Ready v3, 2026-03-26 — Day Zero is welcome + differentiation only. Intake is P08a. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — Day Zero</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P08 — Day Zero | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
-  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
 
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 16px;
-    -webkit-font-smoothing: antialiased;
+    font-family: var(--font); background: var(--bg);
+    color: var(--text-primary); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none;
+    font-size: 14px; cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Page Layout ===== */
+  .page {
+    min-height: 100vh; padding-top: 48px;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 120px 24px 80px;
+  }
+  .page-content {
+    width: 100%; max-width: 600px;
   }
 
-  /* ═══════════════════════════════════════════
-     THE WHOLE SCREEN — NOTHING BUT THIS
-     No sidebar. No nav. No chrome. Just Ditto.
-  ═══════════════════════════════════════════ */
-  .day-zero {
-    max-width: 580px;
-    margin: 0 auto;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 0 24px;
+  /* Self dot + greeting */
+  .self-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--vivid); margin-bottom: 20px;
+    opacity: 0; animation: fade-in 0.6s ease-out 0.2s forwards;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ═══ The opening — feels like meeting someone ═══ */
-  .welcome {
-    margin-bottom: 48px;
+  .greeting {
+    font-size: 31px; font-weight: 600; color: var(--text-primary);
+    letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 8px;
+    opacity: 0; animation: fade-in 0.5s ease-out 0.5s forwards;
+  }
+  .intro-text {
+    font-size: 16px; color: var(--text-secondary); line-height: 1.6;
+    margin-bottom: 36px; max-width: 540px;
+    opacity: 0; animation: fade-in 0.5s ease-out 0.7s forwards;
   }
 
-  .welcome-mark {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    background: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 24px;
+  /* ===== Difference callout — typographic flow, no card ===== */
+  .difference-box {
+    padding-left: 20px; border-left: 2px solid var(--vivid-deep);
+    margin-bottom: 36px;
+    opacity: 0; animation: fade-in 0.5s ease-out 0.9s forwards;
+  }
+  .difference-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .difference-title svg { display: none; }
+  .difference-points {
+    list-style: none; display: flex; flex-direction: column; gap: 8px;
+  }
+  .difference-points li {
+    font-size: 15px; color: var(--text-secondary); line-height: 1.6;
   }
 
-  .welcome-mark span {
-    color: white;
-    font-weight: 700;
-    font-size: 18px;
-    letter-spacing: -0.02em;
-  }
-
-  .welcome-heading {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-    line-height: 1.25;
-    margin-bottom: 12px;
-  }
-
-  .welcome-body {
-    font-size: 16px;
-    line-height: 1.65;
-    color: var(--text-secondary);
-    max-width: 460px;
-  }
-
-  /* ═══ The question — not "how can I help" ═══
-     Specific. Directional. Shows this isn't a blank canvas. */
-  .opening-prompt {
-    margin-bottom: 40px;
-  }
-
-  .opening-prompt-text {
-    font-size: 17px;
-    font-weight: 500;
-    color: var(--text-primary);
-    line-height: 1.5;
-    margin-bottom: 20px;
-  }
-
-  /* Quick-start options — for people who freeze at blank inputs */
-  .quick-starts {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 20px;
-  }
-
-  .quick-start {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-align: left;
-    font-family: inherit;
-    font-size: 15px;
-    color: var(--text-primary);
-    line-height: 1.4;
-  }
-
-  .quick-start:hover {
-    border-color: var(--border-strong);
-    background: var(--surface);
-  }
-
-  .quick-start:active {
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-  }
-
-  .quick-start-emoji {
-    font-size: 20px;
-    flex-shrink: 0;
-    width: 28px;
-    text-align: center;
-  }
-
-  .quick-start-text {
-    flex: 1;
-  }
-
-  .quick-start-label {
-    font-weight: 500;
-  }
-
-  .quick-start-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 1px;
-  }
-
-  /* ═══ The input — warm, inviting, not intimidating ═══ */
-  .opening-input {
-    position: relative;
-  }
-
-  .input-container {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 14px 16px;
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .input-container:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.08);
-  }
-
-  .input-textarea {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    background: transparent;
-    resize: none;
-    min-height: 24px;
-    max-height: 120px;
-  }
-
-  .input-textarea::placeholder {
-    color: var(--text-muted);
-  }
-
-  .input-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-    padding-bottom: 2px;
-  }
-
-  .input-icon-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.15s, background 0.15s;
-  }
-
-  .input-icon-btn:hover {
-    color: var(--text-secondary);
-    background: var(--surface);
-  }
-
-  .input-icon-btn svg {
-    width: 20px;
-    height: 20px;
-    stroke-width: 1.5;
-  }
-
-  .send-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
+  /* ===== CTA — gradient ===== */
+  .start-cta {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 32px;
+    background: var(--vivid);
     color: var(--accent-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, transform 0.1s;
+    font-family: var(--font); font-size: 16px; font-weight: 600;
+    border: none; border-radius: 9999px;
+    cursor: pointer; text-decoration: none;
+    transition: background 0.15s ease-out;
+    opacity: 0; animation: fade-in 0.5s ease-out 1.1s forwards;
+  }
+  .start-cta:hover { background: var(--vivid-deep); }
+  .start-cta:focus-visible { outline: 2px solid var(--vivid-deep); outline-offset: 2px; }
+
+  .time-note {
+    font-size: 13px; color: var(--text-muted); margin-top: 12px;
+    opacity: 0; animation: fade-in 0.5s ease-out 1.3s forwards;
   }
 
-  .send-btn:hover { background: var(--accent-hover); }
-  .send-btn:active { transform: scale(0.95); }
-  .send-btn svg { width: 18px; height: 18px; stroke-width: 2; margin-left: 1px; }
-
-  .input-hint {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 8px;
-    text-align: center;
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+    .self-dot, .greeting, .intro-text, .difference-box, .start-cta, .time-note { opacity: 1 !important; }
   }
+  /* ===== Focus Theme — B&W ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
 
-  /* ═══ Footer — minimal, trustworthy ═══ */
-  .day-zero-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 16px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .day-zero-footer a {
-    color: var(--text-muted);
-    text-decoration: none;
-  }
-
-  .day-zero-footer a:hover {
-    color: var(--text-secondary);
-  }
-
-  /* ═══ Responsive ═══ */
-  @media (max-width: 768px) {
-    .day-zero {
-      padding: 0 20px;
-      justify-content: flex-start;
-      padding-top: 15vh;
-    }
-
-    .welcome-heading {
-      font-size: 24px;
-    }
-
-    .quick-start {
-      padding: 12px 14px;
-    }
-  }
-
-  @media (max-height: 700px) {
-    .day-zero {
-      justify-content: flex-start;
-      padding-top: 8vh;
-    }
-  }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
-
-<div class="day-zero">
-
-  <!-- The opening — no chrome, no sidebar, just this -->
-  <div class="welcome">
-    <div class="welcome-mark"><span>d</span></div>
-    <h1 class="welcome-heading">Hi. I'm Ditto.</h1>
-    <p class="welcome-body">I'll learn how your world works and help you run it. Everything we talk about stays — I don't forget, I don't start over.</p>
-  </div>
-
-  <!-- The question — specific, not open-ended -->
-  <div class="opening-prompt">
-    <p class="opening-prompt-text">What's taking up too much of your time right now?</p>
-
-    <!-- Quick starts — for people who don't know what to type -->
-    <div class="quick-starts">
-      <button class="quick-start">
-        <span class="quick-start-emoji">&#9999;&#65039;</span>
-        <div class="quick-start-text">
-          <div class="quick-start-label">I write the same things over and over</div>
-          <div class="quick-start-desc">Quotes, emails, content, reports</div>
-        </div>
-      </button>
-      <button class="quick-start">
-        <span class="quick-start-emoji">&#128269;</span>
-        <div class="quick-start-text">
-          <div class="quick-start-label">I check everything because I don't trust anyone else to</div>
-          <div class="quick-start-desc">Quality control, reviews, approvals</div>
-        </div>
-      </button>
-      <button class="quick-start">
-        <span class="quick-start-emoji">&#128161;</span>
-        <div class="quick-start-text">
-          <div class="quick-start-label">I'm building something and don't know where to start</div>
-          <div class="quick-start-desc">New business, product, project</div>
-        </div>
-      </button>
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1: Getting Started · <span>Day Zero</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
     </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="23-setup-connection.html" class="proto-arrow" aria-label="Previous: Setup">←</a>
+    <a href="08a-intake-conversation.html" class="proto-arrow" aria-label="Next: Intake Conversation">→</a>
   </div>
+</nav>
 
-  <!-- The input — always available -->
-  <div class="opening-input">
-    <div class="input-container">
-      <textarea class="input-textarea" rows="1" placeholder="Or just tell me what's on your mind..."></textarea>
-      <div class="input-actions">
-        <button class="input-icon-btn" title="Voice">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-          </svg>
-        </button>
-        <button class="send-btn" title="Send">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
+<main class="page">
+  <div class="page-content">
+    <div class="self-dot" aria-hidden="true"></div>
+    <h1 class="greeting">Hi. I'm Ditto.</h1>
+    <p class="intro-text">I'm not a chatbot. I'm a working partner that learns your business, remembers everything, and gets better over time. Let me show you how I'm different — and get to know you.</p>
+
+    <!-- What makes Ditto different -->
+    <div class="difference-box">
+      <div class="difference-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        What makes this different from ChatGPT or Claude
       </div>
+      <ul class="difference-points">
+        <li><strong>I remember everything.</strong> Our conversations build knowledge that compounds. I never start from scratch.</li>
+        <li><strong>I do the work, not just answer questions.</strong> I write your content, run your routines, and learn from your corrections.</li>
+        <li><strong>I earn your trust.</strong> You start by checking everything. Over time, as I prove reliable, I handle more on my own.</li>
+        <li><strong>I explain my thinking.</strong> Every output shows what I used and why. You can always see under the hood.</li>
+      </ul>
     </div>
-    <div class="input-hint">Talk, type, or tap — whatever's easiest</div>
+
+    <a href="08a-intake-conversation.html" class="start-cta">
+      Let's get started
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </a>
+    <div class="time-note">Takes about 10 minutes. I'll learn who you are, what you do, and how I can help.</div>
   </div>
-
-</div>
-
-<div class="day-zero-footer">
-  <a href="#">How Ditto works</a>
-</div>
+</main>
 
 <script>
-  const textarea = document.querySelector('.input-textarea');
-  textarea.addEventListener('input', function() {
-    this.style.height = 'auto';
-    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-  });
-
-  // Quick starts populate the input
-  document.querySelectorAll('.quick-start').forEach(btn => {
+  document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const label = btn.querySelector('.quick-start-label').textContent;
-      textarea.value = label;
-      textarea.focus();
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-      // Highlight the selected one
-      document.querySelectorAll('.quick-start').forEach(b => b.style.borderColor = '');
-      btn.style.borderColor = 'var(--accent)';
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') { document.body.classList.add('theme-focus'); }
+      else { document.body.classList.remove('theme-focus'); }
     });
   });
-</script>
 
-<div class="proto-nav"><span class="pn-d">&larr;</span><span class="pn-t"><a href="index.html">P08 Day Zero</a></span><a href="09-first-conversation.html">First Conversation &rarr;</a></div><!-- pnav -->
+</script>
 </body>
 </html>

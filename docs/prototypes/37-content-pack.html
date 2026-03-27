@@ -1,0 +1,736 @@
+<!-- v1, 2026-03-27 — P37 Multi-Part Content: Steven Leckie Content Pack. Proves ADR-023 multi-artifact handling with tabbed right panel. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P37 — Multi-Part Content | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--vivid-subtle); }
+  .skip-link { position: absolute; top: -100%; left: 16px; background: var(--accent); color: white; padding: 8px 16px; border-radius: var(--radius-md); z-index: 1000; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 56px; }
+
+  /* Proto Nav */
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.15s ease-out; }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* State Bar */
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; padding: 0 16px; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Theme Toggle */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  /* Three-column workspace */
+  .workspace { display: flex; margin-top: 92px; min-height: calc(100vh - 92px); }
+  .sidebar { width: 240px; flex-shrink: 0; background: var(--surface-raised); border-right: 1px solid var(--border); padding: 16px 0; }
+  .sidebar-label { display: flex; align-items: center; gap: 10px; padding: 7px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; transition: all 0.12s; }
+  .sidebar-label:hover { background: var(--accent-subtle); color: var(--text-primary); }
+  .sidebar-label.active { color: var(--text-primary); font-weight: 600; background: var(--accent-subtle); }
+  .sidebar-label svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .sidebar-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 16px 20px 6px; }
+
+  .centre { flex: 1; max-width: 720px; min-width: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .centre-header { padding: 20px 28px 16px; border-bottom: 1px solid var(--border); }
+  .centre-header h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .centre-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  .conversation { flex: 1; padding: 20px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .right-panel { width: 420px; flex-shrink: 0; background: var(--surface-raised); overflow-y: auto; display: flex; flex-direction: column; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .panel-body { padding: 20px; flex: 1; overflow-y: auto; }
+
+  /* State views */
+  .state-view { display: none; }
+  .state-view.active { display: flex; width: 100%; min-height: calc(100vh - 92px); }
+
+  /* Conversation elements */
+  .msg { font-size: 14px; line-height: 1.6; }
+  .msg-user { background: var(--accent-subtle); padding: 10px 16px; border-radius: var(--radius-lg); align-self: flex-end; max-width: 80%; }
+  .msg-ditto { display: flex; flex-direction: column; gap: 8px; }
+  .msg-ditto-label { font-size: 12px; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .msg-ditto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vivid); }
+
+  /* Artifact block (compact reference card in conversation) */
+  .artifact-block { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+  .artifact-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .artifact-icon { width: 32px; height: 32px; border-radius: var(--radius-md); background: var(--vivid-subtle); color: var(--vivid-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .artifact-icon svg { width: 16px; height: 16px; }
+  .artifact-meta { flex: 1; min-width: 0; }
+  .artifact-title { font-size: 14px; font-weight: 600; }
+  .artifact-subtitle { font-size: 12px; color: var(--text-muted); }
+  .artifact-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+  .artifact-status-created { background: var(--vivid-subtle); color: var(--vivid-deep); }
+  .artifact-status-updated { background: var(--info-subtle); color: var(--info); }
+  .artifact-status-resolved { background: var(--positive-subtle); color: var(--positive); }
+  .artifact-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .artifact-body > * + * { margin-top: 6px; }
+  .artifact-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  /* Buttons */
+  .btn-primary { font-family: var(--font); font-size: 13px; font-weight: 600; background: var(--vivid); color: #fff; border: none; border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { font-family: var(--font); font-size: 13px; font-weight: 500; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* Provenance */
+  .provenance { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+
+  /* Tabbed preview in right panel */
+  .preview-tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .preview-tab { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 12px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+  .preview-tab:hover { color: var(--text-primary); }
+  .preview-tab.active { color: var(--vivid-deep); border-bottom-color: var(--vivid); font-weight: 600; }
+  .preview-pane { display: none; }
+  .preview-pane.active { display: block; }
+
+  /* Content preview cards */
+  .content-preview { padding: 20px; }
+  .content-preview h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .content-preview p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px; }
+  .content-preview .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* Phone frame for Instagram preview */
+  .phone-preview { width: 260px; margin: 0 auto; background: #fff; border-radius: 20px; border: 3px solid #e5e5e5; overflow: hidden; }
+  .phone-preview-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 12px; font-weight: 600; }
+  .phone-preview-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--vivid-subtle); }
+  .phone-preview-image { width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600; text-align: center; padding: 20px; }
+  .phone-preview-caption { padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+  .phone-preview-caption strong { color: var(--text-primary); }
+
+  /* Diff highlighting */
+  .changed { background: rgba(5,150,105,0.08); border-left: 2px solid var(--vivid); padding-left: 8px; margin-left: -10px; }
+
+  /* Pack status summary */
+  .pack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pack-piece { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 13px; display: flex; align-items: center; justify-content: space-between; }
+  .pack-piece.approved { border-color: var(--positive); background: var(--positive-subtle); }
+
+  /* Version bar */
+  .version-bar { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+  .version-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .version-dot.current { background: var(--vivid); }
+  .version-dot.past { background: var(--border-strong); }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Multi-Part Content — Steven Leckie property marketing content pack</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Artifact · <span>Multi-Part Content</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="36-document-artifact.html" class="proto-arrow" aria-label="Previous">&larr;</a>
+    <a href="38-code-artifact.html" class="proto-arrow" aria-label="Next">&rarr;</a>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="s1" tabindex="0">1 &middot; Pack Generated</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s2" tabindex="-1">2 &middot; Individual Review</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s3" tabindex="-1">3 &middot; Batch Progress</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s4" tabindex="-1">4 &middot; Complete</button>
+</div>
+
+<main id="main-content">
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STATE 1: Pack Generated                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="state-view active" data-view="s1" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Today
+      </div>
+      <div class="sidebar-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        Inbox
+      </div>
+      <div class="sidebar-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Work
+      </div>
+      <div class="sidebar-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg>
+        Routines
+      </div>
+      <div class="sidebar-section">Recent</div>
+      <div class="sidebar-label" style="font-size: 13px; color: var(--text-muted);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Dubai Marina penthouse
+      </div>
+      <div class="sidebar-label" style="font-size: 13px; color: var(--text-muted);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Palm Jumeirah villa
+      </div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Dubai Marina Penthouse</h2>
+        <p>Steven Leckie &middot; Content Marketing</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Create a full content pack for the Dubai Marina penthouse listing. I need the property listing, 3 Instagram posts, a video walkthrough script, and an email blast to my VIP list.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Content pack ready — 6 pieces generated. I've pulled from your brand guidelines, recent Dubai market data, and the listing photos you uploaded yesterday.
+          </div>
+
+          <!-- Pack summary as RecordBlock -->
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="12" y2="15"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">Content Pack — Dubai Marina Penthouse</div>
+                <div class="artifact-subtitle">6 pieces &middot; Ready for review</div>
+              </div>
+              <span class="artifact-status artifact-status-created">Created</span>
+            </div>
+            <div class="artifact-body">
+              <div class="pack-grid">
+                <div class="pack-piece"><span>Listing</span> <span class="badge badge-neutral">Review</span></div>
+                <div class="pack-piece"><span>Post 1</span> <span class="badge badge-neutral">Review</span></div>
+                <div class="pack-piece"><span>Post 2</span> <span class="badge badge-neutral">Review</span></div>
+                <div class="pack-piece"><span>Post 3</span> <span class="badge badge-neutral">Review</span></div>
+                <div class="pack-piece"><span>Video Script</span> <span class="badge badge-neutral">Review</span></div>
+                <div class="pack-piece"><span>Email Blast</span> <span class="badge badge-neutral">Review</span></div>
+              </div>
+            </div>
+            <div class="artifact-actions">
+              <button class="btn-primary">Review in panel &rarr;</button>
+              <button class="btn-secondary">Approve all</button>
+            </div>
+          </div>
+
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Brand guidelines, listing photos (14), Dubai Marina Q1 market report, VIP list (234 contacts)
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Artifact preview">
+      <div class="panel-header">
+        <span class="panel-title">Content Pack Preview</span>
+        <span class="badge badge-neutral">6 pieces</span>
+      </div>
+      <div class="preview-tabs" role="tablist">
+        <button class="preview-tab active" data-preview="listing">Listing</button>
+        <button class="preview-tab" data-preview="post1">Post 1</button>
+        <button class="preview-tab" data-preview="post2">Post 2</button>
+        <button class="preview-tab" data-preview="post3">Post 3</button>
+        <button class="preview-tab" data-preview="script">Script</button>
+        <button class="preview-tab" data-preview="email">Email</button>
+      </div>
+
+      <div class="preview-pane active" data-pane="listing">
+        <div class="content-preview">
+          <h3>Dubai Marina Penthouse — 4BR Duplex</h3>
+          <div class="label">Headline</div>
+          <p style="font-size: 16px; font-weight: 500; font-style: italic; margin-bottom: 16px;">"Elevated living at its finest — a 4-bedroom duplex penthouse commanding uninterrupted Marina views."</p>
+          <div class="label">Property Details</div>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 14px; margin-bottom: 16px;">
+            <span style="color: var(--text-muted);">Bedrooms</span><span style="font-weight: 500;">4 + maid's</span>
+            <span style="color: var(--text-muted);">Size</span><span style="font-weight: 500;">5,200 sqft</span>
+            <span style="color: var(--text-muted);">Floor</span><span style="font-weight: 500;">48-49 (duplex)</span>
+            <span style="color: var(--text-muted);">Price</span><span style="font-weight: 500;">AED 18,500,000</span>
+            <span style="color: var(--text-muted);">View</span><span style="font-weight: 500;">Full Marina + Palm</span>
+          </div>
+          <div class="label">Description (excerpt)</div>
+          <p>Spanning the top two floors of one of Dubai Marina's most coveted towers, this exceptional penthouse offers 5,200 sqft of meticulously designed living space. Floor-to-ceiling windows frame panoramic views from the Marina waterfront to Palm Jumeirah and the Arabian Gulf beyond...</p>
+        </div>
+      </div>
+
+      <div class="preview-pane" data-pane="post1">
+        <div class="content-preview">
+          <div class="label">Instagram Post 1 — Hero Shot</div>
+          <div class="phone-preview" style="margin: 12px auto;">
+            <div class="phone-preview-header">
+              <div class="phone-preview-avatar"></div>
+              stevenleckie_realestate
+            </div>
+            <div class="phone-preview-image">
+              Marina Skyline<br>Penthouse View<br><span style="font-size: 11px; opacity: 0.7;">[Hero photo placeholder]</span>
+            </div>
+            <div class="phone-preview-caption">
+              <strong>stevenleckie_realestate</strong> This is what AED 18.5M looks like from the 48th floor. Full Marina panorama, duplex living, and a lifestyle most only dream about. DM for private viewing. #DubaiMarina #LuxuryLiving #PenthouseLife
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-pane" data-pane="post2">
+        <div class="content-preview">
+          <div class="label">Instagram Post 2 — Interior</div>
+          <div class="phone-preview" style="margin: 12px auto;">
+            <div class="phone-preview-header">
+              <div class="phone-preview-avatar"></div>
+              stevenleckie_realestate
+            </div>
+            <div class="phone-preview-image" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);">
+              Living Room<br>Interior<br><span style="font-size: 11px; opacity: 0.7;">[Interior photo placeholder]</span>
+            </div>
+            <div class="phone-preview-caption">
+              <strong>stevenleckie_realestate</strong> Double-height ceilings. Italian marble. And that view — it never gets old. Every detail in this penthouse was designed to impress. Link in bio for the full tour. #InteriorDesign #DubaiProperty
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-pane" data-pane="post3">
+        <div class="content-preview">
+          <div class="label">Instagram Post 3 — Lifestyle</div>
+          <div class="phone-preview" style="margin: 12px auto;">
+            <div class="phone-preview-header">
+              <div class="phone-preview-avatar"></div>
+              stevenleckie_realestate
+            </div>
+            <div class="phone-preview-image" style="background: linear-gradient(135deg, #0c2461 0%, #1e3799 100%);">
+              Rooftop Terrace<br>Evening<br><span style="font-size: 11px; opacity: 0.7;">[Terrace photo placeholder]</span>
+            </div>
+            <div class="phone-preview-caption">
+              <strong>stevenleckie_realestate</strong> Sunset from your private terrace. 5,200 sqft of penthouse. This is Dubai Marina at its absolute best. Serious enquiries only — DM or call. #SunsetViews #DubaiRealEstate #Penthouse
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-pane" data-pane="script">
+        <div class="content-preview">
+          <div class="label">Video Walkthrough Script</div>
+          <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.7;">
+            <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">OPEN</strong> [Drone shot, Marina skyline at golden hour]</p>
+            <p style="margin-bottom: 12px;"><em>"Some properties you show. This one — you experience."</em></p>
+            <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">SCENE 1</strong> [Elevator doors open to private foyer]</p>
+            <p style="margin-bottom: 12px;"><em>"Stepping out on the 48th floor into your own private entrance..."</em></p>
+            <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">SCENE 2</strong> [Pan across living room, reveal view]</p>
+            <p style="margin-bottom: 12px;"><em>"Double-height ceilings framing a panorama that stretches from the Marina to the Palm..."</em></p>
+            <p><strong style="color: var(--text-primary);">CLOSE</strong> [Sunset from terrace]</p>
+            <p><em>"AED 18.5 million. One penthouse. Your move."</em></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-pane" data-pane="email">
+        <div class="content-preview">
+          <div class="label">Email Blast — VIP List</div>
+          <div style="background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; margin-top: 8px;">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">To: VIP List (234 contacts)</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Subject: First look — Dubai Marina Penthouse, AED 18.5M</div>
+            <div style="font-size: 14px; line-height: 1.7; color: var(--text-secondary);">
+              <p style="margin-bottom: 12px;">You're receiving this before it hits the market.</p>
+              <p style="margin-bottom: 12px;">A 4-bedroom duplex penthouse in Dubai Marina — 5,200 sqft across floors 48-49, full Marina and Palm views. This is the one clients call about.</p>
+              <p style="margin-bottom: 12px;">Private viewings available this week. Reply to this email or call me directly.</p>
+              <p style="font-weight: 500; color: var(--text-primary);">Steven Leckie</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STATE 2: Individual Review — User refines Post 2                   -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="state-view" data-view="s2" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Recent</div>
+      <div class="sidebar-label" style="font-size: 13px; color: var(--text-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Dubai Marina penthouse</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Dubai Marina Penthouse</h2>
+        <p>Steven Leckie &middot; Content Marketing</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Post 2 caption needs to be punchier. Less descriptive, more provocative. Make them stop scrolling.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Updated Post 2. Shorter, sharper, scroll-stopping. Take a look:
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="18" cy="6" r="1.5"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">Instagram Post 2 — Interior</div>
+                <div class="artifact-subtitle">Caption updated &middot; v2</div>
+              </div>
+              <span class="artifact-status artifact-status-updated">Updated</span>
+            </div>
+            <div class="artifact-body">
+              <div style="font-size: 13px;">Change: Shorter caption, provocative opening line, removed hashtag clutter</div>
+            </div>
+            <div class="artifact-actions">
+              <button class="btn-primary">Approve</button>
+              <button class="btn-secondary">Refine more</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Artifact preview">
+      <div class="panel-header">
+        <span class="panel-title">Post 2 — Interior</span>
+        <span class="badge badge-info">v2</span>
+      </div>
+      <div class="version-bar">
+        <span class="version-dot past"></span>
+        <span style="text-decoration: line-through;">v1</span>
+        <span class="version-dot current"></span>
+        <span style="font-weight: 500; color: var(--text-primary);">v2 (current)</span>
+      </div>
+      <div class="content-preview">
+        <div class="phone-preview" style="margin: 0 auto;">
+          <div class="phone-preview-header">
+            <div class="phone-preview-avatar"></div>
+            stevenleckie_realestate
+          </div>
+          <div class="phone-preview-image" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);">
+            Living Room<br>Interior<br><span style="font-size: 11px; opacity: 0.7;">[Interior photo]</span>
+          </div>
+          <div class="phone-preview-caption">
+            <strong>stevenleckie_realestate</strong>
+            <span class="changed" style="display: block; margin-top: 4px;">You don't buy a penthouse. You buy the moment guests walk in and go silent.</span>
+            <span class="changed" style="display: block; margin-top: 4px;">48th floor. Dubai Marina. Link in bio.</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STATE 3: Batch Progress — 4/6 approved                            -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="state-view" data-view="s3" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Dubai Marina Penthouse</h2>
+        <p>Steven Leckie &middot; Content Marketing</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Listing, Post 1, Post 2 and script look great. Approve those four.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Done — 4 pieces approved. 2 remaining for your review:
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="12" y2="15"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">Content Pack — Dubai Marina Penthouse</div>
+                <div class="artifact-subtitle">4/6 approved</div>
+              </div>
+              <span class="artifact-status artifact-status-updated">In Progress</span>
+            </div>
+            <div class="artifact-body">
+              <div class="pack-grid">
+                <div class="pack-piece approved"><span>Listing</span> <span class="badge badge-positive">Approved</span></div>
+                <div class="pack-piece approved"><span>Post 1</span> <span class="badge badge-positive">Approved</span></div>
+                <div class="pack-piece approved"><span>Post 2</span> <span class="badge badge-positive">Approved</span></div>
+                <div class="pack-piece"><span>Post 3</span> <span class="badge badge-caution">Review</span></div>
+                <div class="pack-piece approved"><span>Video Script</span> <span class="badge badge-positive">Approved</span></div>
+                <div class="pack-piece"><span>Email Blast</span> <span class="badge badge-caution">Review</span></div>
+              </div>
+            </div>
+            <div class="artifact-actions">
+              <button class="btn-primary">Review Post 3</button>
+              <button class="btn-secondary">Review Email</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Artifact preview">
+      <div class="panel-header">
+        <span class="panel-title">Pack Progress</span>
+        <span class="badge badge-caution">4/6</span>
+      </div>
+      <div class="preview-tabs" role="tablist">
+        <button class="preview-tab" style="color: var(--positive);">Listing &#10003;</button>
+        <button class="preview-tab" style="color: var(--positive);">Post 1 &#10003;</button>
+        <button class="preview-tab" style="color: var(--positive);">Post 2 &#10003;</button>
+        <button class="preview-tab active">Post 3</button>
+        <button class="preview-tab" style="color: var(--positive);">Script &#10003;</button>
+        <button class="preview-tab">Email</button>
+      </div>
+      <div class="content-preview">
+        <div class="label">Instagram Post 3 — Lifestyle</div>
+        <div class="phone-preview" style="margin: 12px auto;">
+          <div class="phone-preview-header">
+            <div class="phone-preview-avatar"></div>
+            stevenleckie_realestate
+          </div>
+          <div class="phone-preview-image" style="background: linear-gradient(135deg, #0c2461 0%, #1e3799 100%);">
+            Rooftop Terrace<br>Evening<br><span style="font-size: 11px; opacity: 0.7;">[Terrace photo]</span>
+          </div>
+          <div class="phone-preview-caption">
+            <strong>stevenleckie_realestate</strong> Sunset from your private terrace. 5,200 sqft of penthouse. This is Dubai Marina at its absolute best. Serious enquiries only — DM or call. #SunsetViews #DubaiRealEstate #Penthouse
+          </div>
+        </div>
+        <div class="artifact-actions" style="padding-top: 12px;">
+          <button class="btn-primary">Approve</button>
+          <button class="btn-secondary">Edit caption</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- STATE 4: Complete — All approved, scheduled                        -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="state-view" data-view="s4" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Dubai Marina Penthouse</h2>
+        <p>Steven Leckie &middot; Content Marketing</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">All good. Schedule everything.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            All 6 pieces approved and scheduled. Here's the delivery plan:
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon" style="background: var(--positive-subtle); color: var(--positive);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">Content Pack — Dubai Marina Penthouse</div>
+                <div class="artifact-subtitle">6/6 approved &middot; Scheduled</div>
+              </div>
+              <span class="artifact-status artifact-status-resolved">Complete</span>
+            </div>
+            <div class="artifact-body">
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px 16px; font-size: 13px; align-items: center;">
+                <span style="font-weight: 500;">Listing</span><span class="badge badge-positive">Live</span><span style="color: var(--text-muted);">Published now</span>
+                <span style="font-weight: 500;">Post 1 — Hero</span><span class="badge badge-vivid">Scheduled</span><span style="color: var(--text-muted);">Thu 2pm</span>
+                <span style="font-weight: 500;">Post 2 — Interior</span><span class="badge badge-vivid">Scheduled</span><span style="color: var(--text-muted);">Fri 10am</span>
+                <span style="font-weight: 500;">Post 3 — Lifestyle</span><span class="badge badge-vivid">Scheduled</span><span style="color: var(--text-muted);">Sat 5pm</span>
+                <span style="font-weight: 500;">Video Script</span><span class="badge badge-positive">Sent</span><span style="color: var(--text-muted);">To videographer</span>
+                <span style="font-weight: 500;">Email Blast</span><span class="badge badge-vivid">Scheduled</span><span style="color: var(--text-muted);">Fri 9am</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Content Marketing process &middot; Dubai Marina Penthouse project &middot; 6 artifacts delivered
+          </div>
+
+          <!-- Teach-this moment -->
+          <div style="background: var(--vivid-subtle); border-radius: var(--radius-lg); padding: 12px 16px; margin-top: 4px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px;">Learn from this</div>
+            <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">You preferred shorter, provocative captions over descriptive ones. Want me to use this style for future property content?</div>
+            <div class="artifact-actions" style="margin-top: 8px;">
+              <button class="btn-primary">Yes, remember this</button>
+              <button class="btn-secondary">Just this time</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Delivery schedule">
+      <div class="panel-header">
+        <span class="panel-title">Delivery Schedule</span>
+        <span class="badge badge-positive">All scheduled</span>
+      </div>
+      <div class="panel-body">
+        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Content will publish automatically. I'll notify you after each piece goes live.</div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="padding: 12px; border: 1px solid var(--positive); border-radius: var(--radius-md); background: var(--positive-subtle);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Listing</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Published &middot; Live on portal</div>
+          </div>
+
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Post 1 — Hero Shot</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Instagram &middot; Thursday 2:00pm</div>
+          </div>
+
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Email Blast</div>
+            <div style="font-size: 12px; color: var(--text-muted);">234 VIP contacts &middot; Friday 9:00am</div>
+          </div>
+
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Post 2 — Interior</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Instagram &middot; Friday 10:00am</div>
+          </div>
+
+          <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Post 3 — Lifestyle</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Instagram &middot; Saturday 5:00pm</div>
+          </div>
+
+          <div style="padding: 12px; border: 1px solid var(--positive); border-radius: var(--radius-md); background: var(--positive-subtle);">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Video Script</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Sent to videographer &middot; Today</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</main>
+
+<script>
+  // State bar toggling
+  const stateBtns = document.querySelectorAll('.state-bar .state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => btn.addEventListener('click', () => {
+    stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+    stateViews.forEach(v => v.classList.remove('active'));
+    const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+    if (target) target.classList.add('active');
+  }));
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // Preview tabs in right panel (State 1)
+  document.querySelectorAll('.preview-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const parent = tab.closest('.right-panel') || tab.closest('.state-view');
+      if (!parent) return;
+      parent.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      if (tab.dataset.preview) {
+        parent.querySelectorAll('.preview-pane').forEach(p => p.classList.remove('active'));
+        const pane = parent.querySelector(`[data-pane="${tab.dataset.preview}"]`);
+        if (pane) pane.classList.add('active');
+      }
+    });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>

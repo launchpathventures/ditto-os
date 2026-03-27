@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { DataBlock } from "@/lib/engine";
+import type { DataBlock, FieldAnnotation } from "@/lib/engine";
 
 /**
  * DataBlock — schema-driven structured data display.
@@ -16,6 +16,28 @@ export function DataBlockComponent({ block }: { block: DataBlock }) {
     return <KeyValueView block={block} />;
   }
   return <ListView block={block} />;
+}
+
+/** Render annotation indicators for a field */
+function FieldAnnotations({ annotation }: { annotation?: FieldAnnotation }) {
+  if (!annotation) return null;
+
+  return (
+    <>
+      {annotation.provenance && (
+        <span className="text-xs text-text-muted ml-1">← {annotation.provenance}</span>
+      )}
+      {annotation.flag && (
+        <span className={cn(
+          "text-xs ml-1.5",
+          annotation.flag.level === "error" ? "text-negative" :
+          annotation.flag.level === "warning" ? "text-caution" : "text-info",
+        )}>
+          {annotation.flag.level === "error" ? "✗" : "⚠"} {annotation.flag.message}
+        </span>
+      )}
+    </>
+  );
 }
 
 function TableView({ block }: { block: DataBlock }) {
@@ -50,11 +72,15 @@ function TableView({ block }: { block: DataBlock }) {
                 ri % 2 === 0 ? "bg-surface-primary" : "bg-surface-secondary/20",
               )}
             >
-              {headers.map((h, ci) => (
-                <td key={ci} className="px-3 py-2 text-text-primary">
-                  {String(row[h] ?? "")}
-                </td>
-              ))}
+              {headers.map((h, ci) => {
+                const annotation = block.annotations?.[h];
+                return (
+                  <td key={ci} className="px-3 py-2 text-text-primary">
+                    <span>{String(row[h] ?? "")}</span>
+                    <FieldAnnotations annotation={annotation} />
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -71,12 +97,18 @@ function KeyValueView({ block }: { block: DataBlock }) {
       {block.title && (
         <div className="text-sm font-medium text-text-primary mb-2">{block.title}</div>
       )}
-      {Object.entries(kv).map(([key, value]) => (
-        <div key={key} className="flex justify-between text-sm">
-          <span className="text-text-secondary">{key}</span>
-          <span className="text-text-primary font-medium">{String(value)}</span>
-        </div>
-      ))}
+      {Object.entries(kv).map(([key, value]) => {
+        const annotation = block.annotations?.[key];
+        return (
+          <div key={key} className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
+            <span className="text-text-secondary">{key}</span>
+            <span className="text-text-primary font-medium">
+              {String(value)}
+              <FieldAnnotations annotation={annotation} />
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

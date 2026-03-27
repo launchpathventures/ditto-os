@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P32 — Settings | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav a { text-decoration: none; color: var(--text-muted); transition: color 0.12s; }
+  .proto-nav a:hover { color: var(--text-primary); }
+  .proto-nav-left { display: flex; align-items: center; gap: 6px; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 6px; }
+
+  /* Theme toggle */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    background: transparent; border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ===== Workspace Shell ===== */
+  .workspace {
+    position: fixed; top: 48px; left: 0; right: 0; bottom: 0;
+    display: flex;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .wordmark { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s;
+    font-size: 14px; color: var(--text-secondary);
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .nav-label { flex: 1; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; background: var(--vivid);
+    color: #fff; border-radius: 99px; padding: 1px 7px; line-height: 1.4;
+  }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .sidebar-user {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .sidebar-user:hover { background: var(--surface-raised); }
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-text);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; flex-shrink: 0;
+  }
+  .user-name { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-scroll::-webkit-scrollbar { width: 6px; }
+  .centre-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 120px;
+  }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface-raised); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 20px; }
+  .right-panel-scroll::-webkit-scrollbar { width: 4px; }
+  .right-panel-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Page Title ===== */
+  .page-title {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--text-primary); margin-bottom: 4px;
+  }
+  .page-subtitle {
+    font-size: 15px; color: var(--text-muted); margin-bottom: 36px;
+  }
+
+  /* ===== Section Headers ===== */
+  .section-header {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    margin-top: 32px; margin-bottom: 16px;
+  }
+  .section-header:first-of-type { margin-top: 0; }
+
+  /* ===== Field Rows ===== */
+  .field-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-left { flex: 1; min-width: 0; }
+  .field-label {
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .field-value {
+    font-size: 13px; color: var(--text-muted); margin-top: 2px;
+  }
+  .field-right {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+
+  /* ===== Status Dot ===== */
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .status-dot.connected { background: var(--vivid); }
+  .status-dot.disconnected { background: var(--border-strong); }
+
+  /* ===== Pill Buttons ===== */
+  .btn-pill {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 6px 16px; border-radius: 9999px;
+    border: 1.5px solid var(--border); background: transparent;
+    color: var(--text-secondary); cursor: pointer; transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .btn-pill:hover { border-color: var(--accent); color: var(--text-primary); }
+  .btn-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn-pill-accent {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    padding: 6px 16px; border-radius: 9999px;
+    border: none; background: var(--vivid); color: var(--accent-text);
+    cursor: pointer; transition: all 0.12s; white-space: nowrap;
+  }
+  .btn-pill-accent:hover { background: var(--vivid-deep); }
+  .btn-pill-accent:focus-visible { outline: 2px solid var(--vivid); outline-offset: 2px; }
+
+  .btn-link {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--vivid); background: none; border: none;
+    cursor: pointer; transition: color 0.12s; text-decoration: none;
+  }
+  .btn-link:hover { color: var(--vivid-deep); }
+
+  /* ===== Radio Pills ===== */
+  .radio-pills {
+    display: inline-flex; border: 1px solid var(--border); border-radius: 9999px;
+    overflow: hidden;
+  }
+  .radio-pill {
+    font-family: var(--font); font-size: 12px; font-weight: 500;
+    padding: 5px 14px; border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    border-right: 1px solid var(--border);
+  }
+  .radio-pill:last-child { border-right: none; }
+  .radio-pill:hover { color: var(--text-primary); }
+  .radio-pill.active {
+    background: var(--accent); color: var(--accent-text); font-weight: 600;
+  }
+  .radio-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Toggle Switch ===== */
+  .toggle {
+    width: 36px; height: 20px; border-radius: 9999px;
+    background: var(--border-strong); cursor: pointer;
+    position: relative; transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--vivid); }
+  .toggle::after {
+    content: ''; position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; transition: transform 0.2s;
+    box-shadow: var(--shadow-subtle);
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  /* ===== Progress Bar ===== */
+  .progress-bar {
+    width: 100%; height: 4px; border-radius: 2px;
+    background: var(--border); overflow: hidden; margin-top: 6px;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 2px;
+    background: var(--vivid); transition: width 0.3s ease;
+  }
+
+  /* ===== Dropdown Indicator ===== */
+  .dropdown-indicator {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer;
+  }
+  .dropdown-indicator::after {
+    content: '';
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 4px solid var(--text-muted);
+  }
+
+  /* ===== Integration Row ===== */
+  .integration-row {
+    display: flex; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .integration-row:last-child { border-bottom: none; }
+  .integration-name {
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    width: 120px; flex-shrink: 0;
+  }
+  .integration-status {
+    font-size: 13px; color: var(--text-muted); flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px; width: 110px;
+  }
+  .integration-usage {
+    font-size: 12px; color: var(--text-muted); flex: 1;
+  }
+  .integration-action { flex-shrink: 0; }
+
+  /* ===== Right Panel Sections ===== */
+  .rp-section { margin-bottom: 24px; }
+  .rp-section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px;
+  }
+  .rp-stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: var(--text-secondary); padding: 4px 0;
+  }
+  .rp-stat-value { font-weight: 500; color: var(--text-primary); }
+  .rp-tip {
+    font-size: 13px; line-height: 1.6; color: var(--text-secondary);
+    padding-left: 12px; border-left: 2px solid var(--vivid);
+    margin-bottom: 12px;
+  }
+  .rp-device {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-secondary); padding: 6px 0;
+  }
+  .rp-device-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--vivid); flex-shrink: 0;
+  }
+  .rp-device-dot.inactive { background: var(--border-strong); }
+  .rp-device .this-device {
+    font-size: 11px; color: var(--text-muted); font-weight: 500;
+  }
+
+  /* ===== Appearance Toggle Pills ===== */
+  .appearance-pills {
+    display: inline-flex; gap: 4px;
+  }
+  .appearance-pill {
+    font-family: var(--font); font-size: 12px; font-weight: 500;
+    padding: 5px 14px; border-radius: 9999px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .appearance-pill:hover { color: var(--text-primary); border-color: var(--border-strong); }
+  .appearance-pill.active {
+    color: var(--text-primary); border-color: var(--border-strong);
+    background: var(--surface); font-weight: 600;
+  }
+  .appearance-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--vivid);
+  }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1100px) {
+    .right-panel { display: none; }
+  }
+  @media (max-width: 800px) {
+    .sidebar { display: none; }
+  }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Proto Nav -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">P32 &mdash; <span>Settings</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="35-improvements.html" class="proto-arrow" aria-label="Previous: Improvements">&larr;</a>
+    <a href="index.html" class="proto-arrow" aria-label="Next: Index">&rarr;</a>
+  </div>
+</nav>
+
+<!-- Workspace -->
+<div class="workspace">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <div class="wordmark">Ditto</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">2</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Work</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m8.66-13.5l-5.2 3m-7 4l-5.2 3M22.66 17.5l-5.2-3m-7-4l-5.2-3"/></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+      <div class="nav-separator"></div>
+      <a class="nav-item active" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar">RM</div>
+        <div class="user-name">Rob Mitchell</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Centre -->
+  <main class="centre">
+    <div class="centre-scroll">
+      <div class="centre-content">
+
+        <h1 class="page-title">Settings</h1>
+        <p class="page-subtitle">Your workspace, your rules</p>
+
+        <!-- AI Connection -->
+        <div class="section-header">AI Connection</div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">
+              <span class="status-dot connected"></span>
+              Provider
+            </div>
+            <div class="field-value">Anthropic</div>
+          </div>
+          <div class="field-right">
+            <button class="btn-pill">Change</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Model</div>
+            <div class="field-value">
+              <span class="dropdown-indicator">Claude Sonnet 4</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">API Key</div>
+            <div class="field-value">sk-ant-...7x4f</div>
+          </div>
+          <div class="field-right">
+            <button class="btn-pill">Update</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Monthly usage</div>
+            <div class="field-value">$23.40 of $50 budget</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 47%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trust & Oversight -->
+        <div class="section-header">Review preferences</div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">How much to check</div>
+          </div>
+          <div class="field-right">
+            <div class="radio-pills">
+              <button class="radio-pill">Check everything</button>
+              <button class="radio-pill active">Spot check</button>
+              <button class="radio-pill">Let it run</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Auto-approve threshold</div>
+            <div class="field-value">High confidence only</div>
+          </div>
+          <div class="field-right">
+            <div class="toggle on" tabindex="0" role="switch" aria-checked="true" aria-label="Auto-approve high confidence"></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Notification preference</div>
+            <div class="field-value">
+              <span class="dropdown-indicator">Exceptions only</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Review reminder</div>
+            <div class="field-value">Daily digest at 8am</div>
+          </div>
+        </div>
+
+        <!-- Integrations -->
+        <div class="section-header">Integrations</div>
+
+        <div class="integration-row">
+          <div class="integration-name">Gmail</div>
+          <div class="integration-status">
+            <span class="status-dot connected"></span>
+            Connected
+          </div>
+          <div class="integration-usage">3 processes use this</div>
+          <div class="integration-action">
+            <button class="btn-pill">Manage</button>
+          </div>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-name">Google Calendar</div>
+          <div class="integration-status">
+            <span class="status-dot connected"></span>
+            Connected
+          </div>
+          <div class="integration-usage">1 process</div>
+          <div class="integration-action">
+            <button class="btn-pill">Manage</button>
+          </div>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-name">Xero</div>
+          <div class="integration-status">
+            <span class="status-dot connected"></span>
+            Connected
+          </div>
+          <div class="integration-usage">2 processes</div>
+          <div class="integration-action">
+            <button class="btn-pill">Manage</button>
+          </div>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-name">Slack</div>
+          <div class="integration-status">
+            <span class="status-dot disconnected"></span>
+            Not connected
+          </div>
+          <div class="integration-usage"></div>
+          <div class="integration-action">
+            <button class="btn-pill">Connect</button>
+          </div>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-name">Dropbox</div>
+          <div class="integration-status">
+            <span class="status-dot disconnected"></span>
+            Not connected
+          </div>
+          <div class="integration-usage"></div>
+          <div class="integration-action">
+            <button class="btn-pill">Connect</button>
+          </div>
+        </div>
+
+        <!-- Knowledge -->
+        <div class="section-header">Knowledge</div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Knowledge entries</div>
+            <div class="field-value">47 entries across 6 dimensions</div>
+          </div>
+          <div class="field-right">
+            <a class="btn-link" href="#">View All</a>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Auto-learning</div>
+            <div class="field-value">On &mdash; Ditto learns from your corrections</div>
+          </div>
+          <div class="field-right">
+            <div class="toggle on" tabindex="0" role="switch" aria-checked="true" aria-label="Auto-learning toggle"></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Data retention</div>
+            <div class="field-value">
+              <span class="dropdown-indicator">Keep everything</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="section-header">Appearance</div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Theme</div>
+          </div>
+          <div class="field-right">
+            <div class="appearance-pills">
+              <button class="appearance-pill active">
+                <span class="appearance-dot"></span>
+                Signature
+              </button>
+              <button class="appearance-pill">
+                Focus
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-left">
+            <div class="field-label">Compact mode</div>
+            <div class="field-value">Off</div>
+          </div>
+          <div class="field-right">
+            <div class="toggle" tabindex="0" role="switch" aria-checked="false" aria-label="Compact mode toggle"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Input Bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Tell Ditto something..." aria-label="Message Ditto"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel" aria-label="Ditto assistant panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+    </div>
+    <div class="right-panel-scroll">
+
+      <!-- Account -->
+      <div class="rp-section">
+        <div class="rp-section-label">Account</div>
+        <div class="rp-stat-row">
+          <span>Plan</span>
+          <span class="rp-stat-value">Pro</span>
+        </div>
+        <div class="rp-stat-row">
+          <span>Active processes</span>
+          <span class="rp-stat-value">4</span>
+        </div>
+        <div class="rp-stat-row">
+          <span>This month</span>
+          <span class="rp-stat-value">142 actions</span>
+        </div>
+        <div class="rp-stat-row">
+          <span>Uptime</span>
+          <span class="rp-stat-value">99.8%</span>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="rp-section">
+        <div class="rp-section-label">Tips</div>
+        <div class="rp-tip">
+          You've been reviewing every social post. Based on 94% approval rate, consider auto-approving Content Pipeline outputs.
+        </div>
+        <button class="btn-pill-accent">Adjust Trust</button>
+      </div>
+
+      <!-- Connected Devices -->
+      <div class="rp-section">
+        <div class="rp-section-label">Connected Devices</div>
+        <div class="rp-device">
+          <span class="rp-device-dot"></span>
+          MacBook Pro <span class="this-device">(this device)</span>
+        </div>
+        <div class="rp-device">
+          <span class="rp-device-dot inactive"></span>
+          iPhone 15 Pro
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // ===== Ditto Dots — particle canvas =====
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity * pulse;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textarea
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    });
+  });
+
+  // Toggle switches
+  document.querySelectorAll('.toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const isOn = toggle.classList.toggle('on');
+      toggle.setAttribute('aria-checked', isOn);
+    });
+  });
+
+  // Radio pills
+  document.querySelectorAll('.radio-pills').forEach(group => {
+    group.querySelectorAll('.radio-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        group.querySelectorAll('.radio-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+      });
+    });
+  });
+
+  // Appearance pills
+  document.querySelectorAll('.appearance-pills').forEach(group => {
+    group.querySelectorAll('.appearance-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        group.querySelectorAll('.appearance-pill').forEach(p => {
+          p.classList.remove('active');
+          const dot = p.querySelector('.appearance-dot');
+          if (dot) dot.remove();
+        });
+        pill.classList.add('active');
+        if (!pill.querySelector('.appearance-dot')) {
+          const dot = document.createElement('span');
+          dot.className = 'appearance-dot';
+          pill.prepend(dot);
+        }
+      });
+    });
+  });
+
+  // Proto-nav theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') {
+        document.body.classList.add('theme-focus');
+      } else {
+        document.body.classList.remove('theme-focus');
+      }
+    });
+  });
+</script>
+</body>
+</html>

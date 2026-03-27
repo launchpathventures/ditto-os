@@ -4,13 +4,12 @@
  * Ditto — Block Registry (ADR-021 Surface Protocol)
  *
  * Unified component registry: maps ContentBlock.type → React component.
- * Handles all 13 block types. Unknown types fall back to text rendering.
+ * Handles all 21 block types. Unknown types fall back to text rendering.
  *
  * Provenance: Brief 045, ADR-021, existing item-registry.tsx pattern.
  */
 
 import type { ContentBlock } from "@/lib/engine";
-import { renderBlockToText } from "@/lib/engine";
 import { TextBlockComponent } from "./text-block";
 import { ReviewCardBlockComponent } from "./review-card-block";
 import { StatusCardBlockComponent } from "./status-card-block";
@@ -27,6 +26,11 @@ import { AlertBlockComponent } from "./alert-block";
 import { KnowledgeSynthesisBlockComponent } from "./knowledge-synthesis-block";
 import { ProcessProposalBlockComponent } from "./process-proposal-block";
 import { GatheringIndicatorBlockComponent } from "./gathering-indicator-block";
+import { ChecklistBlockComponent } from "./checklist-block";
+import { ChartBlockComponent } from "./chart-block";
+import { MetricBlockComponent } from "./metric-block";
+import { RecordBlockComponent } from "./record-block";
+import { InteractiveTableBlockComponent } from "./interactive-table-block";
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -67,13 +71,24 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <ProcessProposalBlockComponent block={block} onAction={onAction} />;
     case "gathering_indicator":
       return <GatheringIndicatorBlockComponent block={block} />;
+    case "checklist":
+      return <ChecklistBlockComponent block={block} />;
+    case "chart":
+      return <ChartBlockComponent block={block} />;
+    case "metric":
+      return <MetricBlockComponent block={block} />;
+    case "record":
+      return <RecordBlockComponent block={block} onAction={onAction} />;
+    case "interactive_table":
+      return <InteractiveTableBlockComponent block={block} onAction={onAction} />;
     default: {
       // Exhaustiveness check — TypeScript will error if a type is missing (AC15)
       const _exhaustive: never = block;
-      // Graceful fallback to text rendering (AC6)
+      // Graceful fallback — render any text-like field (AC6)
+      const fallback = (_exhaustive as Record<string, unknown>);
       return (
         <div className="text-sm text-text-secondary whitespace-pre-wrap">
-          {renderBlockToText(_exhaustive as ContentBlock)}
+          {typeof fallback.text === "string" ? fallback.text : JSON.stringify(fallback)}
         </div>
       );
     }

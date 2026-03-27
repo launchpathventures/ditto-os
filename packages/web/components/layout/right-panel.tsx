@@ -21,6 +21,8 @@ import { useState, useCallback } from "react";
 import { useProcessDetail } from "@/lib/process-query";
 import { ProcessBuilderPanel } from "./process-builder-panel";
 import { ArtifactViewerPanel } from "./artifact-viewer-panel";
+import type { ContentBlock } from "@/lib/engine";
+import { BlockList } from "../blocks/block-registry";
 
 // Context types that the panel reacts to
 export type PanelContext =
@@ -29,6 +31,7 @@ export type PanelContext =
   | { type: "process-builder"; yaml: string; slug?: string }
   | { type: "artifact-review"; runId: string; processId: string }
   | { type: "briefing"; data: Record<string, unknown> }
+  | { type: "blocks"; blocks: ContentBlock[]; title?: string }
   | { type: "empty" };
 
 interface RightPanelProps {
@@ -96,6 +99,9 @@ export function RightPanel({
         )}
         {activeContext.type === "briefing" && (
           <BriefingContext data={activeContext.data} />
+        )}
+        {activeContext.type === "blocks" && (
+          <BlocksContext blocks={activeContext.blocks} title={activeContext.title} />
         )}
         {activeContext.type === "empty" && <DefaultContext />}
       </div>
@@ -242,6 +248,20 @@ function ProcessContext({ processId }: { processId: string }) {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/** Blocks context — renders ContentBlock[] from the Self's composition logic */
+function BlocksContext({ blocks, title }: { blocks: ContentBlock[]; title?: string }) {
+  return (
+    <>
+      {title && (
+        <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
+          {title}
+        </p>
+      )}
+      <BlockList blocks={blocks} />
     </>
   );
 }

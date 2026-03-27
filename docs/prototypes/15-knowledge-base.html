@@ -1,531 +1,463 @@
+<!-- Build-Ready v3, 2026-03-27 — Knowledge Base: table view with three-column workspace layout. F1 rebuild. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — What I Know (Rob's Knowledge Base)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P15 — Knowledge Base | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --caution: hsl(48 85% 50%);
-    --caution-subtle: hsl(48 60% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--vivid-subtle); }
+  .skip-link { position: absolute; top: -100%; left: 16px; background: var(--accent); color: white; padding: 8px 16px; border-radius: var(--radius-md); z-index: 1000; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 56px; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.15s ease-out; }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 15px;
-    -webkit-font-smoothing: antialiased;
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; padding: 0 16px; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  .workspace { display: flex; margin-top: 92px; min-height: calc(100vh - 92px); }
+  .sidebar { width: 240px; flex-shrink: 0; background: var(--surface-raised); border-right: 1px solid var(--border); padding: 16px 0; }
+  .sidebar-label { display: flex; align-items: center; gap: 10px; padding: 7px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; transition: all 0.12s; }
+  .sidebar-label:hover { background: var(--accent-subtle); color: var(--text-primary); }
+  .sidebar-label.active { color: var(--text-primary); font-weight: 600; background: var(--accent-subtle); }
+  .sidebar-label svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .sidebar-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 16px 20px 6px; }
+
+  .centre { flex: 1; min-width: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .centre-header { padding: 20px 28px 16px; border-bottom: 1px solid var(--border); }
+  .centre-header h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .centre-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .centre-body { flex: 1; padding: 20px 28px; overflow-y: auto; }
+
+  .right-panel { width: 380px; flex-shrink: 0; background: var(--surface-raised); overflow-y: auto; display: flex; flex-direction: column; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .panel-body { padding: 20px; flex: 1; overflow-y: auto; }
+
+  .state-view { display: none; }
+  .state-view.active { display: flex; width: 100%; min-height: calc(100vh - 92px); }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  .btn-primary { font-family: var(--font); font-size: 13px; font-weight: 600; background: var(--vivid); color: #fff; border: none; border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { font-family: var(--font); font-size: 13px; font-weight: 500; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  .provenance { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+
+  /* Health strip */
+  .health-strip { display: flex; gap: 24px; padding: 16px 0; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .health-metric { min-width: 80px; }
+  .health-value { font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .health-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Knowledge table */
+  .kb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .kb-table th {
+    text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+    border-bottom: 2px solid var(--border); background: var(--surface);
   }
+  .kb-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .kb-table tr { cursor: pointer; transition: background 0.1s; }
+  .kb-table tbody tr:hover { background: var(--accent-subtle); }
+  .kb-table tbody tr.selected { background: var(--vivid-subtle); }
+  .kb-name { font-weight: 500; color: var(--text-primary); }
+  .kb-type { color: var(--text-muted); }
+  .kb-used-by { font-size: 12px; color: var(--text-secondary); }
+  .kb-actions { display: flex; gap: 4px; }
+  .kb-action-btn { font-family: var(--font); font-size: 11px; font-weight: 500; background: transparent; color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 8px; cursor: pointer; transition: all 0.12s; }
+  .kb-action-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
-  .page {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 36px 24px 80px;
-  }
+  /* Freshness indicators */
+  .freshness { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .freshness-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .freshness-fresh .freshness-dot { background: var(--positive); }
+  .freshness-ok .freshness-dot { background: var(--caution); }
+  .freshness-stale .freshness-dot { background: var(--negative); }
 
-  .back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-muted);
-    text-decoration: none;
-    margin-bottom: 20px;
-    transition: color 0.12s;
-  }
-  .back:hover { color: var(--text-secondary); }
-  .back svg { width: 14px; height: 14px; }
+  /* Right panel record detail */
+  .record-detail-header { margin-bottom: 16px; }
+  .record-detail-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .record-detail-meta { font-size: 12px; color: var(--text-muted); }
+  .field-table { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 14px; line-height: 1.5; }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
 
-  .header {
-    margin-bottom: 28px;
-  }
+  /* Sparkline */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+  .sparkline.trend-flat polyline { stroke: var(--text-muted); }
 
-  .header-title {
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-  }
-
-  .header-subtitle {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-
-  /* Overall health strip */
-  .health-strip {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 18px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-top: 16px;
-    font-size: 14px;
-    color: var(--text-secondary);
-  }
-
-  .health-bar-track {
-    flex: 1;
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-    max-width: 200px;
-  }
-
-  .health-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    background: var(--positive);
-  }
-
-  .health-pct {
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-
-  /* Section */
-  .section {
-    margin-bottom: 28px;
-  }
-
-  .section-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 12px;
-  }
-
-  /* ═══ KNOWLEDGE CARDS ═══
-     Each is a structured, editable, viewable document.
-     NOT a setting. NOT a memory entry. A living document.
-  */
-  .knowledge-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 12px;
-    overflow: hidden;
-    transition: box-shadow 0.15s;
-  }
-
-  .knowledge-card:hover {
-    box-shadow: 0 2px 10px hsl(30 10% 15% / 0.05);
-  }
-
-  .knowledge-card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
-    cursor: pointer;
-  }
-
-  .knowledge-card-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .knowledge-card-dot.strong { background: var(--positive); }
-  .knowledge-card-dot.developing { background: var(--accent); }
-  .knowledge-card-dot.stale { background: var(--caution); }
-  .knowledge-card-dot.empty { background: var(--border-strong); }
-
-  .knowledge-card-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    flex: 1;
-  }
-
-  .knowledge-card-status {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 6px;
-    flex-shrink: 0;
-  }
-
-  .status-strong { background: var(--positive-subtle); color: var(--positive); }
-  .status-developing { background: var(--accent-subtle); color: var(--accent); }
-  .status-stale { background: var(--caution-subtle); color: hsl(38 60% 35%); }
-  .status-empty { background: var(--surface); color: var(--text-muted); }
-
-  .knowledge-card-used {
-    font-size: 12px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-
-  /* Expanded content */
-  .knowledge-card-body {
-    padding: 0 18px 16px;
-    border-top: 1px solid var(--border);
-    padding-top: 14px;
-  }
-
-  .knowledge-card-content {
-    font-size: 14px;
-    line-height: 1.65;
-    color: var(--text-primary);
-    margin-bottom: 12px;
-  }
-
-  .knowledge-card-content p + p { margin-top: 8px; }
-
-  /* Items within a card */
-  .knowledge-items {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-
-  .knowledge-line {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    font-size: 14px;
-  }
-
-  .knowledge-line-label {
-    font-weight: 500;
-    color: var(--text-primary);
-    min-width: 100px;
-    flex-shrink: 0;
-  }
-
-  .knowledge-line-value {
-    color: var(--text-secondary);
-  }
-
-  .knowledge-line-learned {
-    font-size: 11px;
-    color: var(--accent);
-    font-weight: 500;
-    margin-left: 4px;
-  }
-
-  /* Source + actions */
-  .knowledge-card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .knowledge-source {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .knowledge-used-by {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  .knowledge-used-by strong {
-    font-weight: 500;
-    color: var(--accent);
-  }
-
-  .knowledge-card-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  /* Empty state card */
-  .knowledge-card.empty-state .knowledge-card-body {
-    padding: 14px 18px 16px;
-    border-top: 1px dashed var(--border-strong);
-  }
-
-  .knowledge-empty-text {
-    font-size: 14px;
-    font-style: italic;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-  }
-
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 12px;
-    font-weight: 500;
-    border: none;
-    border-radius: 6px;
-    padding: 5px 10px;
-    cursor: pointer;
-    transition: all 0.12s;
-  }
-
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-  .btn-ghost:hover { color: var(--text-primary); }
-  .btn-accent { background: var(--accent-subtle); color: var(--accent); border: none; }
-  .btn-accent:hover { background: hsl(24 60% 91%); }
-
-  @media (max-width: 768px) {
-    .page { padding: 24px 16px 60px; }
-    .header-title { font-size: 22px; }
-    .knowledge-line { flex-direction: column; gap: 2px; }
-    .knowledge-line-label { min-width: auto; }
-  }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 </style>
 </head>
 <body>
 
-<div class="page">
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Knowledge Base — Rob's knowledge items as interactive table</h1>
 
-  <a href="#" class="back">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-    </svg>
-    Back
-  </a>
-
-  <div class="header">
-    <div class="header-title">What I know</div>
-    <div class="header-subtitle">Everything Ditto uses when working for you. Edit anything, anytime.</div>
-
-    <div class="health-strip">
-      <span>Business knowledge</span>
-      <div class="health-bar-track">
-        <div class="health-bar-fill" style="width: 72%"></div>
-      </div>
-      <span class="health-pct">72%</span>
-      <span style="color: var(--text-muted);">&middot; 3 gaps</span>
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Screen · <span>Knowledge Base</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
     </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="14a-review-queue.html" class="proto-arrow" aria-label="Previous">&larr;</a>
+    <a href="16-teach-this.html" class="proto-arrow" aria-label="Next">&rarr;</a>
   </div>
+</nav>
 
-  <!-- ═══ PRICING & COSTS ═══ -->
-  <div class="section">
-    <div class="section-title">Pricing &amp; costs</div>
-
-    <div class="knowledge-card">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot stale"></span>
-        <span class="knowledge-card-title">Reece supplier prices</span>
-        <span class="knowledge-card-status status-stale">3 weeks old</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-card-content">
-          <p>Copper fittings, pipe, fixtures. Last updated from Reece price list PDF.</p>
-        </div>
-        <div class="knowledge-card-footer">
-          <span class="knowledge-source">Uploaded 4 Mar &middot; PDF</span>
-          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
-          <div class="knowledge-card-actions">
-            <button class="btn btn-accent">Update</button>
-            <button class="btn btn-ghost">View</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="knowledge-card">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot strong"></span>
-        <span class="knowledge-card-title">Tradelink supplier prices</span>
-        <span class="knowledge-card-status status-strong">Current</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-card-content">
-          <p>Tapware, hot water systems, bathroom accessories.</p>
-        </div>
-        <div class="knowledge-card-footer">
-          <span class="knowledge-source">Uploaded 10 Mar &middot; PDF</span>
-          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
-          <div class="knowledge-card-actions">
-            <button class="btn btn-secondary">Update</button>
-            <button class="btn btn-ghost">View</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="knowledge-card">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot strong"></span>
-        <span class="knowledge-card-title">Your margin rules</span>
-        <span class="knowledge-card-status status-strong">Current</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-items">
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Residential</span>
-            <span class="knowledge-line-value">25%</span>
-          </div>
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Commercial</span>
-            <span class="knowledge-line-value">20%</span>
-          </div>
-        </div>
-        <div class="knowledge-card-footer">
-          <span class="knowledge-source">From setup conversation</span>
-          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
-          <div class="knowledge-card-actions">
-            <button class="btn btn-secondary">Edit</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ LABOUR ═══ -->
-  <div class="section">
-    <div class="section-title">Labour estimates</div>
-
-    <div class="knowledge-card">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot strong"></span>
-        <span class="knowledge-card-title">Standard labour hours</span>
-        <span class="knowledge-card-status status-strong">Current</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-items">
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Bathroom</span>
-            <span class="knowledge-line-value">22 hrs</span>
-            <span class="knowledge-line-learned">learned from your corrections</span>
-          </div>
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Kitchen</span>
-            <span class="knowledge-line-value">12 hrs</span>
-          </div>
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Hot water</span>
-            <span class="knowledge-line-value">4 hrs</span>
-          </div>
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Ensuite</span>
-            <span class="knowledge-line-value">18 hrs</span>
-          </div>
-          <div class="knowledge-line">
-            <span class="knowledge-line-label">Office refit</span>
-            <span class="knowledge-line-value">Based on scope (no standard)</span>
-          </div>
-        </div>
-        <div class="knowledge-card-footer">
-          <span class="knowledge-source">Setup + 3 corrections over 6 weeks</span>
-          <span class="knowledge-used-by">Used by <strong>Quoting</strong></span>
-          <div class="knowledge-card-actions">
-            <button class="btn btn-secondary">Edit</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ CUSTOMERS ═══ -->
-  <div class="section">
-    <div class="section-title">Customers</div>
-
-    <div class="knowledge-card">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot developing"></span>
-        <span class="knowledge-card-title">Customer history</span>
-        <span class="knowledge-card-status status-developing">Growing</span>
-        <span class="knowledge-card-used">12 customers</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-card-content">
-          <p>34 quotes across 12 customers. I track quote history, job types, response patterns, and preferred contact methods.</p>
-        </div>
-        <div class="knowledge-card-footer">
-          <span class="knowledge-source">Built from quoting activity</span>
-          <span class="knowledge-used-by">Used by <strong>Quoting, Follow-ups</strong></span>
-          <div class="knowledge-card-actions">
-            <button class="btn btn-ghost">Browse</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ GAPS — what Ditto doesn't know yet ═══ -->
-  <div class="section">
-    <div class="section-title">Gaps</div>
-
-    <div class="knowledge-card empty-state">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot empty"></span>
-        <span class="knowledge-card-title">Compliance requirements</span>
-        <span class="knowledge-card-status status-empty">Not set up</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-empty-text">Licence numbers, insurance details, regulatory requirements for quotes. Would make your quotes more complete.</div>
-        <div class="knowledge-card-actions">
-          <button class="btn btn-accent">Set up</button>
-          <button class="btn btn-ghost">Not needed</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="knowledge-card empty-state">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot empty"></span>
-        <span class="knowledge-card-title">Quote template / branding</span>
-        <span class="knowledge-card-status status-empty">Not set up</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-empty-text">Your business logo, ABN, payment terms, standard T&Cs. Quotes currently go out as plain text.</div>
-        <div class="knowledge-card-actions">
-          <button class="btn btn-accent">Set up</button>
-          <button class="btn btn-ghost">Later</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="knowledge-card empty-state">
-      <div class="knowledge-card-header">
-        <span class="knowledge-card-dot empty"></span>
-        <span class="knowledge-card-title">Preferred suppliers by job type</span>
-        <span class="knowledge-card-status status-empty">Not set up</span>
-      </div>
-      <div class="knowledge-card-body">
-        <div class="knowledge-empty-text">Which supplier for which job type. Would help me pick the right price list automatically.</div>
-        <div class="knowledge-card-actions">
-          <button class="btn btn-accent">Set up</button>
-          <button class="btn btn-ghost">Not needed</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="s1" tabindex="0">1 &middot; Table View</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s2" tabindex="-1">2 &middot; Record Selected</button>
 </div>
 
-<div class="proto-nav"><a href="14-process-detail.html">&larr; Process Detail</a><span class="pn-t"><a href="index.html">P15 Knowledge Base</a></span><a href="16-teach-this.html">Teach This &rarr;</a></div><!-- pnav -->
+<main id="main-content">
+
+<!-- ═══ STATE 1: Table View ═══ -->
+<div class="state-view active" data-view="s1" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Projects</div>
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> Knowledge</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Knowledge Base</h2>
+        <p>12 items &middot; Last updated 2h ago</p>
+      </div>
+      <div class="centre-body">
+        <!-- Health strip -->
+        <div class="health-strip">
+          <div class="health-metric">
+            <div class="health-value" style="color: var(--positive);">12</div>
+            <div class="health-label">Total items</div>
+          </div>
+          <div class="health-metric">
+            <div class="health-value">9</div>
+            <div class="health-label">Fresh
+              <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,14 10,12 18,9 26,7 34,5 42,3"/></svg>
+            </div>
+          </div>
+          <div class="health-metric">
+            <div class="health-value" style="color: var(--caution);">2</div>
+            <div class="health-label">Needs review</div>
+          </div>
+          <div class="health-metric">
+            <div class="health-value" style="color: var(--negative);">1</div>
+            <div class="health-label">Stale</div>
+          </div>
+        </div>
+
+        <!-- Interactive table -->
+        <table class="kb-table" aria-label="Knowledge items">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Freshness</th>
+              <th>Used By</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Reece Price List</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 2 days ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Refresh</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Tradelink Price List</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 3 days ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Refresh</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Rob's Pricing Rules</td>
+              <td class="kb-type">Business rules</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 1 week ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Job History (34 quotes)</td>
+              <td class="kb-type">Historical data</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> Today</div></td>
+              <td class="kb-used-by">Quoting, Follow-ups</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Client Contact Database</td>
+              <td class="kb-type">Contacts</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> Today</div></td>
+              <td class="kb-used-by">Follow-ups, Invoicing</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Email Templates</td>
+              <td class="kb-type">Templates</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 5 days ago</div></td>
+              <td class="kb-used-by">Follow-ups</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Invoice Template</td>
+              <td class="kb-type">Templates</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 2 weeks ago</div></td>
+              <td class="kb-used-by">Invoicing</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">QBCC Licence &amp; Insurance</td>
+              <td class="kb-type">Credentials</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> Current</div></td>
+              <td class="kb-used-by">Quoting, Invoicing</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Service Area Map</td>
+              <td class="kb-type">Reference</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 1 week ago</div></td>
+              <td class="kb-used-by">Scheduling</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-caution">Review</span></td>
+              <td class="kb-name">Bunnings Price List</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-ok"><span class="freshness-dot"></span> 3 weeks ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn" style="color: var(--caution);">Refresh</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-caution">Review</span></td>
+              <td class="kb-name">Preferred Suppliers</td>
+              <td class="kb-type">Reference</td>
+              <td><div class="freshness freshness-ok"><span class="freshness-dot"></span> 4 weeks ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn" style="color: var(--caution);">Update</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-negative">Stale</span></td>
+              <td class="kb-name">Plumbing Rates Guide 2024</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-stale"><span class="freshness-dot"></span> 14 months</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn" style="color: var(--negative);">Replace</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Item detail">
+      <div class="panel-header">
+        <span class="panel-title">Select an item</span>
+      </div>
+      <div class="panel-body" style="display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px;">
+        Click a row to see details
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══ STATE 2: Record Selected (Reece Price List) ═══ -->
+<div class="state-view" data-view="s2" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Projects</div>
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> Knowledge</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Knowledge Base</h2>
+        <p>12 items &middot; Reece Price List selected</p>
+      </div>
+      <div class="centre-body">
+        <div class="health-strip">
+          <div class="health-metric"><div class="health-value" style="color: var(--positive);">12</div><div class="health-label">Total items</div></div>
+          <div class="health-metric"><div class="health-value">9</div><div class="health-label">Fresh</div></div>
+          <div class="health-metric"><div class="health-value" style="color: var(--caution);">2</div><div class="health-label">Needs review</div></div>
+          <div class="health-metric"><div class="health-value" style="color: var(--negative);">1</div><div class="health-label">Stale</div></div>
+        </div>
+
+        <table class="kb-table" aria-label="Knowledge items">
+          <thead>
+            <tr><th>Status</th><th>Name</th><th>Type</th><th>Freshness</th><th>Used By</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Reece Price List</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 2 days ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Refresh</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Tradelink Price List</td>
+              <td class="kb-type">Price data</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 3 days ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Refresh</button></td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-positive">Active</span></td>
+              <td class="kb-name">Rob's Pricing Rules</td>
+              <td class="kb-type">Business rules</td>
+              <td><div class="freshness freshness-fresh"><span class="freshness-dot"></span> 1 week ago</div></td>
+              <td class="kb-used-by">Quoting</td>
+              <td class="kb-actions"><button class="kb-action-btn">View</button><button class="kb-action-btn">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Item detail">
+      <div class="panel-header">
+        <span class="panel-title">Reece Price List</span>
+        <span class="badge badge-positive">Active</span>
+      </div>
+      <div class="panel-body">
+        <div class="field-table" style="margin-bottom: 20px;">
+          <span class="field-label">Type</span><span class="field-value">Price data</span>
+          <span class="field-label">Source</span><span class="field-value">Reece trade portal</span>
+          <span class="field-label">Format</span><span class="field-value">CSV import</span>
+          <span class="field-label">Items</span><span class="field-value">2,847 products</span>
+          <span class="field-label">Last synced</span><span class="field-value">25 Mar 2026</span>
+          <span class="field-label">Freshness</span><span class="field-value"><span class="badge badge-positive">Fresh</span></span>
+          <span class="field-label">Used by</span><span class="field-value">Quoting process</span>
+          <span class="field-label">Accuracy</span><span class="field-value">98.2% match rate
+            <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,12 10,10 18,8 26,6 34,5 42,3"/></svg>
+          </span>
+        </div>
+
+        <div class="provenance">
+          <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Imported from Reece trade portal &middot; Auto-syncs weekly
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
+          <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px;">Recent usage</div>
+          <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border);">Acme bathroom reno quote — 8 min ago</div>
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border);">Smith kitchen tap quote — 22 min ago</div>
+            <div style="padding: 6px 0;">Henderson hot water quote — 5 days ago</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 20px;">
+          <button class="btn-primary">Refresh now</button>
+          <button class="btn-secondary">Edit source</button>
+          <button class="btn-secondary">View data</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</main>
+
+<script>
+  const stateBtns = document.querySelectorAll('.state-bar .state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => btn.addEventListener('click', () => {
+    stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+    stateViews.forEach(v => v.classList.remove('active'));
+    const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+    if (target) target.classList.add('active');
+  }));
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
 </body>
 </html>

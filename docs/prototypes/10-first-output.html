@@ -1,57 +1,122 @@
+<!-- v2 — Design system alignment: cardless flow, theme toggle, dot particles, centred layout, 2026-03-26 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — First Output (Libby's Instagram Posts)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P10 — First Output | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --caution: hsl(48 85% 50%);
-    --caution-subtle: hsl(48 60% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 16px;
-    -webkit-font-smoothing: antialiased;
-    height: 100vh;
-    overflow: hidden;
+    font-family: var(--font); background: var(--bg);
+    color: var(--text-primary); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+    overflow: hidden; font-size: 16px;
+    padding-top: 48px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle {
+    display: flex; align-items: center; gap: 4px;
+    margin-left: 12px; padding-left: 12px;
+    border-left: 1px solid var(--border);
+  }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active {
+    color: var(--text-primary); border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus {
+    --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB;
+  }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
   /* ═══════════════════════════════════════════
-     LAYOUT — The output is primary. Chat is secondary.
+     LAYOUT — output primary (left), chat secondary (right)
      Insight-080: artefact-primary surface.
   ═══════════════════════════════════════════ */
   .layout {
     display: grid;
     grid-template-columns: 1fr 340px;
-    height: 100vh;
+    height: calc(100vh - 48px);
   }
 
   /* ═══════════════════════════════════════════
-     LEFT: THE OUTPUT — what Ditto produced
+     LEFT: THE OUTPUT
   ═══════════════════════════════════════════ */
   .output-pane {
     overflow-y: auto;
@@ -59,18 +124,16 @@
     display: flex;
     flex-direction: column;
   }
-
   .output-pane::-webkit-scrollbar { width: 6px; }
   .output-pane::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
   /* Header — what this is and what it's based on */
   .output-header {
-    padding: 28px 36px 20px;
+    padding: 28px 0 20px;
     border-bottom: 1px solid var(--border);
-    background: var(--surface-raised);
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
   }
 
   .output-back {
@@ -100,17 +163,18 @@
     margin-bottom: 14px;
   }
 
-  /* Based-on strip — THE TRUST MECHANISM (Insight-083) */
+  /* Based-on strip — provenance (Insight-083) */
   .based-on {
+    border-left: 2px solid var(--vivid);
+    padding-left: 20px;
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    padding: 10px 14px;
-    background: var(--surface);
-    border-radius: 8px;
     font-size: 12px;
     color: var(--text-secondary);
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
 
   .based-on-label {
@@ -126,9 +190,8 @@
     align-items: center;
     gap: 4px;
     padding: 3px 10px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
     font-size: 12px;
     color: var(--text-primary);
     cursor: default;
@@ -143,11 +206,14 @@
 
   /* Content area */
   .output-content {
-    padding: 24px 36px 80px;
+    padding: 24px 0 80px;
     flex: 1;
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
   }
 
-  /* Progress strip at the top */
+  /* Progress strip */
   .output-progress {
     display: flex;
     align-items: center;
@@ -156,7 +222,6 @@
     font-size: 13px;
     color: var(--text-muted);
   }
-
   .output-progress strong { color: var(--accent); font-weight: 600; }
 
   .output-progress-dots {
@@ -171,35 +236,30 @@
     background: var(--border);
     transition: all 0.2s;
   }
-
   .progress-dot.done { background: var(--positive); }
-  .progress-dot.active { background: var(--accent); box-shadow: 0 0 0 3px hsl(24 80% 38% / 0.15); }
+  .progress-dot.active { background: var(--vivid); box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15); }
   .progress-dot.upcoming { background: var(--border-strong); }
 
-  /* ═══ POST CARD — each Instagram post ═══ */
+  /* ═══ POST CARD — hero moments keep subtle surface ═══ */
   .post-card {
     background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-xl);
     margin-bottom: 20px;
     overflow: hidden;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: box-shadow 0.15s;
   }
-
   .post-card:hover {
-    box-shadow: 0 2px 12px hsl(30 10% 15% / 0.05);
+    box-shadow: var(--shadow-subtle);
   }
-
   .post-card.editing {
-    border-color: var(--accent);
-    box-shadow: 0 2px 16px hsl(24 80% 38% / 0.08);
+    box-shadow: var(--shadow-medium);
   }
 
   .post-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 18px;
+    padding: 14px 20px;
     border-bottom: 1px solid var(--border);
   }
 
@@ -210,36 +270,34 @@
   }
 
   .post-card-status {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
     font-size: 12px;
     font-weight: 500;
     padding: 3px 10px;
-    border-radius: 6px;
+    border-radius: 99px;
   }
 
   .status-ready {
     background: var(--positive-subtle);
     color: var(--positive);
   }
-
   .status-edited {
     background: var(--accent-subtle);
     color: var(--accent);
   }
-
   .status-approved {
     background: var(--positive-subtle);
     color: var(--positive);
   }
 
   .post-card-body {
-    padding: 18px;
+    padding: 20px;
   }
 
   .post-content {
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.7;
     color: var(--text-primary);
     white-space: pre-wrap;
@@ -249,21 +307,20 @@
   .post-content[contenteditable="true"] {
     outline: none;
     cursor: text;
-    background: hsl(40 20% 99%);
-    border-radius: 6px;
+    background: var(--surface);
+    border-radius: var(--radius-md);
     padding: 8px;
     margin: -8px;
   }
-
   .post-content[contenteditable="true"]:focus {
-    background: hsl(24 60% 98%);
+    background: var(--accent-subtle);
   }
 
   /* Post topic tag */
   .post-topic {
     display: inline-block;
     padding: 3px 10px;
-    border-radius: 6px;
+    border-radius: 99px;
     font-size: 12px;
     font-weight: 500;
     background: var(--surface);
@@ -276,76 +333,59 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 12px 18px;
+    padding: 12px 20px;
     border-top: 1px solid var(--border);
-    background: hsl(40 15% 97%);
   }
-
   .post-card-actions .spacer { flex: 1; }
 
-  /* Self aside — Ditto's thinking about this specific post */
+  /* Ditto aside — synthesis on a specific post */
   .post-aside {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 10px 14px;
-    margin: 12px 0 0;
-    background: hsl(24 50% 97%);
-    border-radius: 8px;
+    border-left: 2px solid var(--vivid);
+    padding-left: 20px;
+    margin: 14px 0 0;
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.5;
   }
 
-  .post-aside-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-    margin-top: 6px;
-  }
-
-  /* Buttons */
+  /* Buttons — pill-shaped, vivid primary */
   .btn {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font);
     font-size: 13px;
     font-weight: 500;
     border: none;
-    border-radius: 7px;
-    padding: 7px 14px;
+    border-radius: 99px;
+    padding: 7px 16px;
     cursor: pointer;
     transition: all 0.12s;
     line-height: 1.3;
   }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary { background: var(--vivid); color: white; }
+  .btn-primary:hover { background: var(--vivid-deep); }
   .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
   .btn-secondary:hover { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); padding: 7px 10px; }
+  .btn-ghost { background: transparent; color: var(--text-secondary); padding: 7px 12px; }
   .btn-ghost:hover { color: var(--text-primary); background: var(--surface); }
-  .btn-sm { font-size: 12px; padding: 5px 10px; }
+  .btn-sm { font-size: 12px; padding: 5px 12px; }
 
-  /* Bulk actions bar — sticky bottom of output pane */
+  /* Bulk actions bar — sticky bottom */
   .bulk-actions {
     position: sticky;
     bottom: 0;
     padding: 16px 36px;
-    background: var(--surface-raised);
+    background: var(--bg);
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 12px;
-    box-shadow: 0 -4px 16px hsl(40 20% 98% / 0.8);
   }
-
   .bulk-status {
     flex: 1;
     font-size: 14px;
     color: var(--text-secondary);
   }
-
   .bulk-status strong { color: var(--text-primary); font-weight: 600; }
 
   /* ═══════════════════════════════════════════
@@ -371,7 +411,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--vivid);
     flex-shrink: 0;
   }
 
@@ -390,43 +430,31 @@
     gap: 14px;
     font-size: 14px;
   }
-
   .self-messages::-webkit-scrollbar { width: 4px; }
   .self-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
-  .panel-msg {
+  /* Messages — P08a pattern: .msg.ditto (no bg), .msg.user (surface bg) */
+  .msg {
     line-height: 1.55;
     color: var(--text-primary);
   }
-
-  .panel-msg.from-self {
-    padding-left: 12px;
+  .msg.ditto {
+    padding-left: 0;
   }
-
-  .panel-msg.from-user {
-    background: var(--accent-subtle);
-    padding: 8px 12px;
-    border-radius: 14px;
+  .msg.user {
+    background: var(--surface);
+    padding: 10px 14px;
+    border-radius: var(--radius-lg);
     align-self: flex-end;
     max-width: 85%;
   }
 
-  .panel-msg .sender-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
-  }
-
-  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
-  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
-
-  /* Teach-this prompt in panel */
+  /* Teach-this prompt */
   .teach-prompt {
-    background: var(--accent-subtle);
-    border: 1px solid hsl(24 60% 88%);
-    border-radius: 10px;
-    padding: 12px 14px;
+    border-left: 2px solid var(--vivid);
+    padding-left: 20px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-primary);
@@ -435,7 +463,7 @@
   .teach-prompt-label {
     font-size: 11px;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--vivid);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 6px;
@@ -447,52 +475,43 @@
     margin-top: 10px;
   }
 
-  /* Panel input */
-  .self-panel-input {
+  /* Panel input with dot particles */
+  .input-bar {
     padding: 12px 16px 16px;
     border-top: 1px solid var(--border);
   }
 
-  .panel-input-container {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px;
+  .input-container {
     display: flex;
     align-items: center;
-    gap: 8px;
-    transition: border-color 0.2s;
+    gap: 10px;
   }
 
-  .panel-input-container:focus-within { border-color: var(--accent); }
+  .input-dot {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    position: relative;
+  }
 
-  .panel-input-container input {
+  .dots-field {
+    display: block;
+    width: 28px;
+    height: 28px;
+  }
+
+  .input-field {
     flex: 1;
     border: none;
     outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font);
     font-size: 14px;
     color: var(--text-primary);
     background: transparent;
+    resize: none;
+    line-height: 1.5;
   }
-
-  .panel-input-container input::placeholder { color: var(--text-muted); }
-
-  .panel-send {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
+  .input-field::placeholder { color: var(--text-muted); }
 
   /* ═══ Responsive ═══ */
   @media (max-width: 960px) {
@@ -510,17 +529,30 @@
     .post-card-actions { flex-wrap: wrap; }
     .based-on { flex-direction: column; align-items: flex-start; gap: 6px; }
   }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
 
-<div class="layout">
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1 &middot; <span>First Output</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="09-first-conversation.html" class="proto-arrow" aria-label="Previous: First Conversation">←</a>
+    <a href="11-workspace-emerges.html" class="proto-arrow" aria-label="Next: Workspace Emerges">→</a>
+  </div>
+</nav>
+
+<main class="layout">
 
   <!-- ═══════════════════════════════════════
        LEFT: THE OUTPUT
   ═══════════════════════════════════════ -->
-  <main class="output-pane">
+  <section class="output-pane">
 
     <div class="output-header">
       <a href="#" class="output-back">
@@ -593,8 +625,7 @@ Here's what actually matters: something comfortable to wear home, snacks you'll 
 Everything else is nice to have. Don't let the packing list stress you out more than the birth.</div>
 
           <div class="post-aside">
-            <span class="post-aside-dot"></span>
-            <span>You changed "baby" to "bub" — noted. Want me to use "bub" in all your content?</span>
+            You changed "baby" to "bub" — noted. Want me to use "bub" in all your content?
           </div>
         </div>
         <div class="post-card-actions">
@@ -682,7 +713,7 @@ That's what good preparation gives you. Not a script. Just confidence that you c
       <button class="btn btn-primary">Done — use these</button>
     </div>
 
-  </main>
+  </section>
 
   <!-- ═══════════════════════════════════════
        RIGHT: DITTO
@@ -695,31 +726,19 @@ That's what good preparation gives you. Not a script. Just confidence that you c
 
     <div class="self-messages">
 
-      <div class="panel-msg from-self">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
+      <div class="msg ditto">
         Here are 5 posts. Each one targets a different concern your ideal client has — fear of birth, practical preparation, asking for help, partner involvement, and self-trust.
       </div>
 
-      <div class="panel-msg from-self">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
+      <div class="msg ditto">
         Go through them one at a time. Approve, edit, or regenerate — whatever feels right. Your edits teach me your voice better than anything else.
       </div>
 
-      <div class="panel-msg from-user">
+      <div class="msg user">
         Post 1 is great. Post 2 — I'd say "bub" not "baby"
       </div>
 
-      <div class="panel-msg from-self">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
+      <div class="msg ditto">
         Fixed. "Bub" — that's a strong voice signal.
       </div>
 
@@ -733,42 +752,108 @@ That's what good preparation gives you. Not a script. Just confidence that you c
         </div>
       </div>
 
-      <div class="panel-msg from-self">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
+      <div class="msg ditto">
         Post 3 is ready for you. This one's about asking for help — it's the topic your survey respondents felt strongest about.
       </div>
 
     </div>
 
-    <div class="self-panel-input">
-      <div class="panel-input-container">
-        <input type="text" placeholder="Tell me what to change...">
-        <button class="panel-send">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Reply"></textarea>
       </div>
     </div>
   </aside>
 
-</div>
+</main>
 
 <script>
+  // Ditto dots
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textareas
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+
   // Make contenteditable posts feel like editing
   document.querySelectorAll('.post-content[contenteditable]').forEach(el => {
     el.addEventListener('focus', () => {
       el.closest('.post-card').classList.add('editing');
     });
-    el.addEventListener('blur', () => {
-      // Keep editing class if content changed
-    });
   });
 </script>
 
-<div class="proto-nav"><a href="09-first-conversation.html">&larr; First Conversation</a><span class="pn-t"><a href="index.html">P10 First Output</a></span><a href="11-workspace-emerges.html">Workspace Emerges &rarr;</a></div><!-- pnav -->
 </body>
 </html>

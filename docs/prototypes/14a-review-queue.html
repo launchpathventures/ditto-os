@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P14a — Review Queue | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh; font-size: 16px; }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .skip-link { position: absolute; top: -100px; left: 16px; background: var(--accent); color: var(--accent-text); padding: 8px 16px; border-radius: var(--radius-md); z-index: 200; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 8px; }
+
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.12s; }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; padding: 0 16px; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { padding: 116px 24px 120px; max-width: 720px; margin: 0 auto; }
+
+  .page-title { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .page-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 32px; }
+
+  /* Process group */
+  .process-group { margin-bottom: 32px; }
+  .group-label { font-size: 11px; font-weight: 700; color: var(--vivid-deep); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record:first-child { border-top:none; }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-status.info { background:var(--info-subtle); color:var(--info); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-checks { margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; }
+  .record-check { font-size:12px; }
+  .record-check.pass { color:var(--positive); }
+  .record-check.fail { color:var(--caution); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+
+  .item-detail { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.5; }
+
+  .item-note { border-left: 2px solid var(--vivid); padding-left: 12px; font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; font-style: italic; }
+
+  .price-compare { display: flex; gap: 16px; align-items: center; font-size: 14px; margin-bottom: 10px; }
+  .price-yours { color: var(--text-primary); font-weight: 500; }
+  .price-arrow { color: var(--text-muted); }
+  .price-competitor { color: var(--negative); font-weight: 500; }
+  .price-competitor.higher { color: var(--positive); }
+  .price-source { font-size: 12px; color: var(--text-muted); }
+  .btn { font-family: var(--font); font-size: 13px; font-weight: 500; padding: 6px 16px; border-radius: 9999px; cursor: pointer; transition: all 0.15s; border: none; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--vivid); color: #fff; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { background: var(--accent); color: var(--accent-text); }
+  .btn-secondary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* Batch actions */
+  .batch-actions { padding: 16px 0; margin-top: 8px; border-top: 1px solid var(--border-strong); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  /* Input bar */
+  .input-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 24px 24px; background: var(--bg); border-top: 1px solid var(--border); }
+  .input-container { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 8px 16px; transition: all 0.15s; }
+  .input-container:focus-within { border-color: var(--vivid); background: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field { flex: 1; border: none; background: transparent; font-family: var(--font); font-size: 16px; color: var(--text-primary); resize: none; outline: none; line-height: 1.5; }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  .state-view { display: none; }
+  .state-view.active { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Review Queue — What needs your attention</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 2: Building Confidence · <span>Review Queue</span></div>
+  <div class="proto-nav-right">
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="14-process-detail.html" class="proto-arrow" aria-label="Previous: Process Detail">←</a>
+    <a href="15-knowledge-base.html" class="proto-arrow" aria-label="Next: Knowledge Base">→</a>
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="full" tabindex="0">Full queue</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="urgent" tabindex="-1">Urgent only</button>
+</div>
+
+<main class="page" id="main-content">
+
+  <!-- ═══ State 1: Full Queue ═══ -->
+  <div class="state-view active" data-view="full" role="tabpanel">
+    <div class="page-title">What needs you</div>
+    <div class="page-subtitle">8 items across 3 routines · 2 urgent</div>
+
+    <!-- Product Descriptions -->
+    <section class="process-group" aria-label="Product description reviews">
+      <div class="group-label">Product descriptions · 3 items</div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Summer collection hero — beach towel set</span>
+          <span class="record-subtitle">Confidence 91%</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Tone</span> <span class="record-check pass">✓ Brand</span> <span class="record-check pass">✓ Differentiators</span></div>
+        <div class="record-provenance">Based on: your brand voice, product specs, competitor positioning</div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Approve</button>
+          <button class="btn btn-ghost">Edit</button>
+          <button class="btn btn-ghost">Regenerate</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Eco range — bamboo cutlery set</span>
+          <span class="record-subtitle">Confidence 87%</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Tone</span> <span class="record-check fail">⚠ Brand — 1 flag</span></div>
+        <div class="record-fields">
+          <div class="record-field">
+            <span class="record-field-label">Brand check</span>
+            <span class="record-field-value">Description mentions "sustainable" without certification reference. <span class="record-field-flag warning">Your brand rules require linking to certification when making eco claims.</span></span>
+          </div>
+        </div>
+        <div class="record-provenance">Based on: your brand voice, product specs, eco-range guidelines</div>
+        <div class="record-actions">
+          <button class="btn btn-secondary">Review</button>
+          <button class="btn btn-ghost">Skip</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Kids range — activity mat</span>
+          <span class="record-subtitle">Confidence 93% · Routine</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Tone</span> <span class="record-check pass">✓ Brand</span> <span class="record-check pass">✓ Safety disclaimers</span></div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Approve</button>
+          <button class="btn btn-ghost">Spot-check</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Alerts -->
+    <section class="process-group" aria-label="Pricing alert reviews">
+      <div class="group-label">Pricing alerts · 2 items</div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Widget X — competitor dropped 20%</span>
+          <span class="record-status caution">Urgent</span>
+        </div>
+        <div class="item-detail">Detected 2 hours ago. This product is in your top 10 sellers.</div>
+        <div class="price-compare">
+          <span class="price-yours">Your price: $29.99</span>
+          <span class="price-arrow">→</span>
+          <span class="price-competitor">Competitor: $23.99</span>
+          <span class="price-source">(CompetitorCo)</span>
+        </div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Adjust price</button>
+          <button class="btn btn-secondary">Keep price</button>
+          <button class="btn btn-ghost">Investigate</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Candle set — competitor raised 8%</span>
+          <span class="record-subtitle">Informational</span>
+        </div>
+        <div class="price-compare">
+          <span class="price-yours">Your price: $34.99</span>
+          <span class="price-arrow">→</span>
+          <span class="price-competitor higher">Competitor: $37.99</span>
+          <span class="price-source">(RivalShop)</span>
+        </div>
+        <div class="record-actions">
+          <button class="btn btn-ghost">Note</button>
+          <button class="btn btn-ghost">Adjust</button>
+          <button class="btn btn-ghost">Dismiss</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Customer Service -->
+    <section class="process-group" aria-label="Customer service reviews">
+      <div class="group-label">Customer service · 3 items</div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Refund request — wrong size shipped</span>
+          <span class="record-status caution">Urgent</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Policy</span> <span class="record-check pass">✓ Tone</span> <span class="record-check fail">⚠ Compensation</span></div>
+        <div class="item-note">This is the 3rd wrong-size issue this month. Pattern flagged — may indicate a warehouse process issue, not a one-off.</div>
+        <div class="item-detail">Confidence 76% · Response drafted with apology + full refund + 10% discount</div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Send response</button>
+          <button class="btn btn-secondary">Edit</button>
+          <button class="btn btn-ghost">Escalate</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Product question — is the wool organic?</span>
+          <span class="record-subtitle">Confidence 95% · Routine</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Accuracy</span> <span class="record-check pass">✓ Tone</span></div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Send</button>
+          <button class="btn btn-ghost">Edit</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Complaint — delivery delay</span>
+          <span class="record-subtitle">Confidence 82%</span>
+        </div>
+        <div class="record-checks"><span class="record-check pass">✓ Policy</span> <span class="record-check pass">✓ Tone</span></div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Send response</button>
+          <button class="btn btn-ghost">Edit</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="batch-actions">
+      <button class="btn btn-ghost">Approve all routine (3 items)</button>
+      <button class="btn btn-ghost">Skip to urgent only</button>
+    </div>
+  </div>
+
+  <!-- ═══ State 2: Urgent Only ═══ -->
+  <div class="state-view" data-view="urgent" role="tabpanel">
+    <div class="page-title">What needs you</div>
+    <div class="page-subtitle">2 urgent items</div>
+
+    <section class="process-group" aria-label="Urgent pricing alerts">
+      <div class="group-label">Pricing alerts</div>
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Widget X — competitor dropped 20%</span>
+          <span class="record-status caution">Urgent</span>
+        </div>
+        <div class="item-detail">Detected 2 hours ago. This product is in your top 10 sellers.</div>
+        <div class="price-compare">
+          <span class="price-yours">Your price: $29.99</span>
+          <span class="price-arrow">→</span>
+          <span class="price-competitor">Competitor: $23.99</span>
+          <span class="price-source">(CompetitorCo)</span>
+        </div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Adjust price</button>
+          <button class="btn btn-secondary">Keep price</button>
+          <button class="btn btn-ghost">Investigate</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="process-group" aria-label="Urgent customer service">
+      <div class="group-label">Customer service</div>
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-title">Refund request — wrong size shipped</span>
+          <span class="record-status caution">Urgent</span>
+        </div>
+        <div class="item-note">This is the 3rd wrong-size issue this month. Pattern flagged.</div>
+        <div class="item-detail">Confidence 76% · Response drafted with apology + full refund + 10% discount</div>
+        <div class="record-actions">
+          <button class="btn btn-primary">Send response</button>
+          <button class="btn btn-secondary">Edit</button>
+          <button class="btn btn-ghost">Escalate</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="batch-actions">
+      <button class="btn btn-ghost">Show full queue (8 items)</button>
+    </div>
+  </div>
+
+</main>
+
+<div class="input-bar">
+  <div class="input-container">
+    <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+    <textarea class="input-field" rows="1" placeholder="Tell Ditto something..." aria-label="Reply"></textarea>
+  </div>
+</div>
+
+<script>
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3, dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16), speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2, breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)], opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) { ctx.clearRect(0,0,size,size); for (const d of dots) { const x=cx+Math.cos(d.angle)*d.dist*0.6; const y=cy+Math.sin(d.angle)*d.dist*0.6; ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2); ctx.fillStyle=d.color; ctx.globalAlpha=d.opacity; ctx.fill(); } ctx.globalAlpha=1; return; }
+    let raf;
+    function draw() { const t=Date.now()/1000; ctx.clearRect(0,0,size,size); for (const d of dots) { const a=d.angle+t*d.speed; const breathe=Math.sin(t*1.2+d.phase)*d.breathAmp; const r=Math.max(1,d.dist+breathe); const x=cx+Math.cos(a)*r; const y=cy+Math.sin(a)*r; const pulse=0.6+Math.sin(t*2.5+d.phase)*0.4; ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2); ctx.fillStyle=d.color; ctx.globalAlpha=d.opacity*pulse; ctx.fill(); } ctx.globalAlpha=1; raf=requestAnimationFrame(draw); }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf=null; } });
+    observer.observe(canvas); draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      stateViews.forEach(v => v.classList.remove('active'));
+      const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+      if (target) target.classList.add('active');
+    });
+  });
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>

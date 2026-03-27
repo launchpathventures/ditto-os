@@ -1,7 +1,7 @@
 /**
  * Ditto — Content Block Types (ADR-021 Surface Protocol)
  *
- * The 13 typed content block types that flow from the Self to surfaces.
+ * The 21 typed content block types that flow from the Self to surfaces.
  * This is the single source of truth for the block vocabulary.
  *
  * Lives in the engine so the web package imports from engine (one-way
@@ -92,6 +92,13 @@ export interface ProgressBlock {
   status: "running" | "paused" | "complete";
 }
 
+/** FieldAnnotation — per-field metadata for data display (provenance, flags, format hints) */
+export interface FieldAnnotation {
+  provenance?: string;
+  flag?: { level: "info" | "warning" | "error"; message: string };
+  format?: "currency" | "percentage" | "date" | "confidence" | "badge";
+}
+
 /** DataBlock — Structured data display */
 export interface DataBlock {
   type: "data";
@@ -99,6 +106,8 @@ export interface DataBlock {
   title?: string;
   data: Record<string, unknown>[] | Record<string, string>;
   headers?: string[];
+  /** Per-field annotations keyed by field name or column key */
+  annotations?: Record<string, FieldAnnotation>;
 }
 
 /** ImageBlock — Visual content */
@@ -165,6 +174,116 @@ export interface GatheringIndicatorBlock {
   message?: string;
 }
 
+/** ChecklistBlock — Items with done/pending/warning status
+ *  Provenance: Hark (document upload checklist), GitHub issue task lists, Linear sub-issues.
+ */
+export interface ChecklistBlock {
+  type: "checklist";
+  title?: string;
+  items: Array<{ label: string; status: "done" | "pending" | "warning"; detail?: string }>;
+}
+
+/** ChartBlock — Visual data: sparklines, donut charts, bar charts
+ *  Provenance: Hark (donut charts), Performance Sparkline primitive (#4 in architecture.md),
+ *  GitHub contribution graphs.
+ */
+export interface ChartBlock {
+  type: "chart";
+  chartType: "sparkline" | "donut" | "bar";
+  title?: string;
+  /** Sizing hint: inline (default, compact), small, medium, large (full-width) */
+  size?: "inline" | "small" | "medium" | "large";
+  data: {
+    /** sparkline/bar: ordered numeric values */
+    values?: number[];
+    /** sparkline: overall trend direction */
+    trend?: "up" | "down" | "flat";
+    /** sparkline: axis label */
+    label?: string;
+    /** donut/bar: labeled segments with values */
+    segments?: Array<{ label: string; value: number; color?: string }>;
+  };
+}
+
+/** MetricBlock — Large numbers with labels and optional trends
+ *  Provenance: Hark (application outcome metrics), Grafana stat panels, Datadog service metrics.
+ */
+export interface MetricBlock {
+  type: "metric";
+  metrics: Array<{
+    value: string;
+    label: string;
+    trend?: "up" | "down" | "flat";
+    sparkline?: number[];
+  }>;
+}
+
+/** AnnotatedField — a field in a record with optional provenance and flags */
+export interface AnnotatedField {
+  label: string;
+  value: string;
+  provenance?: string;
+  flag?: { level: "info" | "warning" | "error"; message: string };
+}
+
+/** PreCheck — automated validation result */
+export interface PreCheck {
+  label: string;
+  passed: boolean;
+  detail?: string;
+}
+
+/** RecordBlock — General structured record (review items, inbox items, tasks, roles, knowledge entries)
+ *  Provenance: Hark (field-level validation), P33 (review primitives), P24 (inbox), P25 (tasks).
+ *  Renders as typographic flow (no cards): title → subtitle → status → fields → checks → provenance → actions.
+ *  Separated by border-top between records, optional border-left accent for process/department color.
+ */
+export interface RecordBlock {
+  type: "record";
+  title: string;
+  subtitle?: string;
+  status?: {
+    label: string;
+    variant: "positive" | "caution" | "negative" | "neutral" | "info";
+  };
+  confidence?: "high" | "medium" | "low" | null;
+  fields?: AnnotatedField[];
+  detail?: string;
+  checks?: PreCheck[];
+  provenance?: string[];
+  actions?: ActionDef[];
+  accent?: string;
+}
+
+/** TableColumn — column definition with optional format hint */
+export interface TableColumn {
+  key: string;
+  label: string;
+  format?: "text" | "currency" | "percentage" | "badge" | "confidence" | "checks";
+}
+
+/** TableRow — one row in an interactive table */
+export interface TableRow {
+  id: string;
+  cells: Record<string, string | number>;
+  status?: "flagged" | "approved" | "pending" | "error";
+  actions?: ActionDef[];
+}
+
+/** InteractiveTableBlock — Table with per-row actions, selection, and batch operations.
+ *  Provenance: P33 (batch review), P25 (task table), P15 (knowledge table), P26 (agent table).
+ *  Distinct from DataBlock: per-row actions, row status, column format hints, batch operations.
+ */
+export interface InteractiveTableBlock {
+  type: "interactive_table";
+  title: string;
+  summary?: string;
+  columns: TableColumn[];
+  rows: TableRow[];
+  selectable?: boolean;
+  batchActions?: ActionDef[];
+}
+
 // ============================================================
 // Discriminated union
 // ============================================================
@@ -185,7 +304,12 @@ export type ContentBlock =
   | AlertBlock
   | KnowledgeSynthesisBlock
   | ProcessProposalBlock
-  | GatheringIndicatorBlock;
+  | GatheringIndicatorBlock
+  | ChecklistBlock
+  | ChartBlock
+  | MetricBlock
+  | RecordBlock
+  | InteractiveTableBlock;
 
 /** All possible content block type strings */
 export type ContentBlockType = ContentBlock["type"];
@@ -326,6 +450,84 @@ export function renderBlockToText(block: ContentBlock): string {
 
     case "gathering_indicator":
       return block.message ?? "Getting to know your business...";
+
+    case "checklist": {
+      const header = block.title ? `${block.title}\n` : "";
+      const rows = block.items.map((item) => {
+        const icon = item.status === "done" ? "✓" : item.status === "warning" ? "!" : "○";
+        const detail = item.detail ? ` — ${item.detail}` : "";
+        return `  ${icon} ${item.label}${detail}`;
+      });
+      return `${header}${rows.join("\n")}`;
+    }
+
+    case "chart": {
+      if (block.chartType === "sparkline") {
+        const vals = block.data.values ?? [];
+        const trend = block.data.trend ? ` (${block.data.trend})` : "";
+        const label = block.data.label ?? block.title ?? "Trend";
+        return `${label}: ${vals.join(", ")}${trend}`;
+      }
+      // donut or bar
+      const segments = block.data.segments ?? [];
+      const title = block.title ?? block.chartType;
+      return [
+        title,
+        ...segments.map((s) => `  ${s.label}: ${s.value}`),
+      ].join("\n");
+    }
+
+    case "metric":
+      return block.metrics
+        .map((m) => {
+          const trend = m.trend ? ` (${m.trend})` : "";
+          return `${m.label}: ${m.value}${trend}`;
+        })
+        .join(" | ");
+
+    case "record": {
+      const parts: string[] = [];
+      parts.push(block.title);
+      if (block.subtitle) parts.push(block.subtitle);
+      if (block.status) parts.push(`[${block.status.label}]`);
+      if (block.confidence) parts.push(`Confidence: ${block.confidence}`);
+      if (block.detail) parts.push(block.detail);
+      if (block.fields) {
+        for (const f of block.fields) {
+          let line = `  ${f.label}: ${f.value}`;
+          if (f.provenance) line += ` (← ${f.provenance})`;
+          if (f.flag) line += ` [${f.flag.level}: ${f.flag.message}]`;
+          parts.push(line);
+        }
+      }
+      if (block.checks) {
+        for (const c of block.checks) {
+          const icon = c.passed ? "✓" : "⚠";
+          parts.push(`  ${icon} ${c.label}${c.detail ? ` — ${c.detail}` : ""}`);
+        }
+      }
+      if (block.provenance) parts.push(`Sources: ${block.provenance.join(", ")}`);
+      if (block.actions) parts.push(block.actions.map((a) => `[${a.label}]`).join(" "));
+      return parts.filter(Boolean).join("\n");
+    }
+
+    case "interactive_table": {
+      const parts: string[] = [];
+      parts.push(block.title);
+      if (block.summary) parts.push(`(${block.summary})`);
+      const cols = block.columns.map((c) => c.label).join(" | ");
+      parts.push(cols);
+      for (const row of block.rows) {
+        const cells = block.columns.map((c) => String(row.cells[c.key] ?? "")).join(" | ");
+        const status = row.status ? ` [${row.status}]` : "";
+        const actions = row.actions ? ` ${row.actions.map((a) => `[${a.label}]`).join(" ")}` : "";
+        parts.push(`${cells}${status}${actions}`);
+      }
+      if (block.batchActions) {
+        parts.push(block.batchActions.map((a) => `[${a.label}]`).join(" "));
+      }
+      return parts.filter(Boolean).join("\n");
+    }
 
     default: {
       // Exhaustiveness check

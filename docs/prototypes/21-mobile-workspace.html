@@ -1,0 +1,981 @@
+<!-- Build-Ready v3, 2026-03-27 — Mobile Workspace: conversation-forward phone experience -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P21 — Mobile Workspace | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .skip-link { position: absolute; top: -100%; left: 16px; background: var(--accent); color: white; padding: 8px 16px; border-radius: var(--radius-md); z-index: 1000; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Checklists --- */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+  .checklist-detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .metric { min-width: 70px; }
+  .metric-value { font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .metric-trend { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; margin-left: 4px; }
+  .metric-trend.up { color: var(--positive); }
+  .metric-trend.down { color: var(--negative); }
+  .metric-trend.flat { color: var(--text-muted); }
+
+  /* --- Sparklines --- */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+  .sparkline.trend-down polyline { stroke: var(--negative); }
+  .sparkline.trend-flat polyline { stroke: var(--text-muted); }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-heading {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; letter-spacing: -0.01em;
+  }
+
+  /* --- Block Records (P30 vocabulary) --- */
+  .block-record { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .block-record:last-child { border-bottom: none; }
+  .record-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; font-size: 13px;
+  }
+  .record-process { color: var(--text-muted); font-weight: 500; }
+  .record-time { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+  .record-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .record-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: #fff;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* --- Accent Borders --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-caution { border-left: 2px solid var(--caution); padding-left: 12px; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 10px 14px; font-size: 14px;
+  }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
+
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
+  }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+  .provenance a { color: var(--vivid-deep); text-decoration: none; }
+  .provenance a:hover { text-decoration: underline; }
+
+  /* --- Review Item --- */
+  .review-item { padding: 12px 0; }
+  .review-item + .review-item { border-top: 1px solid var(--border); }
+  .review-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .confidence-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .confidence-high { background: var(--positive); }
+  .confidence-medium { background: var(--caution); }
+  .confidence-low { background: var(--negative); }
+
+  /* ===== Phone Frame ===== */
+  .phone-frame {
+    width: 390px; margin: 116px auto 60px;
+    background: var(--surface-raised);
+    border-radius: 40px; border: 6px solid #1a1a1a;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.18), inset 0 0 0 2px #333;
+    overflow: hidden; position: relative; min-height: 780px;
+  }
+  .phone-notch {
+    width: 120px; height: 28px; background: #1a1a1a;
+    border-radius: 0 0 16px 16px; margin: 0 auto;
+    position: relative; z-index: 5;
+  }
+
+  /* Mobile status bar */
+  .mobile-status {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 20px 0; font-size: 12px; font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* Mobile header */
+  .mobile-header {
+    padding: 12px 20px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .mobile-greeting { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .mobile-date { font-size: 12px; color: var(--text-muted); }
+  .mobile-dots { width: 28px; height: 28px; position: relative; overflow: hidden; }
+
+  /* Mobile content area */
+  .mobile-content { padding: 0 20px 90px; overflow-y: auto; max-height: 600px; }
+
+  /* ===== Bottom Nav Bar (5 items, conversation-forward) ===== */
+  .tab-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 72px;
+    background: var(--surface-raised); border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 4px 8px;
+  }
+  .tab-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-size: 10px; font-weight: 500; color: var(--text-muted);
+    cursor: pointer; padding: 6px 10px; border-radius: var(--radius-md);
+    transition: color 0.15s; background: none; border: none; font-family: var(--font);
+    position: relative;
+  }
+  .tab-item:hover { color: var(--text-primary); }
+  .tab-item.active { color: var(--vivid); }
+  .tab-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tab-icon { width: 22px; height: 22px; }
+  .tab-badge {
+    position: absolute; top: 2px; right: 2px;
+    background: var(--negative); color: #fff;
+    font-size: 10px; font-weight: 700; border-radius: 99px;
+    padding: 0 5px; min-width: 16px; text-align: center; line-height: 16px;
+  }
+
+  /* Conversation tab — primary / larger */
+  .tab-item-primary .tab-icon { width: 26px; height: 26px; }
+  .tab-item-primary { font-weight: 600; }
+
+  /* State views */
+  .state-view { display: none; }
+  .state-view.active { display: flex; flex-direction: column; height: 100%; }
+
+  /* ===== Chat-specific styles ===== */
+  .chat-thread {
+    flex: 1; overflow-y: auto; padding: 12px 20px 90px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .chat-msg {
+    max-width: 92%; font-size: 14px; line-height: 1.5;
+  }
+  .chat-msg-user {
+    align-self: flex-end;
+    background: var(--accent); color: var(--accent-text);
+    padding: 10px 14px; border-radius: 18px 18px 4px 18px;
+  }
+  .chat-msg-ditto {
+    align-self: flex-start;
+  }
+  .chat-msg-ditto-header {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 6px; font-size: 12px; color: var(--text-muted); font-weight: 500;
+  }
+  .chat-ditto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vivid); flex-shrink: 0; }
+  .chat-msg-ditto-body {
+    background: var(--surface); padding: 14px 16px;
+    border-radius: 4px 18px 18px 18px;
+  }
+  .chat-msg-ditto-body > * + * { margin-top: 10px; }
+  .chat-msg-ditto-body .field-table { font-size: 13px; gap: 3px 12px; }
+  .chat-msg-ditto-body .badge { font-size: 10px; padding: 2px 7px; }
+  .chat-msg-ditto-body .provenance { font-size: 11px; padding: 4px 0; }
+  .chat-msg-ditto-body .suggestion { padding: 8px 12px; font-size: 13px; }
+  .chat-msg-ditto-body .action-row { margin-top: 8px; }
+  .chat-msg-ditto-body .btn-primary { font-size: 12px; padding: 5px 14px; }
+  .chat-msg-ditto-body .btn-secondary { font-size: 12px; padding: 5px 14px; }
+  .chat-msg-text { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+  .chat-input-bar {
+    position: absolute; bottom: 72px; left: 0; right: 0;
+    padding: 8px 16px; background: var(--surface-raised);
+    border-top: 1px solid var(--border);
+  }
+  .chat-input-container {
+    display: flex; align-items: flex-end; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 22px; padding: 8px 14px;
+    transition: border-color 0.15s;
+  }
+  .chat-input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .chat-input {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 15px; color: var(--text-primary);
+    outline: none; line-height: 1.4; resize: none; min-height: 22px; max-height: 80px;
+  }
+  .chat-input::placeholder { color: var(--text-muted); }
+  .chat-send {
+    width: 32px; height: 32px; border-radius: 50%; border: none;
+    background: var(--vivid); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+  }
+  .chat-send:hover { background: var(--vivid-deep); }
+
+  /* ===== Work-specific ===== */
+  .work-item {
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .work-item:last-child { border-bottom: none; }
+  .work-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .work-name { font-size: 15px; font-weight: 500; }
+  .work-detail { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Mobile Workspace — Rob's conversation-forward phone experience</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Cross-cutting · <span>Mobile Workspace</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="20-something-wrong.html" class="proto-arrow" aria-label="Previous: Something Wrong">&larr;</a>
+    <a href="22-knowledge-in-output.html" class="proto-arrow" aria-label="Next: Knowledge in Output">&rarr;</a>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="conversation" tabindex="0">Conversation</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="today" tabindex="-1">Today</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="inbox" tabindex="-1">Inbox</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="work" tabindex="-1">Work</button>
+</div>
+
+<main id="main-content">
+<div class="phone-frame">
+  <div class="phone-notch"></div>
+
+  <!-- ═══ State 1: Conversation (PRIMARY — default view) ═══ -->
+  <div class="state-view active" data-view="conversation" role="tabpanel">
+    <div class="mobile-header" style="padding-bottom: 6px; border-bottom: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="mobile-dots" style="width: 24px; height: 24px;"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <div>
+          <div style="font-size: 16px; font-weight: 600;">Ditto</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Always here</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-thread">
+      <!-- User message -->
+      <div class="chat-msg chat-msg-user">How's the Henderson quote looking?</div>
+
+      <!-- Ditto response with structured blocks -->
+      <div class="chat-msg chat-msg-ditto">
+        <div class="chat-msg-ditto-header">
+          <span class="chat-ditto-dot"></span> Ditto
+        </div>
+        <div class="chat-msg-ditto-body">
+          <div class="chat-msg-text">Here's where Henderson stands:</div>
+
+          <div class="field-table">
+            <span class="field-label">Amount</span>
+            <span class="field-value">$8,400</span>
+            <span class="field-label">Margin</span>
+            <span class="field-value">25% residential</span>
+            <span class="field-label">Status</span>
+            <span class="field-value">Sent 4 days ago <span class="badge badge-caution">No response</span></span>
+            <span class="field-label">Follow-up</span>
+            <span class="field-value">Polite check-in sent 1h ago</span>
+          </div>
+
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <a href="#">Original quote</a> &middot; <a href="#">Follow-up log</a>
+          </div>
+
+          <div class="suggestion">
+            <div class="suggestion-label">Suggestion</div>
+            Henderson has responded to evening emails before. If no reply by Friday, I can try a shorter follow-up at 5pm.
+          </div>
+
+          <div class="action-row">
+            <button class="btn-primary">Schedule 5pm follow-up</button>
+            <button class="btn-secondary">I'll call them</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Second user message -->
+      <div class="chat-msg chat-msg-user">Good idea. Schedule it. And what's tomorrow look like?</div>
+
+      <!-- Second Ditto response -->
+      <div class="chat-msg chat-msg-ditto">
+        <div class="chat-msg-ditto-header">
+          <span class="chat-ditto-dot"></span> Ditto
+        </div>
+        <div class="chat-msg-ditto-body">
+          <div class="chat-msg-text">Done. Friday 5pm follow-up scheduled for Henderson. Here's tomorrow:</div>
+
+          <ul class="checklist">
+            <li class="checklist-item">
+              <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div>
+                <div>8am: Smith kitchen tap (Greenbank)</div>
+                <div class="checklist-detail">Parts confirmed at Tradelink</div>
+              </div>
+            </li>
+            <li class="checklist-item">
+              <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="4"/></svg></span>
+              <div>
+                <div>10:30am: Chen fence inspection (Mt Gravatt)</div>
+                <div class="checklist-detail">Quote follow-up opportunity</div>
+              </div>
+            </li>
+            <li class="checklist-item">
+              <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="4"/></svg></span>
+              <div>
+                <div>1pm: Acme bathroom start (Bulimba)</div>
+                <div class="checklist-detail">Crew notified, materials on site</div>
+              </div>
+            </li>
+          </ul>
+
+          <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+            Travel time: ~45 min between sites
+            <svg class="sparkline trend-flat" viewBox="0 0 48 18"><polyline points="2,10 12,9 22,11 32,9 42,10"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat input -->
+    <div class="chat-input-bar">
+      <div class="chat-input-container">
+        <textarea class="chat-input" placeholder="Ask Ditto anything..." rows="1" aria-label="Message Ditto"></textarea>
+        <button class="chat-send" aria-label="Send message">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <nav class="tab-bar" aria-label="Workspace navigation">
+      <button class="tab-item" aria-label="Today" data-tab="today">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Today
+      </button>
+      <button class="tab-item" aria-label="Inbox — 2 items" data-tab="inbox">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        Inbox
+        <span class="tab-badge">2</span>
+      </button>
+      <button class="tab-item tab-item-primary active" aria-label="Conversation with Ditto" data-tab="conversation">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Conversation
+      </button>
+      <button class="tab-item" aria-label="Work" data-tab="work">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Work
+      </button>
+      <button class="tab-item" aria-label="More options" data-tab="more">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        More
+      </button>
+    </nav>
+  </div>
+
+  <!-- ═══ State 2: Today ═══ -->
+  <div class="state-view" data-view="today" role="tabpanel">
+    <div class="mobile-header">
+      <div>
+        <div class="mobile-greeting">Morning Rob</div>
+        <div class="mobile-date">Thursday 27 March</div>
+      </div>
+      <div class="mobile-dots"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+    </div>
+    <div class="mobile-content">
+
+      <!-- Greeting from Ditto -->
+      <div style="padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px;">
+        <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+          Good start to the week. Two quotes ready, Henderson still quiet. Here's what matters today.
+        </div>
+      </div>
+
+      <!-- Metric cluster -->
+      <div style="padding: 14px 0; border-bottom: 1px solid var(--border);">
+        <div class="metric-row">
+          <div class="metric">
+            <div class="metric-value">$38k
+              <span class="metric-trend up">&uarr; 12%</span>
+            </div>
+            <div class="metric-label">Pipeline</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">3
+              <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,14 10,12 18,10 26,8 34,6 42,3"/></svg>
+            </div>
+            <div class="metric-label">Jobs today</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">2</div>
+            <div class="metric-label">Need you</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feed items using block-record vocabulary -->
+      <section aria-label="Today's feed">
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Quoting</span>
+            <span class="badge badge-caution">You review</span>
+            <span class="record-time">8 min ago</span>
+          </div>
+          <div class="record-title">Quote ready: Acme bathroom reno</div>
+          <div class="record-body">$14,200 &middot; Materials + labour + 25% margin</div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Reece price list, your pricing rules, 3 similar jobs
+          </div>
+          <div class="action-row">
+            <button class="btn-primary">Review</button>
+            <button class="btn-secondary">Later</button>
+          </div>
+        </div>
+
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Quoting</span>
+            <span class="badge badge-positive">Spot check</span>
+            <span class="record-time">22 min ago</span>
+          </div>
+          <div class="record-title">Quote ready: Smith kitchen tap</div>
+          <div class="record-body">$890 &middot; Standard replacement, 2hr labour</div>
+          <div class="action-row">
+            <button class="btn-primary">Approve</button>
+            <button class="btn-secondary">Review</button>
+          </div>
+        </div>
+
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Follow-ups</span>
+            <span class="badge badge-neutral">Let it run</span>
+            <span class="record-time">1h ago</span>
+          </div>
+          <div class="record-title">Follow-up sent: Henderson hot water</div>
+          <div class="record-body">Quote sent 4 days ago, no response. Polite check-in delivered.</div>
+        </div>
+
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Invoicing</span>
+            <span class="badge badge-neutral">Let it run</span>
+            <span class="record-time">Overnight</span>
+          </div>
+          <div class="record-title">Invoice batch complete</div>
+          <div class="record-body">5 of 5 sent &middot; 2 marked paid
+            <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,16 10,14 18,10 26,8 34,5 42,3"/></svg>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="tab-bar" aria-label="Workspace navigation">
+      <button class="tab-item active" aria-label="Today" data-tab="today">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Today
+      </button>
+      <button class="tab-item" aria-label="Inbox — 2 items" data-tab="inbox">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        Inbox
+        <span class="tab-badge">2</span>
+      </button>
+      <button class="tab-item tab-item-primary" aria-label="Conversation with Ditto" data-tab="conversation">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Conversation
+      </button>
+      <button class="tab-item" aria-label="Work" data-tab="work">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Work
+      </button>
+      <button class="tab-item" aria-label="More options" data-tab="more">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        More
+      </button>
+    </nav>
+  </div>
+
+  <!-- ═══ State 3: Inbox ═══ -->
+  <div class="state-view" data-view="inbox" role="tabpanel">
+    <div class="mobile-header">
+      <div>
+        <div class="mobile-greeting">What needs you</div>
+        <div class="mobile-date">2 items across 2 processes</div>
+      </div>
+      <div class="mobile-dots"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+    </div>
+    <div class="mobile-content">
+
+      <div class="section-title">Quoting</div>
+
+      <div class="review-item">
+        <div class="review-meta">
+          <span class="confidence-dot confidence-medium"></span>
+          <span style="font-size: 13px; font-weight: 500;">Acme bathroom reno</span>
+          <span class="badge badge-caution" style="margin-left: auto;">You review</span>
+        </div>
+        <div class="field-table" style="font-size: 13px; margin-bottom: 8px;">
+          <span class="field-label">Amount</span>
+          <span class="field-value">$14,200</span>
+          <span class="field-label">Confidence</span>
+          <span class="field-value">88%</span>
+          <span class="field-label">Margin</span>
+          <span class="field-value">25% residential</span>
+        </div>
+        <div class="provenance">
+          <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Reece price list, your pricing rules, 3 similar jobs
+        </div>
+        <div class="action-row">
+          <button class="btn-primary">Approve</button>
+          <button class="btn-secondary">Edit</button>
+        </div>
+      </div>
+
+      <div class="review-item">
+        <div class="review-meta">
+          <span class="confidence-dot confidence-high"></span>
+          <span style="font-size: 13px; font-weight: 500;">Smith kitchen tap</span>
+          <span class="badge badge-positive" style="margin-left: auto;">Spot check</span>
+        </div>
+        <div class="field-table" style="font-size: 13px; margin-bottom: 8px;">
+          <span class="field-label">Amount</span>
+          <span class="field-value">$890</span>
+          <span class="field-label">Confidence</span>
+          <span class="field-value">92%</span>
+          <span class="field-label">Labour</span>
+          <span class="field-value">2 hours</span>
+        </div>
+        <div class="provenance">
+          <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Tradelink price list, your pricing rules
+        </div>
+        <div class="action-row">
+          <button class="btn-primary">Approve</button>
+          <button class="btn-secondary">Review</button>
+        </div>
+      </div>
+
+      <div style="padding-top: 16px;">
+        <div class="section-title">Follow-ups</div>
+        <div class="review-item">
+          <div class="review-meta">
+            <span class="confidence-dot confidence-high"></span>
+            <span style="font-size: 13px; font-weight: 500;">Chen fence repair</span>
+            <span class="badge badge-neutral" style="margin-left: auto;">Let it run</span>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Quote sent 6 days ago, no response. Follow-up draft ready.</div>
+          <div class="action-row">
+            <button class="btn-primary">Send</button>
+            <button class="btn-secondary">Edit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tab-bar" aria-label="Workspace navigation">
+      <button class="tab-item" aria-label="Today" data-tab="today">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Today
+      </button>
+      <button class="tab-item active" aria-label="Inbox" data-tab="inbox">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        Inbox
+        <span class="tab-badge">2</span>
+      </button>
+      <button class="tab-item tab-item-primary" aria-label="Conversation with Ditto" data-tab="conversation">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Conversation
+      </button>
+      <button class="tab-item" aria-label="Work" data-tab="work">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Work
+      </button>
+      <button class="tab-item" aria-label="More options" data-tab="more">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        More
+      </button>
+    </nav>
+  </div>
+
+  <!-- ═══ State 4: Work (processes, projects, tasks) ═══ -->
+  <div class="state-view" data-view="work" role="tabpanel">
+    <div class="mobile-header">
+      <div>
+        <div class="mobile-greeting">Work</div>
+        <div class="mobile-date">4 processes &middot; 2 projects</div>
+      </div>
+      <div class="mobile-dots"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+    </div>
+    <div class="mobile-content">
+
+      <div class="section-title">Processes</div>
+
+      <div class="work-item">
+        <div class="work-header">
+          <span class="work-name">Quoting</span>
+          <span class="badge badge-positive">Healthy</span>
+        </div>
+        <div class="work-detail">34 quotes &middot; 91% first-time approval
+          <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,14 10,12 18,9 26,7 34,5 42,3"/></svg>
+        </div>
+        <div class="progress-label">
+          <span>Trust level</span>
+          <span>Spot check</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 72%;"></div></div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">2 pending review &middot; Last: 22 min ago</div>
+      </div>
+
+      <div class="work-item">
+        <div class="work-header">
+          <span class="work-name">Follow-ups</span>
+          <span class="badge badge-positive">Healthy</span>
+        </div>
+        <div class="work-detail">18 follow-ups sent &middot; 78% response rate
+          <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,12 10,11 18,10 26,8 34,6 42,4"/></svg>
+        </div>
+        <div class="progress-label">
+          <span>Trust level</span>
+          <span>Let it run</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 90%;"></div></div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">1 active &middot; Henderson hot water</div>
+      </div>
+
+      <div class="work-item">
+        <div class="work-header">
+          <span class="work-name">Invoicing</span>
+          <span class="badge badge-positive">Healthy</span>
+        </div>
+        <div class="work-detail">47 invoices &middot; $62k collected
+          <svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,16 10,13 18,11 26,8 34,5 42,3"/></svg>
+        </div>
+        <div class="progress-label">
+          <span>Trust level</span>
+          <span>Let it run</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 95%;"></div></div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">5 sent overnight &middot; 2 marked paid</div>
+      </div>
+
+      <div class="work-item">
+        <div class="work-header">
+          <span class="work-name">Scheduling</span>
+          <span class="badge badge-caution">Attention</span>
+        </div>
+        <div class="work-detail">3 jobs tomorrow &middot; 1 time conflict flagged
+          <svg class="sparkline trend-flat" viewBox="0 0 48 18"><polyline points="2,10 10,9 18,11 26,10 34,9 42,10"/></svg>
+        </div>
+        <div class="progress-label">
+          <span>Trust level</span>
+          <span>Check everything</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 45%; background: var(--caution);"></div></div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Still learning your preferences</div>
+      </div>
+
+      <div style="padding: 16px 0;">
+        <div class="accent-vivid" style="font-size: 14px; color: var(--text-secondary);">
+          Quoting is close to "spot check" level. 3 more approved quotes and I'll suggest reducing review.
+        </div>
+      </div>
+    </div>
+
+    <nav class="tab-bar" aria-label="Workspace navigation">
+      <button class="tab-item" aria-label="Today" data-tab="today">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Today
+      </button>
+      <button class="tab-item" aria-label="Inbox" data-tab="inbox">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        Inbox
+        <span class="tab-badge">2</span>
+      </button>
+      <button class="tab-item tab-item-primary" aria-label="Conversation with Ditto" data-tab="conversation">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Conversation
+      </button>
+      <button class="tab-item active" aria-label="Work" data-tab="work">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Work
+      </button>
+      <button class="tab-item" aria-label="More options" data-tab="more">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        More
+      </button>
+    </nav>
+  </div>
+
+</div>
+</main>
+
+<script>
+  // Ditto dots animation
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 24;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(6, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // State bar toggling (outer prototype controls)
+  const stateBtns = document.querySelectorAll('.state-bar .state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  function switchTab(state) {
+    stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+    const activeBtn = document.querySelector(`.state-btn[data-state="${state}"]`);
+    if (activeBtn) { activeBtn.classList.add('active'); activeBtn.setAttribute('aria-selected','true'); activeBtn.setAttribute('tabindex','0'); }
+    stateViews.forEach(v => v.classList.remove('active'));
+    const target = document.querySelector(`[data-view="${state}"]`);
+    if (target) target.classList.add('active');
+    // Sync bottom tab bars
+    document.querySelectorAll('.tab-item').forEach(ti => {
+      ti.classList.remove('active');
+      if (ti.dataset.tab === state) {
+        ti.classList.add('active');
+      }
+    });
+  }
+  stateBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.state)));
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // Bottom tab bar clicks — sync with state bar
+  document.querySelectorAll('.tab-item[data-tab]').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>

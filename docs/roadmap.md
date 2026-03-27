@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-03-25
-**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). Proactive engine, onboarding experience, component protocol, full workspace layout, and workspace transitions all live. Brief 046 delivered conversation in workspace, adaptive right panel (Process Builder / Artifact Viewer / Briefing), mobile bottom sheet, and auto-switch on first process creation.
+**Last updated:** 2026-03-26
+**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). Proactive engine, onboarding experience, component protocol, full workspace layout, and workspace transitions all live. Brief 046 delivered conversation in workspace, adaptive right panel (Process Builder / Artifact Viewer / Briefing), mobile bottom sheet, and auto-switch on first process creation. **Prototype-as-specification in progress:** 17 prototypes (P00-P20, P23) serve as pixel-level build targets. Design system fully aligned across all prototypes (cardless flow, two-green palette, dot particles, theme toggle). `.impeccable.md` is the authoritative design spec. Next: semantic HTML pass, then Phase B-D new prototypes (P21, P22, P14a, P27, P29).
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -377,6 +377,38 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Mode-aware feedback capture (aesthetic tags for creative outputs) | ADR-013 | Original |
 | Insight escalation: correction → pattern ("Teach this" formalised as level 2 of 4) | ADR-013 | Weick sensemaking, Soar impasse-driven learning |
 | Insight escalation: pattern → structural (LLM-based root cause detection) | ADR-013 | Original — via improvement-scanner agent |
+
+### Critical Evaluation E1-E3: Failure Patterns + Verification (ADR-022)
+
+**Re-entry condition:** A2 complete (orchestrator reflection cycle working)
+**Note:** E1-E3 are independently valuable. E4-E5 require data accumulation (20+ runs).
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| **E1: Failure Pattern Memory** | | |
+| Failure pattern extraction from corrections (5+ same type → pattern) | ADR-022 | Reflexion verbal reinforcement (Shinn et al., NeurIPS 2023) |
+| Memory category tagging (`failure_pattern`, `hallucination_pattern`, `overconfidence_pattern`, `quality_drift`) | ADR-022 | Original — process-scoped failure accumulation |
+| Context assembly retrieval of failure patterns + avoidance signal injection (max 2 per step) | ADR-022 | Reflexion context injection pattern |
+| Pattern staleness (demote after 30+ runs untriggered, clear on trust upgrade) | ADR-022 | Original |
+| **E2: Orchestrator Critical Enrichment** | | |
+| Orchestrator reflection cycle gains steps 3, 5, 6 (failure retrieval, Self challenge, caution option) | ADR-022 | Waymo Critic concept + MAP Monitor + actor-critic pattern |
+| Self suggestions evaluated against accumulated failure data before delivery | ADR-022 | Original |
+| **E3: Conditional Verification Handler** | | |
+| Two-stage `verification-check` handler in harness (pre-classifier + CoVe Factor+Revise) | ADR-022 | CoVe (Meta 2023), HaluGate (vLLM 2025), FActScore (EMNLP 2023) |
+| Verification uses different model than producer when available | ADR-022 | AgentCoder independence principle |
+| Verification issues flagged on step runs, routed to human review | ADR-022 | Existing trust gate pattern |
+
+### Critical Evaluation E4-E5: Homeostatic Quality + Correlation (ADR-022)
+
+**Re-entry condition:** E1+E2 data accumulation (20+ runs per process)
+
+| Capability | Source doc | Build from |
+|-----------|-----------|------------|
+| **E4: Homeostatic Quality Regulation** | | |
+| 5-dimension quality tracking with optimal ranges (not single-score maximization) | ADR-022 | Keramati & Gutkin homeostatic regulation (eLife 2014) |
+| Approach/avoidance signal generation via verbal context injection | ADR-022 | Reflexion + METR reward hacking evidence |
+| **E5: Cross-Process Failure Correlation** | | |
+| Awareness-level systemic failure pattern detection (same pattern in 3+ processes) | ADR-022 | Original — L4 awareness enrichment |
 
 ### Cognitive Architecture B: Learning Correlation + Adaptive Scaffolding
 

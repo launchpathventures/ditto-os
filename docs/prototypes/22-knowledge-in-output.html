@@ -1,0 +1,646 @@
+<!-- v1 — Knowledge-in-output close-up: provenance mechanism, 2026-03-26 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P22 — Knowledge in Output | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font); background: var(--bg);
+    color: var(--text-primary); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+    font-size: 16px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* ===== Skip Link ===== */
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .skip-link { position: absolute; top: -100px; left: 16px; background: var(--accent); color: var(--accent-text); padding: 8px 16px; border-radius: var(--radius-md); z-index: 200; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 8px; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle {
+    display: flex; align-items: center; gap: 4px;
+    margin-left: 12px; padding-left: 12px;
+    border-left: 1px solid var(--border);
+  }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== State Bar ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Page Layout ===== */
+  .page {
+    padding: 116px 24px 120px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  /* ===== Back Link ===== */
+  .back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-muted); text-decoration: none;
+    margin-bottom: 20px; transition: color 0.12s;
+  }
+  .back:hover { color: var(--text-secondary); }
+  .back svg { width: 14px; height: 14px; }
+
+  /* ===== Output Header ===== */
+  .output-label {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .output-title {
+    font-size: 22px; font-weight: 600; color: var(--text-primary);
+    letter-spacing: -0.02em; margin-bottom: 20px;
+  }
+
+  /* ===== Provenance Strip ===== */
+  .provenance-strip {
+    border-left: 2px solid var(--vivid);
+    padding-left: 20px;
+    margin-bottom: 28px;
+    padding-top: 4px; padding-bottom: 4px;
+  }
+  .provenance-label {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .provenance-tags {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .provenance-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; background: var(--surface);
+    border-radius: var(--radius-sm); font-size: 12px;
+    color: var(--text-primary); cursor: default;
+  }
+  .provenance-tag-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--positive);
+  }
+
+  /* ===== Post Content ===== */
+  .post-content {
+    font-size: 16px; line-height: 1.7; color: var(--text-primary);
+    margin-bottom: 20px; white-space: pre-line;
+  }
+  .post-content[contenteditable="true"] {
+    padding: 16px; background: var(--surface-raised);
+    border-radius: var(--radius-lg); border: 1px solid var(--border);
+    outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .post-content[contenteditable="true"]:focus {
+    border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1);
+  }
+
+  .expand-link {
+    font-size: 14px; color: var(--vivid-deep); font-weight: 500;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    margin-bottom: 24px; cursor: pointer; transition: color 0.12s;
+  }
+  .expand-link:hover { color: var(--vivid); }
+
+  /* ===== Actions ===== */
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 8px 20px; border-radius: 9999px; cursor: pointer;
+    transition: all 0.15s; border: none;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--vivid); color: #fff; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { background: var(--accent); color: var(--accent-text); }
+  .btn-secondary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* ===== Expanded Provenance Trail ===== */
+  .provenance-trail { margin-bottom: 28px; }
+
+  .provenance-source {
+    margin-bottom: 24px;
+  }
+  .source-category {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .source-quote {
+    border-left: 2px solid var(--vivid-deep);
+    padding-left: 16px; margin-bottom: 6px;
+    font-style: italic; font-size: 15px; color: var(--text-primary);
+  }
+  .source-explanation {
+    padding-left: 18px; font-size: 14px; color: var(--text-secondary);
+    line-height: 1.5; margin-bottom: 4px;
+  }
+  .source-ref {
+    padding-left: 18px; font-size: 12px; color: var(--text-muted);
+  }
+
+  .provenance-missing {
+    border-left: 2px solid var(--caution);
+    padding-left: 16px; margin-top: 28px; margin-bottom: 24px;
+  }
+  .missing-label {
+    font-size: 11px; font-weight: 700; color: var(--caution);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .missing-text {
+    font-size: 14px; color: var(--text-secondary); line-height: 1.5;
+  }
+
+  .collapse-link {
+    font-size: 14px; color: var(--text-muted); font-weight: 500;
+    text-decoration: none; cursor: pointer; margin-bottom: 20px;
+    display: inline-block; transition: color 0.12s;
+  }
+  .collapse-link:hover { color: var(--text-primary); }
+
+  /* ===== Edit Prompt ===== */
+  .edit-prompt {
+    border-left: 2px solid var(--vivid);
+    padding: 12px 16px; margin: 16px 0 24px;
+    font-size: 14px; color: var(--text-secondary); line-height: 1.5;
+  }
+  .edit-prompt-actions {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .edit-prompt .btn { font-size: 13px; padding: 6px 14px; }
+
+  /* ===== Clinical Section Label ===== */
+  .clinical-label {
+    font-size: 12px; font-weight: 600; color: var(--info);
+    background: var(--info-subtle); display: inline-block;
+    padding: 2px 10px; border-radius: 99px; margin-bottom: 12px;
+  }
+
+  /* ===== Input Bar ===== */
+  .input-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 12px 24px 24px; background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 8px 16px;
+    transition: all 0.15s;
+  }
+  .input-container:focus-within { border-color: var(--vivid); background: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px;
+    color: var(--text-primary); resize: none; outline: none;
+    line-height: 1.5; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  .state-view { display: none; }
+  .state-view.active { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Knowledge in Output — How Ditto shows what knowledge produced this</h1>
+
+<!-- Proto Nav -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1: Getting Started · <span>Knowledge in Output</span></div>
+  <div class="proto-nav-right">
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">⊞</a>
+    <a href="15-knowledge-base.html" class="proto-arrow" aria-label="Previous: Knowledge Base">←</a>
+    <a href="24-inbox.html" class="proto-arrow" aria-label="Next: Inbox">→</a>
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+  </div>
+</nav>
+
+<!-- State Bar -->
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="summary" tabindex="0">Output with provenance</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="expanded" tabindex="-1">Provenance expanded</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="editing" tabindex="-1">Editing with provenance</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="clinical" tabindex="-1">Clinical view (Jay)</button>
+</div>
+
+<main class="page" id="main-content">
+
+  <!-- ═══ State 1: Output with Provenance Summary ═══ -->
+  <div class="state-view active" data-view="summary" role="tabpanel">
+    <a href="10-first-output.html" class="back">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+      Back to content pack
+    </a>
+
+    <div class="output-label">Post 3 of 5 · Asking for help</div>
+    <div class="output-title">Instagram post</div>
+
+    <div class="provenance-strip">
+      <div class="provenance-label">Written using</div>
+      <div class="provenance-tags">
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your voice: safe, practical, real</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your client: first-time mums, 30s</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your brand: warm friend, not woo-woo</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Survey: "What scares you most?"</span>
+      </div>
+    </div>
+
+    <div class="post-content">You're not failing if you need help. You're not weak if you're struggling. You're not a bad mum if you don't love every second of it.
+
+You're a person doing something massive for the first time. Of course it's hard.
+
+The strongest thing you can do is say "I need support." Not push through alone pretending you're fine.</div>
+
+    <a class="expand-link" tabindex="0">See how this was written →</a>
+
+    <div class="actions">
+      <button class="btn btn-primary">Approve</button>
+      <button class="btn btn-secondary">Edit</button>
+      <button class="btn btn-ghost">Regenerate</button>
+    </div>
+  </div>
+
+  <!-- ═══ State 2: Provenance Expanded ═══ -->
+  <div class="state-view" data-view="expanded" role="tabpanel">
+    <a href="10-first-output.html" class="back">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+      Back to content pack
+    </a>
+
+    <div class="output-label">Post 3 of 5 · Asking for help</div>
+    <div class="output-title">Instagram post</div>
+
+    <a class="collapse-link" tabindex="0">← Back to summary</a>
+
+    <div class="provenance-trail">
+
+      <div class="provenance-source">
+        <div class="source-category">Your voice · safe, practical, real</div>
+        <div class="source-quote">"The strongest thing you can do is say 'I need support.'"</div>
+        <div class="source-explanation">This sentence uses your voice rule: "Direct but never preachy. State facts, then give permission."</div>
+        <div class="source-ref">Source: Intake conversation, 15 minutes ago</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Your client · first-time mums, 30s</div>
+        <div class="source-quote">"You're a person doing something massive for the first time."</div>
+        <div class="source-explanation">Written for your primary audience. They're dealing with information overload and self-doubt.</div>
+        <div class="source-ref">Source: Intake conversation</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Survey data · "What scares you most?"</div>
+        <div class="source-quote">"Not weak if you're struggling"</div>
+        <div class="source-explanation">73% of survey respondents mentioned fear of judgment. This post directly addresses that fear.</div>
+        <div class="source-ref">Source: Survey synthesis, uploaded yesterday</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Your brand · warm friend, not woo-woo</div>
+        <div class="source-quote">"Of course it's hard."</div>
+        <div class="source-explanation">Short, direct acknowledgment — matches your brand rule: "Never minimise, never dramatise."</div>
+        <div class="source-ref">Source: Intake conversation</div>
+      </div>
+
+      <div class="provenance-missing">
+        <div class="missing-label">What's missing</div>
+        <div class="missing-text">Ditto doesn't yet have: specific examples from your practice, testimonials, or seasonal content preferences. These would make posts more specific to your experience.</div>
+      </div>
+    </div>
+
+    <div class="post-content" style="margin-bottom: 24px;">You're not failing if you need help. You're not weak if you're struggling. You're not a bad mum if you don't love every second of it.
+
+You're a person doing something massive for the first time. Of course it's hard.
+
+The strongest thing you can do is say "I need support." Not push through alone pretending you're fine.</div>
+
+    <div class="actions">
+      <button class="btn btn-primary">Approve</button>
+      <button class="btn btn-secondary">Edit</button>
+      <button class="btn btn-ghost">Regenerate</button>
+    </div>
+  </div>
+
+  <!-- ═══ State 3: Editing with Provenance ═══ -->
+  <div class="state-view" data-view="editing" role="tabpanel">
+    <a href="10-first-output.html" class="back">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+      Back to content pack
+    </a>
+
+    <div class="output-label">Post 3 of 5 · Asking for help</div>
+    <div class="output-title">Instagram post</div>
+
+    <div class="provenance-strip" style="margin-bottom: 20px;">
+      <div class="provenance-label">Written using</div>
+      <div class="provenance-tags">
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your voice: safe, practical, real</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your client: first-time mums, 30s</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your brand: warm friend, not woo-woo</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Survey: "What scares you most?"</span>
+      </div>
+    </div>
+
+    <div class="post-content" contenteditable="true" role="textbox" aria-label="Edit post content">You're not failing if you need help. You're not weak if you're struggling. You're not a bad mum if you don't love every second of it.
+
+You're a person doing something massive for the first time. Of course it's hard.
+
+It's okay to say "I need support." That's not giving up — that's being smart about something huge.</div>
+
+    <div class="edit-prompt">
+      You softened the tone here — changed "The strongest thing you can do" to "It's okay to." Want me to update your voice rules to include this softer register for sensitive topics?
+      <div class="edit-prompt-actions">
+        <button class="btn btn-secondary">Yes, update my voice</button>
+        <button class="btn btn-ghost">Just this post</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary">Save &amp; approve</button>
+      <button class="btn btn-ghost">Cancel edit</button>
+    </div>
+  </div>
+
+  <!-- ═══ State 4: Clinical View (Jay) ═══ -->
+  <div class="state-view" data-view="clinical" role="tabpanel">
+    <a href="#" class="back">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+      Back to patient record
+    </a>
+
+    <span class="clinical-label">Clinical</span>
+    <div class="output-label">Session notes · Jay Chen, Session 12</div>
+    <div class="output-title">Sleep optimisation — progress review</div>
+
+    <div class="provenance-strip">
+      <div class="provenance-label">Written using</div>
+      <div class="provenance-tags">
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Patient history: 12 sessions</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your methodology: functional assessment</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Last session: sleep optimisation</span>
+        <span class="provenance-tag"><span class="provenance-tag-dot"></span> Lab results: HRV trending up</span>
+      </div>
+    </div>
+
+    <div class="post-content">Session 12 follow-up: Sleep optimisation protocol — 6-week review.
+
+Heart rate variability has improved from 42ms to 58ms over the past six weeks, a 38% improvement suggesting the autonomic nervous system is adapting well to the current protocol.
+
+Sleep latency has reduced from approximately 40 minutes to under 15 minutes. Patient reports waking feeling more rested, energy sustained through afternoon (previously reported 2-3pm crash).
+
+Recommend maintaining current sleep protocol with one adjustment: shift magnesium supplementation from morning to 90 minutes pre-bed based on the timing correlation in the last two weeks of data.
+
+No changes to exercise protocol. Next session: review cortisol awakening response with new lab panel.</div>
+
+    <a class="expand-link" tabindex="0">See how this was written →</a>
+
+    <div class="provenance-trail" style="display: block; margin-top: 24px;">
+
+      <div class="provenance-source">
+        <div class="source-category">Patient history · 12 sessions</div>
+        <div class="source-quote">"HRV has improved from 42ms to 58ms over the past six weeks"</div>
+        <div class="source-explanation">This tracks the patient's longitudinal biomarker trend. Baseline was established in Session 1 (42ms). Current reading from lab upload 2 days ago (58ms).</div>
+        <div class="source-ref">Source: Patient record, Sessions 1–12</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Your methodology · functional assessment protocol</div>
+        <div class="source-quote">"Recommend maintaining current sleep protocol with one adjustment"</div>
+        <div class="source-explanation">This recommendation follows your Step 4 assessment framework: if primary metric is improving, maintain course with one targeted refinement per review cycle.</div>
+        <div class="source-ref">Source: Methodology capture, onboarding</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Lab results · HRV trending up</div>
+        <div class="source-quote">"The 38% improvement suggests the nervous system is adapting well"</div>
+        <div class="source-explanation">HRV data uploaded 2 days ago shows sustained improvement. Cross-referenced with sleep quality scores from patient self-reports.</div>
+        <div class="source-ref">Source: Lab upload, 2 days ago</div>
+      </div>
+
+      <div class="provenance-source">
+        <div class="source-category">Last session · sleep optimisation</div>
+        <div class="source-quote">"Shift magnesium supplementation from morning to 90 minutes pre-bed"</div>
+        <div class="source-explanation">Session 11 notes flagged a timing question. Two weeks of data since then show a correlation between evening magnesium timing and improved sleep onset. This is the targeted refinement your methodology calls for.</div>
+        <div class="source-ref">Source: Session 11 notes + 2-week tracking data</div>
+      </div>
+
+      <div class="provenance-missing">
+        <div class="missing-label">What's missing</div>
+        <div class="missing-text">No subjective sleep quality rating from this session yet. Would strengthen the recommendation if added. Also: cortisol awakening response data pending new lab panel.</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary">Approve notes</button>
+      <button class="btn btn-secondary">Edit</button>
+      <button class="btn btn-ghost">Regenerate</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- Input Bar -->
+<div class="input-bar">
+  <div class="input-container">
+    <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+    <textarea class="input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Reply"></textarea>
+  </div>
+</div>
+
+<script>
+  // Ditto dots
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // State toggling
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      stateViews.forEach(v => v.classList.remove('active'));
+      const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>

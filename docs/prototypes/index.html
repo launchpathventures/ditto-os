@@ -4,29 +4,42 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ditto — Prototype Journey</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-subtle: hsl(24 60% 95%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --selection: #E7E7EB;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   ::selection { background: var(--selection); }
 
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
@@ -83,7 +96,7 @@
 
   .proto-link:hover {
     border-color: var(--accent);
-    box-shadow: 0 2px 10px hsl(24 80% 38% / 0.06);
+    box-shadow: 0 2px 10px rgba(5, 150, 105, 0.06);
   }
 
   .proto-num {
@@ -168,23 +181,22 @@
     font-size: 15px;
     font-weight: 600;
     border: none;
-    border-radius: 10px;
+    border-radius: 9999px;
     cursor: pointer;
     text-decoration: none;
     transition: background 0.12s;
   }
 
-  .start-btn:hover { background: hsl(24 80% 32%); }
+  .start-btn:hover { background: var(--vivid-deep); }
   .start-btn svg { width: 18px; height: 18px; stroke-width: 2; }
 </style>
 </head>
 <body>
-
 <div class="page">
   <h1>Ditto Prototypes</h1>
   <p class="subtitle">Walk the user journey from day zero through months of use. Open each in order — or jump to any screen.</p>
 
-  <a href="08-day-zero.html" class="start-btn">
+  <a href="00-workspace-shell.html" class="start-btn">
     Start the journey
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
   </a>
@@ -192,20 +204,54 @@
   <div style="height: 32px;"></div>
 
   <div class="act">
+    <div class="act-title">Foundational</div>
+    <a class="proto-link" href="00-workspace-shell.html">
+      <span class="proto-num">00</span>
+      <div class="proto-info">
+        <div class="proto-name">Workspace Shell</div>
+        <div class="proto-desc">Three-column workspace frame. Sidebar, centre, right panel. Visual vocabulary.</div>
+      </div>
+    </a>
+    <a class="proto-link" href="30-json-render-composability.html">
+      <span class="proto-num">30</span>
+      <div class="proto-info">
+        <div class="proto-name">JSON-Render Composability</div>
+        <div class="proto-desc">ContentBlock JSON → UI proof. All 19 block types rendered with data preview.</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="act">
     <div class="act-title">Act 1 — Getting Started (Libby, Week 0)</div>
+    <a class="proto-link" href="23-setup-connection.html">
+      <span class="proto-num">23</span>
+      <div class="proto-info">
+        <div class="proto-name">Setup Connection</div>
+        <div class="proto-desc">Connect AI. Choose model. API key. Done.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
     <a class="proto-link" href="08-day-zero.html">
       <span class="proto-num">08</span>
       <div class="proto-info">
         <div class="proto-name">Day Zero</div>
-        <div class="proto-desc">First screen. No chrome. "What's taking up your time?"</div>
+        <div class="proto-desc">Onboarding hub. Value differentiation. App connections.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+    <a class="proto-link" href="08a-intake-conversation.html">
+      <span class="proto-num">08a</span>
+      <div class="proto-info">
+        <div class="proto-name">Intake Conversation</div>
+        <div class="proto-desc">Deep intake. Knowledge capture. Mode-shifting UI.</div>
       </div>
       <span class="proto-persona">Libby</span>
     </a>
     <a class="proto-link" href="09-first-conversation.html">
       <span class="proto-num">09</span>
       <div class="proto-info">
-        <div class="proto-name">First Conversation</div>
-        <div class="proto-desc">Structured intake. Knowledge captured live. Plan proposed.</div>
+        <div class="proto-name">Second Conversation</div>
+        <div class="proto-desc">Libby returns next day. Continuity visible. Knowledge growing.</div>
       </div>
       <span class="proto-persona">Libby</span>
     </a>
@@ -261,6 +307,38 @@
       </div>
       <span class="proto-persona">Rob</span>
     </a>
+    <a class="proto-link" href="14a-review-queue.html">
+      <span class="proto-num">14a</span>
+      <div class="proto-info">
+        <div class="proto-name">Review Queue</div>
+        <div class="proto-desc">Dedicated review view. 8 items, 3 processes. Batch approve.</div>
+      </div>
+      <span class="proto-persona">Lisa</span>
+    </a>
+    <a class="proto-link" href="22-knowledge-in-output.html">
+      <span class="proto-num">22</span>
+      <div class="proto-info">
+        <div class="proto-name">Knowledge in Output</div>
+        <div class="proto-desc">Close-up: provenance trail. "Based on" visible. Edit = teach.</div>
+      </div>
+      <span class="proto-persona">Libby</span>
+    </a>
+    <a class="proto-link" href="24-inbox.html">
+      <span class="proto-num">24</span>
+      <div class="proto-info">
+        <div class="proto-name">Inbox</div>
+        <div class="proto-desc">Urgency grouping. Triage donuts. Batch actions.</div>
+      </div>
+      <span class="proto-persona">Lisa</span>
+    </a>
+    <a class="proto-link" href="25-tasks.html">
+      <span class="proto-num">25</span>
+      <div class="proto-info">
+        <div class="proto-name">Tasks</div>
+        <div class="proto-desc">12 active across 4 processes. Filter, track, progress bars.</div>
+      </div>
+      <span class="proto-persona">Jordan</span>
+    </a>
   </div>
 
   <div class="act">
@@ -308,6 +386,114 @@
         <div class="proto-desc">Calm problem surfacing. Auto-downgrade. Recovery path clear.</div>
       </div>
       <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="21-mobile-workspace.html">
+      <span class="proto-num">21</span>
+      <div class="proto-info">
+        <div class="proto-name">Mobile Workspace</div>
+        <div class="proto-desc">Conversation-forward phone workspace. 5-tab nav, chat primary.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="27-process-flow-map.html">
+      <span class="proto-num">27</span>
+      <div class="proto-info">
+        <div class="proto-name">Process Flow Map</div>
+        <div class="proto-desc">Inter-process graph. 4 departments. Impact analysis.</div>
+      </div>
+      <span class="proto-persona">Jordan</span>
+    </a>
+    <a class="proto-link" href="29-process-model-library.html">
+      <span class="proto-num">29</span>
+      <div class="proto-info">
+        <div class="proto-name">Process Library</div>
+        <div class="proto-desc">Capability catalog. Self recommends. Browse, detail, setup.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="26-agent-team.html">
+      <span class="proto-num">26</span>
+      <div class="proto-info">
+        <div class="proto-name">Agent Team</div>
+        <div class="proto-desc">Your agents. Capabilities, activity, trust levels.</div>
+      </div>
+      <span class="proto-persona">Nadia</span>
+    </a>
+    <a class="proto-link" href="31-process-health.html">
+      <span class="proto-num">31</span>
+      <div class="proto-info">
+        <div class="proto-name">Process Health</div>
+        <div class="proto-desc">Diagnostics. Quality trends. Intervention history.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="33-review-primitives.html">
+      <span class="proto-num">33</span>
+      <div class="proto-info">
+        <div class="proto-name">Review Primitives</div>
+        <div class="proto-desc">Review Record, Review Table, Detail Split. Three modes for human judgment.</div>
+      </div>
+      <span class="proto-persona">Rob + Lisa</span>
+    </a>
+    <a class="proto-link" href="35-improvements.html">
+      <span class="proto-num">35</span>
+      <div class="proto-info">
+        <div class="proto-name">Improvements</div>
+        <div class="proto-desc">Proactive suggestions. Pattern-spotted upgrades. Evidence-based.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="32-settings.html">
+      <span class="proto-num">32</span>
+      <div class="proto-info">
+        <div class="proto-name">Settings</div>
+        <div class="proto-desc">AI connection, trust levels, integrations, appearance.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+  </div>
+
+  <div class="act">
+    <div class="act-title">Act 5 — Artifact Interaction (ADR-023)</div>
+    <a class="proto-link" href="36-document-artifact.html">
+      <span class="proto-num">36</span>
+      <div class="proto-info">
+        <div class="proto-name">Document Artifact</div>
+        <div class="proto-desc">Rawlinsons cost estimate. Generate, refine, refine, approve. Right panel preview.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="37-content-pack.html">
+      <span class="proto-num">37</span>
+      <div class="proto-info">
+        <div class="proto-name">Multi-Part Content</div>
+        <div class="proto-desc">Steven Leckie content pack. 6 pieces, tabbed preview, batch approve.</div>
+      </div>
+      <span class="proto-persona">Lisa</span>
+    </a>
+    <a class="proto-link" href="38-code-artifact.html">
+      <span class="proto-num">38</span>
+      <div class="proto-info">
+        <div class="proto-name">Code Artifact</div>
+        <div class="proto-desc">Abodo ERP integration. Syntax highlighting, test results, deploy.</div>
+      </div>
+      <span class="proto-persona">Nadia</span>
+    </a>
+    <a class="proto-link" href="39-email-artifact.html">
+      <span class="proto-num">39</span>
+      <div class="proto-info">
+        <div class="proto-name">Email Artifact</div>
+        <div class="proto-desc">Henderson follow-up. Email preview, tone adjustment, send.</div>
+      </div>
+      <span class="proto-persona">Rob</span>
+    </a>
+    <a class="proto-link" href="40-clinical-notes.html">
+      <span class="proto-num">40</span>
+      <div class="proto-info">
+        <div class="proto-name">Clinical Notes</div>
+        <div class="proto-desc">Voice to structured notes. Section reorg, additions, save to record.</div>
+      </div>
+      <span class="proto-persona">Jay</span>
     </a>
   </div>
 

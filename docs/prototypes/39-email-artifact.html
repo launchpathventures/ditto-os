@@ -1,0 +1,521 @@
+<!-- v2, 2026-03-27 — P39 Email Artifact: Henderson follow-up. Artifact-primary layout: email centre, conversation in Ditto panel. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P39 — Email Artifact | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --negative: #C4352A;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--vivid-subtle); }
+  .skip-link { position: absolute; top: -100%; left: 16px; background: var(--accent); color: white; padding: 8px 16px; border-radius: var(--radius-md); z-index: 1000; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 56px; }
+
+  /* Proto Nav */
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* State Bar */
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+
+  /* Theme */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+  /* ═══ WORKSPACE ═══ */
+  .workspace { position: fixed; top: 92px; left: 0; right: 0; bottom: 0; display: flex; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 240px; min-width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-header { padding: 20px 16px 12px; flex-shrink: 0; }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.15s; font-size: 14px; color: var(--text-secondary); text-decoration: none; }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active { color: var(--text-primary); font-weight: 500; border-left: 2px solid var(--vivid); border-radius: 0; padding-left: 10px; }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; }
+  .nav-badge { font-size: 11px; font-weight: 600; background: var(--negative); color: white; padding: 2px 6px; border-radius: 99px; margin-left: auto; }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ═══ CENTRE — Email Artifact ═══ */
+  .centre { flex: 1; min-width: 480px; display: flex; flex-direction: column; background: var(--bg); }
+
+  .artifact-header-bar { padding: 16px 32px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .artifact-header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .artifact-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--vivid-subtle); color: var(--vivid-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .artifact-icon svg { width: 20px; height: 20px; }
+  .artifact-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .artifact-meta { font-size: 13px; color: var(--text-muted); margin-left: 48px; }
+  .artifact-status { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px; margin-left: auto; }
+  .status-draft { background: var(--accent-subtle); color: var(--text-secondary); }
+  .status-sent { background: var(--info-subtle); color: var(--info); }
+  .status-resolved { background: var(--positive-subtle); color: var(--positive); }
+
+  .version-bar { padding: 8px 32px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .version-tab { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 3px 10px; cursor: pointer; transition: all 0.12s; }
+  .version-tab:hover { color: var(--text-primary); }
+  .version-tab.active { color: var(--text-primary); background: var(--surface); border-color: var(--border); }
+
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-scroll::-webkit-scrollbar { width: 6px; }
+  .centre-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .centre-content { max-width: 640px; margin: 0 auto; padding: 32px 32px 24px; }
+
+  /* Email preview */
+  .email-preview { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-medium); }
+  .email-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .email-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .email-dot.red { background: #ff5f57; }
+  .email-dot.yellow { background: #febc2e; }
+  .email-dot.green { background: #28c840; }
+  .email-toolbar-label { margin-left: auto; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+  .email-meta { padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .email-meta-row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .email-meta-label { color: var(--text-muted); min-width: 56px; font-weight: 500; }
+  .email-meta-value { color: var(--text-primary); }
+  .email-body-content { padding: 20px; font-size: 14px; line-height: 1.7; color: #333; }
+  .email-body-content p { margin-bottom: 14px; }
+  .email-signature { padding: 16px 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .email-signature strong { color: var(--text-primary); font-size: 13px; }
+
+  .changed { background: var(--vivid-subtle); border-radius: 2px; padding: 1px 4px; }
+
+  /* Provenance */
+  .provenance { border-left: 2px solid var(--vivid); padding-left: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .provenance-label { font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; font-size: 11px; }
+  .provenance-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .provenance-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; background: var(--surface); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-primary); }
+  .provenance-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--positive); }
+
+  .centre-footer { padding: 12px 32px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .centre-footer .spacer { flex: 1; }
+  .footer-destination { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+  .footer-destination svg { width: 14px; height: 14px; }
+
+  .resolved-banner { display: flex; align-items: center; gap: 10px; padding: 12px 32px; background: var(--positive-subtle); border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 500; color: var(--positive); flex-shrink: 0; }
+  .resolved-banner svg { width: 20px; height: 20px; }
+
+  /* Buttons */
+  .btn { font-family: var(--font); font-size: 13px; font-weight: 500; border: none; border-radius: 99px; padding: 7px 16px; cursor: pointer; transition: all 0.12s; line-height: 1.3; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--vivid); color: white; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); padding: 7px 12px; }
+  .btn-ghost:hover { color: var(--text-primary); background: var(--surface); }
+  .btn-sm { font-size: 12px; padding: 5px 12px; }
+
+  /* ═══ DITTO PANEL ═══ */
+  .ditto-panel { width: 320px; min-width: 320px; background: var(--surface-raised); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .ditto-panel-header { padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .ditto-panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+  .ditto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vivid); animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+  .ditto-panel-context { font-size: 12px; color: var(--text-muted); }
+
+  .ditto-thread { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .ditto-thread::-webkit-scrollbar { width: 4px; }
+  .ditto-thread::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .msg { line-height: 1.5; font-size: 13px; }
+  .msg.ditto { color: var(--text-primary); }
+  .msg.user { background: var(--surface); padding: 8px 12px; border-radius: var(--radius-lg); align-self: flex-end; max-width: 90%; display: table; }
+
+  .artifact-ref { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-left: 2px solid var(--vivid); background: var(--vivid-subtle); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 12px; font-weight: 500; }
+  .artifact-ref .badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 99px; background: var(--accent-subtle); color: var(--text-secondary); }
+  .artifact-ref .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .change-note { font-size: 12px; color: var(--vivid-deep); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .change-note::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--vivid); flex-shrink: 0; }
+
+  .teach-this { border-left: 2px solid var(--vivid); padding: 8px 12px; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .teach-this-label { font-weight: 600; color: var(--vivid); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+
+  .ditto-input { padding: 8px 12px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .ditto-input-container { display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 8px 12px; transition: border-color 0.15s; }
+  .ditto-input-container:focus-within { border-color: var(--vivid); }
+  .ditto-input-field { flex: 1; border: none; background: transparent; font-family: var(--font); font-size: 14px; color: var(--text-primary); outline: none; line-height: 1.4; resize: none; min-height: 20px; max-height: 80px; }
+  .ditto-input-field::placeholder { color: var(--text-muted); }
+
+  /* State visibility */
+  .state-content { display: none; }
+  .state-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .ditto-state { display: none; }
+  .ditto-state.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  @media (max-width: 1200px) { .ditto-panel { width: 280px; min-width: 280px; } }
+  @media (max-width: 1024px) { .sidebar { display: none; } }
+  @media (max-width: 860px) { .ditto-panel { display: none; } }
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Artifact &middot; <span>Email</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="38-code-artifact.html" class="proto-arrow" aria-label="Previous">&#8592;</a>
+    <a href="40-clinical-notes.html" class="proto-arrow" aria-label="Next">&#8594;</a>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype states">
+  <button class="state-btn active" role="tab" data-state="1" aria-selected="true">1. Draft</button>
+  <button class="state-btn" role="tab" data-state="2">2. Tone Adjustment</button>
+  <button class="state-btn" role="tab" data-state="3">3. Sent</button>
+</div>
+
+<main class="workspace" id="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" aria-label="Navigation">
+    <div class="sidebar-header"><div class="wordmark">Ditto</div></div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg><span class="nav-label">Today</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3"/></svg><span class="nav-label">Inbox</span></a>
+      <a class="nav-item active" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg><span class="nav-label">Work</span></a>
+      <div class="nav-separator"></div>
+      <a class="nav-item" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg><span class="nav-label">Routines</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="nav-label">Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" href="#"><svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg><span class="nav-label">Help</span></a>
+    </div>
+  </aside>
+
+  <!-- ═══ CENTRE — Email Preview ═══ -->
+  <section class="centre" role="main">
+
+    <!-- STATE 1: Draft -->
+    <div class="state-content active" data-state="1">
+      <div class="artifact-header-bar">
+        <div class="artifact-header-top">
+          <div class="artifact-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+          </div>
+          <div class="artifact-title">Henderson Follow-Up</div>
+          <span class="artifact-status status-draft">Draft</span>
+        </div>
+        <div class="artifact-meta">Email &middot; Follow-up &middot; v1</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab active">v1</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="email-preview">
+            <div class="email-toolbar">
+              <span class="email-dot red"></span>
+              <span class="email-dot yellow"></span>
+              <span class="email-dot green"></span>
+              <span class="email-toolbar-label">New Message</span>
+            </div>
+            <div class="email-meta">
+              <div class="email-meta-row"><span class="email-meta-label">To:</span><span class="email-meta-value">mark.henderson@email.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">From:</span><span class="email-meta-value">rob@ridgeplumbing.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">Subject:</span><span class="email-meta-value">Quick check in &mdash; hot water system quote</span></div>
+            </div>
+            <div class="email-body-content">
+              <p>Hi Mark,</p>
+              <p>Just a quick one &mdash; I sent through the hot water system quote about 6 days with no response. Chances is the panel shows how Henderson will see it.</p>
+              <p>A follow-up email drafted. Friendly tone, brief, with a clear next step. Provenance in the panel shows how Henderson will see it.</p>
+              <p>Happy to chat through any of the details or adjust anything if needed for you at all.</p>
+              <p>Cheers,<br>Rob</p>
+            </div>
+            <div class="email-signature">
+              <strong>Rob Mitchell</strong><br>
+              Ridge Plumbing &amp; Gas<br>
+              0421 845 378 &middot; rob@ridgeplumbing.co.nz
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="provenance">
+          <div class="provenance-label">Based on</div>
+          <div class="provenance-tags">
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Original quote (6 days ago)</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Contact: Henderson</span>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <div class="footer-destination">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+          Send to Henderson
+        </div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+        <button class="btn btn-primary btn-sm">Send</button>
+      </div>
+    </div>
+
+    <!-- STATE 2: Tone Adjustment -->
+    <div class="state-content" data-state="2">
+      <div class="artifact-header-bar">
+        <div class="artifact-header-top">
+          <div class="artifact-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+          </div>
+          <div class="artifact-title">Henderson Follow-Up</div>
+          <span class="artifact-status status-draft">Draft</span>
+        </div>
+        <div class="artifact-meta">Email &middot; v2 &middot; Tone adjusted to formal</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab">v1</button>
+        <button class="version-tab active">v2</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="email-preview">
+            <div class="email-toolbar">
+              <span class="email-dot red"></span>
+              <span class="email-dot yellow"></span>
+              <span class="email-dot green"></span>
+              <span class="email-toolbar-label">New Message</span>
+            </div>
+            <div class="email-meta">
+              <div class="email-meta-row"><span class="email-meta-label">To:</span><span class="email-meta-value">mark.henderson@email.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">From:</span><span class="email-meta-value">rob@ridgeplumbing.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">Subject:</span><span class="email-meta-value"><span class="changed">Re: Hot Water System Replacement &mdash; Quote QS-2026-0412</span></span></div>
+            </div>
+            <div class="email-body-content">
+              <p><span class="changed">Dear Mr Henderson,</span></p>
+              <p><span class="changed">I'm writing to follow up on the hot water system replacement quote (Ref: QS-2026-0412) submitted on 21 March 2026. I wanted to confirm you received the documentation and whether you had any questions regarding the scope of works or pricing.</span></p>
+              <p><span class="changed">The quote remains valid for 30 days from the date of issue. Should you wish to proceed, we have availability to commence work within the next two weeks.</span></p>
+              <p><span class="changed">Please don't hesitate to contact me if you require any clarification or adjustments to the proposal.</span></p>
+              <p><span class="changed">Kind regards,</span><br>Rob Mitchell</p>
+            </div>
+            <div class="email-signature">
+              <strong>Rob Mitchell</strong><br>
+              <span class="changed">Director</span> &mdash; Ridge Plumbing &amp; Gas<br>
+              0421 845 378 &middot; rob@ridgeplumbing.co.nz<br>
+              <span class="changed">QBCC Lic: 15847293</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="footer-destination">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+          Send to Henderson
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+        <button class="btn btn-primary btn-sm">Send</button>
+      </div>
+    </div>
+
+    <!-- STATE 3: Sent -->
+    <div class="state-content" data-state="3">
+      <div class="resolved-banner">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Delivered to mark.henderson@email.co.nz
+      </div>
+      <div class="artifact-header-bar" style="border-bottom-color: var(--positive-subtle);">
+        <div class="artifact-header-top">
+          <div class="artifact-icon" style="background: var(--positive-subtle); color: var(--positive);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+          </div>
+          <div class="artifact-title">Henderson Follow-Up</div>
+          <span class="artifact-status status-resolved">Delivered</span>
+        </div>
+        <div class="artifact-meta">Email &middot; v2 (formal) &middot; Sent 27 Mar 2026 3:14 PM</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab">v1</button>
+        <button class="version-tab active">v2</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="email-preview" style="opacity: 0.85;">
+            <div class="email-toolbar">
+              <span class="email-dot red"></span>
+              <span class="email-dot yellow"></span>
+              <span class="email-dot green"></span>
+              <span class="email-toolbar-label">Sent</span>
+            </div>
+            <div class="email-meta">
+              <div class="email-meta-row"><span class="email-meta-label">To:</span><span class="email-meta-value">mark.henderson@email.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">From:</span><span class="email-meta-value">rob@ridgeplumbing.co.nz</span></div>
+              <div class="email-meta-row"><span class="email-meta-label">Subject:</span><span class="email-meta-value">Re: Hot Water System Replacement &mdash; Quote QS-2026-0412</span></div>
+            </div>
+            <div class="email-body-content">
+              <p>Dear Mr Henderson,</p>
+              <p>I'm writing to follow up on the hot water system replacement quote (Ref: QS-2026-0412) submitted on 21 March 2026. I wanted to confirm you received the documentation and whether you had any questions regarding the scope of works or pricing.</p>
+              <p>The quote remains valid for 30 days from the date of issue. Should you wish to proceed, we have availability to commence work within the next two weeks.</p>
+              <p>Please don't hesitate to contact me if you require any clarification or adjustments to the proposal.</p>
+              <p>Kind regards,<br>Rob Mitchell</p>
+            </div>
+            <div class="email-signature">
+              <strong>Rob Mitchell</strong><br>
+              Director &mdash; Ridge Plumbing &amp; Gas<br>
+              0421 845 378 &middot; rob@ridgeplumbing.co.nz<br>
+              QBCC Lic: 15847293
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="provenance">
+          <div class="provenance-label">Based on</div>
+          <div class="provenance-tags">
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Quote QS-2026-0412</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Contact: Henderson</span>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm">Forward</button>
+        <button class="btn btn-secondary btn-sm">Duplicate</button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ═══ DITTO PANEL ═══ -->
+  <aside class="ditto-panel" aria-label="Ditto conversation">
+
+    <div class="ditto-state active" data-state="1">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title"><span class="ditto-dot"></span> Ditto</div>
+        <div class="ditto-panel-context">Henderson Follow-Up</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">Draft a follow-up email to Henderson about the hot water system quote. It's been 6 days with no response.</div>
+        <div class="msg ditto">A follow-up email drafted. Friendly tone, brief, with a clear next step. The preview shows how Henderson will see it.</div>
+        <div class="artifact-ref">Follow-up Email v1 <span class="badge">Draft</span></div>
+        <div class="msg ditto">I kept it casual since most of your client emails are. If Henderson is a property manager you might want something more formal.</div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="ditto-state" data-state="2">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title"><span class="ditto-dot"></span> Ditto</div>
+        <div class="ditto-panel-context">Henderson Follow-Up</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">Draft a follow-up to Henderson about the quote.</div>
+        <div class="msg ditto">Done. Friendly tone, brief, clear next step.</div>
+        <div class="artifact-ref">Follow-up Email v1 <span class="badge">Draft</span></div>
+        <div class="msg user">Actually Henderson is a property manager &mdash; make it more formal. Include the quote reference number.</div>
+        <div class="msg ditto">Updated to formal tone. Added quote reference (QS-2026-0412), QBCC licence number, and professional structure. Subject line updated too.</div>
+        <div class="change-note">Tone: casual &rarr; formal &middot; Added reference &amp; licence</div>
+        <div class="artifact-ref">Follow-up Email v2 <span class="badge">Draft</span></div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="ditto-state" data-state="3">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title"><span class="ditto-dot"></span> Ditto</div>
+        <div class="ditto-panel-context">Henderson Follow-Up</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">Draft a follow-up to Henderson.</div>
+        <div class="artifact-ref">Follow-up Email v1 <span class="badge">Draft</span></div>
+        <div class="msg user">Make it more formal &mdash; he's a property manager.</div>
+        <div class="artifact-ref">Follow-up Email v2 <span class="badge">Draft</span></div>
+        <div class="msg user">Good, send it.</div>
+        <div class="msg ditto">Sent to mark.henderson@email.co.nz. I'll let you know if he replies.</div>
+        <div class="artifact-ref">Follow-up Email v2 <span class="badge badge-positive">Delivered</span></div>
+        <div class="teach-this">
+          <div class="teach-this-label">Quick thing</div>
+          You switched to formal tone for this property manager. Want me to default to formal for commercial clients going forward?
+          <div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button class="btn btn-secondary btn-sm">Yes, formal for commercial</button>
+            <button class="btn btn-ghost btn-sm">Just this one</button>
+          </div>
+        </div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<script>
+  document.querySelectorAll('.state-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const state = btn.dataset.state;
+      document.querySelectorAll('.state-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected', 'true');
+      document.querySelectorAll('.state-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.ditto-state').forEach(el => el.classList.remove('active'));
+      const c = document.querySelector(`.state-content[data-state="${state}"]`);
+      const d = document.querySelector(`.ditto-state[data-state="${state}"]`);
+      if (c) c.classList.add('active');
+      if (d) d.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+</script>
+
+</body>
+</html>

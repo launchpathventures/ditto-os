@@ -1,600 +1,649 @@
+<!-- v3 — Full visual vocabulary rewrite: cardless typographic flow, 2026-03-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Ditto — Morning (Rob's Phone)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P12 — Morning Mobile | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --caution: hsl(48 85% 50%);
-    --caution-subtle: hsl(48 60% 95%);
-    --selection: hsl(24 60% 90%);
-  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
 
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
+    font-family: var(--font);
+    background: #C8C8CC;
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 16px;
     -webkit-font-smoothing: antialiased;
-    /* Simulate phone width */
-    max-width: 390px;
-    margin: 0 auto;
-    min-height: 100vh;
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
   }
+  ::selection { background: var(--vivid-subtle); }
 
-  /* ═══════════════════════════════════════════
-     MOBILE LAYOUT — scroll feed, no panels.
-     Everything Rob needs in a vertical scroll.
-     3 minutes. Coffee. Done.
-  ═══════════════════════════════════════════ */
-  .mobile-app {
-    min-height: 100vh;
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Theme toggle */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Device Frame ===== */
+  .device-frame {
+    width: 390px;
+    margin: 64px auto 32px;
+    border-radius: 40px;
+    background: var(--bg);
+    border: 4px solid var(--border-strong);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+    position: relative;
+  }
+  .device-notch {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 28px;
+    background: var(--border-strong);
+    border-radius: 0 0 16px 16px;
+    z-index: 20;
+  }
+  .device-screen {
+    min-height: 780px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    position: relative;
   }
 
-  /* Top bar — minimal */
-  .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px 10px;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 10;
-  }
-
-  .top-bar-logo {
-    font-size: 17px;
-    font-weight: 600;
+  /* ===== Status Bar (phone chrome) ===== */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 20px 4px;
+    font-size: 12px; font-weight: 600;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 15;
+    min-height: 36px;
   }
+  .status-bar-icons { display: flex; align-items: center; gap: 4px; }
+  .status-bar-icons svg { width: 14px; height: 14px; }
 
+  /* ===== Top Bar ===== */
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 18px 10px;
+    background: var(--bg);
+  }
+  .top-bar-logo {
+    font-size: 17px; font-weight: 600;
+    color: var(--text-primary); letter-spacing: -0.02em;
+  }
   .top-bar-action {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: var(--surface);
+    width: 34px; height: 34px; border-radius: 50%;
+    border: none; background: var(--surface);
     color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     cursor: pointer;
   }
+  .top-bar-action svg { width: 18px; height: 18px; stroke-width: 1.5; }
 
-  .top-bar-action svg { width: 20px; height: 20px; stroke-width: 1.5; }
+  /* ===== Content Area ===== */
+  .content { flex: 1; padding: 0 18px; padding-bottom: 80px; }
 
-  /* ═══ MORNING BRIEF — the first thing Rob sees ═══ */
-  .morning-brief {
-    padding: 0 18px 8px;
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Checklists --- */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 0; flex-wrap: wrap; }
+  .metric {
+    flex: 1; min-width: 80px;
+    padding: 10px 0 10px 12px;
+    border-left: 2px solid var(--vivid);
+  }
+  .metric:nth-child(2) { border-left-color: var(--vivid-deep); }
+  .metric:nth-child(3) { border-left-color: var(--positive); }
+  .metric-value { font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .metric-trend { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; margin-left: 4px; }
+  .metric-trend.up { color: var(--positive); }
+  .metric-trend.down { color: var(--negative); }
+  .metric-trend.flat { color: var(--text-muted); }
+
+  /* --- Sparklines --- */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+  .sparkline.trend-down polyline { stroke: var(--negative); }
+  .sparkline.trend-flat polyline { stroke: var(--text-muted); }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    margin-top: 20px;
   }
 
-  .morning-greeting {
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .block-record:last-child { border-bottom: none; }
+  .block-record.accented { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .record-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; flex-wrap: wrap; }
+  .record-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; color: var(--text-primary); }
+  .record-subtitle { font-size: 12px; color: var(--text-muted); }
+  .record-status { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 99px; margin-left: auto; }
+  .record-status.positive { background: var(--positive-subtle); color: var(--positive); }
+  .record-status.caution { background: var(--caution-subtle); color: var(--caution); }
+  .record-status.negative { background: var(--negative-subtle); color: var(--negative); }
+  .record-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+  .record-process { color: var(--text-muted); font-weight: 500; }
+  .record-time { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
-
-  .morning-summary {
-    font-size: 15px;
-    color: var(--text-secondary);
-    line-height: 1.55;
-    margin-bottom: 16px;
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
-
-  .morning-summary strong { color: var(--text-primary); font-weight: 600; }
-
-  /* Quick stats */
-  .quick-stats {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
+  .btn-vivid:hover { filter: brightness(0.9); }
 
-  .quick-stat {
-    flex: 1;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px;
-    text-align: center;
+  /* --- Accent Borders (content hierarchy) --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-deep { border-left: 2px solid var(--vivid-deep); padding-left: 12px; }
+  .accent-caution { border-left: 2px solid var(--caution); padding-left: 12px; }
+  .accent-negative { border-left: 2px solid var(--negative); padding-left: 12px; }
+
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
   }
-
-  .quick-stat-value {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+  .provenance-tag {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; background: var(--surface);
+    border-radius: 99px; font-size: 11px; color: var(--text-muted);
   }
-
-  .quick-stat-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-
-  /* ═══ NEEDS YOU — the action items ═══ */
-  .section-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 16px 18px 8px;
-  }
-
-  /* Review card — tappable, swipeable feel */
-  .review-card {
-    margin: 0 14px 10px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  .review-card.urgent {
-    border-left: 3px solid var(--accent);
-  }
-
-  .review-card-body {
-    padding: 16px;
-  }
-
-  .review-card-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 6px;
-  }
-
-  .review-card-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.3;
-  }
-
-  .review-card-badge {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 6px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .badge-needs-you {
-    background: var(--accent-subtle);
-    color: var(--accent);
-  }
-
-  .badge-heads-up {
-    background: var(--caution-subtle);
-    color: hsl(38 60% 35%);
-  }
-
-  .review-card-subtitle {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-  }
-
-  /* Key details — what Rob needs to decide */
-  .review-details {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 10px;
-  }
-
-  .review-detail {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .review-detail-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .review-detail-value {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  /* Ditto's note */
-  .review-aside {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 8px 10px;
-    background: hsl(24 50% 97%);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.45;
-    margin-bottom: 4px;
-  }
-
-  .review-aside-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-    margin-top: 6px;
-  }
-
-  /* Based on strip — compact for mobile */
-  .review-based-on {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 6px 0 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .review-based-on-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding: 2px 7px;
-    background: var(--surface);
-    border-radius: 4px;
-    font-size: 11px;
-  }
-
-  .review-based-on-tag-dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
+  .provenance-dot {
+    width: 4px; height: 4px; border-radius: 50%;
     background: var(--positive);
   }
 
-  /* Action buttons — big, tappable */
-  .review-card-actions {
-    display: flex;
-    gap: 8px;
-    padding: 12px 16px;
+  /* --- Review Item --- */
+  .review-item { padding: 14px 0; }
+  .review-item + .review-item { border-top: 1px solid var(--border); }
+  .review-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .confidence-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .confidence-high { background: var(--positive); }
+  .confidence-medium { background: var(--caution); }
+  .confidence-low { background: var(--negative); }
+
+  /* --- Greeting --- */
+  .greeting {
+    font-size: 22px; font-weight: 600;
+    color: var(--text-primary); letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .greeting-summary {
+    font-size: 15px; color: var(--text-secondary);
+    line-height: 1.55; margin-bottom: 16px;
+  }
+  .greeting-summary strong { color: var(--text-primary); font-weight: 600; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px;
+  }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
+
+  /* --- Alert Block --- */
+  .alert {
+    padding: 10px 14px; border-radius: var(--radius-lg); font-size: 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .alert-warning { background: var(--caution-subtle); }
+  .alert-info { background: var(--info-subtle); }
+
+  /* ===== Bottom Tab Bar ===== */
+  .tab-bar {
+    position: sticky; bottom: 0;
+    display: flex; align-items: center; justify-content: space-around;
+    background: var(--surface-raised);
     border-top: 1px solid var(--border);
-    background: hsl(40 15% 97%);
+    padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+    z-index: 10;
   }
-
-  .review-card-actions .btn {
-    flex: 1;
-    text-align: center;
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-
-  /* ═══ RUNNING FINE — compact process health ═══ */
-  .health-strip {
-    display: flex;
-    gap: 8px;
-    padding: 0 18px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin-bottom: 8px;
-  }
-
-  .health-strip::-webkit-scrollbar { display: none; }
-
-  .health-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    white-space: nowrap;
-    font-size: 13px;
-    color: var(--text-secondary);
-    flex-shrink: 0;
-  }
-
-  .health-chip-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-  }
-
-  .health-chip-dot.good { background: var(--positive); }
-  .health-chip-dot.watching { background: hsl(210 50% 50%); }
-
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: all 0.12s;
-    line-height: 1.3;
+  .tab-item {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 10px; font-weight: 500; color: var(--text-muted);
+    text-decoration: none; padding: 4px 12px;
     -webkit-tap-highlight-color: transparent;
+    position: relative; cursor: pointer;
+    border: none; background: none; font-family: var(--font);
+  }
+  .tab-item.active { color: var(--vivid); }
+  .tab-item svg { width: 22px; height: 22px; stroke-width: 1.5; }
+  .tab-badge {
+    position: absolute; top: 0; right: 4px;
+    font-size: 9px; font-weight: 700; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 5px; border-radius: 99px; min-width: 14px; text-align: center;
   }
 
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:active { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-
-  /* ═══ BOTTOM INPUT — always accessible ═══ */
-  .bottom-input {
-    position: sticky;
-    bottom: 0;
-    padding: 10px 14px max(14px, env(safe-area-inset-bottom));
-    background: linear-gradient(transparent, var(--bg) 12px);
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
-
-  .bottom-input-container {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 10px 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .bottom-input-container:focus-within {
-    border-color: var(--accent);
-  }
-
-  .bottom-input-container input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 15px;
-    color: var(--text-primary);
-    background: transparent;
-  }
-
-  .bottom-input-container input::placeholder { color: var(--text-muted); }
-
-  .bottom-icon-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .bottom-icon-btn svg { width: 20px; height: 20px; stroke-width: 1.5; }
-
-  .bottom-send {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .bottom-send svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
 
-<div class="mobile-app">
-
-  <!-- Top bar -->
-  <div class="top-bar">
-    <span class="top-bar-logo">Ditto</span>
-    <button class="top-bar-action">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-      </svg>
-    </button>
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 2 &middot; <span>Morning Mobile</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="11-workspace-emerges.html" class="proto-arrow" aria-label="Previous: Workspace Emerges">&larr;</a>
+    <a href="13-daily-workspace.html" class="proto-arrow" aria-label="Next: Daily Workspace">&rarr;</a>
   </div>
+</nav>
 
-  <!-- ═══ MORNING BRIEF ═══ -->
-  <div class="morning-brief">
-    <div class="morning-greeting">Morning Rob</div>
-    <div class="morning-summary">
-      <strong>2 quotes need you.</strong> Henderson bathroom might be underpriced. Wilson kitchen looks good. Everything else is running fine.
-    </div>
+<!-- Device Frame -->
+<div class="device-frame">
+  <div class="device-notch"></div>
+  <div class="device-screen">
 
-    <div class="quick-stats">
-      <div class="quick-stat">
-        <div class="quick-stat-value">5</div>
-        <div class="quick-stat-label">Quotes this week</div>
-      </div>
-      <div class="quick-stat">
-        <div class="quick-stat-value">4</div>
-        <div class="quick-stat-label">Approved clean</div>
-      </div>
-      <div class="quick-stat">
-        <div class="quick-stat-value">$68k</div>
-        <div class="quick-stat-label">Quoted</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ NEEDS YOU ═══ -->
-  <div class="section-label">Needs you</div>
-
-  <div class="review-card urgent">
-    <div class="review-card-body">
-      <div class="review-card-top">
-        <div class="review-card-title">Henderson bathroom reno</div>
-        <span class="review-card-badge badge-needs-you">Review</span>
-      </div>
-      <div class="review-card-subtitle">Drafted 2 hours ago</div>
-
-      <div class="review-details">
-        <div class="review-detail">
-          <span class="review-detail-label">Materials</span>
-          <span class="review-detail-value">$8,400</span>
-        </div>
-        <div class="review-detail">
-          <span class="review-detail-label">Labour</span>
-          <span class="review-detail-value">18 hrs</span>
-        </div>
-        <div class="review-detail">
-          <span class="review-detail-label">Total</span>
-          <span class="review-detail-value">$14,200</span>
-        </div>
-      </div>
-
-      <div class="review-aside">
-        <span class="review-aside-dot"></span>
-        <span>Labour looks low — bathrooms usually take 22 hrs. Want me to bump it?</span>
-      </div>
-
-      <div class="review-based-on">
-        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Reece prices (12 Mar)</span>
-        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> 25% margin</span>
-        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Bathroom rule: 22 hrs</span>
+    <!-- Phone Status Bar -->
+    <div class="status-bar">
+      <span>6:32</span>
+      <div class="status-bar-icons">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><rect x="1" y="6" width="4" height="12" rx="1"/><rect x="7" y="4" width="4" height="14" rx="1"/><rect x="13" y="2" width="4" height="16" rx="1"/><rect x="19" y="0" width="4" height="18" rx="1"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="4" y="8" width="10" height="8" rx="1"/><rect x="21" y="9" width="2" height="6" rx="1"/></svg>
       </div>
     </div>
 
-    <div class="review-card-actions">
-      <button class="btn btn-primary">Bump &amp; send</button>
-      <button class="btn btn-secondary">Approve as-is</button>
-    </div>
-  </div>
-
-  <div class="review-card">
-    <div class="review-card-body">
-      <div class="review-card-top">
-        <div class="review-card-title">Wilson kitchen renovation</div>
-        <span class="review-card-badge badge-needs-you">Review</span>
-      </div>
-      <div class="review-card-subtitle">Drafted 4 hours ago</div>
-
-      <div class="review-details">
-        <div class="review-detail">
-          <span class="review-detail-label">Materials</span>
-          <span class="review-detail-value">$4,800</span>
-        </div>
-        <div class="review-detail">
-          <span class="review-detail-label">Labour</span>
-          <span class="review-detail-value">12 hrs</span>
-        </div>
-        <div class="review-detail">
-          <span class="review-detail-label">Total</span>
-          <span class="review-detail-value">$8,900</span>
-        </div>
-      </div>
-
-      <div class="review-based-on">
-        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> Tradelink prices (10 Mar)</span>
-        <span class="review-based-on-tag"><span class="review-based-on-tag-dot"></span> 25% margin</span>
-      </div>
-    </div>
-
-    <div class="review-card-actions">
-      <button class="btn btn-primary">Approve &amp; send</button>
-      <button class="btn btn-secondary">Adjust</button>
-    </div>
-  </div>
-
-  <!-- ═══ HEADS UP ═══ -->
-  <div class="section-label">Heads up</div>
-
-  <div class="review-card">
-    <div class="review-card-body">
-      <div class="review-card-top">
-        <div class="review-card-title">Copper prices moved</div>
-        <span class="review-card-badge badge-heads-up">Info</span>
-      </div>
-      <div class="review-card-subtitle">Up 8% this week. 2 quotes used old prices.</div>
-    </div>
-    <div class="review-card-actions">
-      <button class="btn btn-secondary">Update prices</button>
-      <button class="btn btn-ghost">I'll handle it</button>
-    </div>
-  </div>
-
-  <!-- ═══ RUNNING FINE — horizontal scroll chips ═══ -->
-  <div class="section-label">Running fine</div>
-
-  <div class="health-strip">
-    <div class="health-chip">
-      <span class="health-chip-dot good"></span>
-      Quoting &middot; 31/34 clean
-    </div>
-    <div class="health-chip">
-      <span class="health-chip-dot good"></span>
-      Follow-ups &middot; 3 sent yesterday
-    </div>
-    <div class="health-chip">
-      <span class="health-chip-dot watching"></span>
-      Invoicing &middot; 2 of 5 paid
-    </div>
-  </div>
-
-  <!-- Spacer for bottom input -->
-  <div style="height: 80px;"></div>
-
-  <!-- ═══ BOTTOM INPUT ═══ -->
-  <div class="bottom-input">
-    <div class="bottom-input-container">
-      <input type="text" placeholder="Tell Ditto something...">
-      <button class="bottom-icon-btn" title="Voice">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <span class="top-bar-logo">Ditto</span>
+      <button class="top-bar-action" aria-label="Search">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-        </svg>
-      </button>
-      <button class="bottom-send">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
         </svg>
       </button>
     </div>
-  </div>
 
+    <!-- Content -->
+    <div class="content">
+
+      <!-- ===== Morning Greeting ===== -->
+      <div class="greeting">Morning Rob</div>
+      <div class="greeting-summary">
+        <strong>2 quotes need you.</strong> Henderson bathroom might be underpriced. Wilson kitchen looks good. Everything else is running fine.
+      </div>
+
+      <!-- ===== Metric Cluster ===== -->
+      <div class="metric-row" style="margin-bottom: 16px;">
+        <div class="metric">
+          <div class="metric-value">3 <span class="metric-trend up">&#9650;</span></div>
+          <div class="metric-label">Quotes pending</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">2</div>
+          <div class="metric-label">Jobs today</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">$68k</div>
+          <div class="metric-label">Pipeline value</div>
+        </div>
+      </div>
+
+      <!-- ===== Pipeline Sparkline ===== -->
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="font-size: 12px; color: var(--text-muted);">Pipeline 7d</span>
+        <svg class="sparkline trend-up" viewBox="0 0 48 18">
+          <polyline points="2,14 8,12 16,15 22,10 30,8 36,6 46,3"/>
+        </svg>
+      </div>
+
+      <!-- ===== Overnight Activity ===== -->
+      <div class="section-title">Overnight</div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-process">Quoting</span>
+          <span class="badge badge-vivid">You review</span>
+          <span class="record-time">4h ago</span>
+        </div>
+        <div class="record-title">Ditto drafted a follow-up for the Patel job</div>
+        <div class="record-body">Client hasn't responded in 5 days. Draft references the original scope and offers a site visit this week.</div>
+        <div class="provenance">
+          <svg class="provenance-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="provenance-tag"><span class="provenance-dot"></span> Original quote #0041</span>
+          <span class="provenance-tag"><span class="provenance-dot"></span> Email thread</span>
+        </div>
+        <div class="action-row">
+          <button class="btn-primary">Approve &amp; send</button>
+          <button class="btn-secondary">Edit first</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-process">Pricing</span>
+          <span class="badge badge-caution">Spot check</span>
+          <span class="record-time">2h ago</span>
+        </div>
+        <div class="record-title">Supplier price update detected</div>
+        <div class="record-body">Copper pipe up 8% at Reece since last week. 2 active quotes may be affected.</div>
+        <div class="field-table" style="margin-top: 8px;">
+          <span class="field-label">Affected quotes</span>
+          <span class="field-value">Henderson, Trung</span>
+          <span class="field-label">Impact</span>
+          <span class="field-value">+$320 avg per job</span>
+        </div>
+        <div class="action-row">
+          <button class="btn-secondary">Update prices</button>
+          <button class="btn-secondary">I'll handle it</button>
+        </div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-process">Scheduling</span>
+          <span class="badge badge-positive">All good</span>
+          <span class="record-time">6h ago</span>
+        </div>
+        <div class="record-title">Tomorrow's jobs confirmed</div>
+        <div class="record-body">3 clients confirmed via SMS. No changes to schedule.</div>
+      </div>
+
+      <!-- ===== Review Queue ===== -->
+      <div class="section-title">You review</div>
+
+      <!-- Henderson Review -->
+      <div class="review-item">
+        <div class="review-meta">
+          <span class="confidence-dot confidence-medium"></span>
+          <span style="font-size: 13px; font-weight: 500;">Henderson bathroom reno</span>
+          <span class="badge badge-caution" style="margin-left: auto;">Needs check</span>
+        </div>
+        <div class="accent-caution" style="margin-bottom: 10px;">
+          <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+            Labour looks low — bathrooms usually take 22 hrs. Want me to bump it?
+          </div>
+        </div>
+        <div class="field-table" style="margin-bottom: 8px;">
+          <span class="field-label">Materials</span>
+          <span class="field-value">$8,400</span>
+          <span class="field-label">Labour</span>
+          <span class="field-value">18 hrs <span class="badge badge-caution" style="margin-left: 4px;">Low</span></span>
+          <span class="field-label">Total</span>
+          <span class="field-value">$14,200</span>
+          <span class="field-label">Margin</span>
+          <span class="field-value">25%</span>
+        </div>
+
+        <!-- Progress: quote completeness -->
+        <div class="progress-label">
+          <span>Quote completeness</span>
+          <span>85%</span>
+        </div>
+        <div class="progress-bar" style="margin-bottom: 8px;">
+          <div class="progress-fill" style="width: 85%;"></div>
+        </div>
+
+        <!-- Provenance -->
+        <div class="provenance">
+          <svg class="provenance-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="provenance-tag"><span class="provenance-dot"></span> Reece prices (12 Mar)</span>
+          <span class="provenance-tag"><span class="provenance-dot"></span> Bathroom rule: 22 hrs</span>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-vivid">Bump &amp; send</button>
+          <button class="btn-secondary">Approve as-is</button>
+        </div>
+      </div>
+
+      <!-- Wilson Review -->
+      <div class="review-item">
+        <div class="review-meta">
+          <span class="confidence-dot confidence-high"></span>
+          <span style="font-size: 13px; font-weight: 500;">Wilson kitchen renovation</span>
+          <span class="badge badge-positive" style="margin-left: auto;">Looks good</span>
+        </div>
+        <div class="field-table" style="margin-bottom: 8px;">
+          <span class="field-label">Materials</span>
+          <span class="field-value">$4,800</span>
+          <span class="field-label">Labour</span>
+          <span class="field-value">12 hrs</span>
+          <span class="field-label">Total</span>
+          <span class="field-value">$8,900</span>
+          <span class="field-label">Margin</span>
+          <span class="field-value">25%</span>
+        </div>
+
+        <div class="provenance">
+          <svg class="provenance-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="provenance-tag"><span class="provenance-dot"></span> Tradelink prices (10 Mar)</span>
+          <span class="provenance-tag"><span class="provenance-dot"></span> 25% margin</span>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-primary">Approve &amp; send</button>
+          <button class="btn-secondary">Adjust</button>
+        </div>
+      </div>
+
+      <!-- ===== Process Health ===== -->
+      <div class="section-title">Running fine</div>
+
+      <ul class="checklist" style="margin-bottom: 12px;">
+        <li class="checklist-item">
+          <span class="check-icon check-done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>
+          <div>
+            <div>Quoting</div>
+            <div style="font-size: 13px; color: var(--text-muted);">31 of 34 quotes clean this month</div>
+          </div>
+        </li>
+        <li class="checklist-item">
+          <span class="check-icon check-done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>
+          <div>
+            <div>Follow-ups</div>
+            <div style="font-size: 13px; color: var(--text-muted);">3 sent yesterday, 0 overdue</div>
+          </div>
+        </li>
+        <li class="checklist-item">
+          <span class="check-icon check-warning"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01"/></svg></span>
+          <div>
+            <div>Invoicing <span class="badge badge-caution" style="margin-left: 4px;">Spot check</span></div>
+            <div style="font-size: 13px; color: var(--text-muted);">2 of 5 paid this cycle</div>
+            <div class="progress-bar" style="margin-top: 6px; width: 120px;">
+              <div class="progress-fill" style="width: 40%; background: var(--caution);"></div>
+            </div>
+          </div>
+        </li>
+      </ul>
+
+      <!-- ===== Today's Schedule ===== -->
+      <div class="section-title">Today</div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-process">8:00 AM</span>
+          <span class="badge badge-neutral">On site</span>
+        </div>
+        <div class="record-title">Martinez deck — Day 3 of 4</div>
+        <div class="record-body">Railing install and staining. Materials on site.</div>
+      </div>
+
+      <div class="block-record">
+        <div class="record-header">
+          <span class="record-process">1:30 PM</span>
+          <span class="badge badge-info">Measure</span>
+        </div>
+        <div class="record-title">New enquiry — Chen garage conversion</div>
+        <div class="record-body">Site measure and initial scope. Client wants a home office.</div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab-item active" aria-label="Today">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg>
+        Today
+      </button>
+      <button class="tab-item" aria-label="Inbox" style="position: relative;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-17.399 0V6a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121.75 6v7.5"/></svg>
+        <span class="tab-badge">3</span>
+        Inbox
+      </button>
+      <button class="tab-item" aria-label="Work">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+        Work
+      </button>
+      <button class="tab-item" aria-label="Routines">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg>
+        Routines
+      </button>
+    </div>
+
+  </div>
 </div>
 
-<div class="proto-nav"><a href="11-workspace-emerges.html">&larr; Workspace Emerges</a><span class="pn-t"><a href="index.html">P12 Morning Mobile</a></span><a href="13-daily-workspace.html">Daily Workspace &rarr;</a></div><!-- pnav -->
+<script>
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+
+  // Tab bar interaction
+  document.querySelectorAll('.tab-item').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+</script>
 </body>
 </html>

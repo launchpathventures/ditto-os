@@ -1,0 +1,1008 @@
+<!-- Build-Ready v1, 2026-03-27 — JSON-Render Composability Proof -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P30 — Block Gallery | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* Proto nav */
+  .proto-nav { position:fixed; top:0; left:0; right:0; height:48px; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; z-index:100; font-size:14px; }
+  .proto-nav-label { color:var(--text-muted); font-weight:500; }
+  .proto-nav-centre { color:var(--text-secondary); font-weight:500; }
+  .proto-nav-centre span { color:var(--text-primary); }
+  .proto-nav-right { display:flex; align-items:center; gap:12px; }
+  .proto-arrow { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-raised); color:var(--text-secondary); text-decoration:none; font-size:14px; cursor:pointer; transition:all .15s; }
+  .proto-arrow:hover:not(.disabled) { border-color:var(--border-strong); color:var(--text-primary); }
+  .proto-arrow.disabled { opacity:.35; cursor:not-allowed; }
+  .theme-toggle { display:flex; align-items:center; gap:4px; margin-right:12px; padding-right:12px; border-right:1px solid var(--border); }
+  .theme-btn { font-family:var(--font); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); background:transparent; border:1px solid transparent; border-radius:99px; padding:4px 12px; cursor:pointer; transition:all .15s; }
+  .theme-btn:hover { color:var(--text-primary); }
+  .theme-btn.active { color:var(--text-primary); border-color:var(--border-strong); background:var(--surface); }
+  body.theme-focus { --vivid:#111118; --vivid-deep:#4A4A55; --vivid-subtle:#E7E7EB; }
+
+  /* State bar */
+  .state-bar { position:fixed; top:48px; left:0; right:0; height:44px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:center; gap:4px; z-index:99; padding:0 16px; }
+  .state-btn { font-family:var(--font); font-size:13px; font-weight:500; color:var(--text-secondary); background:transparent; border:1px solid transparent; border-radius:var(--radius-md); padding:6px 14px; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .state-btn:hover { color:var(--text-primary); background:var(--surface-raised); }
+  .state-btn.active { color:var(--text-primary); background:var(--surface-raised); border-color:var(--border); box-shadow:var(--shadow-subtle); }
+
+  /* Layout */
+  .workspace { position:fixed; top:92px; left:0; right:0; bottom:0; display:flex; overflow:hidden; }
+  .sidebar { width:240px; min-width:240px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .sidebar-header { padding:20px 16px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .wordmark { font-size:20px; font-weight:600; letter-spacing:-0.02em; }
+  .sidebar-nav { flex:1; overflow-y:auto; padding:4px 8px; }
+  .nav-item { display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:var(--radius-md); cursor:pointer; transition:all .15s; font-size:14px; color:var(--text-secondary); text-decoration:none; }
+  .nav-item:hover { background:var(--surface-raised); color:var(--text-primary); }
+  .nav-item.active { color:var(--text-primary); font-weight:500; border-left:2px solid var(--vivid); border-radius:0; padding-left:10px; }
+  .nav-icon { width:20px; height:20px; flex-shrink:0; }
+  .nav-badge { font-size:11px; font-weight:600; background:var(--negative); color:white; padding:2px 6px; border-radius:99px; margin-left:auto; }
+  .sidebar-footer { padding:8px; border-top:1px solid var(--border); }
+
+  .centre { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--bg); }
+  .centre-scroll { flex:1; overflow-y:auto; }
+  .centre-content { max-width:720px; margin:0 auto; padding:32px 24px 24px; }
+
+  .input-bar { padding:12px 24px 20px; flex-shrink:0; }
+  .input-container { max-width:720px; margin:0 auto; display:flex; align-items:flex-end; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:10px 16px; transition:border-color .15s, box-shadow .15s; }
+  .input-container:focus-within { border-color:var(--vivid); box-shadow:0 0 0 3px rgba(5,150,105,.1); }
+  .input-dot { width:28px; height:28px; flex-shrink:0; position:relative; overflow:hidden; }
+  .input-field { flex:1; border:none; background:transparent; font-family:var(--font); font-size:16px; color:var(--text-primary); outline:none; line-height:1.5; resize:none; min-height:24px; max-height:120px; }
+  .input-field::placeholder { color:var(--text-muted); }
+
+  .right-panel { width:320px; min-width:320px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .right-panel-header { padding:20px 20px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .right-panel-title { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
+  .right-dot { width:24px; height:24px; flex-shrink:0; position:relative; overflow:hidden; }
+  .right-panel-scroll { flex:1; overflow-y:auto; padding:0 20px 20px; }
+
+  /* ===== Block renderers (mirrors block-registry.tsx) ===== */
+
+  /* Shared */
+  .block { margin-bottom: 16px; }
+  .block:last-child { margin-bottom: 0; }
+  .block-type-label { font-family:var(--mono); font-size:11px; color:var(--vivid-deep); background:var(--vivid-subtle); padding:2px 8px; border-radius:4px; margin-bottom:6px; display:inline-block; font-weight:500; }
+
+  /* text */
+  .block-text { font-size:15px; line-height:1.6; color:var(--text-primary); }
+
+  /* review_card */
+  .block-review { border-left:2px solid var(--vivid); padding-left:12px; }
+  .block-review-title { font-size:15px; font-weight:500; margin-bottom:4px; }
+  .block-review-output { font-size:14px; color:var(--text-secondary); line-height:1.5; margin-bottom:8px; }
+  .confidence-dot { width:8px; height:8px; border-radius:50%; display:inline-block; vertical-align:middle; margin-right:4px; }
+  .confidence-high { background:var(--positive); }
+  .confidence-medium { background:var(--caution); }
+  .confidence-low { background:var(--negative); }
+  .action-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn-primary { font-family:var(--font); font-size:13px; font-weight:600; background:var(--accent); color:var(--accent-text); border:none; border-radius:99px; padding:6px 16px; cursor:pointer; }
+  .btn-secondary { font-family:var(--font); font-size:13px; font-weight:500; background:transparent; color:var(--text-secondary); border:1px solid var(--border); border-radius:99px; padding:6px 16px; cursor:pointer; }
+  .btn-vivid { font-family:var(--font); font-size:13px; font-weight:600; background:var(--vivid); color:white; border:none; border-radius:99px; padding:6px 16px; cursor:pointer; }
+  .btn-danger { font-family:var(--font); font-size:13px; font-weight:500; background:transparent; color:var(--negative); border:1px solid var(--negative-subtle); border-radius:99px; padding:6px 16px; cursor:pointer; }
+
+  /* status_card */
+  .block-status { border-left:2px solid var(--info); padding-left:12px; }
+  .block-status-title { font-size:15px; font-weight:500; margin-bottom:4px; }
+  .field-table { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; font-size:14px; }
+  .field-label { color:var(--text-muted); }
+  .field-value { color:var(--text-primary); font-weight:500; }
+
+  /* actions */
+  .block-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* input_request */
+  .block-input { border-left:2px solid var(--vivid); padding-left:12px; }
+  .block-input-prompt { font-size:14px; margin-bottom:8px; }
+  .input-field-mock { width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius-md); font-family:var(--font); font-size:14px; background:var(--surface-raised); margin-bottom:6px; }
+
+  /* knowledge_citation */
+  .block-citation { display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text-muted); padding:6px 0; }
+  .citation-icon { width:14px; height:14px; color:var(--vivid-deep); flex-shrink:0; margin-top:1px; }
+  .citation-source { color:var(--vivid-deep); font-weight:500; }
+
+  /* progress */
+  .progress-bar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:3px; background:var(--vivid); }
+  .progress-label { display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
+
+  /* data — key_value */
+  /* (field-table reused) */
+
+  /* data — table */
+  .data-table { width:100%; border-collapse:collapse; font-size:14px; }
+  .data-table th { text-align:left; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); padding:6px 8px; border-bottom:1px solid var(--border); }
+  .data-table td { padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text-primary); }
+
+  /* image */
+  .block-image { border-radius:var(--radius-lg); overflow:hidden; background:var(--surface); }
+  .block-image-placeholder { width:100%; height:120px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:13px; }
+  .block-image-caption { font-size:12px; color:var(--text-muted); padding:6px 0; }
+
+  /* code */
+  .block-code { background:var(--text-primary); color:var(--surface-raised); border-radius:var(--radius-md); padding:12px 16px; font-family:var(--mono); font-size:13px; line-height:1.5; overflow-x:auto; }
+  .block-code-filename { font-size:11px; color:var(--text-muted); margin-bottom:4px; font-family:var(--mono); }
+
+  /* reasoning_trace */
+  .block-reasoning { border-left:2px solid var(--vivid-deep); padding-left:12px; }
+  .block-reasoning-title { font-size:14px; font-weight:600; margin-bottom:6px; }
+  .reasoning-step { font-size:13px; margin-bottom:4px; color:var(--text-secondary); }
+  .reasoning-step strong { color:var(--text-primary); font-weight:500; }
+  .reasoning-conclusion { font-size:14px; font-weight:500; margin-top:8px; border-top:1px solid var(--border); padding-top:8px; }
+
+  /* suggestion */
+  .block-suggestion { background:var(--vivid-subtle); border-radius:var(--radius-lg); padding:12px 16px; font-size:14px; }
+  .suggestion-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--vivid-deep); margin-bottom:4px; }
+
+  /* alert */
+  .block-alert { padding:10px 14px; border-radius:var(--radius-lg); font-size:14px; display:flex; align-items:flex-start; gap:10px; }
+  .block-alert.warning { background:var(--caution-subtle); }
+  .block-alert.error { background:var(--negative-subtle); }
+  .block-alert.info { background:var(--info-subtle); }
+  .alert-icon { width:18px; height:18px; flex-shrink:0; margin-top:1px; }
+  .alert-title { font-weight:600; }
+
+  /* knowledge_synthesis */
+  .block-synthesis { border-left:2px solid var(--vivid); padding-left:12px; }
+  .synthesis-entry { font-size:14px; margin-bottom:6px; }
+  .synthesis-dim { font-weight:500; color:var(--vivid-deep); }
+  .synthesis-bar { height:4px; background:var(--border); border-radius:2px; margin-top:2px; width:100px; display:inline-block; overflow:hidden; vertical-align:middle; margin-left:8px; }
+  .synthesis-bar-fill { height:100%; background:var(--vivid); border-radius:2px; }
+
+  /* process_proposal */
+  .block-proposal { background:var(--surface-raised); border-radius:var(--radius-lg); padding:16px; }
+  .proposal-name { font-size:16px; font-weight:600; margin-bottom:4px; }
+  .proposal-desc { font-size:14px; color:var(--text-secondary); margin-bottom:10px; }
+  .proposal-step { display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0; }
+  .step-icon { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; }
+  .step-done { background:var(--positive-subtle); color:var(--positive); }
+  .step-current { background:var(--vivid-subtle); color:var(--vivid); }
+  .step-pending { background:var(--accent-subtle); color:var(--text-muted); }
+
+  /* gathering_indicator */
+  .block-gathering { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-muted); padding:8px 0; }
+  .gathering-dots { display:flex; gap:3px; }
+  .gathering-dot { width:6px; height:6px; border-radius:50%; background:var(--vivid); animation:gatherPulse 1.4s infinite; }
+  .gathering-dot:nth-child(2) { animation-delay:.2s; }
+  .gathering-dot:nth-child(3) { animation-delay:.4s; }
+  @keyframes gatherPulse { 0%,80%,100% { opacity:.3; } 40% { opacity:1; } }
+
+  /* checklist */
+  .checklist { list-style:none; }
+  .checklist-item { display:flex; align-items:flex-start; gap:10px; padding:5px 0; font-size:14px; }
+  .check-icon { width:18px; height:18px; flex-shrink:0; margin-top:2px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+  .check-done { background:var(--positive-subtle); color:var(--positive); }
+  .check-pending { background:var(--accent-subtle); color:var(--text-muted); }
+  .check-warning { background:var(--caution-subtle); color:var(--caution); }
+  .check-icon svg { width:12px; height:12px; }
+  .checklist-detail { font-size:13px; color:var(--text-muted); }
+
+  /* chart — sparkline */
+  .sparkline { display:inline-block; width:48px; height:18px; vertical-align:middle; }
+  .sparkline polyline { fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+  .sparkline.trend-up polyline { stroke:var(--positive); }
+  .sparkline.trend-down polyline { stroke:var(--negative); }
+  .sparkline.trend-flat polyline { stroke:var(--text-muted); }
+
+  /* chart — donut */
+  .donut { width:48px; height:48px; transform:rotate(-90deg); }
+  .donut circle { fill:none; stroke-width:5; }
+  .donut .donut-track { stroke:var(--border); }
+  .donut .donut-fill { stroke:var(--vivid); stroke-linecap:round; }
+  .donut-container { display:flex; align-items:center; gap:12px; }
+  .donut-label { font-size:14px; }
+  .donut-label strong { font-weight:600; }
+
+  /* chart — bar */
+  .bar-chart { display:flex; align-items:flex-end; gap:4px; height:48px; }
+  .bar-segment { flex:1; min-width:0; border-radius:3px 3px 0 0; background:var(--vivid); transition:height .3s; }
+
+  /* Gallery: charts scale to fill their block */
+  .gallery-item .donut-container { gap:20px; }
+  .gallery-item .donut { width:96px; height:96px; }
+  .gallery-item .donut circle { stroke-width:4; }
+  .gallery-item .donut-label { font-size:16px; }
+  .gallery-item .bar-chart { height:120px; gap:6px; }
+  .gallery-item .bar-chart + div { gap:0; }
+  .gallery-item .bar-chart + div span { flex:1; min-width:0; width:auto; }
+  .gallery-item .sparkline { width:100%; height:48px; display:block; }
+
+  /* record */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-checks { margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; }
+  .record-check { font-size:12px; }
+  .record-check.pass { color:var(--positive); }
+  .record-check.fail { color:var(--caution); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+
+  /* interactive_table */
+  .block-itable { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+  .itable-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); }
+  .itable-title { font-size:14px; font-weight:500; color:var(--text-primary); }
+  .itable-summary { font-size:12px; color:var(--text-muted); }
+  .itable table { width:100%; border-collapse:collapse; font-size:13px; }
+  .itable th { padding:6px 12px; text-align:left; font-weight:500; font-size:12px; color:var(--text-secondary); background:var(--surface); border-bottom:1px solid var(--border); }
+  .itable th.right { text-align:right; }
+  .itable th.center { text-align:center; }
+  .itable td { padding:6px 12px; color:var(--text-primary); border-top:1px solid var(--border); }
+  .itable td.right { text-align:right; font-variant-numeric:tabular-nums; }
+  .itable td.center { text-align:center; }
+  .itable tr.flagged { border-left:2px solid var(--caution); }
+  .itable .row-action { color:var(--vivid); font-size:12px; font-weight:500; cursor:pointer; background:none; border:none; font-family:var(--font); }
+  .itable-batch { padding:8px 12px; border-top:1px solid var(--border); background:var(--surface); }
+
+  /* metric */
+  .metric-row { display:flex; gap:24px; flex-wrap:wrap; }
+  .metric { min-width:80px; }
+  .metric-value { font-size:28px; font-weight:600; line-height:1.2; letter-spacing:-0.02em; }
+  .metric-label { font-size:12px; color:var(--text-muted); margin-top:2px; }
+  .metric-trend { display:inline-flex; align-items:center; gap:2px; font-size:12px; font-weight:500; margin-left:4px; }
+  .metric-trend.up { color:var(--positive); }
+  .metric-trend.down { color:var(--negative); }
+  .metric-trend.flat { color:var(--text-muted); }
+
+  /* Badge */
+  .badge { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:99px; white-space:nowrap; }
+  .badge-positive { background:var(--positive-subtle); color:var(--positive); }
+  .badge-caution { background:var(--caution-subtle); color:var(--caution); }
+  .badge-negative { background:var(--negative-subtle); color:var(--negative); }
+  .badge-info { background:var(--info-subtle); color:var(--info); }
+  .badge-neutral { background:var(--accent-subtle); color:var(--text-secondary); }
+  .badge-vivid { background:var(--vivid-subtle); color:var(--vivid-deep); }
+
+  /* Section */
+  .section-title { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin:24px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .section-heading { font-size:16px; font-weight:600; margin-bottom:8px; letter-spacing:-0.01em; }
+
+  /* Conversation messages */
+  .msg { margin-bottom:16px; max-width:720px; }
+  .msg.user { background:var(--surface); border-radius:var(--radius-xl); padding:12px 16px; font-size:15px; margin-left:40px; }
+  .msg.ditto { font-size:15px; line-height:1.6; }
+
+  /* Gallery grid */
+  .gallery-grid { display:grid; gap:24px; }
+  .gallery-item { padding:16px 0; border-bottom:1px solid var(--border); }
+  .gallery-item:last-child { border-bottom:none; }
+  .gallery-item-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .gallery-type { font-family:var(--mono); font-size:12px; font-weight:500; color:var(--vivid-deep); background:var(--vivid-subtle); padding:2px 10px; border-radius:4px; }
+  .gallery-desc { font-size:13px; color:var(--text-muted); }
+  .json-preview { font-family:var(--mono); font-size:11px; color:var(--text-muted); background:var(--surface); padding:8px 12px; border-radius:var(--radius-md); margin-top:8px; overflow-x:auto; white-space:pre; max-height:80px; overflow-y:auto; display:none; }
+  .json-toggle { font-family:var(--font); font-size:11px; color:var(--vivid-deep); background:none; border:none; cursor:pointer; margin-top:6px; text-decoration:underline; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<nav class="proto-nav">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Composability · <span>Block Gallery</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="00-workspace-shell.html" class="proto-arrow" aria-label="Previous: Shell">←</a>
+    <a href="23-setup-connection.html" class="proto-arrow" aria-label="Next: Setup">→</a>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist">
+  <button class="state-btn active" role="tab" data-state="conversation">Conversation</button>
+  <button class="state-btn" role="tab" data-state="after">After interaction</button>
+  <button class="state-btn" role="tab" data-state="gallery">Block gallery</button>
+</div>
+
+<div class="workspace">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="wordmark">Ditto</div></div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Today</span></a>
+      <a class="nav-item" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg><span>Inbox</span><span class="nav-badge">3</span></a>
+      <a class="nav-item" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>Work</span></a>
+      <a class="nav-item" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><span>Projects</span></a>
+      <a class="nav-item" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg><span>Routines</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" role="button"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>Settings</span></a>
+    </div>
+  </aside>
+
+  <!-- Centre -->
+  <main class="centre">
+    <div class="centre-scroll">
+      <!-- STATE 1: Conversation arrives -->
+      <div class="centre-content" id="state-conversation">
+        <div class="msg user">How's my quoting going this week?</div>
+
+        <div class="msg ditto">
+          <div class="block">
+            <div class="block-gathering">
+              <div class="gathering-dots"><div class="gathering-dot"></div><div class="gathering-dot"></div><div class="gathering-dot"></div></div>
+              Checking your quoting process...
+            </div>
+          </div>
+
+          <div class="block block-text">Here's your quoting summary for this week.</div>
+
+          <div class="block">
+            <div class="metric-row">
+              <div class="metric"><div class="metric-value">7 <span class="metric-trend up">↑ 2</span></div><div class="metric-label">Quotes</div></div>
+              <div class="metric"><div class="metric-value">5</div><div class="metric-label">Approved</div></div>
+              <div class="metric"><div class="metric-value">4</div><div class="metric-label">Sent</div></div>
+              <div class="metric"><div class="metric-value">71%</div><div class="metric-label">Win rate</div></div>
+            </div>
+          </div>
+
+          <div class="block block-review">
+            <div class="block-review-title">Henderson bathroom renovation — $18,400 <span class="badge badge-caution" style="margin-left:6px;">Review</span></div>
+            <div class="block-review-output">4-piece bathroom refit. Tiles, plumbing, waterproofing, vanity install. Materials from Reece, labour based on your standard rates.</div>
+            <div style="margin:8px 0;">
+              <div class="field-table">
+                <span class="field-label">Materials</span><span class="field-value">$11,200</span>
+                <span class="field-label">Labour</span><span class="field-value">$5,800</span>
+                <span class="field-label">Margin</span><span class="field-value">7.6%</span>
+                <span class="field-label">Confidence</span><span class="field-value"><span class="confidence-dot confidence-high"></span> High</span>
+              </div>
+            </div>
+            <div class="action-row"><button class="btn-vivid">Approve</button><button class="btn-secondary">Edit</button><button class="btn-secondary">Reject</button></div>
+          </div>
+
+          <div class="block block-citation">
+            <svg class="citation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            <span>Based on <span class="citation-source">Rob's pricing rules</span>, <span class="citation-source">Reece trade prices (Mar 2026)</span></span>
+          </div>
+
+          <div class="block block-suggestion">
+            <div class="suggestion-label">Suggestion</div>
+            Copper is up 8% this month — 3 active quotes may need recalculation. Want me to flag the affected ones?
+            <div class="action-row" style="margin-top:8px;"><button class="btn-vivid">Flag affected quotes</button><button class="btn-secondary">Dismiss</button></div>
+          </div>
+
+          <div class="block block-alert warning">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--caution)" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div><span class="alert-title">Wilson kitchen — waiting 48 hours.</span> Client hasn't confirmed benchtop material. Quote is on hold.</div>
+          </div>
+
+          <div class="block">
+            <div class="progress-label"><span>Weekly quoting</span><span>5 of 7</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:71%;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE 2: After interaction -->
+      <div class="centre-content" id="state-after" style="display:none;">
+        <div class="msg user">How's my quoting going this week?</div>
+
+        <div class="msg ditto">
+          <div class="block block-text">Here's your quoting summary for this week.</div>
+
+          <div class="block">
+            <div class="metric-row">
+              <div class="metric"><div class="metric-value">7 <span class="metric-trend up">↑ 2</span></div><div class="metric-label">Quotes</div></div>
+              <div class="metric"><div class="metric-value">6</div><div class="metric-label">Approved</div></div>
+              <div class="metric"><div class="metric-value">4</div><div class="metric-label">Sent</div></div>
+              <div class="metric"><div class="metric-value">71%</div><div class="metric-label">Win rate</div></div>
+            </div>
+          </div>
+
+          <div class="block" style="border-left:2px solid var(--positive); padding-left:12px;">
+            <div style="font-size:15px; font-weight:500; margin-bottom:4px;">Henderson bathroom renovation — $18,400 <span class="badge badge-positive" style="margin-left:6px;">Approved</span></div>
+            <div style="font-size:14px; color:var(--text-secondary);">Approved and sent to client. Quote ref: Q-2026-0147.</div>
+          </div>
+
+          <div class="block block-citation">
+            <svg class="citation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            <span>Based on <span class="citation-source">Rob's pricing rules</span>, <span class="citation-source">Reece trade prices (Mar 2026)</span></span>
+          </div>
+
+          <div class="block block-alert warning">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--caution)" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div><span class="alert-title">Wilson kitchen — still waiting.</span> I'll chase the client tomorrow if we don't hear back.</div>
+          </div>
+
+          <div class="block">
+            <div class="progress-label"><span>Weekly quoting</span><span>6 of 7</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:86%;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE 3: Block Gallery -->
+      <div class="centre-content" id="state-gallery" style="display:none;">
+        <div class="section-heading">Content Block Gallery</div>
+        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:24px;">All 22 ContentBlock types from <code style="font-family:var(--mono); font-size:13px; background:var(--surface); padding:2px 6px; border-radius:4px;">content-blocks.ts</code>. Each shows the rendered output. Toggle JSON to see the data shape.</p>
+
+        <div class="gallery-grid">
+
+          <!-- 1. text -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">text</span><span class="gallery-desc">Markdown text content</span></div>
+            <div class="block-text">Here's your quoting summary for this week. Everything is running well — 5 of 7 quotes approved.</div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "text", "text": "Here's your quoting summary..." }</div>
+          </div>
+
+          <!-- 2. review_card -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">review_card</span><span class="gallery-desc">Process output for inline review</span></div>
+            <div class="block-review">
+              <div class="block-review-title">Henderson bathroom — $18,400</div>
+              <div class="block-review-output">4-piece bathroom refit. Tiles, plumbing, waterproofing.</div>
+              <div style="font-size:13px; margin-bottom:6px;"><span class="confidence-dot confidence-high"></span> High confidence</div>
+              <div class="action-row"><button class="btn-vivid">Approve</button><button class="btn-secondary">Edit</button><button class="btn-secondary">Reject</button></div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "review_card", "processRunId": "run_47", "stepName": "generate-quote", "confidence": "high", "actions": [...] }</div>
+          </div>
+
+          <!-- 3. status_card -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">status_card</span><span class="gallery-desc">Process or work item status</span></div>
+            <div class="block-status">
+              <div class="block-status-title">Invoice follow-up <span class="badge badge-positive" style="margin-left:4px;">Running</span></div>
+              <div class="field-table" style="margin-top:6px;">
+                <span class="field-label">Step</span><span class="field-value">Send reminder</span>
+                <span class="field-label">Started</span><span class="field-value">2h ago</span>
+                <span class="field-label">Trust</span><span class="field-value">Runs itself</span>
+              </div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "status_card", "entityType": "process_run", "title": "Invoice follow-up", "status": "running", "details": {...} }</div>
+          </div>
+
+          <!-- 4. actions -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">actions</span><span class="gallery-desc">Choices for the user</span></div>
+            <div class="block-actions"><button class="btn-vivid">Update pricing</button><button class="btn-secondary">Review first</button><button class="btn-danger">Skip</button></div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "actions", "actions": [{ "id": "update", "label": "Update pricing", "style": "primary" }, ...] }</div>
+          </div>
+
+          <!-- 5. input_request -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">input_request</span><span class="gallery-desc">Structured input collection</span></div>
+            <div class="block-input">
+              <div class="block-input-prompt">I need a couple of details to complete this quote:</div>
+              <input class="input-field-mock" placeholder="Benchtop material (e.g. stone, laminate)" readonly>
+              <input class="input-field-mock" placeholder="Installation timeline preference" readonly>
+              <div class="action-row" style="margin-top:6px;"><button class="btn-vivid">Submit</button></div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "input_request", "requestId": "req_12", "prompt": "...", "fields": [{ "name": "material", "type": "text" }] }</div>
+          </div>
+
+          <!-- 6. knowledge_citation -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">knowledge_citation</span><span class="gallery-desc">Provenance strip</span></div>
+            <div class="block-citation">
+              <svg class="citation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span>Based on <span class="citation-source">Rob's pricing rules</span>, <span class="citation-source">Reece trade prices</span>, <span class="citation-source">Labour rates 2024</span></span>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "knowledge_citation", "label": "Based on", "sources": [{ "name": "Rob's pricing rules", "type": "user_knowledge" }] }</div>
+          </div>
+
+          <!-- 7. progress -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">progress</span><span class="gallery-desc">Execution progress</span></div>
+            <div class="progress-label"><span>Generate quote</span><span>4 of 5 <span class="badge badge-positive">Running</span></span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:80%;"></div></div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "progress", "processRunId": "run_47", "currentStep": "generate-quote", "totalSteps": 5, "completedSteps": 4, "status": "running" }</div>
+          </div>
+
+          <!-- 8. data (key_value) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">data</span> <span class="badge badge-neutral">key_value</span><span class="gallery-desc">Structured data display</span></div>
+            <div class="field-table">
+              <span class="field-label">Materials</span><span class="field-value">$11,200</span>
+              <span class="field-label">Labour</span><span class="field-value">$5,800</span>
+              <span class="field-label">Margin</span><span class="field-value">7.6%</span>
+              <span class="field-label">Total</span><span class="field-value">$18,400</span>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "data", "format": "key_value", "data": { "Materials": "$11,200", "Labour": "$5,800", "Margin": "7.6%", "Total": "$18,400" } }</div>
+          </div>
+
+          <!-- 9. data (table) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">data</span> <span class="badge badge-neutral">table</span></div>
+            <table class="data-table">
+              <thead><tr><th>Quote</th><th>Amount</th><th>Status</th><th>Days</th></tr></thead>
+              <tbody>
+                <tr><td>Henderson bathroom</td><td>$18,400</td><td><span class="badge badge-caution">Review</span></td><td>2</td></tr>
+                <tr><td>Park Ave kitchen</td><td>$24,100</td><td><span class="badge badge-positive">Sent</span></td><td>5</td></tr>
+                <tr><td>Wilson kitchen</td><td>$31,500</td><td><span class="badge badge-negative">Stalled</span></td><td>3</td></tr>
+              </tbody>
+            </table>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "data", "format": "table", "headers": ["Quote","Amount","Status","Days"], "data": [{...}] }</div>
+          </div>
+
+          <!-- 9b. data (list) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">data</span> <span class="badge badge-neutral">list</span></div>
+            <div style="padding-left: 8px;">
+              <div style="margin-bottom: 6px; color: var(--text-secondary); font-size: 14px; font-weight: 500;">Recent corrections</div>
+              <div style="margin-bottom: 4px; font-size: 14px;">- {"step": "draft_quote", "correction": "Always include GST in line items", "date": "Mar 24"}</div>
+              <div style="margin-bottom: 4px; font-size: 14px;">- {"step": "material_lookup", "correction": "Use PlaceMakers pricing, not Bunnings", "date": "Mar 22"}</div>
+              <div style="margin-bottom: 4px; font-size: 14px;">- {"step": "client_email", "correction": "Sign off as 'Rob' not 'Mitchell Plumbing'", "date": "Mar 20"}</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "data", "format": "list", "title": "Recent corrections", "data": [{ "step": "draft_quote", "correction": "Always include GST in line items", "date": "Mar 24" }, { "step": "material_lookup", "correction": "Use PlaceMakers pricing, not Bunnings", "date": "Mar 22" }, { "step": "client_email", "correction": "Sign off as 'Rob' not 'Mitchell Plumbing'", "date": "Mar 20" }] }</div>
+          </div>
+
+          <!-- 10. image -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">image</span><span class="gallery-desc">Visual content</span></div>
+            <div class="block-image"><div class="block-image-placeholder">[ Floor plan image — Henderson bathroom ]</div></div>
+            <div class="block-image-caption">Uploaded floor plan for Henderson renovation</div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "image", "url": "/uploads/henderson-plan.png", "alt": "Floor plan", "caption": "..." }</div>
+          </div>
+
+          <!-- 11. code -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">code</span><span class="gallery-desc">Syntax-highlighted code</span></div>
+            <div class="block-code-filename">pricing-rules.yaml</div>
+            <div class="block-code">margin_target: 8%
+labour_rate: $85/hr
+materials_markup: 15%
+minimum_quote: $2,500</div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "code", "language": "yaml", "filename": "pricing-rules.yaml", "content": "..." }</div>
+          </div>
+
+          <!-- 12. reasoning_trace -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">reasoning_trace</span><span class="gallery-desc">Decision reasoning</span></div>
+            <div class="block-reasoning">
+              <div class="block-reasoning-title">How I priced Henderson</div>
+              <div class="reasoning-step"><strong>1. Scope check:</strong> Standard 4-piece bathroom, no structural changes</div>
+              <div class="reasoning-step"><strong>2. Materials:</strong> Matched Reece trade catalogue, applied 15% markup</div>
+              <div class="reasoning-step"><strong>3. Labour:</strong> 68 hours at $85/hr based on similar jobs</div>
+              <div class="reasoning-conclusion"><span class="confidence-dot confidence-high"></span> High confidence — similar to 4 previous bathroom quotes</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "reasoning_trace", "title": "How I priced Henderson", "steps": [...], "conclusion": "...", "confidence": "high" }</div>
+          </div>
+
+          <!-- 13. suggestion -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">suggestion</span><span class="gallery-desc">Proactive suggestion</span></div>
+            <div class="block-suggestion">
+              <div class="suggestion-label">Suggestion</div>
+              Your quoting has been solid — 85% approved without edits. Want me to start sending routine quotes under $5k automatically?
+              <div class="action-row" style="margin-top:8px;"><button class="btn-vivid">Tell me more</button><button class="btn-secondary">Not now</button></div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "suggestion", "content": "...", "reasoning": "85% approval rate", "actions": [...] }</div>
+          </div>
+
+          <!-- 14. alert -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">alert</span><span class="gallery-desc">Attention needed</span></div>
+            <div class="block-alert warning">
+              <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--caution)" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div><span class="alert-title">Wilson kitchen waiting 48 hours.</span> Client hasn't responded to scope questions.</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "alert", "severity": "warning", "title": "Wilson kitchen waiting 48 hours", "content": "..." }</div>
+          </div>
+
+          <!-- 15. knowledge_synthesis -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">knowledge_synthesis</span><span class="gallery-desc">What the Self has learned</span></div>
+            <div class="block-synthesis">
+              <div class="synthesis-entry"><span class="synthesis-dim">Pricing Rules</span> — 8% target margin, Reece preferred supplier <span class="synthesis-bar"><span class="synthesis-bar-fill" style="width:90%"></span></span></div>
+              <div class="synthesis-entry"><span class="synthesis-dim">Labour Rates</span> — $85/hr standard, $95/hr weekends <span class="synthesis-bar"><span class="synthesis-bar-fill" style="width:75%"></span></span></div>
+              <div class="synthesis-entry"><span class="synthesis-dim">Client Preferences</span> — Henderson prefers email <span class="synthesis-bar"><span class="synthesis-bar-fill" style="width:40%"></span></span></div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">3 of 9 dimensions</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "knowledge_synthesis", "entries": [{ "dimension": "Pricing Rules", "content": "...", "confidence": 0.9 }], "totalDimensions": 9 }</div>
+          </div>
+
+          <!-- 16. process_proposal -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">process_proposal</span><span class="gallery-desc">Proposed process in plain language</span></div>
+            <div class="block-proposal">
+              <div class="proposal-name">Quoting</div>
+              <div class="proposal-desc">Turn enquiries into accurate quotes using your pricing rules</div>
+              <div class="proposal-step"><span class="step-icon step-done">✓</span> Receive and review enquiry</div>
+              <div class="proposal-step"><span class="step-icon step-done">✓</span> Check scope and materials</div>
+              <div class="proposal-step"><span class="step-icon step-current">→</span> Calculate pricing</div>
+              <div class="proposal-step"><span class="step-icon step-pending">○</span> Generate quote document</div>
+              <div class="proposal-step"><span class="step-icon step-pending">○</span> Send to client</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "process_proposal", "name": "Quoting", "steps": [{ "name": "Receive enquiry", "status": "done" }, ...] }</div>
+          </div>
+
+          <!-- 17. gathering_indicator -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">gathering_indicator</span><span class="gallery-desc">Subtle learning indicator</span></div>
+            <div class="block-gathering">
+              <div class="gathering-dots"><div class="gathering-dot"></div><div class="gathering-dot"></div><div class="gathering-dot"></div></div>
+              Getting to know your pricing approach...
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "gathering_indicator", "message": "Getting to know your pricing approach..." }</div>
+          </div>
+
+          <!-- 18. checklist -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">checklist</span><span class="gallery-desc">Items with done/pending/warning status</span></div>
+            <div style="font-size:14px; font-weight:600; margin-bottom:6px;">I'm tracking</div>
+            <ul class="checklist">
+              <li class="checklist-item">
+                <span class="check-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span>
+                <div>Wilson kitchen stalled 48h<div class="checklist-detail">Waiting on scope confirmation</div></div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <div>Henderson quote ready</div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+                <div>Copper price impact on pipeline</div>
+              </li>
+            </ul>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "checklist", "title": "I'm tracking", "items": [{ "label": "Wilson kitchen stalled 48h", "status": "warning", "detail": "..." }] }</div>
+          </div>
+
+          <!-- 19a. chart (sparkline) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">chart</span> <span class="badge badge-neutral">sparkline</span></div>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+              <span style="font-size:14px; font-weight:500;">Quoting throughput</span>
+              <span class="badge badge-positive">↑ trending</span>
+            </div>
+            <svg class="sparkline trend-up" viewBox="0 0 200 48" preserveAspectRatio="none"><polyline points="4,40 30,36 56,30 82,24 108,20 134,14 160,10 186,6 196,4"/></svg>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "chart", "chartType": "sparkline", "data": { "values": [3,4,5,6,7,8,9], "trend": "up", "label": "Quoting throughput" } }</div>
+          </div>
+
+          <!-- 19b. chart (donut) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">chart</span> <span class="badge badge-neutral">donut</span></div>
+            <div class="donut-container">
+              <svg class="donut" viewBox="0 0 36 36">
+                <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+                <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="85 15"/>
+              </svg>
+              <div class="donut-label"><strong>85%</strong> approved without edits</div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "chart", "chartType": "donut", "title": "Approval rate", "data": { "segments": [{ "label": "Approved", "value": 85 }, { "label": "Edited", "value": 15 }] } }</div>
+          </div>
+
+          <!-- 19c. chart (bar) -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">chart</span> <span class="badge badge-neutral">bar</span></div>
+            <div style="font-size:14px; font-weight:500; margin-bottom:6px;">Quotes per day this week</div>
+            <div class="bar-chart">
+              <div class="bar-segment" style="height:30%;"></div>
+              <div class="bar-segment" style="height:50%;"></div>
+              <div class="bar-segment" style="height:80%;"></div>
+              <div class="bar-segment" style="height:60%;"></div>
+              <div class="bar-segment" style="height:100%;"></div>
+              <div class="bar-segment" style="height:40%; opacity:.4;"></div>
+              <div class="bar-segment" style="height:20%; opacity:.4;"></div>
+            </div>
+            <div style="display:flex; gap:6px; font-size:11px; color:var(--text-muted); margin-top:4px;">
+              <span style="flex:1; text-align:center;">M</span><span style="flex:1; text-align:center;">T</span><span style="flex:1; text-align:center;">W</span><span style="flex:1; text-align:center;">T</span><span style="flex:1; text-align:center;">F</span><span style="flex:1; text-align:center; opacity:.4;">S</span><span style="flex:1; text-align:center; opacity:.4;">S</span>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "chart", "chartType": "bar", "title": "Quotes per day", "data": { "values": [2,3,5,4,6,2,1] } }</div>
+          </div>
+
+          <!-- 20. metric -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">metric</span><span class="gallery-desc">Large numbers with context</span></div>
+            <div class="metric-row">
+              <div class="metric"><div class="metric-value">7 <span class="metric-trend up">↑ 2</span></div><div class="metric-label">Quotes this week</div></div>
+              <div class="metric"><div class="metric-value">71%</div><div class="metric-label">Win rate</div></div>
+              <div class="metric"><div class="metric-value">$42k <span class="metric-trend up">↑</span></div><div class="metric-label">Pipeline</div></div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "metric", "metrics": [{ "value": "7", "label": "Quotes this week", "trend": "up" }, ...] }</div>
+          </div>
+
+          <!-- 21. record -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">record</span><span class="gallery-desc">Structured record — review, inbox, task, role</span></div>
+            <div class="block-record accented">
+              <div class="record-header">
+                <span class="confidence-dot confidence-high"></span>
+                <span class="record-title">Henderson bathroom quote</span>
+                <span class="record-subtitle">Quoting · 2m ago</span>
+              </div>
+              <div class="record-fields">
+                <div class="record-field">
+                  <span class="record-field-label">Materials</span>
+                  <span class="record-field-value">$11,200</span>
+                  <span class="record-field-provenance">← PlaceMakers Mar 25</span>
+                </div>
+                <div class="record-field">
+                  <span class="record-field-label">Margin</span>
+                  <span class="record-field-value">7.6%</span>
+                  <span class="record-field-flag warning">⚠ Below 8% target</span>
+                </div>
+                <div class="record-field">
+                  <span class="record-field-label">Total</span>
+                  <span class="record-field-value">$18,400</span>
+                </div>
+              </div>
+              <div class="record-checks">
+                <span class="record-check pass">✓ Pricing current</span>
+                <span class="record-check fail">⚠ Margin target</span>
+              </div>
+              <div class="record-provenance">Based on: PlaceMakers prices (Mar 25), Henderson specs</div>
+              <div class="record-actions">
+                <button class="btn-vivid">Approve</button>
+                <button class="btn-secondary">Edit</button>
+              </div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "record", "title": "Henderson bathroom quote", "subtitle": "Quoting · 2m ago", "confidence": "high", "fields": [{ "label": "Materials", "value": "$11,200", "provenance": "PlaceMakers Mar 25" }, { "label": "Margin", "value": "7.6%", "flag": { "level": "warning", "message": "Below 8% target" } }, { "label": "Total", "value": "$18,400" }], "checks": [{ "label": "Pricing current", "passed": true }, { "label": "Margin target", "passed": false }], "provenance": ["PlaceMakers prices (Mar 25)", "Henderson specs"], "actions": [{ "id": "approve.run-abc", "label": "Approve", "style": "primary" }, { "id": "edit.run-abc", "label": "Edit" }], "accent": "#3D5A48" }</div>
+          </div>
+
+          <!-- 22. interactive_table -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">interactive_table</span><span class="gallery-desc">Table with row actions, selection, batch ops</span></div>
+            <div class="block-itable itable">
+              <div class="itable-header">
+                <span class="itable-title">5 quotes ready</span>
+                <span class="itable-summary">2 flagged</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th class="right">Amount</th>
+                    <th class="right">Margin</th>
+                    <th class="center" style="width:24px;"></th>
+                    <th style="width:80px;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="flagged">
+                    <td>Henderson bathroom</td>
+                    <td class="right">$18,400</td>
+                    <td class="right" style="color:var(--caution);">7.6%</td>
+                    <td class="center"><span class="confidence-dot confidence-high"></span></td>
+                    <td class="right"><button class="row-action">Approve</button></td>
+                  </tr>
+                  <tr>
+                    <td>Park Ave kitchen</td>
+                    <td class="right">$24,100</td>
+                    <td class="right">8.2%</td>
+                    <td class="center"><span class="confidence-dot confidence-high"></span></td>
+                    <td class="right"><button class="row-action">Approve</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="itable-batch">
+                <button class="btn-vivid">Approve all clean (3)</button>
+              </div>
+            </div>
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "interactive_table", "title": "5 quotes ready", "summary": "2 flagged", "columns": [{ "key": "item", "label": "Item" }, { "key": "amount", "label": "Amount", "format": "currency" }, { "key": "margin", "label": "Margin", "format": "percentage" }, { "key": "confidence", "label": "", "format": "confidence" }], "rows": [{ "id": "run-abc", "cells": { "item": "Henderson bathroom", "amount": "$18,400", "margin": "7.6%", "confidence": "high" }, "status": "flagged", "actions": [{ "id": "approve.run-abc", "label": "Approve", "style": "primary" }] }], "selectable": true, "batchActions": [{ "id": "batch.approve-clean", "label": "Approve all clean (3)", "style": "primary" }] }</div>
+          </div>
+
+          <!-- 23. artifact -->
+          <div class="gallery-item">
+            <div class="gallery-item-header"><span class="gallery-type">artifact</span><span class="gallery-desc">Compact deliverable reference — versioned, refinable</span></div>
+
+            <!-- Created state -->
+            <div style="border: 1px solid var(--border); border-left: 3px solid var(--vivid); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; background: var(--surface-raised);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--vivid-subtle); color: var(--vivid-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:18px;height:18px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;">Henderson Bathroom Renovation</div>
+                  <div style="font-size:12px;color:var(--text-muted);">Cost Estimate &middot; v1</div>
+                </div>
+                <span style="display:inline-flex;font-size:11px;font-weight:600;padding:3px 8px;border-radius:99px;background:var(--accent-subtle);color:var(--text-secondary);">Draft</span>
+              </div>
+              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">Materials $11,240 &middot; Labour $5,800 &middot; Margin 7.6% &middot; Total $18,400</div>
+              <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-bottom:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+                Email to Henderson as PDF when approved
+              </div>
+              <div style="display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--border);">
+                <button class="btn-outline" style="font-size:12px;padding:5px 12px;">Review</button>
+                <button class="btn-vivid" style="font-size:12px;padding:5px 12px;">Approve &amp; Send</button>
+              </div>
+            </div>
+
+            <!-- Updated state -->
+            <div style="border: 1px solid var(--border); border-left: 3px solid var(--vivid); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; background: var(--surface-raised);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--vivid-subtle); color: var(--vivid-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:18px;height:18px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;">Henderson Bathroom Renovation</div>
+                  <div style="font-size:12px;color:var(--text-muted);">Cost Estimate &middot; v2</div>
+                </div>
+                <span style="display:inline-flex;font-size:11px;font-weight:600;padding:3px 8px;border-radius:99px;background:var(--accent-subtle);color:var(--text-secondary);">Draft</span>
+              </div>
+              <div style="font-size:12px;color:var(--vivid-deep);font-weight:500;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--vivid);flex-shrink:0;"></span>
+                Copper pipework: $38/m &rarr; $42/m &middot; Materials +$180 &middot; Total $18,594
+              </div>
+              <div style="display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--border);">
+                <button class="btn-vivid" style="font-size:12px;padding:5px 12px;">Approve &amp; Send</button>
+              </div>
+            </div>
+
+            <!-- Resolved state -->
+            <div style="border: 1px solid var(--border); border-left: 3px solid var(--positive); border-radius: 8px; padding: 10px 16px; background: var(--surface-raised);">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:16px;height:16px;color:var(--positive);"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <strong style="color:var(--text-primary);font-weight:600;">Henderson Bathroom Renovation</strong> &middot; Sent to Henderson via email
+              </div>
+            </div>
+
+            <button class="json-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Toggle JSON</button>
+            <div class="json-preview">{ "type": "artifact", "artifactId": "art-henderson-001", "title": "Henderson Bathroom Renovation", "subtitle": "Cost Estimate · v1", "artifactType": "document", "status": { "label": "Draft", "variant": "neutral" }, "summary": "Materials $11,240 · Labour $5,800 · Margin 7.6% · Total $18,400", "destination": { "label": "Email to Henderson as PDF", "type": "email" }, "actions": [{ "id": "review", "label": "Review", "variant": "secondary" }, { "id": "approve-send", "label": "Approve & Send", "variant": "primary" }] }</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+    </div>
+    <div class="right-panel-scroll">
+      <div style="font-size:14px; font-weight:600; margin-bottom:8px;">I'm tracking</div>
+      <ul class="checklist">
+        <li class="checklist-item">
+          <span class="check-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></span>
+          <div>Wilson kitchen stalled<div class="checklist-detail">48h without client response</div></div>
+        </li>
+        <li class="checklist-item">
+          <span class="check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div>Henderson quote ready</div>
+        </li>
+        <li class="checklist-item">
+          <span class="check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+          <div>Copper price impact<div class="checklist-detail">3 quotes affected</div></div>
+        </li>
+      </ul>
+
+      <div style="margin-top:20px; font-size:14px; font-weight:600; margin-bottom:8px;">Process health</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="donut-container">
+          <svg class="donut" viewBox="0 0 36 36"><circle class="donut-track" cx="18" cy="18" r="15.9"/><circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="85 15"/></svg>
+          <div class="donut-label"><strong>Quoting</strong> — 85% approved<br><svg class="sparkline trend-up" viewBox="0 0 48 18"><polyline points="2,14 10,12 18,10 26,8 34,6 42,4 46,3"/></svg></div>
+        </div>
+        <div class="donut-container">
+          <svg class="donut" viewBox="0 0 36 36"><circle class="donut-track" cx="18" cy="18" r="15.9"/><circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="71 29" style="stroke:var(--positive);"/></svg>
+          <div class="donut-label"><strong>Invoicing</strong> — 5/7 done<br><svg class="sparkline trend-flat" viewBox="0 0 48 18"><polyline points="2,10 10,9 18,10 26,9 34,10 42,9 46,10"/></svg></div>
+        </div>
+      </div>
+
+      <div class="block-suggestion" style="margin-top:20px;">
+        <div class="suggestion-label">Suggestion</div>
+        85% approved without edits. Consider upgrading quoting to spot-checked?
+        <div class="action-row" style="margin-top:8px;"><button class="btn-vivid" style="font-size:12px; padding:4px 12px;">Tell me more</button></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  // State toggles
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const states = { conversation: document.getElementById('state-conversation'), after: document.getElementById('state-after'), gallery: document.getElementById('state-gallery') };
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true');
+      Object.values(states).forEach(el => el.style.display = 'none');
+      states[btn.dataset.state].style.display = 'block';
+    });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+
+  // Textarea auto-resize
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+  });
+
+  // Dots
+  const COLORS = ['#059669','#059669','#047857','#3D5A48','#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size/2, cy = size/2, count = Math.max(8, Math.round(size/3)), maxR = size * 0.35;
+    const dots = Array.from({length:count}, (_,i) => ({
+      angle: (Math.PI*2/count)*i + Math.random()*0.3, dist: 2+Math.random()*maxR,
+      size: 1+Math.random()*(size/16), speed: 0.15+Math.random()*0.35,
+      phase: Math.random()*Math.PI*2, breathAmp: 1+Math.random()*(maxR*0.3),
+      color: COLORS[Math.floor(Math.random()*COLORS.length)], opacity: 0.5+Math.random()*0.5,
+    }));
+    if (reducedMotion) { ctx.clearRect(0,0,size,size); for (const d of dots) { ctx.beginPath(); ctx.arc(cx+Math.cos(d.angle)*d.dist*0.6, cy+Math.sin(d.angle)*d.dist*0.6, d.size, 0, Math.PI*2); ctx.fillStyle=d.color; ctx.globalAlpha=d.opacity; ctx.fill(); } ctx.globalAlpha=1; return; }
+    let raf; function draw() { const t=Date.now()/1000; ctx.clearRect(0,0,size,size); for (const d of dots) { const a=d.angle+t*d.speed, r=Math.max(1,d.dist+Math.sin(t*1.2+d.phase)*d.breathAmp); ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r, cy+Math.sin(a)*r, d.size, 0, Math.PI*2); ctx.fillStyle=d.color; ctx.globalAlpha=d.opacity*(0.6+Math.sin(t*2.5+d.phase)*0.4); ctx.fill(); } ctx.globalAlpha=1; raf=requestAnimationFrame(draw); }
+    const obs = new IntersectionObserver(([e]) => { if(e.isIntersecting){if(!raf)draw();}else{cancelAnimationFrame(raf);raf=null;} }); obs.observe(canvas); draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+</script>
+</body>
+</html>

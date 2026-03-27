@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P24 â Inbox | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --neutral: #65656F; --neutral-subtle: #F0F0F3;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh; font-size: 16px; overflow: hidden; }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.12s; }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Bar ===== */
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; padding: 0 16px; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Three-Column Workspace ===== */
+  .workspace { display: grid; grid-template-columns: 240px 1fr 320px; height: calc(100vh - 92px); margin-top: 92px; }
+
+  /* ===== Sidebar ===== */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar::-webkit-scrollbar { width: 0; }
+
+  .ws { padding: 16px 16px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .ws:hover .ws-name { color: var(--accent); }
+  .ws-avatar { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .ws-name { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; transition: color 0.12s; }
+  .ws-chev { color: var(--text-muted); font-size: 10px; }
+
+  .nav-group { padding: 8px 10px 0; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; color: var(--text-secondary); text-decoration: none; transition: all 0.1s; border-left: 2px solid transparent; }
+  .nav-item:hover { background: var(--accent-subtle); color: var(--text-primary); }
+  .nav-item.active { background: var(--surface-raised); color: var(--text-primary); font-weight: 500; border-left-color: var(--vivid); }
+  .nav-icon { width: 18px; height: 18px; flex-shrink: 0; color: currentColor; }
+  .nav-item-label { flex: 1; }
+  .nav-count { font-size: 11px; font-weight: 600; background: var(--vivid); color: white; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+
+  .sidebar-spacer { flex: 1; }
+  .sidebar-foot { padding: 8px 10px 14px; border-top: 1px solid var(--border); }
+  .sidebar-foot .nav-item { font-size: 13px; color: var(--text-muted); padding: 5px 10px; }
+
+  /* ===== Centre: Content ===== */
+  .main { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  .scroll { flex: 1; overflow-y: auto; padding: 32px 40px 120px; display: flex; justify-content: center; }
+  .scroll::-webkit-scrollbar { width: 6px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .content { width: 100%; max-width: 720px; }
+
+  .state-view { display: none; }
+  .state-view.active { display: block; }
+
+  .page-title { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .page-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+
+  /* Metric cluster */
+  .metric-cluster { display: flex; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .metric { display: flex; flex-direction: column; }
+  .metric-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .metric-value.urgent { color: var(--negative); }
+  .metric-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; }
+
+  /* Filter tabs */
+  .filter-tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .filter-tab { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .filter-tab:hover { color: var(--text-primary); background: var(--surface); }
+  .filter-tab.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .filter-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filter-count { font-size: 11px; color: var(--text-muted); margin-left: 2px; }
+
+  /* Urgency group */
+  .urgency-group { margin-bottom: 28px; }
+  .group-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .group-label.now { color: var(--negative); }
+  .group-label.week { color: var(--vivid-deep); }
+  .group-label.fyi { color: var(--text-muted); }
+
+  /* Inbox item — replaced by block-record vocabulary below */
+
+  /* Badges */
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; display: inline-flex; align-items: center; gap: 4px; }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-neutral { background: var(--neutral-subtle); color: var(--neutral); }
+
+  .confidence-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--positive); display: inline-block; }
+
+  /* Buttons */
+  .btn { font-family: var(--font); font-size: 13px; font-weight: 500; padding: 6px 16px; border-radius: 99px; cursor: pointer; transition: all 0.15s; border: none; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--vivid); color: #fff; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { background: var(--accent); color: var(--accent-text); }
+  .btn-secondary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-sm { font-size: 12px; padding: 5px 12px; }
+  .btn-negative { background: var(--negative); color: #fff; }
+  .btn-negative:hover { background: #A82D23; }
+
+  /* ===== Right Panel: Ditto ===== */
+  .ditto { background: var(--surface-raised); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .ditto-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .ditto-dot-container { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .ditto-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .ditto-status { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+  .ditto-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 20px; }
+  .ditto-scroll::-webkit-scrollbar { width: 4px; }
+  .ditto-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .ditto-sh { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+
+  /* Triage donut */
+  .donut-container { display: flex; align-items: center; gap: 16px; }
+  .donut-canvas { width: 80px; height: 80px; }
+  .donut-legend { display: flex; flex-direction: column; gap: 4px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Checklist */
+  .check-list { display: flex; flex-direction: column; gap: 6px; }
+  .check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; }
+  .check-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+  .ck-rec { background: var(--vivid-subtle); color: var(--vivid); }
+  .ck-info { background: var(--info-subtle); color: var(--info); }
+  .check-label { color: var(--text-secondary); }
+
+  /* Pattern alert */
+  .pattern-alert { padding: 12px 0 0 14px; border-left: 2px solid var(--caution); font-size: 13px; line-height: 1.55; color: var(--text-primary); }
+  .pattern-alert-label { font-size: 10px; font-weight: 600; color: var(--caution); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .pattern-alert-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* Suggestion */
+  .suggestion { padding: 0 0 0 14px; border-left: 2px solid var(--vivid-deep); font-size: 13px; line-height: 1.55; color: var(--text-primary); }
+  .suggestion-label { font-size: 10px; font-weight: 600; color: var(--vivid-deep); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .suggestion-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* ===== Input bar ===== */
+  .input-bar { position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 24px 32px; display: flex; justify-content: center; background: linear-gradient(transparent, var(--bg) 40%); pointer-events: none; }
+  .input-container { display: flex; align-items: flex-end; gap: 10px; background: var(--surface-raised); border: 1.5px solid var(--border); border-radius: 24px; padding: 12px 18px; transition: all 0.15s; width: 100%; max-width: 560px; box-shadow: var(--shadow-medium); pointer-events: all; }
+  .input-container:focus-within { border-color: var(--vivid); background: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field { flex: 1; border: none; background: transparent; font-family: var(--font); font-size: 15px; color: var(--text-primary); outline: none; resize: none; overflow: hidden; min-height: 24px; max-height: 200px; line-height: 1.5; }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1100px) { .workspace { grid-template-columns: 240px 1fr; } .ditto { display: none; } }
+  @media (max-width: 768px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: none; } .scroll { padding: 24px 20px 120px; } }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record:first-child { border-top:none; }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-status.info { background:var(--info-subtle); color:var(--info); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+</style>
+</head>
+<body>
+
+<h1 class="sr-only">Inbox &mdash; Lisa's triage surface</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Cross-Cutting &middot; <span>Inbox</span></div>
+  <div class="proto-nav-right">
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="22-knowledge-in-output.html" class="proto-arrow" aria-label="Previous: Knowledge in Output">&larr;</a>
+    <a href="25-tasks.html" class="proto-arrow" aria-label="Next: Tasks">&rarr;</a>
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="all" tabindex="0">All items</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="urgent" tabindex="-1">Urgent only</button>
+</div>
+
+<div class="workspace">
+
+  <!-- ===== LEFT: NAVIGATION ===== -->
+  <nav class="sidebar" aria-label="Workspace navigation">
+    <div class="ws">
+      <div class="ws-avatar">L</div>
+      <span class="ws-name">Lisa's Store</span>
+      <span class="ws-chev">&#9662;</span>
+    </div>
+
+    <div class="nav-group">
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-item-label">Today</span>
+      </a>
+      <a class="nav-item active" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        <span class="nav-item-label">Inbox</span>
+        <span class="nav-count">8</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-item-label">Work</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        <span class="nav-item-label">Projects</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="nav-item-label">Routines</span>
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-foot">
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="nav-item-label">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ===== CENTRE: INBOX ===== -->
+  <main class="main">
+    <div class="scroll">
+      <div class="content">
+
+        <!-- ======= State 1: All Items ======= -->
+        <div class="state-view active" data-view="all" role="tabpanel">
+          <div class="page-title">Inbox</div>
+          <div class="page-subtitle">Your triage surface &mdash; what needs attention, sorted by urgency</div>
+
+          <!-- Metric cluster -->
+          <div class="metric-cluster">
+            <div class="metric">
+              <div class="metric-value">8</div>
+              <div class="metric-label">Items</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value urgent">2</div>
+              <div class="metric-label">Urgent</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">~15 min</div>
+              <div class="metric-label">Estimated</div>
+            </div>
+          </div>
+
+          <!-- Filter tabs -->
+          <div class="filter-tabs" role="tablist" aria-label="Urgency filter">
+            <button class="filter-tab active" data-filter="all">Now<span class="filter-count"> (2)</span></button>
+            <button class="filter-tab" data-filter="week">This week<span class="filter-count"> (4)</span></button>
+            <button class="filter-tab" data-filter="fyi">FYI<span class="filter-count"> (2)</span></button>
+          </div>
+
+          <!-- NOW group -->
+          <section class="urgency-group" aria-label="Urgent items">
+            <div class="group-label now">Now &mdash; needs you today</div>
+
+            <div class="block-record accented">
+              <div class="record-header">
+                <span class="record-title">Service complaint &mdash; wrong size delivered (3rd this week)</span>
+                <span class="badge badge-negative">Urgent</span>
+              </div>
+              <div class="record-subtitle">Content &middot; 2h ago</div>
+              <div>Customer received medium instead of large. This is the 3rd wrong-size complaint this week &mdash; possible warehouse pattern.</div>
+              <div class="record-actions">
+                <button class="btn btn-negative">Investigate</button>
+                <button class="btn btn-primary">Respond</button>
+                <button class="btn btn-ghost">Escalate</button>
+              </div>
+            </div>
+
+            <div class="block-record accented">
+              <div class="record-header">
+                <span class="record-title">Pricing update needs approval &mdash; copper up 8%</span>
+                <span class="badge badge-caution">Needs approval</span>
+              </div>
+              <div class="record-subtitle">Pricing &middot; 4h ago</div>
+              <div>Raw copper prices rose 8% this week. 12 products affected. Ditto has drafted updated prices for your review.</div>
+              <div class="record-actions">
+                <button class="btn btn-primary">Approve</button>
+                <button class="btn btn-ghost">Review changes</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- THIS WEEK group -->
+          <section class="urgency-group" aria-label="This week items">
+            <div class="group-label week">This week</div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Content review: 5 Instagram posts for Stevens</span>
+                <span class="badge badge-info">Review</span>
+              </div>
+              <div class="record-subtitle">Content &middot; 1d ago</div>
+              <div>Batch of 5 posts ready for approval. All passed brand voice checks.</div>
+              <div class="record-actions">
+                <button class="btn btn-primary">Review batch</button>
+                <button class="btn btn-ghost">Preview</button>
+              </div>
+            </div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Quote review: Henderson bathroom $18,400</span>
+                <span class="badge badge-caution">Flagged</span>
+              </div>
+              <div class="record-subtitle">Quoting &middot; 2h ago <span class="confidence-dot" title="High confidence"></span></div>
+              <div>Materials look correct. Labour estimate is 22 hrs &mdash; consistent with your last 5 bathroom jobs.</div>
+              <div class="record-actions">
+                <button class="btn btn-primary">Approve &amp; send</button>
+                <button class="btn btn-ghost">Adjust</button>
+              </div>
+            </div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Compliance check: Q1 returns</span>
+                <span class="badge badge-info">Due soon</span>
+              </div>
+              <div class="record-subtitle">Compliance &middot; 2d ago</div>
+              <div>Q1 compliance report drafted. 3 items need your sign-off before submission deadline next Wednesday.</div>
+              <div class="record-actions">
+                <button class="btn btn-primary">Review</button>
+                <button class="btn btn-ghost">Delegate</button>
+              </div>
+            </div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Customer feedback summary &mdash; 12 new reviews</span>
+                <span class="badge badge-neutral">Summary</span>
+              </div>
+              <div class="record-subtitle">Service &middot; 3d ago</div>
+              <div>10 positive, 1 neutral, 1 negative (sizing issue). Average rating: 4.6/5.</div>
+              <div class="record-actions">
+                <button class="btn btn-ghost">View details</button>
+                <button class="btn btn-ghost">Dismiss</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- FYI group -->
+          <section class="urgency-group" aria-label="FYI items">
+            <div class="group-label fyi">FYI &mdash; no action needed</div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Weekly content performance: 23% engagement rate</span>
+                <span class="badge badge-positive">+3% vs last week</span>
+              </div>
+              <div class="record-subtitle">Content &middot; 1d ago</div>
+              <div>Top post: summer collection hero &mdash; 847 likes, 92 saves. Beach towel set driving the most traffic.</div>
+              <div class="record-actions">
+                <button class="btn btn-ghost">View report</button>
+                <button class="btn btn-ghost">Dismiss</button>
+              </div>
+            </div>
+
+            <div class="block-record">
+              <div class="record-header">
+                <span class="record-title">Invoice follow-up: 3 reminders sent, 1 payment received</span>
+                <span class="badge badge-positive">Payment received</span>
+              </div>
+              <div class="record-subtitle">Invoicing &middot; 4h ago</div>
+              <div>Henderson paid $14,200. Wilson and Marsh reminders sent &mdash; both within terms.</div>
+              <div class="record-actions">
+                <button class="btn btn-ghost">View details</button>
+                <button class="btn btn-ghost">Dismiss</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ======= State 2: Urgent Only ======= -->
+        <div class="state-view" data-view="urgent" role="tabpanel">
+          <div class="page-title">Inbox</div>
+          <div class="page-subtitle">Urgent items only &mdash; 2 things need you now</div>
+
+          <div class="metric-cluster">
+            <div class="metric">
+              <div class="metric-value urgent">2</div>
+              <div class="metric-label">Urgent</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">~5 min</div>
+              <div class="metric-label">Estimated</div>
+            </div>
+          </div>
+
+          <section class="urgency-group" aria-label="Urgent items">
+            <div class="group-label now">Needs you now</div>
+
+            <div class="block-record accented">
+              <div class="record-header">
+                <span class="record-title">Service complaint &mdash; wrong size delivered (3rd this week)</span>
+                <span class="badge badge-negative">Urgent</span>
+              </div>
+              <div class="record-subtitle">Content &middot; 2h ago</div>
+              <div>Customer received medium instead of large. This is the 3rd wrong-size complaint this week &mdash; possible warehouse pattern.</div>
+              <div class="record-actions">
+                <button class="btn btn-negative">Investigate</button>
+                <button class="btn btn-primary">Respond</button>
+                <button class="btn btn-ghost">Escalate</button>
+              </div>
+            </div>
+
+            <div class="block-record accented">
+              <div class="record-header">
+                <span class="record-title">Pricing update needs approval &mdash; copper up 8%</span>
+                <span class="badge badge-caution">Needs approval</span>
+              </div>
+              <div class="record-subtitle">Pricing &middot; 4h ago</div>
+              <div>Raw copper prices rose 8% this week. 12 products affected. Ditto has drafted updated prices for your review.</div>
+              <div class="record-actions">
+                <button class="btn btn-primary">Approve</button>
+                <button class="btn btn-ghost">Review changes</button>
+              </div>
+            </div>
+          </section>
+
+          <div style="padding: 16px 0; border-top: 1px solid var(--border); margin-top: 8px;">
+            <button class="btn btn-ghost" onclick="document.querySelector('[data-state=all]').click()">Show all 8 items</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Input bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" width="28" height="28" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Tell Ditto something..." aria-label="Reply"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== RIGHT: DITTO ===== -->
+  <aside class="ditto" aria-label="Ditto context panel">
+    <div class="ditto-header">
+      <div class="ditto-dot-container"><canvas class="dots-field" width="28" height="28" aria-hidden="true"></canvas></div>
+      <span class="ditto-label">Ditto</span>
+      <span class="ditto-status">Triaging</span>
+    </div>
+
+    <div class="ditto-scroll">
+
+      <!-- Triage donut -->
+      <div>
+        <div class="ditto-sh">By process</div>
+        <div class="donut-container">
+          <canvas class="donut-canvas" width="80" height="80" aria-label="Inbox items by process: Content 3, Pricing 1, Quoting 1, Compliance 1, Service 1, Invoicing 1"></canvas>
+          <div class="donut-legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#059669"></span> Content (3)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#D4960A"></span> Pricing (1)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#2563eb"></span> Quoting (1)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#7C3AED"></span> Compliance (1)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#C4352A"></span> Service (1)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#65656F"></span> Invoicing (1)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ditto recommendations -->
+      <div>
+        <div class="ditto-sh">Recommended order</div>
+        <div class="check-list">
+          <div class="check">
+            <span class="check-icon ck-rec">1</span>
+            <span class="check-label">Service complaint &mdash; pattern emerging, address root cause</span>
+          </div>
+          <div class="check">
+            <span class="check-icon ck-rec">2</span>
+            <span class="check-label">Pricing approval &mdash; quotes may be underpriced</span>
+          </div>
+          <div class="check">
+            <span class="check-icon ck-info">3</span>
+            <span class="check-label">Henderson quote &mdash; looks clean, quick approve</span>
+          </div>
+          <div class="check">
+            <span class="check-icon ck-info">4</span>
+            <span class="check-label">Content batch &mdash; review at your pace</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pattern alert -->
+      <div class="pattern-alert">
+        <div class="pattern-alert-label">Pattern detected</div>
+        3rd wrong-size delivery this week. All traced to warehouse batch #W-2247. Want me to flag the warehouse team?
+        <div class="pattern-alert-actions">
+          <button class="btn btn-ghost btn-sm">Flag warehouse</button>
+          <button class="btn btn-ghost btn-sm">Investigate first</button>
+        </div>
+      </div>
+
+      <!-- Proactive suggestion -->
+      <div class="suggestion">
+        <div class="suggestion-label">Suggestion</div>
+        Your content reviews have been 100% approve for 3 weeks. Want to auto-approve content that passes all brand checks?
+        <div class="suggestion-actions">
+          <button class="btn btn-ghost btn-sm">Tell me more</button>
+          <button class="btn btn-ghost btn-sm">Not now</button>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // ===== Dot Particles =====
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const x = cx + Math.cos(d.angle) * d.dist * 0.6; const y = cy + Math.sin(d.angle) * d.dist * 0.6; ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill(); }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000; ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const a = d.angle + t * d.speed; const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp; const r = Math.max(1, d.dist + breathe); const x = cx + Math.cos(a) * r; const y = cy + Math.sin(a) * r; const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4; ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * pulse; ctx.fill(); }
+      ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf = null; } });
+    observer.observe(canvas); draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // ===== Donut Chart =====
+  function drawDonut(canvas) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const size = 80;
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2, r = 30, lw = 10;
+    const segments = [
+      { value: 3, color: '#059669' },
+      { value: 1, color: '#D4960A' },
+      { value: 1, color: '#2563eb' },
+      { value: 1, color: '#7C3AED' },
+      { value: 1, color: '#C4352A' },
+      { value: 1, color: '#65656F' },
+    ];
+    const total = segments.reduce((s, seg) => s + seg.value, 0);
+    let angle = -Math.PI / 2;
+    for (const seg of segments) {
+      const sweep = (seg.value / total) * Math.PI * 2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, angle, angle + sweep); ctx.strokeStyle = seg.color; ctx.lineWidth = lw; ctx.lineCap = 'butt'; ctx.stroke();
+      angle += sweep;
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r - lw / 2 - 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'transparent'; ctx.fill();
+    ctx.font = '600 16px DM Sans'; ctx.fillStyle = '#111118'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('8', cx, cy);
+  }
+  const donutEl = document.querySelector('.donut-canvas');
+  if (donutEl) drawDonut(donutEl);
+
+  // ===== State Toggle =====
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); b.setAttribute('tabindex', '-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); btn.setAttribute('tabindex', '0');
+      stateViews.forEach(v => v.classList.remove('active'));
+      const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+      if (target) target.classList.add('active');
+    });
+  });
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // ===== Theme Toggle =====
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+
+  // ===== Textarea Auto-resize =====
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; });
+  });
+</script>
+
+</body>
+</html>

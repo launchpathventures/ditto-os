@@ -35,8 +35,20 @@ export type {
   KnowledgeSynthesisBlock,
   ProcessProposalBlock,
   GatheringIndicatorBlock,
+  ChecklistBlock,
+  ChartBlock,
+  MetricBlock,
+  AnnotatedField,
+  PreCheck,
+  RecordBlock,
+  TableColumn,
+  TableRow,
+  InteractiveTableBlock,
+  FieldAnnotation,
 } from "../../../src/engine/content-blocks";
-export { renderBlockToText } from "../../../src/engine/content-blocks";
+// renderBlockToText is a pure function — import it directly from
+// @engine/content-blocks in client components to avoid pulling in
+// the server-only getEngine() dynamic imports.
 
 /**
  * Lazy-load engine modules to avoid build-time SQLite initialization.

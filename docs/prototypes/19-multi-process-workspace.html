@@ -1,826 +1,793 @@
+<!-- Build-Ready v2, 2026-03-27 — P19 Multi-Process Workspace -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — Multi-Process Workspace (Jordan, 4 Processes)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P19 — Multi-Process Workspace | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --caution: hsl(48 85% 50%);
-    --caution-subtle: hsl(48 60% 95%);
-    --negative: hsl(0 65% 50%);
-    --negative-subtle: hsl(0 50% 96%);
-    --sidebar-bg: hsl(38 16% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    /* Department accent colours */
+    --dept-sales: #2563eb;
+    --dept-service: #D4960A;
+    --dept-marketing: #059669;
+    --dept-finance: #16a34a;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 15px;
     -webkit-font-smoothing: antialiased;
-    height: 100vh;
-    overflow: hidden;
   }
+  ::selection { background: var(--vivid-subtle); }
 
+  /* ===== Skip Link ===== */
+  .skip-link {
+    position: absolute; top: -100%; left: 16px;
+    background: var(--accent); color: white;
+    padding: 8px 16px; border-radius: var(--radius-md);
+    z-index: 1000; font-size: 14px; text-decoration: none;
+  }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-dots { display: flex; gap: 6px; }
+  .proto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+  .proto-dot.active { background: var(--vivid); }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover:not(.disabled) { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow.disabled { opacity: 0.35; cursor: not-allowed; }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Workspace Shell ===== */
   .workspace {
-    display: grid;
-    grid-template-columns: 240px 1fr 320px;
-    height: 100vh;
+    position: fixed; top: 48px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden; transition: all 0.22s ease-in-out;
   }
 
-  /* ═══ SIDEBAR — multiple departments now ═══ */
+  /* ===== Sidebar ===== */
   .sidebar {
-    background: var(--sidebar-bg);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 20px 0;
-    overflow-y: auto;
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
   }
-
   .sidebar-header {
-    padding: 0 18px 16px;
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
   }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
 
-  .sidebar-logo {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
+  /* Nav items */
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
   }
-
-  .sidebar-tagline {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 2px;
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
   }
-
-  .sidebar-section { padding: 0 10px; margin-bottom: 4px; }
-
-  .sidebar-section-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 14px 8px 6px;
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 6px; border-radius: 99px; margin-left: auto;
   }
-
-  .sidebar-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.12s;
-    font-size: 14px;
-    color: var(--text-primary);
-    text-decoration: none;
-    min-height: 34px;
-  }
-
-  .sidebar-item:hover { background: hsl(40 12% 91%); }
-  .sidebar-item.active {
-    background: var(--surface-raised);
-    box-shadow: 0 1px 2px hsl(30 10% 15% / 0.04);
-    font-weight: 500;
-  }
-
-  .sidebar-item-text {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .sidebar-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .sidebar-dot.healthy { background: var(--positive); }
-  .sidebar-dot.attention { background: var(--accent); }
-  .sidebar-dot.warning { background: var(--caution); }
-  .sidebar-dot.problem { background: var(--negative); }
-
-  .sidebar-count {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent-text);
-    background: var(--accent);
-    min-width: 20px;
-    height: 20px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    padding: 0 6px;
-  }
-
-  .sidebar-spacer { flex: 1; }
-
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
   .sidebar-footer {
-    padding: 0 10px;
-    margin-top: 8px;
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
+    padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0;
   }
 
-  .sidebar-footer .sidebar-item {
-    color: var(--text-secondary);
-    font-size: 13px;
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 24px;
   }
 
-  /* ═══ CENTRE FEED ═══ */
-  .feed {
-    overflow-y: auto;
-    padding: 28px 28px 48px;
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: all 0.22s ease-in-out; overflow: hidden;
+  }
+  .right-panel.hidden { width: 0; min-width: 0; border-left: none; }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .close-btn {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .close-btn:hover { background: var(--surface-raised); color: var(--text-secondary); }
+  .close-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Checklists --- */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+  .checklist-detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .metric { min-width: 80px; }
+  .metric-value { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .metric-trend { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 500; margin-left: 4px; }
+  .metric-trend.up { color: var(--positive); }
+  .metric-trend.down { color: var(--negative); }
+  .metric-trend.flat { color: var(--text-muted); }
+
+  /* --- Sparklines --- */
+  .sparkline { display: inline-block; width: 48px; height: 18px; vertical-align: middle; }
+  .sparkline polyline { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sparkline.trend-up polyline { stroke: var(--positive); }
+  .sparkline.trend-down polyline { stroke: var(--negative); }
+  .sparkline.trend-flat polyline { stroke: var(--text-muted); }
+
+  /* --- Donut Charts --- */
+  .donut { width: 48px; height: 48px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 5; }
+  .donut .donut-track { stroke: var(--border); }
+  .donut .donut-fill { stroke: var(--vivid); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+  .donut-container { display: flex; align-items: center; gap: 12px; }
+  .donut-label { font-size: 14px; }
+  .donut-label strong { font-weight: 600; }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-heading {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; letter-spacing: -0.01em;
   }
 
-  .feed::-webkit-scrollbar { width: 6px; }
-  .feed::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
-
-  .feed-inner {
-    max-width: 660px;
-    margin: 0 auto;
+  /* --- Feed Items (typographic flow, no cards) --- */
+  .feed-item {
+    padding: 16px 0; border-bottom: 1px solid var(--border);
   }
-
-  /* Brief */
-  .brief {
-    background: var(--surface-raised);
-    border-radius: 14px;
-    padding: 22px;
-    margin-bottom: 20px;
-    border: 1px solid var(--border);
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; font-size: 13px;
   }
+  .feed-process { color: var(--text-muted); font-weight: 500; }
+  .feed-time { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+  .feed-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .feed-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
 
-  .brief-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
   }
-
-  .self-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
   }
-
-  .brief-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
   }
+  .btn-vivid:hover { filter: brightness(0.9); }
 
-  .brief-body {
-    font-size: 15px;
-    line-height: 1.65;
-    color: var(--text-primary);
+  /* --- Accent Borders (content hierarchy) --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-deep { border-left: 2px solid var(--vivid-deep); padding-left: 12px; }
+  .accent-caution { border-left: 2px solid var(--caution); padding-left: 12px; }
+  .accent-negative { border-left: 2px solid var(--negative); padding-left: 12px; }
+  .accent-info { border-left: 2px solid var(--info); padding-left: 12px; }
+  .accent-positive { border-left: 2px solid var(--positive); padding-left: 12px; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px;
   }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
 
-  .brief-body p + p { margin-top: 8px; }
-  .brief-body strong { font-weight: 600; }
-
-  /* Department metrics */
-  .dept-metrics {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 10px;
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
   }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+  .provenance a { color: var(--vivid-deep); text-decoration: none; }
+  .provenance a:hover { text-decoration: underline; }
 
-  .dept-metric {
-    text-align: center;
+  /* --- Data Table --- */
+  .data-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
   }
-
-  .dept-metric-value {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
+  .data-table th {
+    text-align: left; font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); padding: 8px 10px;
+    border-bottom: 1px solid var(--border-strong);
   }
-
-  .dept-metric-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
+  .data-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    color: var(--text-primary); vertical-align: middle;
   }
+  .data-table tr:last-child td { border-bottom: none; }
 
-  /* Process health row — compact for multi-process */
-  .health-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 20px;
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record:first-child { border-top:none; }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-status.info { background:var(--info-subtle); color:var(--info); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
-
-  .health-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-    cursor: pointer;
-    transition: box-shadow 0.15s;
-  }
-
-  .health-card:hover { box-shadow: 0 2px 8px hsl(30 10% 15% / 0.05); }
-
-  .health-card-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 4px;
-  }
-
-  .health-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .health-card-status {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 2px 7px;
-    border-radius: 4px;
-  }
-
-  .hstatus-good { background: var(--positive-subtle); color: var(--positive); }
-  .hstatus-attention { background: var(--caution-subtle); color: hsl(38 60% 35%); }
-  .hstatus-problem { background: var(--negative-subtle); color: var(--negative); }
-  .hstatus-new { background: var(--accent-subtle); color: var(--accent); }
-
-  .health-card-body {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.4;
-  }
-
-  .health-card-dept {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-
-  /* Section label */
-  .section-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 10px;
-    margin-top: 4px;
-  }
-
-  /* Feed cards */
-  .feed-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 12px;
-    overflow: hidden;
-  }
-
-  .feed-card.urgent { border-left: 3px solid var(--accent); }
-  .feed-card.warning { border-left: 3px solid var(--caution); }
-  .feed-card.problem { border-left: 3px solid var(--negative); }
-
-  .feed-card-inner { padding: 14px 16px; }
-
-  .feed-card-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 4px;
-  }
-
-  .feed-card-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.3;
-  }
-
-  .feed-card-badge {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 6px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .badge-review { background: var(--accent-subtle); color: var(--accent); }
-  .badge-info { background: var(--caution-subtle); color: hsl(38 60% 35%); }
-  .badge-fail { background: var(--negative-subtle); color: var(--negative); }
-
-  .feed-card-subtitle {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-
-  .feed-card-body {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  .feed-card-dept {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 6px;
-  }
-
-  .feed-card-actions {
-    display: flex;
-    gap: 8px;
-    padding: 10px 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  /* Impact card — Jordan's leadership value */
-  .impact-card {
-    background: var(--accent-subtle);
-    border: 1px solid hsl(24 60% 88%);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-bottom: 16px;
-  }
-
-  .impact-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 10px;
-  }
-
-  .impact-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .impact-stat {
-    text-align: center;
-    padding: 10px;
-    background: var(--surface-raised);
-    border-radius: 8px;
-  }
-
-  .impact-stat-value {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
-  }
-
-  .impact-stat-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-
-  .impact-note {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-top: 12px;
-    line-height: 1.5;
-  }
-
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    border: none;
-    border-radius: 7px;
-    padding: 7px 14px;
-    cursor: pointer;
-    transition: all 0.12s;
-  }
-
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-  .btn-ghost:hover { color: var(--text-primary); }
-
-  /* ═══ RIGHT PANEL ═══ */
-  .self-panel {
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
-  }
-
-  .self-panel-header {
-    padding: 16px 18px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .self-panel-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-
-  .self-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 16px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    font-size: 14px;
-  }
-
-  .self-messages::-webkit-scrollbar { width: 4px; }
-  .self-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
-
-  .panel-msg {
-    line-height: 1.55;
-    color: var(--text-primary);
-    padding-left: 12px;
-  }
-
-  .panel-msg.from-user {
-    background: var(--accent-subtle);
-    padding: 8px 12px;
-    border-radius: 14px;
-    align-self: flex-end;
-    max-width: 85%;
-    padding-left: 12px;
-  }
-
-  .panel-msg .sender-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
-  }
-
-  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
-  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
-
-  .self-panel-input {
-    padding: 12px 16px 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  .panel-input-container {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: border-color 0.2s;
-  }
-
-  .panel-input-container:focus-within { border-color: var(--accent); }
-
-  .panel-input-container input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    color: var(--text-primary);
-    background: transparent;
-  }
-
-  .panel-input-container input::placeholder { color: var(--text-muted); }
-
-  .panel-send {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
-
-  @media (max-width: 1100px) {
-    .workspace { grid-template-columns: 230px 1fr; }
-    .self-panel { display: none; }
-  }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div class="workspace">
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 4 &middot; <span>Multi-Process Workspace</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <div class="proto-dots" aria-label="Prototype progress">
+      <div class="proto-dot" aria-label="Day Zero"></div>
+      <div class="proto-dot" aria-label="First Conversation"></div>
+      <div class="proto-dot" aria-label="First Output"></div>
+      <div class="proto-dot active" aria-label="Current: Multi-Process Workspace"></div>
+      <div class="proto-dot" aria-label="Something Wrong"></div>
+    </div>
+    <a href="18-second-process.html" class="proto-arrow" aria-label="Previous: Second Process">&larr;</a>
+    <a href="20-something-wrong.html" class="proto-arrow" aria-label="Next: Something Wrong">&rarr;</a>
+  </div>
+</nav>
 
-  <!-- ═══ SIDEBAR — Jordan has processes across 3 departments ═══ -->
-  <nav class="sidebar">
+<!-- Workspace -->
+<div class="workspace" id="main-content">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Main navigation">
     <div class="sidebar-header">
-      <div class="sidebar-logo">Ditto</div>
-      <div class="sidebar-tagline">5 things across 3 teams</div>
+      <div class="wordmark">Ditto</div>
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Needs you</div>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Reference check results</span>
-        <span class="sidebar-count">2</span>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" tabindex="0" role="button" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
       </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Month-end reconciliation</span>
-        <span class="sidebar-count">1</span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">5</span>
       </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Weekly report failed</span>
-        <span class="sidebar-dot problem"></span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Work</span>
       </a>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Processes</div>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">HR — Reference checks</span>
-        <span class="sidebar-dot healthy"></span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Projects</span>
       </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Finance — Reconciliation</span>
-        <span class="sidebar-dot healthy"></span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg>
+        <span class="nav-label">Routines</span>
       </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Ops — Weekly reports</span>
-        <span class="sidebar-dot problem"></span>
-      </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">IT — Ticket triage</span>
-        <span class="sidebar-dot attention"></span>
-      </a>
-    </div>
-
-    <div class="sidebar-spacer"></div>
-
+    </nav>
     <div class="sidebar-footer">
-      <a class="sidebar-item active" href="#">
-        <span class="sidebar-item-text">Home</span>
-      </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">What I know</span>
-      </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Impact report</span>
-      </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Settings</span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
       </a>
     </div>
-  </nav>
+  </aside>
 
-  <!-- ═══ CENTRE FEED ═══ -->
-  <main class="feed">
-    <div class="feed-inner">
+  <!-- Centre -->
+  <main class="centre">
+    <div class="centre-scroll">
+      <div class="centre-content">
 
-      <!-- Brief — cross-department -->
-      <div class="brief">
-        <div class="brief-header">
-          <span class="self-dot"></span>
-          <span class="brief-label">This morning</span>
+        <!-- Greeting -->
+        <div style="margin-bottom: 24px;">
+          <div class="section-heading" style="font-size: 20px;">Good morning, Jordan</div>
+          <p style="font-size: 14px; color: var(--text-secondary);">4 routines running across Sales Ops, Customer Service, Marketing, and Finance. 5 items need your attention today.</p>
         </div>
-        <div class="brief-body">
-          <p><strong>3 things across HR and Finance.</strong> 2 reference checks are ready. Month-end reconciliation found 3 exceptions. Ops weekly report failed — the data source changed, I need your help.</p>
-        </div>
-        <div class="dept-metrics">
-          <div class="dept-metric">
-            <div class="dept-metric-value">12</div>
-            <div class="dept-metric-label">Ref checks (total)</div>
+
+        <!-- Metric cluster -->
+        <div class="metric-row" style="margin-bottom: 28px;">
+          <div class="metric">
+            <div class="metric-value">4</div>
+            <div class="metric-label">Active routines</div>
           </div>
-          <div class="dept-metric">
-            <div class="dept-metric-value">3</div>
-            <div class="dept-metric-label">Recon exceptions</div>
+          <div class="metric">
+            <div class="metric-value">3</div>
+            <div class="metric-label">Departments covered</div>
           </div>
-          <div class="dept-metric">
-            <div class="dept-metric-value">47</div>
-            <div class="dept-metric-label">Tickets triaged</div>
+          <div class="metric">
+            <div class="metric-value">47 <span class="metric-trend up">&uarr; 8</span></div>
+            <div class="metric-label">Tasks this week</div>
           </div>
-          <div class="dept-metric">
-            <div class="dept-metric-value">8.5d</div>
-            <div class="dept-metric-label">Saved this month</div>
+          <div class="metric">
+            <div class="metric-value">12h</div>
+            <div class="metric-label">Time saved</div>
           </div>
         </div>
+
+        <!-- Donut chart: Overall approval rate -->
+        <div class="donut-container" style="margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);">
+          <svg class="donut" viewBox="0 0 36 36">
+            <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+            <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="94 6"/>
+          </svg>
+          <div class="donut-label"><strong>94%</strong> overall approval rate across all routines
+            <svg class="sparkline trend-up" viewBox="0 0 48 18" style="margin-left: 4px;"><polyline points="2,14 10,11 18,10 26,7 34,5 42,4 46,3"/></svg>
+          </div>
+        </div>
+
+        <!-- Department feed items -->
+        <div class="section-title">Department activity</div>
+
+        <!-- 1. Sales Ops — Quote automation -->
+        <div class="block-record accented" style="border-left-color: var(--dept-sales);">
+          <div class="record-header">
+            <span class="record-title">Quote automation</span>
+            <span class="record-subtitle">Sales Ops · Today</span>
+            <span class="record-status positive">Runs itself</span>
+          </div>
+          <div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">12 quotes processed, 0 corrections needed. Trending up consistently over 3 weeks.</div>
+          <div class="record-actions">
+            <button class="btn-secondary">View quotes</button>
+          </div>
+        </div>
+
+        <!-- 2. Customer Service — Ticket triage -->
+        <div class="block-record accented" style="border-left-color: var(--dept-service);">
+          <div class="record-header">
+            <span class="record-title">Ticket triage</span>
+            <span class="record-subtitle">Customer Service · 2h ago</span>
+            <span class="record-status caution">2 escalated</span>
+          </div>
+          <div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">2 tickets escalated to human agents. Remaining 31 triaged and routed automatically.</div>
+          <div class="record-fields">
+            <div class="record-field"><span class="record-field-label">Avg response</span><span class="record-field-value">4 min</span></div>
+            <div class="record-field"><span class="record-field-label">Resolution rate</span><span class="record-field-value">89%</span></div>
+            <div class="record-field"><span class="record-field-label">Trust level</span><span class="record-field-value">Spot check</span></div>
+          </div>
+          <div class="record-actions">
+            <button class="btn-primary">Review escalations</button>
+            <button class="btn-secondary">View all tickets</button>
+          </div>
+        </div>
+
+        <!-- 3. Marketing — Content pipeline -->
+        <div class="block-record accented" style="border-left-color: var(--dept-marketing);">
+          <div class="record-header">
+            <span class="record-title">3 posts scheduled, 1 needs review</span>
+            <span class="record-subtitle">Marketing · 4h ago</span>
+            <span class="record-status caution">Review</span>
+          </div>
+          <div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">LinkedIn thought-leadership post drafted from last week's webinar. Tone and stats need your sign-off before publishing Thursday.</div>
+          <div class="record-provenance">Based on webinar transcript, brand guidelines, and Q1 performance data</div>
+          <div class="record-actions">
+            <button class="btn-primary">Review post</button>
+            <button class="btn-secondary">View schedule</button>
+          </div>
+        </div>
+
+        <!-- 4. Finance — Invoice matching -->
+        <div class="block-record accented" style="border-left-color: var(--dept-finance);">
+          <div class="record-header">
+            <span class="record-title">Invoice matching</span>
+            <span class="record-subtitle">Finance · Yesterday</span>
+            <span class="record-status positive">Runs itself</span>
+          </div>
+          <div style="font-size:14px; color:var(--text-secondary); margin-top:4px;">23 of 25 invoices matched automatically. 2 remaining need manual PO lookup.</div>
+          <div style="margin-top:8px;">
+            <div class="progress-label"><span>Matched</span><span>23 / 25</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width: 92%;"></div></div>
+          </div>
+          <div class="record-actions">
+            <button class="btn-secondary">View unmatched</button>
+          </div>
+        </div>
+
+        <!-- Data table: Cross-department impact summary -->
+        <div class="section-title" style="margin-top: 28px;">Cross-department impact summary</div>
+        <div style="overflow-x: auto; margin-bottom: 24px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Department</th>
+                <th>Routine</th>
+                <th>Trust level</th>
+                <th>Tasks/week</th>
+                <th>Accuracy</th>
+                <th>Time saved</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Sales Ops</td>
+                <td>Quote automation</td>
+                <td><span class="badge badge-positive">Runs itself</span></td>
+                <td>12</td>
+                <td>100%</td>
+                <td>4h</td>
+              </tr>
+              <tr>
+                <td>Customer Service</td>
+                <td>Ticket triage</td>
+                <td><span class="badge badge-neutral">Spot check</span></td>
+                <td>33</td>
+                <td>89%</td>
+                <td>3.5h</td>
+              </tr>
+              <tr>
+                <td>Marketing</td>
+                <td>Content pipeline</td>
+                <td><span class="badge badge-caution">You review</span></td>
+                <td>4</td>
+                <td>92%</td>
+                <td>2h</td>
+              </tr>
+              <tr>
+                <td>Finance</td>
+                <td>Invoice matching</td>
+                <td><span class="badge badge-positive">Runs itself</span></td>
+                <td>25</td>
+                <td>92%</td>
+                <td>2.5h</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
+    </div>
 
-      <!-- Process health grid -->
-      <div class="health-row">
-        <div class="health-card">
-          <div class="health-card-top">
-            <div class="health-card-title">Reference checks</div>
-            <span class="health-card-status hstatus-good">Strong</span>
-          </div>
-          <div class="health-card-body">12 completed, 10 clean. Turnaround: 1 day (was 5).</div>
-          <div class="health-card-dept">HR</div>
-        </div>
-        <div class="health-card">
-          <div class="health-card-top">
-            <div class="health-card-title">Reconciliation</div>
-            <span class="health-card-status hstatus-good">Running</span>
-          </div>
-          <div class="health-card-body">Month-end in progress. 3 exceptions flagged.</div>
-          <div class="health-card-dept">Finance</div>
-        </div>
-        <div class="health-card">
-          <div class="health-card-top">
-            <div class="health-card-title">Weekly reports</div>
-            <span class="health-card-status hstatus-problem">Failed</span>
-          </div>
-          <div class="health-card-body">Data source API changed. Needs your input.</div>
-          <div class="health-card-dept">Ops</div>
-        </div>
-        <div class="health-card">
-          <div class="health-card-top">
-            <div class="health-card-title">Ticket triage</div>
-            <span class="health-card-status hstatus-new">2 weeks old</span>
-          </div>
-          <div class="health-card-body">47 triaged. Accuracy improving — 89% match.</div>
-          <div class="health-card-dept">IT</div>
-        </div>
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
       </div>
-
-      <!-- Needs attention -->
-      <div class="section-label">Needs you</div>
-
-      <div class="feed-card problem">
-        <div class="feed-card-inner">
-          <div class="feed-card-top">
-            <div class="feed-card-title">Weekly reports can't run</div>
-            <span class="feed-card-badge badge-fail">Failed</span>
-          </div>
-          <div class="feed-card-subtitle">Ops &middot; Failed last night</div>
-          <div class="feed-card-body">
-            The Salesforce export endpoint changed. I can't pull this week's pipeline data. I need the new URL or API key.
-          </div>
-          <div class="feed-card-dept">Affects: Ops weekly report &middot; 3 department heads waiting</div>
-        </div>
-        <div class="feed-card-actions">
-          <button class="btn btn-primary">Fix this now</button>
-          <button class="btn btn-ghost">I'll handle it manually</button>
-        </div>
-      </div>
-
-      <div class="feed-card urgent">
-        <div class="feed-card-inner">
-          <div class="feed-card-top">
-            <div class="feed-card-title">2 reference checks ready</div>
-            <span class="feed-card-badge badge-review">Review</span>
-          </div>
-          <div class="feed-card-subtitle">HR &middot; For Sarah Chen and Marcus Webb</div>
-          <div class="feed-card-body">
-            All 3 referees responded for both candidates. No concerns flagged. Summaries ready for hiring managers.
-          </div>
-        </div>
-        <div class="feed-card-actions">
-          <button class="btn btn-primary">Review &amp; send</button>
-          <button class="btn btn-ghost">View details</button>
-        </div>
-      </div>
-
-      <div class="feed-card warning">
-        <div class="feed-card-inner">
-          <div class="feed-card-top">
-            <div class="feed-card-title">3 reconciliation exceptions</div>
-            <span class="feed-card-badge badge-info">Exceptions</span>
-          </div>
-          <div class="feed-card-subtitle">Finance &middot; Month-end March</div>
-          <div class="feed-card-body">
-            $2,340 unmatched across 3 transactions. 2 look like timing differences (will clear). 1 needs investigation — vendor invoice doesn't match PO.
-          </div>
-        </div>
-        <div class="feed-card-actions">
-          <button class="btn btn-primary">Review exceptions</button>
-          <button class="btn btn-ghost">Show all matches</button>
-        </div>
-      </div>
-
-      <!-- Impact — Jordan's leadership ammunition -->
-      <div class="impact-card">
-        <div class="impact-title">Your impact this month</div>
-        <div class="impact-stats">
-          <div class="impact-stat">
-            <div class="impact-stat-value">8.5</div>
-            <div class="impact-stat-label">Person-days saved</div>
-          </div>
-          <div class="impact-stat">
-            <div class="impact-stat-value">4x</div>
-            <div class="impact-stat-label">Faster ref checks</div>
-          </div>
-          <div class="impact-stat">
-            <div class="impact-stat-value">3</div>
-            <div class="impact-stat-label">Departments served</div>
-          </div>
-          <div class="impact-stat">
-            <div class="impact-stat-value">89%</div>
-            <div class="impact-stat-label">Ticket triage accuracy</div>
-          </div>
-        </div>
-        <div class="impact-note">Reference checks: 5 days &rarr; 1 day. Reconciliation: 2 person-days &rarr; 3 hours. This data is ready to present to leadership whenever you need it.</div>
-      </div>
-
     </div>
   </main>
 
-  <!-- ═══ RIGHT PANEL ═══ -->
-  <aside class="self-panel">
-    <div class="self-panel-header">
-      <span class="self-dot"></span>
-      <span class="self-panel-title">Ditto</span>
+  <!-- Right Panel -->
+  <aside class="right-panel" aria-label="Ditto context panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+      <button class="close-btn" aria-label="Close panel" title="Close panel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
     </div>
+    <div class="right-panel-scroll">
 
-    <div class="self-messages">
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
+      <!-- Suggestion: Leadership report -->
+      <div class="suggestion" style="margin-bottom: 20px;">
+        <div class="suggestion-label">Suggestion</div>
+        Your leadership meeting is Thursday. I can compile a cross-department impact report showing 12h saved, 94% approval rate, and adoption across 3 teams. Want me to draft it?
+        <div class="action-row" style="margin-top: 8px;">
+          <button class="btn-vivid" style="font-size: 12px; padding: 4px 12px;">Draft report</button>
+          <button class="btn-secondary" style="font-size: 12px; padding: 4px 12px;">Not now</button>
         </div>
-        Morning Jordan. The Salesforce issue is the urgent one — 3 department heads are expecting their weekly report today. The ref checks and recon can wait until after.
       </div>
 
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
+      <!-- Aggregate stats -->
+      <div style="margin-bottom: 20px;">
+        <div class="section-heading" style="font-size: 14px;">Aggregate this month</div>
+        <div class="field-table">
+          <span class="field-label">Total tasks</span><span class="field-value">189</span>
+          <span class="field-label">Auto-completed</span><span class="field-value">174 (92%)</span>
+          <span class="field-label">Human reviews</span><span class="field-value">15</span>
+          <span class="field-label">Time saved</span><span class="field-value">48h this month</span>
+          <span class="field-label">Error rate</span><span class="field-value">1.6% <span class="metric-trend down" style="font-size: 11px;">&darr; 0.4%</span></span>
         </div>
-        On the positive side — your leadership meeting is Thursday. The impact numbers are strong. Want me to put together a one-pager?
       </div>
 
-      <div class="panel-msg from-user">
-        Yeah, do the one-pager. I'll fix the Salesforce thing now.
+      <!-- Checklist: Upcoming reviews -->
+      <div style="margin-bottom: 20px;">
+        <div class="section-heading" style="font-size: 14px;">Upcoming reviews</div>
+        <ul class="checklist">
+          <li class="checklist-item">
+            <span class="check-icon check-warning">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+            </span>
+            <div>
+              <div>Marketing post review</div>
+              <div class="checklist-detail">Due Thursday before publish</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div>
+              <div>2 escalated tickets</div>
+              <div class="checklist-detail">Customer Service — spot check</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div>
+              <div>2 unmatched invoices</div>
+              <div class="checklist-detail">Finance — manual PO lookup</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div>
+              <div>Quote automation health check</div>
+              <div class="checklist-detail">Next Monday — routine</div>
+            </div>
+          </li>
+        </ul>
       </div>
 
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
-        On it. I'll have the impact summary in your review queue by lunch. For Salesforce — when you've got the new endpoint, just paste it here and I'll reconnect the report.
-      </div>
-    </div>
-
-    <div class="self-panel-input">
-      <div class="panel-input-container">
-        <input type="text" placeholder="What's on your mind?">
-        <button class="panel-send">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
-      </div>
     </div>
   </aside>
 
 </div>
 
-<div class="proto-nav"><a href="18-second-process.html">&larr; Second Process</a><span class="pn-t"><a href="index.html">P19 Multi-Process</a></span><a href="20-something-wrong.html">Something Wrong &rarr;</a></div><!-- pnav -->
+<script>
+  // ═══════ Theme toggle ═══════
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+
+  // ═══════ Close panel ═══════
+  document.querySelector('.close-btn').addEventListener('click', () => {
+    document.querySelector('.right-panel').classList.add('hidden');
+  });
+
+  // ═══════ Textarea auto-resize ═══════
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    });
+  });
+
+  // ═══════ Ditto Dots ═══════
+  const COLORS = ['#059669','#059669','#047857','#3D5A48','#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size/2, cy = size/2;
+    const count = Math.max(8, Math.round(size/3));
+    const maxR = size * 0.35;
+    const dots = Array.from({length:count}, (_,i) => ({
+      angle: (Math.PI*2/count)*i + Math.random()*0.3,
+      dist: 2 + Math.random()*maxR,
+      size: 1 + Math.random()*(size/16),
+      speed: 0.15 + Math.random()*0.35,
+      phase: Math.random()*Math.PI*2,
+      breathAmp: 1 + Math.random()*(maxR*0.3),
+      color: COLORS[Math.floor(Math.random()*COLORS.length)],
+      opacity: 0.5 + Math.random()*0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle)*d.dist*0.6;
+        const y = cy + Math.sin(d.angle)*d.dist*0.6;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now()/1000;
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const a = d.angle + t*d.speed;
+        const breathe = Math.sin(t*1.2+d.phase)*d.breathAmp;
+        const r = Math.max(1, d.dist+breathe);
+        const x = cx + Math.cos(a)*r;
+        const y = cy + Math.sin(a)*r;
+        const pulse = 0.6 + Math.sin(t*2.5+d.phase)*0.4;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity*pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+</script>
 </body>
 </html>

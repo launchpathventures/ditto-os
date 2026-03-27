@@ -81,7 +81,7 @@ The `SelfConverseResult` changes from:
 
 ### 2. Content Block Types
 
-Thirteen block types cover the Self's conversational vocabulary. Each maps to specific surface capabilities:
+Nineteen block types cover the Self's conversational vocabulary (13 original + 3 onboarding + 3 visual). Each maps to specific surface capabilities:
 
 #### TextBlock — Conversational response
 ```typescript
@@ -354,7 +354,7 @@ The relationship: when a process produces a `view`-type output (ADR-009), and th
 ## Consequences
 
 **What becomes easier:**
-- New surfaces can be built by implementing renderers for 13 block types — no need to understand the engine internals
+- New surfaces can be built by implementing renderers for 19 block types — no need to understand the engine internals
 - Telegram gets native inline keyboards for review actions instead of text-only
 - The web app gets typed React props instead of parsing markdown
 - Third-party integrators get a stable JSON contract
@@ -375,6 +375,88 @@ The relationship: when a process produces a `view`-type output (ADR-009), and th
 - [ ] Update Brief 039-044 (Phase 10) to consume `ContentBlock[]` instead of string
 - [ ] Update Telegram bot to use block renderers
 - [ ] Determine whether the Self produces blocks directly (structured output from LLM) or whether a post-processor converts text + harness events into blocks
+
+## Addendum: Visual Block Types (2026-03-27)
+
+**Context:** Architecture review of the prototype system (Phase 10) identified three gaps in the content block vocabulary. Prototypes require visual elements — checklists, charts, metrics — that cannot be rendered from the original 13 block types. Additionally, 3 onboarding-specific types (KnowledgeSynthesisBlock, ProcessProposalBlock, GatheringIndicatorBlock) were added in Brief 044 but not documented here.
+
+**Corrected block count:** The original ADR specified 13 block types. Brief 044 added 3 (total: 16). This addendum adds 3 more (total: 19).
+
+### ChecklistBlock — Status-tracked item list
+```typescript
+interface ChecklistBlock {
+  type: "checklist";
+  title?: string;
+  items: Array<{ label: string; status: "done" | "pending" | "warning"; detail?: string }>;
+}
+```
+- **Web:** Checkbox rows with done/pending/warning visual states
+- **Telegram:** Emoji-prefixed list (✓/○/⚠)
+- **CLI:** Colored checkbox output
+
+**Provenance:** Hark (document upload checklist with progress pills), GitHub issue task lists, Linear sub-issues. **Composition level: pattern.**
+
+### ChartBlock — Visual data rendering
+```typescript
+interface ChartBlock {
+  type: "chart";
+  chartType: "sparkline" | "donut" | "bar";
+  title?: string;
+  data: {
+    values?: number[];       // sparkline/bar: ordered values
+    trend?: "up" | "down" | "flat";  // sparkline: direction
+    label?: string;          // sparkline: axis label
+    segments?: Array<{ label: string; value: number; color?: string }>;  // donut/bar
+  };
+}
+```
+- **Web:** SVG sparkline (40×16px inline), SVG donut (48px with stroke-dasharray), horizontal bar chart
+- **Telegram:** Text summary with trend arrow
+- **CLI:** ASCII sparkline or percentage bar
+
+**Provenance:** Hark (donut charts for application outcomes), Performance Sparkline primitive (#4 in architecture.md), GitHub contribution graphs. **Composition level: pattern.**
+
+### MetricBlock — Key numbers with context
+```typescript
+interface MetricBlock {
+  type: "metric";
+  metrics: Array<{
+    value: string;
+    label: string;
+    trend?: "up" | "down" | "flat";
+    sparkline?: number[];
+  }>;
+}
+```
+- **Web:** Large number + label + optional inline sparkline, cardless
+- **Telegram:** "Label: Value ↑" formatted text
+- **CLI:** Aligned metric output
+
+**Provenance:** Hark (conditionally approved metrics), Grafana stat panels, Datadog service metrics. **Composition level: pattern.**
+
+### Why new types, not DataBlock extensions
+
+The discriminated union on `type` provides compile-time exhaustiveness checking in the block renderer (`block-registry.tsx`). Each `case` in the switch must be handled or TypeScript errors. If these visual patterns were hidden as `DataBlock.format` values, the compiler wouldn't catch missing renderers — format is a string within an already-handled type. New block types preserve the safety guarantee that every block is rendered.
+
+### Updated ContentBlock union (19 types)
+
+```typescript
+type ContentBlock =
+  | TextBlock | ReviewCardBlock | StatusCardBlock | ActionBlock
+  | InputRequestBlock | KnowledgeCitationBlock | ProgressBlock | DataBlock
+  | ImageBlock | CodeBlock | ReasoningTraceBlock | SuggestionBlock
+  | AlertBlock | KnowledgeSynthesisBlock | ProcessProposalBlock | GatheringIndicatorBlock
+  | ChecklistBlock | ChartBlock | MetricBlock;
+```
+
+### Right Panel Composition Surface
+
+The right panel (`right-panel.tsx`) gains a new `PanelContext` type:
+```typescript
+| { type: "blocks"; blocks: ContentBlock[]; title?: string }
+```
+
+This makes the right panel a second composition surface — the Self composes it via ContentBlocks, the same way it composes the centre conversation. The `BlockList` component renders the array. This enables the Self to populate the Ditto panel with checklists, charts, and metrics without custom rendering code per panel state.
 
 ## Reference Docs to Update
 

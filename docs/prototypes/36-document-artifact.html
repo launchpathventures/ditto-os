@@ -1,0 +1,1117 @@
+<!-- v2, 2026-03-27 — P36 Document Artifact: Rawlinsons Cost Estimate. Artifact-primary layout: document centre, conversation in Ditto panel. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P36 — Document Artifact | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Skip Link ===== */
+  .skip-link {
+    position: absolute; top: -100%; left: 16px;
+    background: var(--accent); color: white;
+    padding: 8px 16px; border-radius: var(--radius-md);
+    z-index: 1000; font-size: 14px; text-decoration: none;
+  }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover:not(.disabled) { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow.disabled { opacity: 0.35; cursor: not-allowed; }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Bar ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ═══════════════════════════════════════════
+     WORKSPACE — three-column: sidebar + artifact (centre) + Ditto panel
+  ═══════════════════════════════════════════ */
+  .workspace {
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 6px; border-radius: 99px; margin-left: auto;
+  }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ═══════════════════════════════════════════
+     CENTRE — Artifact (primary content)
+  ═══════════════════════════════════════════ */
+  .centre {
+    flex: 1; min-width: 480px;
+    display: flex; flex-direction: column;
+    background: var(--bg);
+  }
+
+  /* Artifact header */
+  .artifact-header-bar {
+    padding: 16px 32px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .artifact-header-top {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 4px;
+  }
+  .artifact-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    background: var(--vivid-subtle); color: var(--vivid-deep);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .artifact-icon svg { width: 20px; height: 20px; }
+  .artifact-title { font-size: 18px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+  .artifact-meta { font-size: 13px; color: var(--text-muted); margin-left: 48px; }
+  .artifact-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; margin-left: auto;
+  }
+  .status-draft { background: var(--accent-subtle); color: var(--text-secondary); }
+  .status-ready { background: var(--positive-subtle); color: var(--positive); }
+  .status-sent { background: var(--info-subtle); color: var(--info); }
+  .status-resolved { background: var(--positive-subtle); color: var(--positive); }
+
+  /* Version bar */
+  .version-bar {
+    padding: 8px 32px;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; flex-shrink: 0;
+  }
+  .version-tab {
+    font-family: var(--font); font-size: 12px; font-weight: 500;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; border-radius: 99px;
+    padding: 3px 10px; cursor: pointer; transition: all 0.12s;
+  }
+  .version-tab:hover { color: var(--text-primary); }
+  .version-tab.active { color: var(--text-primary); background: var(--surface); border-color: var(--border); }
+  .version-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Document content — scrollable area */
+  .centre-scroll {
+    flex: 1; overflow-y: auto; padding: 0;
+  }
+  .centre-scroll::-webkit-scrollbar { width: 6px; }
+  .centre-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 32px 24px;
+  }
+
+  /* Document sections */
+  .doc-section { margin-bottom: 24px; }
+  .doc-section-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 8px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Line items table */
+  .line-items { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .line-items th {
+    text-align: left; font-weight: 600; font-size: 11px;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .line-items th:last-child { text-align: right; }
+  .line-items td {
+    padding: 7px 8px 7px 0; border-bottom: 1px solid var(--border);
+    color: var(--text-primary); vertical-align: top;
+  }
+  .line-items td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .line-items .item-detail { font-size: 12px; color: var(--text-muted); }
+  .line-items tfoot td {
+    font-weight: 600; padding-top: 10px; border-bottom: none;
+  }
+  .line-items tfoot .total-row td { font-size: 15px; }
+  .line-items .changed {
+    background: var(--vivid-subtle);
+    border-radius: 2px;
+    padding: 1px 4px;
+  }
+  .line-items .removed {
+    text-decoration: line-through;
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  /* Assumptions / text sections */
+  .doc-text {
+    font-size: 13px; line-height: 1.6; color: var(--text-secondary);
+  }
+  .doc-text li { margin-bottom: 4px; list-style: none; padding-left: 16px; position: relative; }
+  .doc-text li::before {
+    content: ''; position: absolute; left: 0; top: 8px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border-strong);
+  }
+  .doc-text .flagged::before { background: var(--caution); }
+  .doc-text .flagged { color: var(--text-primary); }
+
+  /* Provenance strip — in centre footer */
+  .provenance {
+    border-left: 2px solid var(--vivid);
+    padding-left: 16px;
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+  }
+  .provenance-label {
+    font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 4px; font-size: 11px;
+  }
+  .provenance-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .provenance-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; background: var(--surface);
+    border-radius: var(--radius-sm); font-size: 12px; color: var(--text-primary);
+  }
+  .provenance-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--positive); }
+
+  /* Centre footer — actions */
+  .centre-footer {
+    padding: 12px 32px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  .centre-footer .spacer { flex: 1; }
+  .footer-destination {
+    font-size: 12px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .footer-destination svg { width: 14px; height: 14px; }
+
+  /* ===== Buttons ===== */
+  .btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    border: none; border-radius: 99px; padding: 7px 16px;
+    cursor: pointer; transition: all 0.12s; line-height: 1.3;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--vivid); color: white; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); padding: 7px 12px; }
+  .btn-ghost:hover { color: var(--text-primary); background: var(--surface); }
+  .btn-sm { font-size: 12px; padding: 5px 12px; }
+
+  /* ═══════════════════════════════════════════
+     DITTO PANEL — Conversation + Context (always present)
+  ═══════════════════════════════════════════ */
+  .ditto-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface-raised);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .ditto-panel-header {
+    padding: 14px 16px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .ditto-panel-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .ditto-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--vivid);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+  .ditto-panel-context {
+    font-size: 12px; color: var(--text-muted);
+  }
+
+  /* Compact conversation thread */
+  .ditto-thread {
+    flex: 1; overflow-y: auto;
+    padding: 12px 16px;
+    display: flex; flex-direction: column;
+    gap: 10px;
+  }
+  .ditto-thread::-webkit-scrollbar { width: 4px; }
+  .ditto-thread::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .msg { line-height: 1.5; font-size: 13px; }
+  .msg.ditto { color: var(--text-primary); }
+  .msg.user {
+    background: var(--surface);
+    padding: 8px 12px;
+    border-radius: var(--radius-lg);
+    align-self: flex-end;
+    max-width: 90%;
+    display: table;
+    color: var(--text-primary);
+  }
+
+  /* Mini artifact reference in thread */
+  .artifact-ref {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-left: 2px solid var(--vivid);
+    background: var(--vivid-subtle);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 12px; font-weight: 500; color: var(--text-primary);
+  }
+  .artifact-ref .badge {
+    font-size: 10px; font-weight: 600;
+    padding: 2px 6px; border-radius: 99px;
+    background: var(--accent-subtle); color: var(--text-secondary);
+  }
+  .artifact-ref .badge-positive {
+    background: var(--positive-subtle); color: var(--positive);
+  }
+
+  /* Change summary in thread */
+  .change-note {
+    font-size: 12px; color: var(--vivid-deep); font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0;
+  }
+  .change-note::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--vivid); flex-shrink: 0;
+  }
+
+  /* Teach-this moment in thread */
+  .teach-this {
+    border-left: 2px solid var(--vivid);
+    padding: 8px 12px;
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+  }
+  .teach-this-label {
+    font-weight: 600; color: var(--vivid); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .teach-this .btn { margin-top: 8px; }
+
+  /* Ditto panel input */
+  .ditto-input {
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ditto-input-container {
+    display: flex; align-items: flex-end; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 8px 12px;
+    transition: border-color 0.15s;
+  }
+  .ditto-input-container:focus-within { border-color: var(--vivid); }
+  .ditto-input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 14px; color: var(--text-primary);
+    outline: none; line-height: 1.4; resize: none;
+    min-height: 20px; max-height: 80px;
+  }
+  .ditto-input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== State visibility ===== */
+  .state-content { display: none; }
+  .state-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .ditto-state { display: none; }
+  .ditto-state.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  /* Resolved centre — success state */
+  .resolved-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 32px;
+    background: var(--positive-subtle);
+    border-bottom: 1px solid var(--border);
+    font-size: 14px; font-weight: 500; color: var(--positive);
+    flex-shrink: 0;
+  }
+  .resolved-banner svg { width: 20px; height: 20px; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1200px) {
+    .ditto-panel { width: 280px; min-width: 280px; }
+  }
+  @media (max-width: 1024px) {
+    .sidebar { display: none; }
+  }
+  @media (max-width: 860px) {
+    .ditto-panel { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<!-- ===== Proto Nav ===== -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Artifact &middot; <span>Document</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="35-improvements.html" class="proto-arrow" aria-label="Previous">&#8592;</a>
+    <a href="37-content-pack.html" class="proto-arrow" aria-label="Next">&#8594;</a>
+  </div>
+</nav>
+
+<!-- ===== State Bar ===== -->
+<div class="state-bar" role="tablist" aria-label="Prototype states">
+  <button class="state-btn active" role="tab" data-state="1" aria-selected="true">1. Generation</button>
+  <button class="state-btn" role="tab" data-state="2">2. Refinement</button>
+  <button class="state-btn" role="tab" data-state="3">3. Add Contingency</button>
+  <button class="state-btn" role="tab" data-state="4">4. Approved</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     WORKSPACE
+═══════════════════════════════════════════════════ -->
+<main class="workspace" id="main">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" aria-label="Navigation">
+    <div class="sidebar-header">
+      <div class="wordmark">Ditto</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+        <span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" /></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">3</span>
+      </a>
+      <a class="nav-item active" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>
+        <span class="nav-label">Work</span>
+      </a>
+      <div class="nav-separator"></div>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" /></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
+        <span class="nav-label">Help</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════
+       CENTRE — Artifact (the document)
+  ═══════════════════════════════════════ -->
+  <section class="centre" role="main">
+
+    <!-- ═══ STATE 1: v1 Generated ═══ -->
+    <div class="state-content active" data-state="1">
+      <div class="artifact-header-bar">
+        <div class="artifact-header-top">
+          <div class="artifact-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+          </div>
+          <div class="artifact-title">Henderson Bathroom Renovation</div>
+          <span class="artifact-status status-draft">Draft</span>
+        </div>
+        <div class="artifact-meta">Cost Estimate &middot; Prepared 27 Mar 2026 &middot; Ref: QS-2026-0847</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab active">v1</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="doc-section">
+            <div class="doc-section-title">Materials</div>
+            <table class="line-items">
+              <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Tiles (ceramic, 300&times;600)<div class="item-detail">Supplier: PlaceMakers</div></td>
+                  <td>14 m&sup2;</td><td>$85/m&sup2;</td><td>$1,190</td>
+                </tr>
+                <tr>
+                  <td>Vanity unit (wall-hung, 900mm)<div class="item-detail">Supplier: PlaceMakers</div></td>
+                  <td>1</td><td>$1,450</td><td>$1,450</td>
+                </tr>
+                <tr>
+                  <td>Shower mixer &amp; rail<div class="item-detail">Supplier: PlaceMakers</div></td>
+                  <td>1 set</td><td>$680</td><td>$680</td>
+                </tr>
+                <tr>
+                  <td>Toilet (wall-hung, concealed cistern)<div class="item-detail">Supplier: PlaceMakers</div></td>
+                  <td>1</td><td>$1,200</td><td>$1,200</td>
+                </tr>
+                <tr>
+                  <td>Copper pipework<div class="item-detail">Supplier: PlaceMakers &middot; <span style="color: var(--caution); font-weight: 500;">&#9888; Q3 pricing &mdash; check current</span></div></td>
+                  <td>45 m</td><td>$38/m</td><td>$1,710</td>
+                </tr>
+                <tr>
+                  <td>Waterproofing membrane<div class="item-detail">Supplier: PlaceMakers</div></td>
+                  <td>16 m&sup2;</td><td>$28/m&sup2;</td><td>$448</td>
+                </tr>
+                <tr>
+                  <td>Adhesive, grout, sealant<div class="item-detail">Consumables</div></td>
+                  <td>1 lot</td><td>&mdash;</td><td>$380</td>
+                </tr>
+                <tr>
+                  <td>Electrical (heated towel rail, fan, lighting)<div class="item-detail">Subcontract</div></td>
+                  <td>1 lot</td><td>&mdash;</td><td>$2,400</td>
+                </tr>
+                <tr>
+                  <td>Waste &amp; miscellaneous<div class="item-detail">Skip, fixings, sundries</div></td>
+                  <td>1 lot</td><td>&mdash;</td><td>$1,782</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Materials subtotal</td><td>$11,240</td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Labour</div>
+            <table class="line-items">
+              <thead><tr><th>Trade</th><th>Days</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Demolition &amp; strip</td><td>1.5</td><td>$480/day</td><td>$720</td></tr>
+                <tr><td>Plumbing rough-in</td><td>2</td><td>$520/day</td><td>$1,040</td></tr>
+                <tr><td>Waterproofing</td><td>1</td><td>$480/day</td><td>$480</td></tr>
+                <tr><td>Tiling</td><td>3</td><td>$500/day</td><td>$1,500</td></tr>
+                <tr><td>Fit-off (vanity, toilet, shower)</td><td>1.5</td><td>$520/day</td><td>$780</td></tr>
+                <tr><td>Project management</td><td>&mdash;</td><td>&mdash;</td><td>$1,280</td></tr>
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Labour subtotal</td><td>$5,800</td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Summary</div>
+            <table class="line-items">
+              <tbody>
+                <tr><td colspan="3">Materials</td><td>$11,240</td></tr>
+                <tr><td colspan="3">Labour</td><td>$5,800</td></tr>
+                <tr><td colspan="3">Margin (7.6%)</td><td>$1,360</td></tr>
+              </tbody>
+              <tfoot>
+                <tr class="total-row"><td colspan="3"><strong>Total (excl. GST)</strong></td><td><strong>$18,400</strong></td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Assumptions</div>
+            <ul class="doc-text">
+              <li>Access to site during standard hours (7am&ndash;5pm)</li>
+              <li>Existing services in good condition (no re-routing)</li>
+              <li class="flagged">Copper pricing based on Q3 2025 &mdash; may need adjustment</li>
+              <li>No structural work required (walls, floor slab intact)</li>
+              <li>Excludes consent fees (estimated $800&ndash;$1,200 separately)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="provenance">
+          <div class="provenance-label">Based on</div>
+          <div class="provenance-tags">
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> PlaceMakers prices (Mar 25)</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Henderson specs (uploaded)</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your standard margin rules</span>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <div class="footer-destination">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+          Email to Henderson as PDF
+        </div>
+        <button class="btn btn-ghost btn-sm">Download</button>
+        <button class="btn btn-primary btn-sm">Approve &amp; Send</button>
+      </div>
+    </div>
+
+    <!-- ═══ STATE 2: v2 — Copper rate updated ═══ -->
+    <div class="state-content" data-state="2">
+      <div class="artifact-header-bar">
+        <div class="artifact-header-top">
+          <div class="artifact-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+          </div>
+          <div class="artifact-title">Henderson Bathroom Renovation</div>
+          <span class="artifact-status status-draft">Draft</span>
+        </div>
+        <div class="artifact-meta">Cost Estimate &middot; v2 &middot; Copper rate updated</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab">v1</button>
+        <button class="version-tab active">v2</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="doc-section">
+            <div class="doc-section-title">Materials</div>
+            <table class="line-items">
+              <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Tiles (ceramic, 300&times;600)</td><td>14 m&sup2;</td><td>$85/m&sup2;</td><td>$1,190</td></tr>
+                <tr><td>Vanity unit (wall-hung, 900mm)</td><td>1</td><td>$1,450</td><td>$1,450</td></tr>
+                <tr><td>Shower mixer &amp; rail</td><td>1 set</td><td>$680</td><td>$680</td></tr>
+                <tr><td>Toilet (wall-hung, concealed cistern)</td><td>1</td><td>$1,200</td><td>$1,200</td></tr>
+                <tr>
+                  <td>Copper pipework<div class="item-detail">Supplier: PlaceMakers &middot; Q4 2025</div></td>
+                  <td>45 m</td>
+                  <td><span class="changed">$42/m</span> <span class="removed">$38/m</span></td>
+                  <td><span class="changed">$1,890</span></td>
+                </tr>
+                <tr><td>Waterproofing membrane</td><td>16 m&sup2;</td><td>$28/m&sup2;</td><td>$448</td></tr>
+                <tr><td>Adhesive, grout, sealant</td><td>1 lot</td><td>&mdash;</td><td>$380</td></tr>
+                <tr><td>Electrical (heated towel rail, fan, lighting)</td><td>1 lot</td><td>&mdash;</td><td>$2,400</td></tr>
+                <tr><td>Waste &amp; miscellaneous</td><td>1 lot</td><td>&mdash;</td><td>$1,782</td></tr>
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Materials subtotal</td><td><span class="changed">$11,420</span></td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Labour</div>
+            <table class="line-items">
+              <thead><tr><th>Trade</th><th>Days</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Demolition &amp; strip</td><td>1.5</td><td>$480/day</td><td>$720</td></tr>
+                <tr><td>Plumbing rough-in</td><td>2</td><td>$520/day</td><td>$1,040</td></tr>
+                <tr><td>Waterproofing</td><td>1</td><td>$480/day</td><td>$480</td></tr>
+                <tr><td>Tiling</td><td>3</td><td>$500/day</td><td>$1,500</td></tr>
+                <tr><td>Fit-off (vanity, toilet, shower)</td><td>1.5</td><td>$520/day</td><td>$780</td></tr>
+                <tr><td>Project management</td><td>&mdash;</td><td>&mdash;</td><td>$1,280</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="3">Labour subtotal</td><td>$5,800</td></tr></tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Summary</div>
+            <table class="line-items">
+              <tbody>
+                <tr><td colspan="3">Materials</td><td><span class="changed">$11,420</span></td></tr>
+                <tr><td colspan="3">Labour</td><td>$5,800</td></tr>
+                <tr><td colspan="3">Margin (7.6%)</td><td><span class="changed">$1,374</span></td></tr>
+              </tbody>
+              <tfoot>
+                <tr class="total-row"><td colspan="3"><strong>Total (excl. GST)</strong></td><td><strong><span class="changed">$18,594</span></strong></td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Assumptions</div>
+            <ul class="doc-text">
+              <li>Access to site during standard hours (7am&ndash;5pm)</li>
+              <li>Existing services in good condition (no re-routing)</li>
+              <li><span class="changed" style="display: inline; background: var(--vivid-subtle); padding: 1px 4px; border-radius: 2px;">Copper pricing updated to Q4 2025 rates ($42/m)</span></li>
+              <li>No structural work required (walls, floor slab intact)</li>
+              <li>Excludes consent fees (estimated $800&ndash;$1,200 separately)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="footer-destination">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+          Email to Henderson as PDF
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm">Download</button>
+        <button class="btn btn-primary btn-sm">Approve &amp; Send</button>
+      </div>
+    </div>
+
+    <!-- ═══ STATE 3: v3 — Contingency added ═══ -->
+    <div class="state-content" data-state="3">
+      <div class="artifact-header-bar">
+        <div class="artifact-header-top">
+          <div class="artifact-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+          </div>
+          <div class="artifact-title">Henderson Bathroom Renovation</div>
+          <span class="artifact-status status-draft">Draft</span>
+        </div>
+        <div class="artifact-meta">Cost Estimate &middot; v3 &middot; Contingency added</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab">v1</button>
+        <button class="version-tab">v2</button>
+        <button class="version-tab active">v3</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="doc-section">
+            <div class="doc-section-title">Materials</div>
+            <table class="line-items">
+              <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Tiles (ceramic, 300&times;600)</td><td>14 m&sup2;</td><td>$85/m&sup2;</td><td>$1,190</td></tr>
+                <tr><td>Vanity unit (wall-hung, 900mm)</td><td>1</td><td>$1,450</td><td>$1,450</td></tr>
+                <tr><td>Shower mixer &amp; rail</td><td>1 set</td><td>$680</td><td>$680</td></tr>
+                <tr><td>Toilet (wall-hung, concealed cistern)</td><td>1</td><td>$1,200</td><td>$1,200</td></tr>
+                <tr><td>Copper pipework</td><td>45 m</td><td>$42/m</td><td>$1,890</td></tr>
+                <tr><td>Waterproofing membrane</td><td>16 m&sup2;</td><td>$28/m&sup2;</td><td>$448</td></tr>
+                <tr><td>Adhesive, grout, sealant</td><td>1 lot</td><td>&mdash;</td><td>$380</td></tr>
+                <tr><td>Electrical (heated towel rail, fan, lighting)</td><td>1 lot</td><td>&mdash;</td><td>$2,400</td></tr>
+                <tr><td>Waste &amp; miscellaneous</td><td>1 lot</td><td>&mdash;</td><td>$1,782</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="3">Materials subtotal</td><td>$11,420</td></tr></tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Labour</div>
+            <table class="line-items">
+              <thead><tr><th>Trade</th><th>Days</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Demolition &amp; strip</td><td>1.5</td><td>$480/day</td><td>$720</td></tr>
+                <tr><td>Plumbing rough-in</td><td>2</td><td>$520/day</td><td>$1,040</td></tr>
+                <tr><td>Waterproofing</td><td>1</td><td>$480/day</td><td>$480</td></tr>
+                <tr><td>Tiling</td><td>3</td><td>$500/day</td><td>$1,500</td></tr>
+                <tr><td>Fit-off (vanity, toilet, shower)</td><td>1.5</td><td>$520/day</td><td>$780</td></tr>
+                <tr><td>Project management</td><td>&mdash;</td><td>&mdash;</td><td>$1,280</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="3">Labour subtotal</td><td>$5,800</td></tr></tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Summary</div>
+            <table class="line-items">
+              <tbody>
+                <tr><td colspan="3">Materials</td><td>$11,420</td></tr>
+                <tr><td colspan="3">Labour</td><td>$5,800</td></tr>
+                <tr class="changed" style="background: var(--vivid-subtle);"><td colspan="3">Contingency (5%)</td><td>$571</td></tr>
+                <tr><td colspan="3">Margin (7.6%)</td><td>$1,756</td></tr>
+              </tbody>
+              <tfoot>
+                <tr class="total-row"><td colspan="3"><strong>Total (excl. GST)</strong></td><td><strong>$19,547</strong></td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Assumptions</div>
+            <ul class="doc-text">
+              <li>Access to site during standard hours (7am&ndash;5pm)</li>
+              <li>Existing services in good condition (no re-routing)</li>
+              <li>Copper pricing updated to Q4 2025 rates ($42/m)</li>
+              <li>No structural work required (walls, floor slab intact)</li>
+              <li>Excludes consent fees (estimated $800&ndash;$1,200 separately)</li>
+              <li class="flagged" style="color: var(--vivid-deep);"><span class="changed" style="display: inline; background: var(--vivid-subtle); padding: 1px 4px; border-radius: 2px;">5% contingency applied to materials &amp; labour</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="footer-destination">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+          Email to Henderson as PDF
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm">Download PDF</button>
+        <button class="btn btn-primary btn-sm">Approve &amp; Send</button>
+      </div>
+    </div>
+
+    <!-- ═══ STATE 4: Approved & Sent ═══ -->
+    <div class="state-content" data-state="4">
+      <div class="resolved-banner">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        Sent to mark.henderson@email.co.nz as PDF
+      </div>
+
+      <div class="artifact-header-bar" style="border-bottom-color: var(--positive-subtle);">
+        <div class="artifact-header-top">
+          <div class="artifact-icon" style="background: var(--positive-subtle); color: var(--positive);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+          </div>
+          <div class="artifact-title">Henderson Bathroom Renovation</div>
+          <span class="artifact-status status-resolved">Sent</span>
+        </div>
+        <div class="artifact-meta">Cost Estimate &middot; v3 &middot; Final</div>
+      </div>
+
+      <div class="version-bar">
+        <button class="version-tab">v1</button>
+        <button class="version-tab">v2</button>
+        <button class="version-tab active">v3</button>
+      </div>
+
+      <div class="centre-scroll">
+        <div class="centre-content">
+          <div class="doc-section">
+            <div class="doc-section-title">Summary</div>
+            <table class="line-items">
+              <tbody>
+                <tr><td colspan="3">Materials</td><td>$11,420</td></tr>
+                <tr><td colspan="3">Labour</td><td>$5,800</td></tr>
+                <tr><td colspan="3">Contingency (5%)</td><td>$571</td></tr>
+                <tr><td colspan="3">Margin (7.6%)</td><td>$1,756</td></tr>
+              </tbody>
+              <tfoot>
+                <tr class="total-row"><td colspan="3"><strong>Total (excl. GST)</strong></td><td><strong>$19,547</strong></td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Materials</div>
+            <table class="line-items">
+              <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Tiles (ceramic, 300&times;600)</td><td>14 m&sup2;</td><td>$85/m&sup2;</td><td>$1,190</td></tr>
+                <tr><td>Vanity unit (wall-hung, 900mm)</td><td>1</td><td>$1,450</td><td>$1,450</td></tr>
+                <tr><td>Shower mixer &amp; rail</td><td>1 set</td><td>$680</td><td>$680</td></tr>
+                <tr><td>Toilet (wall-hung, concealed cistern)</td><td>1</td><td>$1,200</td><td>$1,200</td></tr>
+                <tr><td>Copper pipework</td><td>45 m</td><td>$42/m</td><td>$1,890</td></tr>
+                <tr><td>Waterproofing membrane</td><td>16 m&sup2;</td><td>$28/m&sup2;</td><td>$448</td></tr>
+                <tr><td>Adhesive, grout, sealant</td><td>1 lot</td><td>&mdash;</td><td>$380</td></tr>
+                <tr><td>Electrical</td><td>1 lot</td><td>&mdash;</td><td>$2,400</td></tr>
+                <tr><td>Waste &amp; miscellaneous</td><td>1 lot</td><td>&mdash;</td><td>$1,782</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="3">Materials subtotal</td><td>$11,420</td></tr></tfoot>
+            </table>
+          </div>
+
+          <div class="doc-section">
+            <div class="doc-section-title">Labour</div>
+            <table class="line-items">
+              <thead><tr><th>Trade</th><th>Days</th><th>Rate</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>Demolition &amp; strip</td><td>1.5</td><td>$480/day</td><td>$720</td></tr>
+                <tr><td>Plumbing rough-in</td><td>2</td><td>$520/day</td><td>$1,040</td></tr>
+                <tr><td>Waterproofing</td><td>1</td><td>$480/day</td><td>$480</td></tr>
+                <tr><td>Tiling</td><td>3</td><td>$500/day</td><td>$1,500</td></tr>
+                <tr><td>Fit-off</td><td>1.5</td><td>$520/day</td><td>$780</td></tr>
+                <tr><td>Project management</td><td>&mdash;</td><td>&mdash;</td><td>$1,280</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="3">Labour subtotal</td><td>$5,800</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="centre-footer">
+        <div class="provenance">
+          <div class="provenance-label">Based on</div>
+          <div class="provenance-tags">
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> PlaceMakers Q4 2025</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Henderson specs</span>
+            <span class="provenance-tag"><span class="provenance-tag-dot"></span> Your margin rules</span>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm">Download PDF</button>
+        <button class="btn btn-secondary btn-sm">Duplicate</button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       DITTO PANEL — Conversation + Context (always present)
+  ═══════════════════════════════════════ -->
+  <aside class="ditto-panel" aria-label="Ditto conversation">
+
+    <!-- ═══ DITTO STATE 1 ═══ -->
+    <div class="ditto-state active" data-state="1">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title">
+          <span class="ditto-dot"></span> Ditto
+        </div>
+        <div class="ditto-panel-context">Henderson Bathroom</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">I've uploaded the Henderson bathroom renovation plans. Can you put together a cost estimate?</div>
+        <div class="msg ditto">I've reviewed the Henderson plans &mdash; 12m&sup2; bathroom, full strip and refit. Here's the estimate based on your standard rates and PlaceMakers pricing.</div>
+        <div class="artifact-ref">
+          Henderson Bathroom v1 <span class="badge">Draft</span>
+        </div>
+        <div class="msg ditto">I've flagged the copper pipe rate &mdash; it's based on last quarter's pricing and copper has moved. You might want to check that line.</div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DITTO STATE 2 ═══ -->
+    <div class="ditto-state" data-state="2">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title">
+          <span class="ditto-dot"></span> Ditto
+        </div>
+        <div class="ditto-panel-context">Henderson Bathroom</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">I've uploaded the Henderson bathroom renovation plans. Can you put together a cost estimate?</div>
+        <div class="msg ditto">I've reviewed the Henderson plans. Here's the estimate.</div>
+        <div class="artifact-ref">
+          Henderson Bathroom v1 <span class="badge">Draft</span>
+        </div>
+        <div class="msg ditto">I've flagged the copper pipe rate &mdash; it's based on last quarter's pricing.</div>
+        <div class="msg user">Yeah you're right, copper has jumped. Use Q4 2025 rates &mdash; should be about $42/m instead of $38.</div>
+        <div class="msg ditto">Updated. Copper pipework now uses $42/m (Q4 2025 PlaceMakers). Materials up $180, total adjusted.</div>
+        <div class="change-note">Copper: $38/m &rarr; $42/m &middot; Total $18,594</div>
+        <div class="artifact-ref">
+          Henderson Bathroom v2 <span class="badge">Draft</span>
+        </div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DITTO STATE 3 ═══ -->
+    <div class="ditto-state" data-state="3">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title">
+          <span class="ditto-dot"></span> Ditto
+        </div>
+        <div class="ditto-panel-context">Henderson Bathroom</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">Can you put together a cost estimate?</div>
+        <div class="msg ditto">Here's the estimate.</div>
+        <div class="artifact-ref">Henderson Bathroom v1 <span class="badge">Draft</span></div>
+        <div class="msg user">Use Q4 2025 rates for copper &mdash; $42/m.</div>
+        <div class="msg ditto">Updated. Copper pipework now $42/m.</div>
+        <div class="artifact-ref">Henderson Bathroom v2 <span class="badge">Draft</span></div>
+        <div class="msg user">Actually add a 5% contingency line too. Bathroom jobs always hit surprises.</div>
+        <div class="msg ditto">Added. 5% contingency across all materials &mdash; $571. New total $19,547.</div>
+        <div class="change-note">Added: Contingency (5%) $571</div>
+        <div class="artifact-ref">Henderson Bathroom v3 <span class="badge">Draft</span></div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Tell Ditto what to change..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DITTO STATE 4 ═══ -->
+    <div class="ditto-state" data-state="4">
+      <div class="ditto-panel-header">
+        <div class="ditto-panel-title">
+          <span class="ditto-dot"></span> Ditto
+        </div>
+        <div class="ditto-panel-context">Henderson Bathroom</div>
+      </div>
+      <div class="ditto-thread">
+        <div class="msg user">Can you put together a cost estimate?</div>
+        <div class="msg ditto">Here's the estimate.</div>
+        <div class="artifact-ref">Henderson Bathroom v1 <span class="badge">Draft</span></div>
+        <div class="msg user">Use Q4 2025 copper rates.</div>
+        <div class="artifact-ref">Henderson Bathroom v2 <span class="badge">Draft</span></div>
+        <div class="msg user">Add 5% contingency.</div>
+        <div class="artifact-ref">Henderson Bathroom v3 <span class="badge">Draft</span></div>
+        <div class="msg user">Looks good, send it.</div>
+        <div class="msg ditto">Done. Sent the Henderson bathroom quote to mark.henderson@email.co.nz as PDF.</div>
+        <div class="artifact-ref">
+          Henderson Bathroom v3 <span class="badge badge-positive">Sent</span>
+        </div>
+        <div class="teach-this">
+          <div class="teach-this-label">Quick thing</div>
+          You've adjusted copper rates on the last 3 estimates. Want me to update your default rate to $42/m so future quotes start there?
+          <div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button class="btn btn-secondary btn-sm">Yeah, update it</button>
+            <button class="btn btn-ghost btn-sm">Just for Henderson</button>
+          </div>
+        </div>
+      </div>
+      <div class="ditto-input">
+        <div class="ditto-input-container">
+          <textarea class="ditto-input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<!-- ===== JavaScript ===== -->
+<script>
+  // State switching — toggles both centre content and Ditto panel content
+  document.querySelectorAll('.state-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const state = btn.dataset.state;
+      document.querySelectorAll('.state-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      document.querySelectorAll('.state-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.ditto-state').forEach(el => el.classList.remove('active'));
+      const centreEl = document.querySelector(`.state-content[data-state="${state}"]`);
+      const dittoEl = document.querySelector(`.ditto-state[data-state="${state}"]`);
+      if (centreEl) centreEl.classList.add('active');
+      if (dittoEl) dittoEl.classList.add('active');
+    });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+</script>
+
+</body>
+</html>

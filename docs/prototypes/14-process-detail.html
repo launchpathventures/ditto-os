@@ -3,451 +3,399 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — Process Detail (Rob's Quoting)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P14 — Process Detail | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --caution: hsl(48 85% 50%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh; font-size: 16px; }
+  ::selection { background: var(--vivid-deep); color: #fff; }
 
-  body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 15px;
-    -webkit-font-smoothing: antialiased;
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
   }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Page Layout ===== */
   .page {
-    max-width: 700px;
+    max-width: 720px;
     margin: 0 auto;
-    padding: 36px 24px 80px;
+    padding: 72px 24px 140px;
   }
 
-  /* Back */
+  /* Back link */
   .back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-muted);
-    text-decoration: none;
-    margin-bottom: 20px;
-    transition: color 0.12s;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-muted);
+    text-decoration: none; margin-bottom: 24px; transition: color 0.12s;
   }
   .back:hover { color: var(--text-secondary); }
   .back svg { width: 14px; height: 14px; }
 
-  /* Header */
-  .header {
-    margin-bottom: 28px;
+  /* ===== Hero Summary ===== */
+  .hero {
+    background: var(--surface-raised);
+    border-radius: var(--radius-lg);
+    padding: 28px 28px 24px;
+    margin-bottom: 40px;
   }
 
-  .header-title {
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+  .hero-title {
+    font-size: 28px; font-weight: 700;
+    color: var(--text-primary); letter-spacing: -0.02em; line-height: 1.2;
   }
 
-  .header-subtitle {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-top: 4px;
+  .hero-subtitle {
+    font-size: 15px; color: var(--text-muted); margin-top: 4px;
   }
 
-  /* Trust banner — the big, clear trust statement */
   .trust-banner {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--accent-subtle);
-    border-radius: 10px;
-    margin-top: 14px;
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.45;
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 14px; color: var(--text-secondary); line-height: 1.5;
   }
 
   .trust-banner-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--vivid); flex-shrink: 0; margin-top: 5px;
   }
 
   .trust-banner a {
-    color: var(--accent);
-    font-weight: 500;
-    text-decoration: none;
-    white-space: nowrap;
+    color: var(--accent); font-weight: 500;
+    text-decoration: none; white-space: nowrap;
   }
-
   .trust-banner a:hover { text-decoration: underline; }
 
-  /* Sections */
-  .section {
-    margin-bottom: 32px;
-  }
+  /* ===== Sections ===== */
+  .section { margin-bottom: 40px; }
 
   .section-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 14px;
+    font-size: 12px; font-weight: 600;
+    color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 16px;
   }
 
-  /* ═══ HOW IT WORKS — plain language process steps ═══ */
-  .steps {
-    display: flex;
-    flex-direction: column;
-  }
+  /* ===== Steps — cardless flow ===== */
+  .steps { display: flex; flex-direction: column; }
 
   .step {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 8px 0;
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 10px 0;
   }
 
   .step-track {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex-shrink: 0;
-    width: 20px;
+    display: flex; flex-direction: column; align-items: center;
+    flex-shrink: 0; width: 20px;
   }
 
   .step-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: 2px solid var(--border-strong);
-    background: var(--bg);
-    z-index: 1;
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--border-strong); background: var(--bg); z-index: 1;
   }
-
-  .step-dot.active { background: var(--accent); border-color: var(--accent); }
+  .step-dot.active { background: var(--vivid); border-color: var(--vivid); }
   .step-dot.complete { background: var(--positive); border-color: var(--positive); }
 
   .step-line {
-    width: 2px;
-    flex: 1;
-    min-height: 16px;
-    background: var(--border);
+    width: 2px; flex: 1; min-height: 16px; background: var(--border);
   }
-
   .step-dot.complete + .step-line { background: var(--positive); }
 
-  .step-body {
-    padding-bottom: 6px;
-  }
+  .step-body { padding-bottom: 4px; }
 
   .step-label {
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.4;
+    font-size: 15px; color: var(--text-primary); line-height: 1.4;
   }
-
-  .step-label.active { font-weight: 500; color: var(--accent); }
+  .step-label.active { font-weight: 600; }
   .step-label.muted { color: var(--text-muted); }
 
   .step-detail {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-top: 2px;
+    font-size: 13px; color: var(--text-muted); margin-top: 2px;
   }
 
-  /* ═══ HOW IT'S GOING — performance ═══ */
-  .perf-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 18px;
+  /* ===== Performance — typographic flow ===== */
+  .perf-row {
+    display: flex; gap: 32px; margin-bottom: 20px;
+    flex-wrap: wrap;
   }
 
-  .perf-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-  }
+  .perf-stat { flex: 1; min-width: 100px; }
 
   .perf-value {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
+    font-size: 24px; font-weight: 700;
+    color: var(--text-primary); line-height: 1.2;
   }
 
   .perf-label {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 2px;
+    font-size: 13px; color: var(--text-muted); margin-top: 2px;
   }
 
   /* Quality bar */
   .quality-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 14px 0;
+    display: flex; align-items: center; gap: 12px; margin: 16px 0;
   }
 
   .quality-label {
-    font-size: 13px;
-    color: var(--text-muted);
-    width: 54px;
-    flex-shrink: 0;
+    font-size: 13px; color: var(--text-muted); width: 54px; flex-shrink: 0;
   }
 
   .quality-bar {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-    max-width: 280px;
+    flex: 1; height: 6px; background: var(--border);
+    border-radius: 3px; overflow: hidden; max-width: 280px;
   }
 
   .quality-fill {
-    height: 100%;
-    border-radius: 4px;
-    background: var(--positive);
+    height: 100%; border-radius: 3px; background: var(--positive);
   }
 
   .quality-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    width: 40px;
-    flex-shrink: 0;
+    font-size: 15px; font-weight: 600;
+    color: var(--text-primary); width: 40px; flex-shrink: 0;
   }
 
   /* Correction narrative */
   .narrative {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.6;
+    font-size: 14px; color: var(--text-secondary); line-height: 1.6;
+    border-left: 2px solid var(--vivid); padding-left: 14px;
   }
-
   .narrative p + p { margin-top: 8px; }
 
-  /* ═══ WHAT IT USES — knowledge inputs (Insight-083) ═══ */
+  /* ===== Knowledge — cardless list ===== */
   .knowledge-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: flex; flex-direction: column; gap: 0;
   }
 
   .knowledge-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 14px;
-    transition: background 0.12s;
-    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px; cursor: pointer; transition: background 0.12s;
   }
-
-  .knowledge-item:hover { background: var(--surface); }
+  .knowledge-item:last-child { border-bottom: none; }
+  .knowledge-item:hover { background: var(--surface); margin: 0 -8px; padding: 10px 8px; border-radius: var(--radius-sm); }
 
   .knowledge-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
   }
-
   .knowledge-dot.current { background: var(--positive); }
   .knowledge-dot.stale { background: var(--caution); }
 
-  .knowledge-name {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
+  .knowledge-name { font-weight: 500; color: var(--text-primary); }
+  .knowledge-detail { color: var(--text-secondary); flex: 1; }
+  .knowledge-age { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .knowledge-stale-note { font-size: 12px; color: var(--caution); font-weight: 500; }
 
-  .knowledge-detail {
-    color: var(--text-secondary);
-    flex: 1;
-  }
-
-  .knowledge-age {
-    font-size: 12px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-
-  .knowledge-stale-note {
-    font-size: 12px;
-    color: var(--caution);
-    font-weight: 500;
-  }
-
-  /* ═══ RECENT ═══ */
-  .recent-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
+  /* ===== Recent — cardless rows ===== */
+  .recent-list { display: flex; flex-direction: column; gap: 0; }
 
   .recent-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    transition: background 0.12s;
-    cursor: pointer;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.12s;
   }
-
-  .recent-item:hover { background: var(--surface); }
+  .recent-item:last-child { border-bottom: none; }
+  .recent-item:hover { background: var(--surface); margin: 0 -8px; padding: 10px 8px; border-radius: var(--radius-sm); }
 
   .recent-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
   }
-
-  .recent-dot.pending { background: var(--accent); }
+  .recent-dot.pending { background: var(--vivid); }
   .recent-dot.approved { background: var(--positive); }
   .recent-dot.sent { background: var(--border-strong); }
 
-  .recent-title {
-    flex: 1;
-    font-size: 14px;
-    color: var(--text-primary);
+  .recent-title { flex: 1; font-size: 14px; color: var(--text-primary); }
+  .recent-meta { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+
+  /* ===== Status pills ===== */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 500;
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .pill-positive { background: var(--positive-subtle); color: var(--positive); }
+  .pill-caution { background: var(--caution-subtle); color: var(--caution); }
+  .pill-info { background: var(--info-subtle); color: var(--info); }
+
+  /* ===== Trust — cardless with emerald accent ===== */
+  .trust-section {
+    border-left: 2px solid var(--vivid);
+    padding-left: 16px;
+    font-size: 14px; color: var(--text-secondary); line-height: 1.65;
   }
 
-  .recent-meta {
-    font-size: 13px;
-    color: var(--text-muted);
-    white-space: nowrap;
+  .trust-section strong {
+    color: var(--text-primary); font-weight: 600;
   }
 
-  /* ═══ TRUST CONTROL ═══ */
-  .trust-card {
-    background: var(--accent-subtle);
-    border-radius: 12px;
-    padding: 18px 20px;
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.6;
+  .trust-actions {
+    display: flex; gap: 8px; margin-top: 16px;
   }
 
-  .trust-card strong {
-    color: var(--text-primary);
-    font-weight: 600;
-  }
-
-  .trust-card-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 14px;
-  }
-
-  /* Under the hood */
+  /* ===== Under the hood ===== */
   .hood-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 8px 0;
-    border: none;
-    background: none;
-    font-family: inherit;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-muted);
+    cursor: pointer; padding: 8px 0;
+    border: none; background: none; font-family: var(--font);
     transition: color 0.12s;
   }
-
   .hood-toggle:hover { color: var(--text-secondary); }
   .hood-toggle svg { width: 14px; height: 14px; transition: transform 0.2s; }
 
   .hood-content {
     display: none;
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 14px 16px;
-    font-size: 13px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    color: var(--text-secondary);
-    line-height: 1.6;
-    margin-top: 8px;
+    padding: 12px 16px;
+    font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    color: var(--text-secondary); line-height: 1.7;
+    margin-top: 4px;
+    border-left: 2px solid var(--border);
   }
-
   .hood-content.open { display: block; }
 
-  .hood-row {
-    display: flex;
-    gap: 12px;
-    padding: 3px 0;
-  }
+  .hood-row { display: flex; gap: 12px; padding: 2px 0; }
+  .hood-label { color: var(--text-muted); min-width: 80px; flex-shrink: 0; }
 
-  .hood-label {
-    color: var(--text-muted);
-    min-width: 80px;
-    flex-shrink: 0;
+  /* ===== Buttons ===== */
+  .btn-accent {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    background: var(--vivid); color: var(--accent-text);
+    border: none; border-radius: 99px;
+    padding: 8px 20px; cursor: pointer; transition: all 0.15s;
   }
+  .btn-accent:hover { background: var(--vivid-deep); }
+  .btn-accent:focus-visible { outline: 2px solid var(--vivid); outline-offset: 2px; }
 
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    border: none;
-    border-radius: 7px;
-    padding: 7px 14px;
-    cursor: pointer;
-    transition: all 0.12s;
+  .btn-ghost {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: none; border-radius: 99px;
+    padding: 8px 20px; cursor: pointer; transition: color 0.15s;
   }
-
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--surface-raised); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); }
 
-  @media (max-width: 768px) {
-    .page { padding: 24px 16px 60px; }
-    .header-title { font-size: 22px; }
-    .perf-grid { grid-template-columns: 1fr 1fr; }
+  /* ===== Input Bar ===== */
+  .input-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg); border-top: 1px solid var(--border);
+    padding: 12px 24px; z-index: 100;
   }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+
+  .input-bar-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+  }
+
+  .dots-wrap {
+    width: 28px; height: 28px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .dots-field { display: block; }
+
+  .input-field {
+    flex: 1; font-family: var(--font); font-size: 15px;
+    background: var(--surface-raised); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 10px 14px; resize: none;
+    line-height: 1.5; min-height: 42px; max-height: 200px;
+    overflow-y: auto; transition: border-color 0.12s;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+  .input-field:focus { outline: none; border-color: var(--vivid); }
+
+  .input-send {
+    width: 36px; height: 36px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--vivid); color: #fff;
+    border: none; border-radius: 99px; cursor: pointer;
+    transition: background 0.12s;
+  }
+  .input-send:hover { background: var(--vivid-deep); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 768px) {
+    .page { padding: 60px 16px 140px; }
+    .hero { padding: 20px; }
+    .hero-title { font-size: 24px; }
+    .perf-row { gap: 20px; }
+    .perf-stat { min-width: 80px; }
+  }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
 
-<div class="page">
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 2 &middot; <span>Process Detail</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&oplus;</a>
+    <a href="13-daily-workspace.html" class="proto-arrow" aria-label="Previous: Daily Workspace">&larr;</a>
+    <a href="15-knowledge-base.html" class="proto-arrow" aria-label="Next: Knowledge Base">&rarr;</a>
+  </div>
+</nav>
+
+<main class="page">
 
   <a href="#" class="back">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -456,9 +404,10 @@
     Back
   </a>
 
-  <div class="header">
-    <div class="header-title">Quoting</div>
-    <div class="header-subtitle">Running 6 weeks &middot; 34 quotes completed</div>
+  <!-- Hero summary — the one surface-raised moment -->
+  <div class="hero">
+    <div class="hero-title">Quoting</div>
+    <div class="hero-subtitle">Running 6 weeks &middot; 34 quotes completed</div>
 
     <div class="trust-banner">
       <span class="trust-banner-dot"></span>
@@ -525,16 +474,16 @@
   <div class="section">
     <div class="section-title">How it's going</div>
 
-    <div class="perf-grid">
-      <div class="perf-card">
+    <div class="perf-row">
+      <div class="perf-stat">
         <div class="perf-value">34</div>
         <div class="perf-label">Total quotes</div>
       </div>
-      <div class="perf-card">
+      <div class="perf-stat">
         <div class="perf-value">31</div>
         <div class="perf-label">Approved clean</div>
       </div>
-      <div class="perf-card">
+      <div class="perf-stat">
         <div class="perf-value">12 min</div>
         <div class="perf-label">Avg draft time</div>
       </div>
@@ -553,7 +502,7 @@
     </div>
   </div>
 
-  <!-- WHAT IT USES — knowledge provenance -->
+  <!-- WHAT IT USES -->
   <div class="section">
     <div class="section-title">What it uses</div>
     <div class="knowledge-list">
@@ -625,11 +574,11 @@
   <!-- TRUST CONTROL -->
   <div class="section" id="trust">
     <div class="section-title">Trust level</div>
-    <div class="trust-card">
+    <div class="trust-section">
       <strong>You're currently checking every quote.</strong> Based on your track record (31 of 34 clean), you could check a sample instead. I'd still flag anything unusual — new customer types, big jobs, anything over $20k. If things slip, I'll go back to checking everything with you first.
-      <div class="trust-card-actions">
-        <button class="btn btn-primary">Try it</button>
-        <button class="btn btn-ghost">Not yet</button>
+      <div class="trust-actions">
+        <button class="btn-accent">Try it</button>
+        <button class="btn-ghost">Not yet</button>
       </div>
     </div>
   </div>
@@ -652,8 +601,58 @@
     </div>
   </div>
 
+</main>
+
+<!-- Input bar with dot canvas -->
+<div class="input-bar">
+  <div class="input-bar-inner">
+    <div class="dots-wrap"><canvas class="dots-field"></canvas></div>
+    <textarea class="input-field" rows="1" placeholder="Ask about this process..."></textarea>
+    <button class="input-send" aria-label="Send">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
 </div>
 
-<div class="proto-nav"><a href="13-daily-workspace.html">&larr; Daily Workspace</a><span class="pn-t"><a href="index.html">P14 Process Detail</a></span><a href="15-knowledge-base.html">Knowledge Base &rarr;</a></div><!-- pnav -->
+<script>
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR, size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35, phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { ctx.beginPath(); ctx.arc(cx + Math.cos(d.angle) * d.dist * 0.6, cy + Math.sin(d.angle) * d.dist * 0.6, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill(); }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000; ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const a = d.angle + t * d.speed; const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp; const r = Math.max(1, d.dist + breathe); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * (0.6 + Math.sin(t * 2.5 + d.phase) * 0.4); ctx.fill(); }
+      ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf = null; } });
+    observer.observe(canvas); draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+  document.querySelectorAll('.input-field').forEach(ta => { ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; }); });
+  document.querySelectorAll('.theme-btn').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus'); else document.body.classList.remove('theme-focus'); }); });
+</script>
 </body>
 </html>

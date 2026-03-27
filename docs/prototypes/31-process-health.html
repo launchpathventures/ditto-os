@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P31 â Process Health | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  ::selection { background: var(--vivid-subtle); }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Bar ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Workspace Shell ===== */
+  .workspace {
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 6px; border-radius: 99px; margin-left: auto;
+  }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
+  .sidebar-footer { padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-scroll::-webkit-scrollbar { width: 6px; }
+  .centre-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 120px;
+  }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface-raised); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 20px; }
+  .right-panel-scroll::-webkit-scrollbar { width: 4px; }
+  .right-panel-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Design Components ===== */
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* Metric Clusters */
+  .metric-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .metric { min-width: 80px; }
+  .metric-value { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Section Headers */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+
+  /* Field Tables */
+  .field-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .field-table th {
+    text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .field-table td {
+    padding: 10px 12px 10px 0; border-bottom: 1px solid var(--border);
+    color: var(--text-primary); vertical-align: top;
+  }
+  .field-table tr:last-child td { border-bottom: none; }
+  .field-table .muted { color: var(--text-muted); }
+  .field-table .change-positive { color: var(--positive); font-weight: 500; }
+
+  /* Checklists */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-warning { background: var(--caution-subtle); color: var(--caution); }
+  .check-icon svg { width: 12px; height: 12px; }
+
+  /* Donut Charts */
+  .donut { width: 48px; height: 48px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 5; }
+  .donut .donut-track { stroke: var(--border); }
+  .donut .donut-fill { stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+  .donut-container { display: flex; align-items: center; gap: 12px; }
+  .donut-label { font-size: 14px; }
+  .donut-label strong { font-weight: 600; }
+
+  /* Process Header */
+  .process-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 24px;
+  }
+  .process-header h1 {
+    font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+  }
+
+  /* Section spacing */
+  .section { margin-bottom: 32px; }
+
+  /* Health Timeline */
+  .health-timeline {
+    display: flex; gap: 4px; align-items: center;
+    padding: 16px 0 8px;
+  }
+  .health-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0; transition: transform 0.15s;
+    cursor: default;
+  }
+  .health-dot:hover { transform: scale(1.4); }
+  .health-dot.approved { background: var(--positive); }
+  .health-dot.edited { background: var(--caution); }
+  .health-dot.rejected { background: var(--negative); }
+  .timeline-legend {
+    display: flex; gap: 16px; font-size: 12px; color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  /* Trust Tier Timeline */
+  .trust-timeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 8px 0 12px;
+  }
+  .trust-phase {
+    flex: 1; padding: 12px 14px;
+    border-left: 2px solid var(--border);
+  }
+  .trust-phase.active-phase { border-left-color: var(--vivid); }
+  .trust-phase-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .trust-phase.active-phase .trust-phase-label { color: var(--vivid); }
+  .trust-phase-name {
+    font-size: 15px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .trust-phase-detail {
+    font-size: 13px; color: var(--text-secondary); line-height: 1.5;
+  }
+
+  /* Knowledge badge in field table */
+  .knowledge-badge {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 99px;
+  }
+  .kb-yes { background: var(--positive-subtle); color: var(--positive); }
+  .kb-no { background: var(--caution-subtle); color: var(--caution); }
+
+  /* Right panel sections */
+  .rp-section { margin-bottom: 20px; }
+  .rp-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px;
+  }
+
+  /* Suggestion block */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px; line-height: 1.55;
+    margin-top: 16px;
+  }
+  .suggestion-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px;
+  }
+  .suggestion p { color: var(--text-primary); }
+
+  /* Buttons */
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-vivid:hover { filter: brightness(0.9); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .right-panel { display: none; }
+  }
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+  }
+
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Proto Nav -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Cross-Cutting &middot; <span>Process Health</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="29-process-model-library.html" class="proto-arrow" aria-label="Previous: Process Library">&larr;</a>
+    <a href="35-improvements.html" class="proto-arrow" aria-label="Next: Improvements">&rarr;</a>
+  </div>
+</nav>
+
+<!-- State Bar -->
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="overview" tabindex="0">Overview</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="corrections" tabindex="-1">Corrections</button>
+</div>
+
+<!-- Workspace -->
+<div class="workspace">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <div class="wordmark">Ditto</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge">3</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Work</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a class="nav-item active" tabindex="0" role="button" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Centre -->
+  <main class="centre">
+    <div class="centre-scroll">
+      <div class="centre-content">
+
+        <!-- State: Overview -->
+        <div id="state-overview">
+
+          <!-- Process Header -->
+          <div class="process-header">
+            <h1>Quoting &mdash; Health</h1>
+            <span class="badge badge-positive">Healthy</span>
+          </div>
+
+          <!-- Metric Cluster -->
+          <div class="section">
+            <div class="metric-row">
+              <div class="metric">
+                <div class="metric-value">85%</div>
+                <div class="metric-label">Approved</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">4.2h</div>
+                <div class="metric-label">Avg turnaround</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">7.6%</div>
+                <div class="metric-label">Avg margin</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">$3.20</div>
+                <div class="metric-label">Monthly cost</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Health Timeline -->
+          <div class="section">
+            <div class="section-title">Last 30 days</div>
+            <div class="health-timeline" aria-label="Health timeline: 30 days of outcomes">
+              <span class="health-dot approved" title="Mar 27: Approved"></span>
+              <span class="health-dot approved" title="Mar 26: Approved"></span>
+              <span class="health-dot edited" title="Mar 25: Edited"></span>
+              <span class="health-dot approved" title="Mar 24: Approved"></span>
+              <span class="health-dot approved" title="Mar 23: Approved"></span>
+              <span class="health-dot edited" title="Mar 22: Edited"></span>
+              <span class="health-dot approved" title="Mar 21: Approved"></span>
+              <span class="health-dot approved" title="Mar 20: Approved"></span>
+              <span class="health-dot approved" title="Mar 19: Approved"></span>
+              <span class="health-dot edited" title="Mar 18: Edited"></span>
+              <span class="health-dot approved" title="Mar 17: Approved"></span>
+              <span class="health-dot approved" title="Mar 16: Approved"></span>
+              <span class="health-dot edited" title="Mar 15: Edited"></span>
+              <span class="health-dot approved" title="Mar 14: Approved"></span>
+              <span class="health-dot approved" title="Mar 13: Approved"></span>
+              <span class="health-dot approved" title="Mar 12: Approved"></span>
+              <span class="health-dot rejected" title="Mar 11: Rejected"></span>
+              <span class="health-dot approved" title="Mar 10: Approved"></span>
+              <span class="health-dot approved" title="Mar 9: Approved"></span>
+              <span class="health-dot edited" title="Mar 8: Edited"></span>
+              <span class="health-dot approved" title="Mar 7: Approved"></span>
+              <span class="health-dot edited" title="Mar 6: Edited"></span>
+              <span class="health-dot approved" title="Mar 5: Approved"></span>
+              <span class="health-dot approved" title="Mar 4: Approved"></span>
+              <span class="health-dot rejected" title="Mar 3: Rejected"></span>
+              <span class="health-dot edited" title="Mar 2: Edited"></span>
+              <span class="health-dot edited" title="Mar 1: Edited"></span>
+              <span class="health-dot approved" title="Feb 28: Approved"></span>
+              <span class="health-dot edited" title="Feb 27: Edited"></span>
+              <span class="health-dot rejected" title="Feb 26: Rejected"></span>
+            </div>
+            <div class="timeline-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--positive)"></span> Approved</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--caution)"></span> Edited</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--negative)"></span> Rejected</span>
+            </div>
+          </div>
+
+          <!-- Correction History -->
+          <div class="section">
+            <div class="section-title">Recent corrections</div>
+            <table class="field-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>What was corrected</th>
+                  <th>Became knowledge?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="muted">Mar 25</td>
+                  <td>Labour rate for tiling adjusted</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> now in pricing rules</td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 22</td>
+                  <td>Henderson materials markup</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 18</td>
+                  <td>Plumbing fixture pricing</td>
+                  <td><span class="knowledge-badge kb-no">Not yet</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 15</td>
+                  <td>Margin calculation method</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Trust Tier History -->
+          <div class="section">
+            <div class="section-title">Trust tier history</div>
+            <div class="trust-timeline">
+              <div class="trust-phase">
+                <div class="trust-phase-label">Week 1&ndash;2</div>
+                <div class="trust-phase-name">Check everything</div>
+                <div class="trust-phase-detail">Every quote reviewed. 14 quotes processed, 6 corrections made. Established baseline pricing rules.</div>
+              </div>
+              <div class="trust-phase active-phase">
+                <div class="trust-phase-label">Week 3+</div>
+                <div class="trust-phase-name">Spot check</div>
+                <div class="trust-phase-detail">Random 30% reviewed. Earned by: 85% clean rate, consistent margin accuracy, zero customer complaints.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Baseline Comparison -->
+          <div class="section">
+            <div class="section-title">Baseline comparison</div>
+            <table class="field-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Baseline (Week 1)</th>
+                  <th>Current</th>
+                  <th>Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Approval rate</td>
+                  <td class="muted">60%</td>
+                  <td>85%</td>
+                  <td class="change-positive">&uarr; 25%</td>
+                </tr>
+                <tr>
+                  <td>Turnaround</td>
+                  <td class="muted">8.1h</td>
+                  <td>4.2h</td>
+                  <td class="change-positive">&darr; 48%</td>
+                </tr>
+                <tr>
+                  <td>Corrections per run</td>
+                  <td class="muted">2.1</td>
+                  <td>0.3</td>
+                  <td class="change-positive">&darr; 86%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div><!-- /state-overview -->
+
+        <!-- State: Corrections -->
+        <div id="state-corrections" style="display:none;">
+
+          <!-- Process Header -->
+          <div class="process-header">
+            <h1>Quoting &mdash; Corrections</h1>
+            <span class="badge badge-positive">Healthy</span>
+          </div>
+
+          <!-- Expanded Correction History -->
+          <div class="section">
+            <div class="section-title">All corrections</div>
+            <table class="field-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>What was corrected</th>
+                  <th>Became knowledge?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="muted">Mar 25</td>
+                  <td>Labour rate for tiling adjusted</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> now in pricing rules</td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 22</td>
+                  <td>Henderson materials markup</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 18</td>
+                  <td>Plumbing fixture pricing</td>
+                  <td><span class="knowledge-badge kb-no">Not yet</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 15</td>
+                  <td>Margin calculation method</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 11</td>
+                  <td>Commercial vs residential rate applied incorrectly</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> added to margin rules</td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 8</td>
+                  <td>Copper fitting quantities doubled</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 6</td>
+                  <td>Hot water cylinder brand preference</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> now defaults to Rinnai</td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 3</td>
+                  <td>Forgot to include travel time for rural jobs</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span></td>
+                </tr>
+                <tr>
+                  <td class="muted">Mar 2</td>
+                  <td>Bathroom labour hours underestimated</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> set to 22hrs</td>
+                </tr>
+                <tr>
+                  <td class="muted">Feb 27</td>
+                  <td>Tradelink prices were outdated</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> price list updated</td>
+                </tr>
+                <tr>
+                  <td class="muted">Feb 26</td>
+                  <td>Missing drainage component in bathroom quote</td>
+                  <td><span class="knowledge-badge kb-yes">Yes</span> added to checklist</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Knowledge Impact -->
+          <div class="section">
+            <div class="section-title">Knowledge impact</div>
+            <p style="font-size:14px; color:var(--text-secondary); line-height:1.65; border-left:2px solid var(--vivid); padding-left:14px;">
+              11 corrections total. 10 became knowledge items &mdash; a 91% learning rate. The remaining 1 (plumbing fixture pricing) is pending your confirmation on updated prices. Each correction made the process permanently better.
+            </p>
+          </div>
+
+          <!-- Correction Trend -->
+          <div class="section">
+            <div class="section-title">Correction trend</div>
+            <table class="field-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Corrections</th>
+                  <th>Per run</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="muted">Week 1</td>
+                  <td>5</td>
+                  <td>2.5</td>
+                </tr>
+                <tr>
+                  <td class="muted">Week 2</td>
+                  <td>3</td>
+                  <td>1.5</td>
+                </tr>
+                <tr>
+                  <td class="muted">Week 3</td>
+                  <td>2</td>
+                  <td>0.5</td>
+                </tr>
+                <tr>
+                  <td class="muted">Week 4</td>
+                  <td>1</td>
+                  <td>0.2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div><!-- /state-corrections -->
+
+      </div>
+    </div>
+
+    <!-- Input Bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Ask about this process..." aria-label="Message Ditto"></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel" aria-label="Ditto analysis">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
+      </div>
+    </div>
+    <div class="right-panel-scroll">
+
+      <!-- What's working well -->
+      <div class="rp-section">
+        <div class="rp-title">What's working well</div>
+        <ul class="checklist">
+          <li class="checklist-item">
+            <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Approval rate trending up &mdash; 85% this week vs 60% baseline</span>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Turnaround halved from 8.1h to 4.2h</span>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>91% of corrections became permanent knowledge</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Watch points -->
+      <div class="rp-section">
+        <div class="rp-title">Watch points</div>
+        <ul class="checklist">
+          <li class="checklist-item">
+            <span class="check-icon check-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg></span>
+            <span>Plumbing fixture pricing correction (Mar 18) still not absorbed &mdash; needs your updated price list</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Trust upgrade suggestion -->
+      <div class="suggestion">
+        <div class="suggestion-label">Suggestion</div>
+        <p>Based on 4 consecutive weeks of improving accuracy (0.3 corrections/run, down from 2.1), quoting may be ready for <strong>autonomous</strong> on standard residential jobs under $15k. You'd still review commercial and large jobs.</p>
+        <div class="action-row">
+          <button class="btn-vivid">Try autonomous</button>
+          <button class="btn-secondary">Not yet</button>
+        </div>
+      </div>
+
+      <!-- Knowledge Health Donut -->
+      <div class="rp-section" style="margin-top:20px;">
+        <div class="rp-title">Knowledge health</div>
+        <div class="donut-container">
+          <svg class="donut" viewBox="0 0 36 36" aria-label="Knowledge health: 7 fresh, 1 stale, 1 missing">
+            <circle class="donut-track" cx="18" cy="18" r="15.915" stroke-dasharray="100 100"/>
+            <circle class="donut-fill" cx="18" cy="18" r="15.915" stroke="var(--positive)" stroke-dasharray="78 22"/>
+            <circle class="donut-fill" cx="18" cy="18" r="15.915" stroke="var(--caution)" stroke-dasharray="11 89" stroke-dashoffset="-78"/>
+            <circle class="donut-fill" cx="18" cy="18" r="15.915" stroke="var(--negative)" stroke-dasharray="11 89" stroke-dashoffset="-89"/>
+          </svg>
+          <div class="donut-label">
+            <strong>9 items</strong><br>
+            <span style="font-size:12px; color:var(--text-muted);">7 fresh &middot; 1 stale &middot; 1 missing</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // Dot particles
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR, size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35, phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { ctx.beginPath(); ctx.arc(cx + Math.cos(d.angle) * d.dist * 0.6, cy + Math.sin(d.angle) * d.dist * 0.6, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill(); }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000; ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const a = d.angle + t * d.speed; const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp; const r = Math.max(1, d.dist + breathe); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * (0.6 + Math.sin(t * 2.5 + d.phase) * 0.4); ctx.fill(); }
+      ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf = null; } });
+    observer.observe(canvas); draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textarea
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+
+  // State toggle
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateOverview = document.getElementById('state-overview');
+  const stateCorrections = document.getElementById('state-corrections');
+
+  function switchState(state) {
+    stateOverview.style.display = state === 'overview' ? '' : 'none';
+    stateCorrections.style.display = state === 'corrections' ? '' : 'none';
+  }
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); b.setAttribute('tabindex', '-1'); });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      btn.setAttribute('tabindex', '0');
+      switchState(btn.dataset.state);
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault();
+    tabs[next].click();
+    tabs[next].focus();
+  });
+</script>
+</body>
+</html>

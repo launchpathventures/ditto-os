@@ -1,0 +1,630 @@
+<!-- Build-Ready v3, 2026-03-26 — dot particles added -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P23 — Setup | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --shadow-large: 0 8px 24px hsl(30 10% 15% / 0.12);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  ::selection { background: #ECFDF5; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-dots { display: flex; gap: 6px; }
+  .proto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+  .proto-dot.active { background: var(--accent); }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover:not(.disabled) { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow.disabled { opacity: 0.35; cursor: not-allowed; }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out;
+    white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Setup Screen ===== */
+  .setup-page {
+    min-height: 100vh; padding-top: 92px;
+    display: flex; align-items: center; justify-content: center;
+    padding-bottom: 48px;
+  }
+
+  .setup-card {
+    width: 100%; max-width: 520px;
+    background: var(--surface-raised);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-large);
+    padding: 40px 36px;
+    position: relative;
+  }
+
+  /* Progress steps */
+  .progress-steps {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; margin-bottom: 32px;
+  }
+  .progress-step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 500; color: var(--text-muted);
+  }
+  .progress-step.active { color: var(--accent); }
+  .progress-step.done { color: var(--positive); }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    border: 1.5px solid var(--border);
+    color: var(--text-muted);
+  }
+  .progress-step.active .step-num {
+    border-color: var(--vivid); background: var(--vivid); color: white;
+  }
+  .progress-step.done .step-num {
+    border-color: var(--positive); background: var(--positive); color: white;
+  }
+  .step-divider {
+    width: 32px; height: 1px; background: var(--border);
+  }
+
+  /* ===== Dot Particles ===== */
+  .dots-container { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; margin: 0 auto 20px; }
+  .dots-container.large { width: 48px; height: 48px; margin: 0 auto 16px; }
+  .dots-field { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+  /* Self dot */
+  .self-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--vivid); margin: 0 auto 20px;
+  }
+  .self-dot.scanning { animation: gentle-pulse 2s ease-in-out infinite; }
+  .self-dot.success { background: var(--positive); }
+  @keyframes gentle-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+  }
+
+  .setup-heading {
+    font-size: 25px; font-weight: 600; line-height: 1.3;
+    color: var(--text-primary); text-align: center;
+    margin-bottom: 8px; letter-spacing: -0.02em;
+  }
+  .setup-subtext {
+    font-size: 16px; color: var(--text-secondary);
+    text-align: center; margin-bottom: 28px; line-height: 1.5;
+  }
+
+  /* Connection method cards */
+  .connection-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .connection-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; background: var(--bg);
+    border: 1.5px solid var(--border); border-radius: var(--radius-lg);
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .connection-card:hover { border-color: var(--border-strong); background: var(--surface); }
+  .connection-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .connection-card.selected { border-color: var(--vivid); background: var(--accent-subtle); }
+  .connection-card .icon-box {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    background: var(--surface); display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0; font-size: 18px;
+  }
+  .connection-card.selected .icon-box { background: white; }
+  .connection-info { flex: 1; min-width: 0; }
+  .connection-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+  .connection-desc { font-size: 13px; color: var(--text-muted); margin-top: 1px; }
+  .connection-badge {
+    font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 99px; flex-shrink: 0;
+  }
+  .badge-detected { background: var(--positive-subtle); color: var(--positive); }
+  .badge-available { background: var(--surface); color: var(--text-muted); }
+
+  /* Model selection */
+  .model-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }
+  .model-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: var(--bg);
+    border: 1.5px solid var(--border); border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .model-card:hover { border-color: var(--border-strong); }
+  .model-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .model-card.selected { border-color: var(--vivid); background: var(--accent-subtle); }
+  .model-radio {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border-strong); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease-out;
+  }
+  .model-card.selected .model-radio {
+    border-color: var(--vivid);
+  }
+  .model-radio-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--vivid); opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+  .model-card.selected .model-radio-dot { opacity: 1; }
+  .model-name { font-size: 14px; font-weight: 500; color: var(--text-primary); flex: 1; }
+  .model-badge {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 99px; background: var(--accent-subtle); color: var(--accent);
+  }
+
+  /* API key input */
+  .api-section { margin-bottom: 24px; }
+  .api-label {
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    margin-bottom: 6px; display: block;
+  }
+  .api-input {
+    width: 100%; padding: 10px 14px;
+    font-family: var(--font); font-size: 16px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--bg); color: var(--text-primary); outline: none;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+  .api-input:focus { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.08); }
+  .api-input::placeholder { color: var(--text-muted); }
+  .api-helper { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+  .api-helper a { color: var(--accent); text-decoration: none; }
+  .api-helper a:hover { text-decoration: underline; }
+
+  /* Buttons */
+  .btn-primary {
+    width: 100%; padding: 12px 24px;
+    font-family: var(--font); font-size: 16px; font-weight: 500;
+    border: none; border-radius: 9999px;
+    background: var(--vivid); color: white;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--vivid-deep); box-shadow: var(--shadow-subtle); }
+  .btn-primary:active:not(:disabled) { transform: scale(0.99); }
+  .btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-back {
+    background: none; border: none; font-family: var(--font);
+    font-size: 14px; font-weight: 500; color: var(--text-muted);
+    cursor: pointer; padding: 8px 0; transition: color 0.15s ease-out;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .btn-back:hover { color: var(--text-primary); }
+
+  /* Success */
+  .success-check {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--positive-subtle); color: var(--positive);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .state-view { display: none; }
+  .state-view.active { display: block; }
+
+  .scanning-dots span { animation: dot-pulse 1.4s ease-in-out infinite; }
+  .scanning-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .scanning-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-pulse {
+    0%, 80%, 100% { opacity: 0.3; }
+    40% { opacity: 1; }
+  }
+
+  .detection-area {
+    background: var(--surface); border-radius: var(--radius-lg);
+    padding: 16px 20px; margin-bottom: 20px;
+  }
+  .detection-row { display: flex; align-items: center; gap: 12px; }
+  .detection-icon {
+    width: 32px; height: 32px; border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .detection-icon.scanning { background: var(--accent-subtle); color: var(--accent); }
+  .detection-icon.found { background: var(--positive-subtle); color: var(--positive); }
+  .detection-label { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+  .detection-detail { font-size: 13px; color: var(--text-muted); margin-top: 1px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1: Getting Started · <span>Setup</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <div class="proto-dots">
+      <div class="proto-dot"></div>
+      <div class="proto-dot active"></div>
+      <div class="proto-dot"></div>
+      <div class="proto-dot"></div>
+      <div class="proto-dot"></div>
+    </div>
+    <a href="00-workspace-shell.html" class="proto-arrow" aria-label="Previous: Workspace Shell">←</a>
+    <a href="08-day-zero.html" class="proto-arrow" aria-label="Next: Day Zero">→</a>
+  </div>
+</nav>
+
+<!-- State Toggle Bar -->
+<div class="state-bar" role="tablist" aria-label="Setup states">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="scanning" tabindex="0">Scanning</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="connection" tabindex="-1">Choose connection</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="model" tabindex="-1">Choose model</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="api-key" tabindex="-1">API key entry</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="success" tabindex="-1">Success</button>
+</div>
+
+<!-- Setup Page -->
+<main class="setup-page" id="main-content">
+
+  <!-- State 1: Scanning -->
+  <div class="state-view active" data-view="scanning" role="tabpanel">
+    <div class="setup-card">
+      <div class="progress-steps">
+        <div class="progress-step active"><span class="step-num">1</span> Connect</div>
+        <div class="step-divider"></div>
+        <div class="progress-step"><span class="step-num">2</span> Model</div>
+      </div>
+      <div class="dots-container" aria-hidden="true"><canvas class="dots-field"></canvas></div>
+      <h1 class="setup-heading">Let's get you set up</h1>
+      <p class="setup-subtext">Ditto needs an AI model to think with. Let me check what you have available.</p>
+      <div class="detection-area">
+        <div class="detection-row">
+          <div class="detection-icon scanning">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          </div>
+          <div>
+            <div class="detection-label">Looking for connections<span class="scanning-dots"><span>.</span><span>.</span><span>.</span></span></div>
+            <div class="detection-detail">Checking for Claude CLI, OpenAI, Ollama</div>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary" disabled>Continue</button>
+    </div>
+  </div>
+
+  <!-- State 2: Choose Connection Method -->
+  <div class="state-view" data-view="connection" role="tabpanel">
+    <div class="setup-card">
+      <div class="progress-steps">
+        <div class="progress-step active"><span class="step-num">1</span> Connect</div>
+        <div class="step-divider"></div>
+        <div class="progress-step"><span class="step-num">2</span> Model</div>
+      </div>
+      <h1 class="setup-heading">How should Ditto connect?</h1>
+      <p class="setup-subtext">Choose how Ditto accesses an AI model. You can change this later.</p>
+      <div class="connection-options">
+        <div class="connection-card selected" tabindex="0" role="button">
+          <div class="icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">Claude subscription</div>
+            <div class="connection-desc">Via Claude CLI on your machine</div>
+          </div>
+          <span class="connection-badge badge-detected">Detected</span>
+        </div>
+        <div class="connection-card" tabindex="0" role="button">
+          <div class="icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">OpenAI subscription</div>
+            <div class="connection-desc">Via Codex CLI</div>
+          </div>
+          <span class="connection-badge badge-available">Available</span>
+        </div>
+        <div class="connection-card" tabindex="0" role="button">
+          <div class="icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">Anthropic API key</div>
+            <div class="connection-desc">Direct API access to Claude models</div>
+          </div>
+          <span class="connection-badge badge-available">Available</span>
+        </div>
+        <div class="connection-card" tabindex="0" role="button">
+          <div class="icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">OpenAI API key</div>
+            <div class="connection-desc">Direct API access to GPT models</div>
+          </div>
+          <span class="connection-badge badge-available">Available</span>
+        </div>
+        <div class="connection-card" tabindex="0" role="button">
+          <div class="icon-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">Ollama (local)</div>
+            <div class="connection-desc">Run models on your own machine</div>
+          </div>
+          <span class="connection-badge badge-available">Available</span>
+        </div>
+      </div>
+      <button class="btn-primary">Continue with Claude</button>
+    </div>
+  </div>
+
+  <!-- State 3: Choose Model -->
+  <div class="state-view" data-view="model" role="tabpanel">
+    <div class="setup-card">
+      <div class="progress-steps">
+        <div class="progress-step done">
+          <span class="step-num">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span> Connect
+        </div>
+        <div class="step-divider"></div>
+        <div class="progress-step active"><span class="step-num">2</span> Model</div>
+      </div>
+      <h1 class="setup-heading">Which model should Ditto use?</h1>
+      <p class="setup-subtext">This is the brain Ditto thinks with. You can change it anytime, or let Ditto suggest the best fit as it learns your work.</p>
+      <div class="model-options">
+        <div class="model-card selected" tabindex="0" role="radio" aria-checked="true">
+          <div class="model-radio"><div class="model-radio-dot"></div></div>
+          <span class="model-name">Claude Sonnet 4.6</span>
+          <span class="model-badge">Recommended</span>
+        </div>
+        <div class="model-card" tabindex="0" role="radio" aria-checked="false">
+          <div class="model-radio"><div class="model-radio-dot"></div></div>
+          <span class="model-name">Claude Opus 4.6</span>
+        </div>
+        <div class="model-card" tabindex="0" role="radio" aria-checked="false">
+          <div class="model-radio"><div class="model-radio-dot"></div></div>
+          <span class="model-name">Claude Haiku 4.5</span>
+        </div>
+      </div>
+      <a href="08-day-zero.html" class="btn-primary" style="margin-bottom: 12px; display: block; text-align: center; text-decoration: none;">Get started</a>
+      <button class="btn-back" onclick="document.querySelector('[data-state=connection]').click()">← Back to connections</button>
+    </div>
+  </div>
+
+  <!-- State 4: API Key Entry -->
+  <div class="state-view" data-view="api-key" role="tabpanel">
+    <div class="setup-card">
+      <div class="progress-steps">
+        <div class="progress-step active"><span class="step-num">1</span> Connect</div>
+        <div class="step-divider"></div>
+        <div class="progress-step"><span class="step-num">2</span> Model</div>
+      </div>
+      <h1 class="setup-heading">Connect with an API key</h1>
+      <p class="setup-subtext">Paste your Anthropic API key below. Ditto stores it locally — it never leaves your machine.</p>
+      <div class="api-section">
+        <label class="api-label" for="api-key-input">Your API key</label>
+        <input type="password" id="api-key-input" class="api-input" placeholder="sk-ant-..." aria-describedby="api-helper-text">
+        <div class="api-helper" id="api-helper-text">Find yours at <a href="#" tabindex="0">console.anthropic.com/api-keys</a></div>
+      </div>
+      <button class="btn-primary" style="margin-bottom: 12px;">Connect &amp; choose model</button>
+      <button class="btn-back">← Back to connections</button>
+    </div>
+  </div>
+
+  <!-- State 5: Success -->
+  <div class="state-view" data-view="success" role="tabpanel">
+    <div class="setup-card">
+      <div class="dots-container large" aria-hidden="true"><canvas class="dots-field"></canvas></div>
+      <h1 class="setup-heading">You're ready</h1>
+      <p class="setup-subtext">Connected to Claude Sonnet 4.6. Now let's get to know each other — Ditto works best when it understands you and your work.</p>
+      <a href="08-day-zero.html" style="text-decoration: none;">
+        <button class="btn-primary">Let's go</button>
+      </a>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // Ditto dots
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+        ctx.beginPath(); ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+</script>
+
+<script>
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+
+  function showState(state) {
+    stateViews.forEach(v => v.classList.remove('active'));
+    const target = document.querySelector(`[data-view="${state}"]`);
+    if (target) target.classList.add('active');
+  }
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      showState(btn.dataset.state);
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // Connection card selection
+  document.querySelectorAll('.connection-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.connection-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+
+  // Model card selection
+  document.querySelectorAll('.model-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.model-card').forEach(c => {
+        c.classList.remove('selected');
+        c.setAttribute('aria-checked', 'false');
+      });
+      card.classList.add('selected');
+      card.setAttribute('aria-checked', 'true');
+    });
+  });
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') { document.body.classList.add('theme-focus'); }
+      else { document.body.classList.remove('theme-focus'); }
+    });
+  });
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P26 â Your Team | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font); background: var(--bg);
+    color: var(--text-primary); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+    overflow: hidden; font-size: 16px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Theme toggle */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    background: transparent; border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* State toggle */
+  .state-toggle { display: flex; align-items: center; gap: 4px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .state-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    background: transparent; border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .state-btn:hover { color: var(--text-primary); }
+  .state-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+
+  /* ===== Ditto Dots ===== */
+  .ditto-dots { display: inline-block; vertical-align: middle; }
+  .ditto-dots canvas { display: block; }
+
+  /* âââââââââââââââââââââââââââââââââââââââââââ
+     THREE COLUMNS
+  âââââââââââââââââââââââââââââââââââââââââââ */
+  .workspace {
+    display: grid;
+    grid-template-columns: 240px 1fr 320px;
+    height: calc(100vh - 48px);
+    margin-top: 48px;
+  }
+
+  /* âââ LEFT: NAVIGATION âââ */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar::-webkit-scrollbar { width: 0; }
+
+  .ws {
+    padding: 16px 16px 14px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; border-bottom: 1px solid var(--border);
+  }
+  .ws:hover .ws-name { color: var(--accent); }
+
+  .ws-avatar {
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; flex-shrink: 0;
+  }
+
+  .ws-name {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    flex: 1; transition: color 0.12s;
+  }
+
+  .ws-chev { color: var(--text-muted); font-size: 10px; }
+
+  .nav-group { padding: 8px 10px 0; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 14px; color: var(--text-secondary);
+    text-decoration: none; transition: all 0.1s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { background: var(--accent-subtle); color: var(--text-primary); }
+  .nav-item.active { background: var(--surface-raised); color: var(--text-primary); font-weight: 500; border-left-color: var(--vivid); }
+
+  .nav-item-icon { width: 16px; height: 16px; flex-shrink: 0; color: inherit; }
+
+  .nav-item-label { flex: 1; }
+
+  .nav-count {
+    font-size: 11px; font-weight: 600;
+    background: var(--vivid); color: white;
+    min-width: 18px; height: 18px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center; padding: 0 5px;
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-foot {
+    padding: 8px 10px 14px; border-top: 1px solid var(--border);
+  }
+  .sidebar-foot .nav-item { font-size: 13px; color: var(--text-muted); padding: 5px 10px; }
+
+  /* âââ CENTRE: YOUR WORK âââ */
+  .main {
+    display: flex; flex-direction: column; overflow: hidden; position: relative;
+  }
+
+  .scroll {
+    flex: 1; overflow-y: auto;
+    padding: 32px 40px 120px;
+    display: flex; justify-content: center;
+  }
+  .scroll::-webkit-scrollbar { width: 6px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  .content { width: 100%; max-width: 720px; }
+
+  /* Location */
+  .location {
+    font-size: 13px; color: var(--text-muted); margin-bottom: 20px;
+  }
+
+  /* Section heading */
+  .page-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 24px; }
+
+  .section { margin-bottom: 32px; }
+  .sh {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px;
+  }
+
+  /* Metric cluster */
+  .metrics {
+    display: flex; gap: 32px; margin-bottom: 32px;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border);
+  }
+  .metric {}
+  .metric-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Role rows â typographic flow, border-separated */
+  .role-list { display: flex; flex-direction: column; }
+
+  .role-row {
+    padding: 16px 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .role-row:hover { border-left-color: var(--vivid); }
+  .role-row:last-child { border-bottom: none; }
+
+  .role-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .role-name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .role-cost { font-size: 14px; color: var(--text-muted); margin-left: auto; font-weight: 500; }
+
+  .role-detail {
+    display: flex; align-items: center; gap: 16px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .role-detail-item { display: flex; align-items: center; gap: 6px; }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 99px;
+    white-space: nowrap;
+  }
+  .badge-process { background: var(--accent-subtle); color: var(--accent); }
+  .badge-supervised { background: var(--caution-subtle); color: hsl(38 60% 35%); }
+  .badge-spot { background: var(--info-subtle); color: var(--info); }
+  .badge-autonomous { background: var(--positive-subtle); color: var(--positive); }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: hsl(38 60% 35%); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+
+  /* Sparkline â inline SVG */
+  .sparkline { display: inline-block; vertical-align: middle; }
+  .sparkline svg { display: block; }
+
+  /* Field table */
+  .field-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .field-table th {
+    text-align: left; font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .field-table td {
+    padding: 10px 12px 10px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .field-table td:first-child { color: var(--text-primary); font-weight: 500; }
+  .field-table tr:last-child td { border-bottom: none; }
+  .field-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Activity timeline */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .timeline-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px; line-height: 1.55;
+  }
+  .timeline-item:last-child { border-bottom: none; }
+  .timeline-time {
+    font-size: 12px; color: var(--text-muted); white-space: nowrap;
+    min-width: 60px; padding-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .timeline-text { color: var(--text-secondary); flex: 1; }
+  .timeline-text strong { color: var(--text-primary); font-weight: 500; }
+
+  /* ===== Buttons ===== */
+  .btn {
+    font-family: var(--font);
+    font-size: 13px; font-weight: 600; border: none; border-radius: 99px;
+    padding: 8px 18px; cursor: pointer; transition: all 0.12s;
+    text-align: center; white-space: nowrap;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn-p { background: var(--vivid); color: white; }
+  .btn-p:hover { background: var(--vivid-deep); }
+
+  .btn-s {
+    background: transparent; color: var(--text-primary);
+    border: 1.5px solid var(--border); border-radius: 99px;
+  }
+  .btn-s:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .btn-g { background: transparent; color: var(--text-muted); font-size: 12px; padding: 6px 12px; }
+  .btn-g:hover { color: var(--text-primary); }
+
+  /* âââ RIGHT: DITTO âââ */
+  .ditto-panel {
+    background: var(--surface-raised);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ditto-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .ditto-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--vivid);
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  .ditto-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .ditto-status { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+  .ditto-scroll {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .ditto-scroll::-webkit-scrollbar { width: 4px; }
+  .ditto-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .ditto-sh {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px;
+  }
+
+  /* Donut chart */
+  .donut-container {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .donut-chart { flex-shrink: 0; }
+  .donut-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .donut-legend-item { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+  .donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Suggestion â border-left emphasis */
+  .suggestion {
+    padding: 0 0 0 14px;
+    border-left: 2px solid var(--vivid-deep);
+    font-size: 13px; line-height: 1.55;
+    color: var(--text-primary);
+  }
+  .suggestion-label {
+    font-size: 10px; font-weight: 600; color: var(--vivid-deep);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .suggestion-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .suggestion-actions .btn { font-size: 12px; padding: 5px 12px; }
+
+  /* Checklist */
+  .check-list { display: flex; flex-direction: column; gap: 5px; }
+  .check {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+  }
+  .check-icon {
+    width: 18px; height: 18px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+  }
+  .ck-todo { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-label { color: var(--text-secondary); }
+
+  /* ===== Input bar ===== */
+  .input-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 12px 24px 32px;
+    display: flex; justify-content: center;
+    background: linear-gradient(transparent, var(--bg) 40%);
+    pointer-events: none;
+  }
+  .input-container {
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface-raised); border: 1.5px solid var(--border);
+    border-radius: 24px; padding: 12px 18px;
+    transition: all 0.15s;
+    width: 100%; max-width: 560px;
+    box-shadow: var(--shadow-medium);
+    pointer-events: all;
+  }
+  .input-container:focus-within { border-color: var(--vivid); background: #fff; box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 15px;
+    color: var(--text-primary); outline: none;
+    resize: none; overflow: hidden;
+    min-height: 24px; max-height: 200px;
+    line-height: 1.5;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1100px) {
+    .workspace { grid-template-columns: 240px 1fr; }
+    .ditto-panel { display: none; }
+  }
+  @media (max-width: 768px) {
+    .workspace { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .scroll { padding: 24px 20px 120px; }
+  }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ===== State visibility ===== */
+  .state-activity { display: none; }
+  body.show-activity .state-overview { display: none; }
+  body.show-activity .state-activity { display: block; }
+
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding:12px 0; border-top:1px solid var(--border); }
+  .block-record:first-child { border-top:none; }
+  .block-record.accented { border-left:2px solid var(--vivid); padding-left:12px; }
+  .record-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .record-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .record-subtitle { font-size:12px; color:var(--text-muted); }
+  .record-status { font-size:11px; font-weight:500; padding:2px 8px; border-radius:99px; margin-left:auto; }
+  .record-status.positive { background:var(--positive-subtle); color:var(--positive); }
+  .record-status.caution { background:var(--caution-subtle); color:var(--caution); }
+  .record-status.negative { background:var(--negative-subtle); color:var(--negative); }
+  .record-status.info { background:var(--info-subtle); color:var(--info); }
+  .record-status.neutral { background:var(--accent-subtle); color:var(--text-secondary); }
+  .record-fields { margin-top:8px; }
+  .record-field { display:flex; gap:12px; align-items:baseline; font-size:14px; margin-bottom:2px; }
+  .record-field-label { color:var(--text-muted); min-width:80px; }
+  .record-field-value { color:var(--text-primary); font-weight:500; }
+  .record-field-provenance { font-size:12px; color:var(--text-muted); }
+  .record-field-flag { font-size:12px; }
+  .record-field-flag.warning { color:var(--caution); }
+  .record-field-flag.error { color:var(--negative); }
+  .record-provenance { margin-top:6px; font-size:12px; color:var(--text-muted); }
+  .record-actions { margin-top:8px; display:flex; gap:8px; }
+
+  .block-itable { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-top:16px; }
+  .itable-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); }
+  .itable-title { font-size:14px; font-weight:500; color:var(--text-primary); }
+  .itable-summary { font-size:12px; color:var(--text-muted); }
+  .itable table { width:100%; border-collapse:collapse; font-size:13px; }
+  .itable th { padding:6px 12px; text-align:left; font-weight:500; font-size:12px; color:var(--text-secondary); background:var(--surface); border-bottom:1px solid var(--border); }
+  .itable th.right { text-align:right; }
+  .itable td { padding:6px 12px; color:var(--text-primary); border-top:1px solid var(--border); }
+  .itable td.right { text-align:right; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Cross-Cutting &middot; <span>Your Team</span></div>
+  <div class="proto-nav-right">
+    <div class="state-toggle">
+      <button class="state-btn active" data-state="overview">Overview</button>
+      <button class="state-btn" data-state="activity">Activity</button>
+    </div>
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="21-mobile-workspace.html" class="proto-arrow" aria-label="Previous: Mobile">&larr;</a>
+    <a href="27-process-flow-map.html" class="proto-arrow" aria-label="Next: Process Flow Map">&rarr;</a>
+  </div>
+</nav>
+
+<div class="workspace">
+
+  <!-- âââ LEFT: NAVIGATION âââ -->
+  <nav class="sidebar">
+    <div class="ws">
+      <div class="ws-avatar">N</div>
+      <span class="ws-name">Nadia's Studio</span>
+      <span class="ws-chev">&#9662;</span>
+    </div>
+
+    <div class="nav-group">
+      <a class="nav-item active" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>
+        <span class="nav-item-label">Today</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3"/></svg>
+        <span class="nav-item-label">Inbox</span>
+        <span class="nav-count">3</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="nav-item-label">Work</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6z"/></svg>
+        <span class="nav-item-label">Projects</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg>
+        <span class="nav-item-label">Routines</span>
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-foot">
+      <a class="nav-item" href="#">
+        <svg class="nav-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="nav-item-label">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- âââ CENTRE: YOUR WORK âââ -->
+  <main class="main">
+    <div class="scroll">
+      <div class="content">
+
+        <div class="location">Today</div>
+
+        <h1 class="page-title">Your team</h1>
+
+        <!-- Metric cluster -->
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-value">4</div>
+            <div class="metric-label">Active roles</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">$12.40</div>
+            <div class="metric-label">Cost this month</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">142</div>
+            <div class="metric-label">Tasks completed</div>
+          </div>
+        </div>
+
+        <!-- STATE 1: Overview -->
+        <div class="state-overview">
+
+          <!-- Role rows -->
+          <div class="section">
+            <div class="sh">Roles</div>
+            <div class="role-list">
+
+              <div class="block-record">
+                <div class="record-header">
+                  <span class="record-title">Content Reviewer</span>
+                  <span class="record-subtitle badge badge-process">Content</span>
+                  <span class="record-status info">Spot-checked</span>
+                </div>
+                <div class="record-fields">
+                  <div class="record-field">
+                    <span class="record-field-label">Trend</span>
+                    <span class="record-field-value"><span class="sparkline"><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,12 10,10 18,8 26,11 34,6 42,4 50,5" fill="none" stroke="var(--vivid)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span> 7 days</span>
+                  </div>
+                  <div class="record-field">
+                    <span class="record-field-label">Tasks</span>
+                    <span class="record-field-value">48</span>
+                    <span class="record-field-provenance">95% accuracy</span>
+                    <span class="record-field-provenance" style="margin-left:auto">$3.20</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block-record">
+                <div class="record-header">
+                  <span class="record-title">Quote Generator</span>
+                  <span class="record-subtitle badge badge-process">Quoting</span>
+                  <span class="record-status caution">You review</span>
+                </div>
+                <div class="record-fields">
+                  <div class="record-field">
+                    <span class="record-field-label">Trend</span>
+                    <span class="record-field-value"><span class="sparkline"><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,14 10,12 18,10 26,8 34,9 42,6 50,4" fill="none" stroke="var(--vivid)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span> 7 days</span>
+                  </div>
+                  <div class="record-field">
+                    <span class="record-field-label">Tasks</span>
+                    <span class="record-field-value">52</span>
+                    <span class="record-field-provenance">88% accuracy</span>
+                    <span class="record-field-provenance" style="margin-left:auto">$4.80</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block-record">
+                <div class="record-header">
+                  <span class="record-title">Service Responder</span>
+                  <span class="record-subtitle badge badge-process">Service</span>
+                  <span class="record-status positive">Runs itself</span>
+                </div>
+                <div class="record-fields">
+                  <div class="record-field">
+                    <span class="record-field-label">Trend</span>
+                    <span class="record-field-value"><span class="sparkline"><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,8 10,6 18,9 26,7 34,5 42,6 50,4" fill="none" stroke="var(--vivid)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span> 7 days</span>
+                  </div>
+                  <div class="record-field">
+                    <span class="record-field-label">Tasks</span>
+                    <span class="record-field-value">28</span>
+                    <span class="record-field-provenance">97% accuracy</span>
+                    <span class="record-field-provenance" style="margin-left:auto">$2.60</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block-record">
+                <div class="record-header">
+                  <span class="record-title">Compliance Checker</span>
+                  <span class="record-subtitle badge badge-process">Compliance</span>
+                  <span class="record-status info">Spot-checked</span>
+                </div>
+                <div class="record-fields">
+                  <div class="record-field">
+                    <span class="record-field-label">Trend</span>
+                    <span class="record-field-value"><span class="sparkline"><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,10 10,8 18,10 26,6 34,4 42,5 50,3" fill="none" stroke="var(--vivid)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span> 7 days</span>
+                  </div>
+                  <div class="record-field">
+                    <span class="record-field-label">Tasks</span>
+                    <span class="record-field-value">14</span>
+                    <span class="record-field-provenance">100% accuracy</span>
+                    <span class="record-field-provenance" style="margin-left:auto">$1.80</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Cost breakdown table -->
+          <div class="section">
+            <div class="sh">Cost breakdown</div>
+            <div class="block-itable">
+              <div class="itable-header">
+                <span class="itable-title">This month</span>
+                <span class="itable-summary">4 roles · $12.40 total</span>
+              </div>
+              <div class="itable">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Role</th>
+                      <th class="right">Tasks</th>
+                      <th class="right">Cost</th>
+                      <th class="right">Accuracy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Content Reviewer</td>
+                      <td class="right">48</td>
+                      <td class="right">$3.20</td>
+                      <td class="right">95%</td>
+                    </tr>
+                    <tr>
+                      <td>Quote Generator</td>
+                      <td class="right">52</td>
+                      <td class="right">$4.80</td>
+                      <td class="right">88%</td>
+                    </tr>
+                    <tr>
+                      <td>Service Responder</td>
+                      <td class="right">28</td>
+                      <td class="right">$2.60</td>
+                      <td class="right">97%</td>
+                    </tr>
+                    <tr>
+                      <td>Compliance Checker</td>
+                      <td class="right">14</td>
+                      <td class="right">$1.80</td>
+                      <td class="right">100%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- STATE 2: Activity (expanded timeline) -->
+        <div class="state-activity">
+          <div class="section">
+            <div class="sh">Recent activity</div>
+            <div class="timeline">
+
+              <div class="timeline-item">
+                <span class="timeline-time">2 min ago</span>
+                <span class="timeline-text"><strong>Service Responder</strong> replied to customer inquiry about delivery ETA &mdash; <span class="badge badge-process">Service</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">18 min ago</span>
+                <span class="timeline-text"><strong>Content Reviewer</strong> approved 3 social posts, flagged 1 for tone &mdash; <span class="badge badge-process">Content</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">34 min ago</span>
+                <span class="timeline-text"><strong>Quote Generator</strong> drafted Henderson kitchen quote at $8,900 &mdash; <span class="badge badge-process">Quoting</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">1 hr ago</span>
+                <span class="timeline-text"><strong>Compliance Checker</strong> verified 2 invoices against regulatory requirements &mdash; <span class="badge badge-process">Compliance</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">1.5 hrs ago</span>
+                <span class="timeline-text"><strong>Service Responder</strong> escalated warranty claim to you (outside policy) &mdash; <span class="badge badge-process">Service</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">2 hrs ago</span>
+                <span class="timeline-text"><strong>Content Reviewer</strong> auto-approved 5 routine product descriptions &mdash; <span class="badge badge-process">Content</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">3 hrs ago</span>
+                <span class="timeline-text"><strong>Quote Generator</strong> sent follow-up on Wilson quote (approved yesterday) &mdash; <span class="badge badge-process">Quoting</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">4 hrs ago</span>
+                <span class="timeline-text"><strong>Compliance Checker</strong> flagged missing ABN on supplier invoice &mdash; <span class="badge badge-process">Compliance</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">Yesterday</span>
+                <span class="timeline-text"><strong>Content Reviewer</strong> corrected brand voice on 2 blog drafts, learned new pattern &mdash; <span class="badge badge-process">Content</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">Yesterday</span>
+                <span class="timeline-text"><strong>Quote Generator</strong> completed 4 quotes, 3 approved as-is &mdash; <span class="badge badge-process">Quoting</span></span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Overview: recent 5 actions -->
+        <div class="state-overview">
+          <div class="section">
+            <div class="sh">Recent activity</div>
+            <div class="timeline">
+
+              <div class="timeline-item">
+                <span class="timeline-time">2 min ago</span>
+                <span class="timeline-text"><strong>Service Responder</strong> replied to delivery ETA inquiry &mdash; <span class="badge badge-process">Service</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">18 min ago</span>
+                <span class="timeline-text"><strong>Content Reviewer</strong> approved 3 posts, flagged 1 for tone &mdash; <span class="badge badge-process">Content</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">34 min ago</span>
+                <span class="timeline-text"><strong>Quote Generator</strong> drafted Henderson kitchen &mdash; $8,900 &mdash; <span class="badge badge-process">Quoting</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">1 hr ago</span>
+                <span class="timeline-text"><strong>Compliance Checker</strong> verified 2 invoices &mdash; <span class="badge badge-process">Compliance</span></span>
+              </div>
+
+              <div class="timeline-item">
+                <span class="timeline-time">1.5 hrs ago</span>
+                <span class="timeline-text"><strong>Service Responder</strong> escalated warranty claim &mdash; <span class="badge badge-process">Service</span></span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Input bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot">
+          <span class="ditto-dots"><canvas class="dots-field" width="28" height="28"></canvas></span>
+        </div>
+        <textarea class="input-field" rows="1" placeholder="Talk to Ditto..."></textarea>
+      </div>
+    </div>
+  </main>
+
+  <!-- âââ RIGHT: DITTO âââ -->
+  <aside class="ditto-panel">
+    <div class="ditto-header">
+      <span class="ditto-dot"></span>
+      <span class="ditto-label">Ditto</span>
+      <span class="ditto-status">Watching your team</span>
+    </div>
+
+    <div class="ditto-scroll">
+
+      <!-- Team health donut -->
+      <div>
+        <div class="ditto-sh">Team health</div>
+        <div class="donut-container">
+          <div class="donut-chart">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <!-- Background circle -->
+              <circle cx="40" cy="40" r="28" fill="none" stroke="var(--border)" stroke-width="8"/>
+              <!-- Healthy: 3 of 4 = 270deg -->
+              <circle cx="40" cy="40" r="28" fill="none" stroke="var(--positive)" stroke-width="8"
+                stroke-dasharray="131.95 44.0" stroke-dashoffset="44.0"
+                transform="rotate(-90 40 40)" stroke-linecap="round"/>
+              <!-- Needs attention: 1 of 4 = 90deg -->
+              <circle cx="40" cy="40" r="28" fill="none" stroke="var(--caution)" stroke-width="8"
+                stroke-dasharray="44.0 131.95" stroke-dashoffset="-131.95"
+                transform="rotate(-90 40 40)" stroke-linecap="round"/>
+              <!-- Centre label -->
+              <text x="40" y="38" text-anchor="middle" font-family="var(--font)" font-size="16" font-weight="700" fill="var(--text-primary)">3/4</text>
+              <text x="40" y="50" text-anchor="middle" font-family="var(--font)" font-size="9" fill="var(--text-muted)">healthy</text>
+            </svg>
+          </div>
+          <div class="donut-legend">
+            <div class="donut-legend-item"><span class="donut-legend-dot" style="background:var(--positive)"></span> Healthy (3)</div>
+            <div class="donut-legend-item"><span class="donut-legend-dot" style="background:var(--caution)"></span> Needs attention (1)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggestion -->
+      <div class="suggestion">
+        <div class="suggestion-label">Suggestion</div>
+        Content Reviewer has 95% accuracy over 48 tasks. That's strong enough to upgrade from spot-checked to autonomous for routine reviews.
+        <div class="suggestion-actions">
+          <button class="btn btn-s">Upgrade trust</button>
+          <button class="btn btn-g">Not yet</button>
+        </div>
+      </div>
+
+      <!-- Checklist -->
+      <div>
+        <div class="ditto-sh">Things I'd recommend</div>
+        <div class="check-list">
+          <div class="check">
+            <span class="check-icon ck-todo">1</span>
+            <span class="check-label">Upgrade Content Reviewer to autonomous</span>
+          </div>
+          <div class="check">
+            <span class="check-icon ck-todo">2</span>
+            <span class="check-label">Review Quote Generator's 88% accuracy &mdash; 6 corrections this month</span>
+          </div>
+          <div class="check">
+            <span class="check-icon ck-todo">3</span>
+            <span class="check-label">Add seasonal pricing data to Quoting knowledge</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // âââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // DITTO DOTS
+  // âââââââââââââââââââââââââââââââââââââââââââââââââââ
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR,
+      size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle) * d.dist * 0.6;
+        const y = cy + Math.sin(d.angle) * d.dist * 0.6;
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000;
+      ctx.clearRect(0, 0, size, size);
+
+      for (const d of dots) {
+        const a = d.angle + t * d.speed;
+        const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp;
+        const r = Math.max(1, d.dist + breathe);
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const pulse = 0.6 + Math.sin(t * 2.5 + d.phase) * 0.4;
+
+        ctx.beginPath();
+        ctx.arc(x, y, d.size, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = d.opacity * pulse;
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textarea
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') {
+        document.body.classList.add('theme-focus');
+      } else {
+        document.body.classList.remove('theme-focus');
+      }
+    });
+  });
+
+  // State toggle
+  document.querySelectorAll('.state-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.state === 'activity') {
+        document.body.classList.add('show-activity');
+      } else {
+        document.body.classList.remove('show-activity');
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

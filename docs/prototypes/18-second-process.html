@@ -1,209 +1,214 @@
+<!-- v2 — Design system alignment: cardless flow, theme toggle, dot particles, 2026-03-26 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Ditto — Second Process (Rob Adds Follow-ups)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P18 — Second Process | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669;
+    --vivid-deep: #3D5A48;
+    --vivid-subtle: #ECFDF5;
+    --positive: #16a34a;
+    --positive-subtle: #EEFAF0;
+    --info: #2563eb;
+    --info-subtle: #EEF4FF;
+    --caution: #D4960A;
+    --caution-subtle: #FDF8E8;
+    --negative: #C4352A;
+    --negative-subtle: #FDF0EE;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 16px;
     -webkit-font-smoothing: antialiased;
+    font-size: 16px;
+  }
+  ::selection { background: var(--vivid-deep); color: #fff; }
+
+  /* ===== Proto Nav ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); font-weight: 600; }
+  .proto-nav-right { display: flex; align-items: center; gap: 8px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .proto-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle {
+    display: flex; align-items: center; gap: 4px;
+    margin-left: 12px; padding-left: 12px;
+    border-left: 1px solid var(--border);
+  }
+  .theme-btn {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    background: transparent; border: 1px solid transparent; border-radius: 99px;
+    padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Mobile Viewport Simulation ===== */
+  .mobile-frame {
     max-width: 390px;
-    margin: 0 auto;
-    min-height: 100vh;
+    margin: 48px auto 0;
+    min-height: calc(100vh - 48px);
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
-  }
-
-  .conversation {
-    min-height: 100vh;
+    background: var(--bg);
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
+  /* ===== Top Bar ===== */
   .top-bar {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 14px 18px 10px;
     position: sticky;
-    top: 0;
+    top: 48px;
     background: var(--bg);
     z-index: 10;
   }
+  .top-bar-logo {
+    font-size: 17px; font-weight: 600;
+    color: var(--text-primary); letter-spacing: -0.02em;
+  }
+  .ditto-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--vivid); flex-shrink: 0;
+  }
 
-  .top-bar-title { font-size: 16px; font-weight: 600; flex: 1; }
-
+  /* ===== Messages — clean, spacious ===== */
   .messages {
     flex: 1;
     padding: 12px 18px 24px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 24px;
   }
 
-  .msg-group {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  .msg { display: flex; flex-direction: column; }
+  .msg.ditto .msg-bubble { padding: 0; font-size: 15px; line-height: 1.7; color: var(--text-primary); }
+  .msg.user .msg-bubble {
+    background: var(--surface);
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    font-size: 15px; line-height: 1.6;
+    align-self: flex-end;
   }
+  .msg-bubble p + p { margin-top: 8px; }
 
-  .msg-group.self { align-items: flex-start; }
-  .msg-group.user { align-items: flex-end; }
-
-  .sender {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
+  .msg-sender {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 4px;
   }
-
-  .self-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
+  .msg-sender-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--vivid);
   }
-
-  .sender-label {
-    font-size: 12px;
-    font-weight: 500;
+  .msg-sender-label {
+    font-size: 12px; font-weight: 500;
     color: var(--text-muted);
   }
 
-  .msg {
-    max-width: 88%;
-    font-size: 15px;
-    line-height: 1.6;
-  }
-
-  .msg-group.self .msg { padding: 2px 0 2px 14px; }
-
-  .msg-group.user .msg {
-    background: var(--accent-subtle);
-    padding: 10px 14px;
-    border-radius: 18px;
-    border-bottom-right-radius: 4px;
-  }
-
-  .msg p + p { margin-top: 8px; }
-
-  /* ═══ KNOWLEDGE REUSE SIGNAL ═══
-     When Ditto uses existing knowledge for the new process,
-     the user SEES it happening. Not invisible reuse.
-  */
+  /* ═══ Knowledge Reuse Signal — cardless, border-left accent ═══ */
   .reuse-signal {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 10px 14px;
-    margin-left: 14px;
-    max-width: 310px;
-    background: var(--positive-subtle);
-    border: 1px solid hsl(145 40% 88%);
-    border-radius: 10px;
+    padding: 10px 0 10px 16px;
+    border-left: 2px solid var(--positive);
+    margin-top: 10px;
     font-size: 13px;
     color: var(--text-secondary);
-    line-height: 1.45;
+    line-height: 1.5;
   }
-
-  .reuse-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--positive);
-    flex-shrink: 0;
-    margin-top: 5px;
-  }
-
   .reuse-signal strong {
     color: var(--text-primary);
     font-weight: 600;
   }
 
-  /* ═══ PROCESS PROPOSAL — simpler for second process ═══ */
+  /* ═══ Process Proposal — surface background for hero moment ═══ */
   .process-card {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--accent);
-    border-radius: 14px;
-    padding: 18px;
-    margin-left: 14px;
-    max-width: 330px;
-    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    padding: 24px;
+    margin-top: 16px;
   }
-
   .process-card-title {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+    margin-bottom: 2px;
   }
-
   .process-card-subtitle {
     font-size: 13px;
     color: var(--text-muted);
-    margin-bottom: 14px;
+    margin-bottom: 16px;
   }
 
-  .process-steps {
-    display: flex;
-    flex-direction: column;
-  }
-
+  .process-steps { display: flex; flex-direction: column; gap: 2px; }
   .process-step {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-md);
     font-size: 14px;
   }
-
-  .process-step:last-child { border-bottom: none; }
-
   .step-num {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 12px;
-    font-weight: 600;
-    background: var(--surface);
-    border: 1.5px solid var(--border-strong);
-    color: var(--text-muted);
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 12px; font-weight: 700;
+    background: var(--accent-subtle); color: var(--text-primary);
+    margin-top: 1px;
   }
-
-  .step-text { color: var(--text-primary); flex: 1; }
-  .step-meta { font-size: 12px; color: var(--text-muted); }
+  .step-text { color: var(--text-primary); flex: 1; line-height: 1.5; }
 
   .process-card-note {
     font-size: 13px;
@@ -216,201 +221,170 @@
 
   .process-card-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 14px;
+    gap: 10px;
+    margin-top: 16px;
   }
 
-  /* ═══ SETTINGS CARD — quick config, not a form ═══ */
-  .settings-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 18px;
-    margin-left: 14px;
-    max-width: 330px;
+  /* ═══ Settings — cardless, border-left accent with details ═══ */
+  .settings-block {
+    margin-top: 12px;
+    padding-left: 16px;
+    border-left: 2px solid var(--vivid);
   }
-
-  .settings-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 12px;
+  .settings-block-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-muted); margin-bottom: 10px;
   }
-
   .setting-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 6px 0;
     border-bottom: 1px solid var(--border);
     font-size: 14px;
   }
+  .setting-row:last-of-type { border-bottom: none; }
+  .setting-label { color: var(--text-secondary); }
+  .setting-value { font-weight: 600; color: var(--text-primary); }
 
-  .setting-row:last-child { border-bottom: none; }
-
-  .setting-label { color: var(--text-primary); }
-
-  .setting-value {
-    font-weight: 500;
-    color: var(--accent);
-    cursor: pointer;
-  }
-
-  .settings-card-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 14px;
-    padding-top: 12px;
+  .settings-actions {
+    display: flex; gap: 10px;
+    margin-top: 14px; padding-top: 12px;
     border-top: 1px solid var(--border);
   }
 
-  /* Confirmed */
+  /* ═══ Confirmed — surface background for hero moment ═══ */
   .confirmed {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 14px 16px;
-    margin-left: 14px;
-    max-width: 330px;
-    background: var(--positive-subtle);
-    border: 1px solid hsl(145 40% 85%);
-    border-radius: 12px;
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 20px; margin-top: 12px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
   }
-
   .confirmed-check {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--positive);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--positive); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0;
   }
-
   .confirmed-text {
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.5;
+    font-size: 14px; color: var(--text-primary); line-height: 1.55;
   }
-
   .confirmed-text strong { font-weight: 600; }
-
   .confirmed-detail {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
   }
 
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: all 0.12s;
-    -webkit-tap-highlight-color: transparent;
-    flex: 1;
-    text-align: center;
+  /* ===== Buttons — pill-shaped, vivid green ===== */
+  .btn-accent {
+    font-family: var(--font); font-size: 14px; font-weight: 600;
+    padding: 10px 24px; border-radius: 99px; border: none;
+    background: var(--vivid); color: var(--accent-text);
+    cursor: pointer; transition: all 0.12s;
+    flex: 1; text-align: center;
   }
+  .btn-accent:hover { background: var(--vivid-deep); }
+  .btn-accent:active { transform: scale(0.98); }
+  .btn-accent:focus-visible { outline: 2px solid var(--vivid); outline-offset: 2px; }
+  .btn-ghost {
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 10px 20px; border-radius: 99px;
+    border: 1.5px solid var(--border); background: transparent;
+    color: var(--text-secondary); cursor: pointer; transition: all 0.12s;
+    flex: 1; text-align: center;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--text-primary); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
-  .btn-primary:active { background: var(--accent-hover); transform: scale(0.98); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-
-  /* Input */
-  .bottom-input {
-    position: sticky;
-    bottom: 0;
+  /* ===== Input Bar ===== */
+  .input-bar {
+    position: sticky; bottom: 0;
     padding: 10px 14px max(14px, env(safe-area-inset-bottom));
     background: linear-gradient(transparent, var(--bg) 12px);
   }
-
   .input-container {
     background: var(--surface-raised);
     border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 10px 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    border-radius: var(--radius-lg);
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 8px;
   }
-
-  .input-container:focus-within { border-color: var(--accent); }
-
-  .input-container input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 15px;
-    color: var(--text-primary);
-    background: transparent;
+  .input-container:focus-within { border-color: var(--vivid); }
+  .input-dot {
+    width: 28px; height: 28px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
   }
-
-  .input-container input::placeholder { color: var(--text-muted); }
-
-  .send-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
+  .dots-field { display: block; border-radius: 50%; }
+  .input-field {
+    flex: 1; border: none; outline: none;
+    font-family: var(--font); font-size: 15px;
+    color: var(--text-primary); background: transparent;
+    resize: none; line-height: 1.4;
   }
+  .input-field::placeholder { color: var(--text-muted); }
 
-  .send-btn svg { width: 16px; height: 16px; stroke-width: 2; margin-left: 1px; }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
 
-<div class="conversation">
+<!-- Proto Nav -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 3 &middot; <span>Second Process</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="17-trust-upgrade.html" class="proto-arrow" aria-label="Previous: Trust Upgrade">&larr;</a>
+    <a href="19-multi-process-workspace.html" class="proto-arrow" aria-label="Next: Multi-Process">&rarr;</a>
+  </div>
+</nav>
+
+<!-- Mobile Frame -->
+<div class="mobile-frame">
 
   <div class="top-bar">
-    <span class="self-dot" style="width: 8px; height: 8px;"></span>
-    <span class="top-bar-title">Ditto</span>
+    <span class="ditto-dot"></span>
+    <span class="top-bar-logo">Ditto</span>
   </div>
 
-  <div class="messages">
+  <main class="messages">
 
     <!-- Rob initiates — the compound effect starts with a complaint -->
-    <div class="msg-group user">
-      <div class="msg">I'm losing jobs because I don't follow up on quotes fast enough. The guy who calls back first gets the job.</div>
+    <div class="msg user">
+      <div class="msg-bubble">I'm losing jobs because I don't follow up on quotes fast enough. The guy who calls back first gets the job.</div>
     </div>
 
     <!-- Ditto recognises and proposes — fast, because it already knows Rob -->
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
+    <div class="msg ditto">
+      <div class="msg-sender">
+        <span class="msg-sender-dot"></span>
+        <span class="msg-sender-label">Ditto</span>
       </div>
-      <div class="msg">
+      <div class="msg-bubble">
         <p>I can handle that. I already have your customer info and quoting history — so I know who's been quoted and when.</p>
       </div>
 
-      <!-- Knowledge reuse — Rob sees his existing data being used -->
+      <!-- Knowledge reuse — cardless, border-left accent -->
       <div class="reuse-signal">
-        <span class="reuse-dot"></span>
-        <span><strong>Already know:</strong> 12 customers, 34 quotes, response times, contact details — all from your quoting process</span>
+        <strong>Already know:</strong> 12 customers, 34 quotes, response times, contact details — all from your quoting process
       </div>
 
-      <div class="msg">
+      <div class="msg-bubble" style="margin-top: 10px;">
         <p>Here's what I'd set up:</p>
       </div>
 
-      <!-- Process proposal — simpler than onboarding because Rob already trusts Ditto -->
+      <!-- Process proposal — surface background for hero moment -->
       <div class="process-card">
         <div class="process-card-title">Quote follow-ups</div>
         <div class="process-card-subtitle">Automatic — you review before sending</div>
@@ -439,29 +413,29 @@
         </div>
 
         <div class="process-card-actions">
-          <button class="btn btn-primary">Set it up</button>
-          <button class="btn btn-ghost">Adjust</button>
+          <button class="btn-accent">Set it up</button>
+          <button class="btn-ghost">Adjust</button>
         </div>
       </div>
     </div>
 
     <!-- Rob says yes -->
-    <div class="msg-group user">
-      <div class="msg">Yeah do it. Make the follow-ups pretty casual — these are tradies and homeowners, not corporates.</div>
+    <div class="msg user">
+      <div class="msg-bubble">Yeah do it. Make the follow-ups pretty casual — these are tradies and homeowners, not corporates.</div>
     </div>
 
-    <!-- Quick config — not a form, just confirming the key settings -->
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
+    <!-- Quick config — cardless, border-left accent -->
+    <div class="msg ditto">
+      <div class="msg-sender">
+        <span class="msg-sender-dot"></span>
+        <span class="msg-sender-label">Ditto</span>
       </div>
-      <div class="msg">
+      <div class="msg-bubble">
         <p>Got it — casual tone. Let me confirm the rules:</p>
       </div>
 
-      <div class="settings-card">
-        <div class="settings-card-title">Follow-up rules</div>
+      <div class="settings-block">
+        <div class="settings-block-title">Follow-up rules</div>
         <div class="setting-row">
           <span class="setting-label">First follow-up</span>
           <span class="setting-value">3 days</span>
@@ -486,68 +460,123 @@
           <span class="setting-label">You review</span>
           <span class="setting-value">Every follow-up (for now)</span>
         </div>
-        <div class="settings-card-actions">
-          <button class="btn btn-primary">Looks right</button>
-          <button class="btn btn-secondary">Change something</button>
+        <div class="settings-actions">
+          <button class="btn-accent">Looks right</button>
+          <button class="btn-ghost">Change something</button>
         </div>
       </div>
     </div>
 
     <!-- Rob confirms -->
-    <div class="msg-group user">
-      <div class="msg">Looks good</div>
+    <div class="msg user">
+      <div class="msg-bubble">Looks good</div>
     </div>
 
     <!-- Confirmed + immediate value -->
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
+    <div class="msg ditto">
+      <div class="msg-sender">
+        <span class="msg-sender-dot"></span>
+        <span class="msg-sender-label">Ditto</span>
       </div>
 
       <div class="confirmed">
         <div class="confirmed-check">&#10003;</div>
         <div>
           <div class="confirmed-text"><strong>Follow-ups are live.</strong> I'll check your outstanding quotes every morning and draft follow-ups for any that are overdue.</div>
-          <div class="confirmed-detail">Uses your customer data from Quoting &middot; Supervised — you approve each one</div>
+          <div class="confirmed-detail">Uses your customer data from Quoting &middot; You review each one</div>
         </div>
       </div>
 
-      <div class="msg">
+      <div class="msg-bubble" style="margin-top: 12px;">
         <p>Already found 3 quotes with no response — Henderson (4 days), Acme (6 days), and Blake (3 days). Want me to draft follow-ups for those now?</p>
       </div>
     </div>
 
-    <div class="msg-group user">
-      <div class="msg">Yeah go</div>
+    <div class="msg user">
+      <div class="msg-bubble">Yeah go</div>
     </div>
 
-    <div class="msg-group self">
-      <div class="sender">
-        <span class="self-dot"></span>
-        <span class="sender-label">Ditto</span>
+    <div class="msg ditto">
+      <div class="msg-sender">
+        <span class="msg-sender-dot"></span>
+        <span class="msg-sender-label">Ditto</span>
       </div>
-      <div class="msg">
+      <div class="msg-bubble">
         <p>Done — 3 follow-up texts drafted. They're in your review queue. That took about 2 minutes to set up because I already knew your customers and your voice.</p>
         <p>Your morning update now covers both quoting and follow-ups.</p>
       </div>
     </div>
 
-  </div>
+    <!-- Spacer for input bar -->
+    <div style="height: 80px;"></div>
 
-  <div class="bottom-input">
+  </main>
+
+  <!-- Input Bar with Dot Canvas -->
+  <div class="input-bar">
     <div class="input-container">
-      <input type="text" placeholder="Tell Ditto something...">
-      <button class="send-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-        </svg>
-      </button>
+      <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+      <textarea class="input-field" rows="1" placeholder="Tell Ditto something..." aria-label="Reply"></textarea>
     </div>
   </div>
 
 </div>
 
-<div class="proto-nav"><a href="17-trust-upgrade.html">&larr; Trust Upgrade</a><span class="pn-t"><a href="index.html">P18 Second Process</a></span><a href="19-multi-process-workspace.html">Multi-Process &rarr;</a></div><!-- pnav -->
+<script>
+  // ═══ Ditto Dots — Input field particle field ═══
+  const COLORS = ['#059669', '#059669', '#047857', '#3D5A48', '#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const count = Math.max(8, Math.round(size / 3));
+    const maxR = size * 0.35;
+    const dots = Array.from({ length: count }, (_, i) => ({
+      angle: (Math.PI * 2 / count) * i + Math.random() * 0.3,
+      dist: 2 + Math.random() * maxR, size: 1 + Math.random() * (size / 16),
+      speed: 0.15 + Math.random() * 0.35, phase: Math.random() * Math.PI * 2,
+      breathAmp: 1 + Math.random() * (maxR * 0.3),
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      opacity: 0.5 + Math.random() * 0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { ctx.beginPath(); ctx.arc(cx + Math.cos(d.angle) * d.dist * 0.6, cy + Math.sin(d.angle) * d.dist * 0.6, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill(); }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now() / 1000; ctx.clearRect(0, 0, size, size);
+      for (const d of dots) { const a = d.angle + t * d.speed; const breathe = Math.sin(t * 1.2 + d.phase) * d.breathAmp; const r = Math.max(1, d.dist + breathe); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.size, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity * (0.6 + Math.sin(t * 2.5 + d.phase) * 0.4); ctx.fill(); }
+      ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { if (!raf) draw(); } else { cancelAnimationFrame(raf); raf = null; } });
+    observer.observe(canvas); draw();
+  }
+
+  document.querySelectorAll('.dots-field').forEach(initDots);
+
+  // Auto-resize textareas
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; });
+  });
+
+  // Theme toggle
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
 </body>
 </html>

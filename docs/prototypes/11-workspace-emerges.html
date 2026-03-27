@@ -1,710 +1,827 @@
+<!-- P11 — Workspace Emerges | Rewritten with P00 visual vocabulary, 2026-03-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ditto — Workspace Emerges (Libby, Day 1)</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>P11 — Workspace Emerges | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   :root {
-    --bg: hsl(40 20% 98%);
-    --surface: hsl(40 15% 96%);
-    --surface-raised: hsl(0 0% 100%);
-    --border: hsl(40 10% 90%);
-    --border-strong: hsl(40 8% 82%);
-    --text-primary: hsl(30 10% 15%);
-    --text-secondary: hsl(30 6% 40%);
-    --text-muted: hsl(30 4% 50%);
-    --accent: hsl(24 80% 38%);
-    --accent-hover: hsl(24 80% 32%);
-    --accent-subtle: hsl(24 60% 95%);
-    --accent-text: hsl(0 0% 100%);
-    --positive: hsl(145 55% 40%);
-    --positive-subtle: hsl(145 40% 95%);
-    --selection: hsl(24 60% 90%);
-    --sidebar-bg: hsl(38 16% 95%);
+    --bg: #EDEDF0;
+    --surface: #E2E2E6;
+    --surface-raised: #F9F9FB;
+    --border: #D5D5DA;
+    --border-strong: #BBBBC2;
+    --text-primary: #111118;
+    --text-secondary: #4A4A55;
+    --text-muted: #65656F;
+    --accent: #111118;
+    --accent-hover: #000000;
+    --accent-subtle: #E7E7EB;
+    --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  ::selection { background: var(--selection); }
-
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 15px;
     -webkit-font-smoothing: antialiased;
-    height: 100vh;
-    overflow: hidden;
   }
+  ::selection { background: var(--vivid-subtle); }
 
-  /* ═══════════════════════════════════════════
-     THE WORKSPACE — born from work, not configured.
-     Sidebar + Centre + Self panel.
-     This is the FIRST TIME Libby sees the full layout.
-  ═══════════════════════════════════════════ */
+  /* ===== Skip Link ===== */
+  .skip-link {
+    position: absolute; top: -100%; left: 16px;
+    background: var(--accent); color: white;
+    padding: 8px 16px; border-radius: var(--radius-md);
+    z-index: 1000; font-size: 14px; text-decoration: none;
+  }
+  .skip-link:focus { top: 56px; }
+
+  /* ===== Prototype Nav Bar ===== */
+  .proto-nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 100; font-size: 14px;
+  }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; letter-spacing: -0.01em; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-raised);
+    color: var(--text-secondary); text-decoration: none; font-size: 14px;
+    cursor: pointer; transition: all 0.15s ease-out;
+  }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); box-shadow: var(--shadow-subtle); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== State Toggles ===== */
+  .state-bar {
+    position: fixed; top: 48px; left: 0; right: 0; height: 44px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    z-index: 99; padding: 0 16px;
+  }
+  .state-btn {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap;
+  }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Theme Toggle ===== */
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ===== Focus Theme ===== */
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+  body.theme-focus ::selection { background: var(--accent); color: var(--accent-text); }
+
+  /* ===== Workspace Shell ===== */
   .workspace {
-    display: grid;
-    grid-template-columns: 220px 1fr 320px;
-    height: 100vh;
+    position: fixed; top: 92px; left: 0; right: 0; bottom: 0;
+    display: flex; overflow: hidden;
   }
 
-  /* ═══ SIDEBAR — simple, just what exists ═══ */
+  /* ===== Sidebar ===== */
   .sidebar {
-    background: var(--sidebar-bg);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 20px 0;
-  }
-
-  .sidebar-header {
-    padding: 0 18px 16px;
-  }
-
-  .sidebar-logo {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-  }
-
-  .sidebar-section {
-    padding: 0 10px;
-    margin-bottom: 8px;
-  }
-
-  .sidebar-section-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 12px 8px 6px;
-  }
-
-  .sidebar-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.12s;
-    font-size: 14px;
-    color: var(--text-primary);
-    text-decoration: none;
-  }
-
-  .sidebar-item:hover { background: hsl(40 12% 91%); }
-
-  .sidebar-item.active {
-    background: var(--surface-raised);
-    box-shadow: 0 1px 2px hsl(30 10% 15% / 0.04);
-  }
-
-  .sidebar-item-text {
-    flex: 1;
+    width: 240px; min-width: 240px;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
-
-  .sidebar-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
   }
+  .wordmark { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
 
-  .sidebar-dot.done { background: var(--positive); }
-  .sidebar-dot.active { background: var(--accent); }
-
-  .sidebar-spacer { flex: 1; }
-
+  /* Nav items */
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s ease-out;
+    font-size: 14px; color: var(--text-secondary); font-weight: 400;
+    text-decoration: none; position: relative;
+  }
+  .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
+  .nav-item.active {
+    color: var(--text-primary); font-weight: 500;
+    border-left: 2px solid var(--vivid); border-radius: 0;
+    padding-left: 10px;
+  }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-md); }
+  .nav-icon { width: 20px; height: 20px; flex-shrink: 0; color: inherit; }
+  .nav-label { white-space: nowrap; }
+  .nav-badge {
+    font-size: 11px; font-weight: 600; line-height: 1;
+    background: var(--negative); color: white;
+    padding: 2px 6px; border-radius: 99px; margin-left: auto;
+  }
+  .nav-separator { height: 1px; background: var(--border); margin: 8px 12px; }
   .sidebar-footer {
-    padding: 0 10px;
-    margin-top: 8px;
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
+    padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0;
   }
 
-  .sidebar-footer .sidebar-item {
-    color: var(--text-secondary);
-    font-size: 13px;
+  /* ===== Centre ===== */
+  .centre {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg); position: relative;
+  }
+  .centre-scroll { flex: 1; overflow-y: auto; }
+  .centre-content {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 24px;
   }
 
-  /* ═══ CENTRE — The feed ═══ */
-  .feed {
-    overflow-y: auto;
-    padding: 32px 28px 48px;
+  /* ===== Input Bar ===== */
+  .input-bar { padding: 12px 24px 20px; flex-shrink: 0; }
+  .input-container {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+  .input-container:focus-within { border-color: var(--vivid); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+  .input-dot { width: 28px; height: 28px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .input-field {
+    flex: 1; border: none; background: transparent;
+    font-family: var(--font); font-size: 16px; color: var(--text-primary);
+    outline: none; line-height: 1.5; resize: none;
+    min-height: 24px; max-height: 120px;
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    width: 320px; min-width: 320px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .right-panel-header {
+    padding: 20px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .right-panel-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .right-dot { width: 24px; height: 24px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .right-panel-scroll { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+
+  /* ===== VISUAL VOCABULARY ===== */
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+
+  /* --- Field Tables --- */
+  .field-table {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; font-size: 14px; line-height: 1.5;
+  }
+  .field-label { color: var(--text-muted); white-space: nowrap; }
+  .field-value { color: var(--text-primary); font-weight: 500; }
+
+  /* --- Checklists --- */
+  .checklist { list-style: none; }
+  .checklist-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; font-size: 14px; line-height: 1.5;
+  }
+  .check-icon {
+    width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .check-done { background: var(--positive-subtle); color: var(--positive); }
+  .check-pending { background: var(--accent-subtle); color: var(--text-muted); }
+  .check-icon svg { width: 12px; height: 12px; }
+  .checklist-detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Metric Clusters --- */
+  .metric-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .metric { min-width: 80px; }
+  .metric-value { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --- Donut Charts --- */
+  .donut { width: 48px; height: 48px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 5; }
+  .donut .donut-track { stroke: var(--border); }
+  .donut .donut-fill { stroke: var(--vivid); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+  .donut-container { display: flex; align-items: center; gap: 12px; }
+  .donut-label { font-size: 14px; }
+  .donut-label strong { font-weight: 600; }
+
+  /* --- Progress Bars --- */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--vivid); transition: width 0.3s ease; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+  /* --- Section Headers --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-heading {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; letter-spacing: -0.01em;
   }
 
-  .feed::-webkit-scrollbar { width: 6px; }
-  .feed::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  /* === Block vocabulary (from P30 gallery) === */
+  .block-record { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .block-record:last-child { border-bottom: none; }
+  .block-record.accented { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .record-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; flex-wrap: wrap; }
+  .record-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; color: var(--text-primary); }
+  .record-subtitle { font-size: 12px; color: var(--text-muted); }
+  .record-status { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 99px; margin-left: auto; }
+  .record-status.positive { background: var(--positive-subtle); color: var(--positive); }
+  .record-status.caution { background: var(--caution-subtle); color: var(--caution); }
+  .record-status.negative { background: var(--negative-subtle); color: var(--negative); }
+  .record-status.info { background: var(--info-subtle); color: var(--info); }
+  .record-fields { margin-top: 8px; }
+  .record-field { display: flex; gap: 12px; align-items: baseline; font-size: 14px; margin-bottom: 2px; }
+  .record-field-label { color: var(--text-muted); min-width: 80px; }
+  .record-field-value { color: var(--text-primary); font-weight: 500; }
+  .record-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+  .record-process { color: var(--text-muted); font-weight: 500; }
+  .record-time { color: var(--text-muted); font-size: 12px; margin-left: auto; }
 
-  .feed-inner {
-    max-width: 620px;
-    margin: 0 auto;
+  /* --- Action Buttons --- */
+  .action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
   }
-
-  /* Welcome back message */
-  .welcome-card {
-    background: var(--surface-raised);
-    border-radius: 14px;
-    padding: 24px;
-    margin-bottom: 24px;
-    border: 1px solid var(--border);
-  }
-
-  .welcome-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .self-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-
-  .welcome-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-
-  .welcome-body {
-    font-size: 15px;
-    line-height: 1.65;
-    color: var(--text-primary);
-  }
-
-  .welcome-body p + p { margin-top: 10px; }
-  .welcome-body strong { font-weight: 600; }
-
-  /* Journey card — where Libby is */
-  .journey-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px 22px;
-    margin-bottom: 20px;
-  }
-
-  .journey-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 14px;
-  }
-
-  .journey-steps {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .journey-step {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    font-size: 14px;
-  }
-
-  .journey-step-icon {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 12px;
-  }
-
-  .journey-step-icon.done { background: var(--positive); color: white; }
-  .journey-step-icon.next { background: var(--accent); color: white; font-weight: 700; }
-  .journey-step-icon.later {
-    background: var(--surface);
-    border: 1.5px solid var(--border-strong);
-    color: var(--text-muted);
-  }
-
-  .journey-step-text { color: var(--text-primary); }
-  .journey-step-text.done { color: var(--text-secondary); }
-  .journey-step-text.next { font-weight: 500; color: var(--accent); }
-  .journey-step-text.later { color: var(--text-muted); }
-
-  .journey-step-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-left: auto;
-    white-space: nowrap;
-  }
-
-  /* Completed work card */
-  .work-done-card {
-    background: var(--surface-raised);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--positive);
-    border-radius: 12px;
-    padding: 16px 18px;
-    margin-bottom: 14px;
-  }
-
-  .work-done-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
-  }
-
-  .work-done-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .work-done-badge {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: var(--positive-subtle);
-    color: var(--positive);
-  }
-
-  .work-done-body {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  .work-done-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  /* Next step card — slightly highlighted */
-  .next-step-card {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--accent);
-    border-radius: 14px;
-    padding: 20px 22px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 12px hsl(24 80% 38% / 0.06);
-  }
-
-  .next-step-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 6px;
-  }
-
-  .next-step-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 6px;
-  }
-
-  .next-step-body {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-    margin-bottom: 14px;
-  }
-
-  .next-step-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  /* Buttons */
-  .btn {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    border: none;
-    border-radius: 7px;
-    padding: 7px 14px;
-    cursor: pointer;
-    transition: all 0.12s;
-    line-height: 1.3;
-  }
-
-  .btn-primary { background: var(--accent); color: var(--accent-text); }
   .btn-primary:hover { background: var(--accent-hover); }
-  .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--surface); }
-  .btn-ghost { background: transparent; color: var(--text-secondary); }
-  .btn-ghost:hover { color: var(--text-primary); }
+  .btn-secondary {
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .btn-vivid {
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    background: var(--vivid); color: white;
+    border: none; border-radius: 99px; padding: 6px 16px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-vivid:hover { filter: brightness(0.9); }
 
-  /* ═══ SELF PANEL ═══ */
-  .self-panel {
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
+  /* --- Accent Borders --- */
+  .accent-vivid { border-left: 2px solid var(--vivid); padding-left: 12px; }
+  .accent-positive { border-left: 2px solid var(--positive); padding-left: 12px; }
+
+  /* --- Suggestion Block --- */
+  .suggestion {
+    background: var(--vivid-subtle); border-radius: var(--radius-lg);
+    padding: 12px 16px; font-size: 14px;
+  }
+  .suggestion-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px; }
+
+  /* --- Provenance Strip --- */
+  .provenance {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 0;
+  }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+
+  /* ===== Reduced Motion ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
-  .self-panel-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  /* ===== Focus States ===== */
+  .btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-vivid:focus-visible,
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .self-panel-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-
-  /* Knowledge summary in self panel */
-  .knowledge-summary {
-    padding: 16px 16px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .knowledge-summary-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 10px;
-  }
-
-  .knowledge-mini-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
-
-  .knowledge-mini-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .knowledge-mini-dot.known { background: var(--positive); }
-  .knowledge-mini-dot.gap { background: var(--border-strong); }
-
-  .knowledge-mini-label { font-weight: 500; color: var(--text-primary); min-width: 70px; }
-
-  .knowledge-see-all {
-    display: block;
-    font-size: 12px;
-    color: var(--accent);
-    text-decoration: none;
-    margin-top: 8px;
-    font-weight: 500;
-  }
-
-  .knowledge-see-all:hover { text-decoration: underline; }
-
-  /* Self messages */
-  .self-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 16px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    font-size: 14px;
-  }
-
-  .panel-msg {
-    line-height: 1.55;
-    color: var(--text-primary);
-    padding-left: 12px;
-  }
-
-  .panel-msg .sender-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
-  }
-
-  .panel-msg .sender-row .self-dot { width: 6px; height: 6px; }
-  .panel-msg .sender-row .sender-name { font-size: 11px; font-weight: 500; color: var(--text-muted); }
-
-  /* Panel input */
-  .self-panel-input {
-    padding: 12px 16px 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  .panel-input-container {
-    background: var(--surface-raised);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: border-color 0.2s;
-  }
-
-  .panel-input-container:focus-within { border-color: var(--accent); }
-
-  .panel-input-container input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    color: var(--text-primary);
-    background: transparent;
-  }
-
-  .panel-input-container input::placeholder { color: var(--text-muted); }
-
-  .panel-send {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--accent-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .panel-send svg { width: 14px; height: 14px; stroke-width: 2; margin-left: 1px; }
-
-  /* ═══ Responsive ═══ */
+  /* ===== Responsive ===== */
   @media (max-width: 1100px) {
-    .workspace { grid-template-columns: 200px 1fr; }
-    .self-panel { display: none; }
+    .right-panel { display: none; }
   }
-
   @media (max-width: 768px) {
-    .workspace { grid-template-columns: 1fr; }
     .sidebar { display: none; }
-    .feed { padding: 20px 16px; }
+    .centre-content { padding: 20px 16px; }
   }
-/* pnav */.proto-nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:hsl(30 10% 15%);color:hsl(40 10% 80%);font-size:12px;font-family:Inter,system-ui,sans-serif;z-index:9999;gap:8px}.proto-nav a{color:hsl(24 80% 65%);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:4px;white-space:nowrap}.proto-nav a:hover{background:hsl(30 10% 22%)}.proto-nav .pn-t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proto-nav .pn-d{color:hsl(30 10% 35%);padding:4px 10px}/* /pnav */
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
-<div class="workspace">
+<!-- Prototype Nav Bar -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Act 1 &middot; <span>Workspace Emerges</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="10-first-output.html" class="proto-arrow" aria-label="Previous: First Output">&larr;</a>
+    <a href="12-morning-mobile.html" class="proto-arrow" aria-label="Next: Morning Mobile">&rarr;</a>
+  </div>
+</nav>
 
-  <!-- ═══ SIDEBAR — born from work ═══ -->
-  <nav class="sidebar">
+<!-- State Toggle Bar -->
+<div class="state-bar" role="tablist" aria-label="Prototype states">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="taking-shape" tabindex="0">Taking shape</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="ready-to-work" tabindex="-1">Ready to work</button>
+</div>
+
+<!-- Workspace -->
+<div class="workspace" id="main-content">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" aria-label="Main navigation">
     <div class="sidebar-header">
-      <div class="sidebar-logo">Ditto</div>
+      <div class="wordmark">Ditto</div>
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Your work</div>
-      <a class="sidebar-item active" href="#">
-        <span class="sidebar-item-text">Getting started</span>
-        <span class="sidebar-dot active"></span>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" tabindex="0" role="button" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Today</span>
       </a>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Completed</div>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">5 Instagram posts</span>
-        <span class="sidebar-dot done"></span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="nav-label">Inbox</span>
       </a>
-    </div>
-
-    <div class="sidebar-spacer"></div>
-
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Work</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg>
+        <span class="nav-label">Routines</span>
+      </a>
+    </nav>
     <div class="sidebar-footer">
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">What I know</span>
-      </a>
-      <a class="sidebar-item" href="#">
-        <span class="sidebar-item-text">Settings</span>
+      <a class="nav-item" tabindex="0" role="button">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
       </a>
     </div>
-  </nav>
+  </aside>
 
-  <!-- ═══ CENTRE FEED ═══ -->
-  <main class="feed">
-    <div class="feed-inner">
+  <!-- ===== Centre ===== -->
+  <main class="centre">
 
-      <!-- Ditto's welcome-back -->
-      <div class="welcome-card">
-        <div class="welcome-header">
-          <span class="self-dot"></span>
-          <span class="welcome-label">Ditto</span>
+    <!-- ─── State 1: Taking shape ─── -->
+    <div class="centre-scroll" id="state-taking-shape">
+      <div class="centre-content">
+
+        <div style="margin-bottom: 24px;">
+          <div class="section-heading" style="font-size: 18px;">Your workspace is taking shape</div>
+          <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">Your first posts are ready to go. Here's what happened and what's next.</p>
         </div>
-        <div class="welcome-body">
-          <p><strong>Your first posts are ready to go.</strong> 5 Instagram posts approved — 1 edited, 4 as-is. You changed "baby" to "bub" and I've saved that for all future content.</p>
-          <p>Here's where you're at:</p>
+
+        <!-- Metric cluster -->
+        <div class="metric-row" style="margin-bottom: 24px;">
+          <div class="metric">
+            <div class="metric-value">5</div>
+            <div class="metric-label">Posts approved</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">1</div>
+            <div class="metric-label">Routine created</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">4</div>
+            <div class="metric-label">Knowledge entries</div>
+          </div>
         </div>
+
+        <div class="section-title">What Ditto set up</div>
+
+        <!-- Feed item: Content routine -->
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Onboarding</span>
+            <span class="badge badge-positive">Complete</span>
+            <span class="record-time">Just now</span>
+          </div>
+          <div class="record-title">Content routine created</div>
+          <div class="record-body">Instagram content for your doula business. Generates draft posts, you review and approve. Currently set to <strong>You review</strong> &mdash; every post comes to you before publishing.</div>
+          <div style="margin-top: 10px;">
+            <div class="field-table">
+              <span class="field-label">Routine</span><span class="field-value">Instagram content</span>
+              <span class="field-label">Trust level</span><span class="field-value"><span class="badge badge-caution">You review</span></span>
+              <span class="field-label">Frequency</span><span class="field-value">On demand</span>
+            </div>
+          </div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Created from your first conversation
+          </div>
+        </div>
+
+        <!-- Feed item: Knowledge captured -->
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Knowledge</span>
+            <span class="badge badge-info">Captured</span>
+            <span class="record-time">Just now</span>
+          </div>
+          <div class="record-title">Your voice and audience saved</div>
+          <div class="record-body">Ditto learned about you, your ideal client, your voice, and your business stage. This knowledge will shape everything Ditto creates for you.</div>
+          <div style="margin-top: 10px;">
+            <ul class="checklist">
+              <li class="checklist-item">
+                <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <div>
+                  <div>You &mdash; doula, educator, mum</div>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <div>
+                  <div>Ideal client &mdash; first-time mums, 30s, professional</div>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <div>
+                  <div>Voice &mdash; safe, practical, real. Uses "bub" not "baby"</div>
+                </div>
+              </li>
+              <li class="checklist-item">
+                <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <div>
+                  <div>Stage &mdash; building, not launched yet</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            Extracted from intake conversation
+          </div>
+        </div>
+
+        <!-- Feed item: Posts ready -->
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Instagram content</span>
+            <span class="badge badge-positive">Ready</span>
+            <span class="record-time">Just now</span>
+          </div>
+          <div class="record-title">5 Instagram posts approved</div>
+          <div class="record-body">Fear of birth &middot; Hospital bag &middot; Asking for help &middot; Partner's role &middot; Trusting yourself. 1 edited (you changed "baby" to "bub"), 4 approved as-is.</div>
+          <div class="action-row">
+            <button class="btn-secondary">View posts</button>
+            <button class="btn-secondary">Copy all</button>
+          </div>
+        </div>
+
+        <!-- Journey progress with accent border -->
+        <div class="block-record" style="border-bottom: none;">
+          <div class="section-title" style="margin-top: 8px;">Your journey</div>
+          <div class="accent-vivid" style="margin-bottom: 8px;">
+            <div class="record-title">Getting your business out there</div>
+            <div style="margin-top: 10px;">
+              <ul class="checklist">
+                <li class="checklist-item">
+                  <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <div>Understand you and your client</div>
+                </li>
+                <li class="checklist-item">
+                  <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <div>Define your voice</div>
+                </li>
+                <li class="checklist-item">
+                  <span class="check-icon check-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <div>5 Instagram posts <span class="badge badge-positive" style="margin-left: 4px;">Done</span></div>
+                </li>
+                <li class="checklist-item">
+                  <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+                  <div><strong>Landing page with waitlist</strong></div>
+                </li>
+                <li class="checklist-item">
+                  <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+                  <div>Content plan for the first month</div>
+                </li>
+              </ul>
+            </div>
+            <div style="margin-top: 12px;">
+              <div class="progress-label"><span>Progress</span><span>3 of 5</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: 60%;"></div></div>
+            </div>
+          </div>
+        </div>
+
       </div>
+    </div>
 
-      <!-- Journey progress -->
-      <div class="journey-card">
-        <div class="journey-title">Getting your business out there</div>
-        <div class="journey-steps">
-          <div class="journey-step">
-            <div class="journey-step-icon done">&#10003;</div>
-            <span class="journey-step-text done">Understand you and your client</span>
-            <span class="journey-step-meta">Done</span>
+    <!-- ─── State 2: Ready to work ─── -->
+    <div class="centre-scroll" id="state-ready-to-work" style="display: none;">
+      <div class="centre-content">
+
+        <div style="margin-bottom: 24px;">
+          <div class="section-heading" style="font-size: 18px;">Your workspace is ready</div>
+          <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">You've got real content, a routine that knows your voice, and a clear next step. Let's keep going.</p>
+        </div>
+
+        <!-- Metric cluster -->
+        <div class="metric-row" style="margin-bottom: 24px;">
+          <div class="metric">
+            <div class="metric-value">5</div>
+            <div class="metric-label">Posts ready</div>
           </div>
-          <div class="journey-step">
-            <div class="journey-step-icon done">&#10003;</div>
-            <span class="journey-step-text done">Define your voice</span>
-            <span class="journey-step-meta">Done</span>
+          <div class="metric">
+            <div class="metric-value">1</div>
+            <div class="metric-label">Routine active</div>
           </div>
-          <div class="journey-step">
-            <div class="journey-step-icon done">&#10003;</div>
-            <span class="journey-step-text done">5 Instagram posts</span>
-            <span class="journey-step-meta">5 approved</span>
+          <div class="metric">
+            <div class="metric-value">4</div>
+            <div class="metric-label">Things I know</div>
           </div>
-          <div class="journey-step">
-            <div class="journey-step-icon next">4</div>
-            <span class="journey-step-text next">Landing page with waitlist</span>
-          </div>
-          <div class="journey-step">
-            <div class="journey-step-icon later">5</div>
-            <span class="journey-step-text later">Content plan for the first month</span>
+          <div class="metric">
+            <div class="metric-value">60%</div>
+            <div class="metric-label">Journey progress</div>
           </div>
         </div>
+
+        <div class="section-title">Ready for review</div>
+
+        <!-- First output ready -->
+        <div class="block-record">
+          <div class="record-header">
+            <span class="record-process">Instagram content</span>
+            <span class="badge badge-positive">Complete</span>
+            <span class="record-time">This session</span>
+          </div>
+          <div class="record-title">5 Instagram posts</div>
+          <div class="record-body">All approved and ready to use. Your voice correction ("bub" not "baby") has been saved for all future content.</div>
+          <div style="margin: 10px 0;">
+            <div class="field-table">
+              <span class="field-label">Topics</span><span class="field-value">Fear of birth, Hospital bag, Asking for help, Partner's role, Trusting yourself</span>
+              <span class="field-label">Edited</span><span class="field-value">1 of 5</span>
+              <span class="field-label">Trust level</span><span class="field-value"><span class="badge badge-caution">You review</span></span>
+            </div>
+          </div>
+          <div class="action-row">
+            <button class="btn-vivid">View posts</button>
+            <button class="btn-secondary">Copy all</button>
+            <button class="btn-secondary">Schedule</button>
+          </div>
+        </div>
+
+        <!-- Next step suggestion -->
+        <div class="block-record" style="border-bottom: none;">
+          <div class="suggestion">
+            <div class="suggestion-label">Next step</div>
+            <strong>Landing page with waitlist.</strong> Now that your voice and first content are done, let's give people somewhere to go when they find you. I'll draft a landing page using your voice and your client profile &mdash; you'll review and approve it just like the posts.
+            <div class="action-row" style="margin-top: 10px;">
+              <button class="btn-vivid">Let's do it</button>
+              <button class="btn-secondary">Something else first</button>
+            </div>
+          </div>
+        </div>
+
       </div>
+    </div>
 
-      <!-- What was produced -->
-      <div class="work-done-card">
-        <div class="work-done-header">
-          <div class="work-done-title">5 Instagram Posts</div>
-          <span class="work-done-badge">Complete</span>
-        </div>
-        <div class="work-done-body">
-          Fear of birth &middot; Hospital bag &middot; Asking for help &middot; Partner's role &middot; Trusting yourself
-        </div>
-        <div class="work-done-actions">
-          <button class="btn btn-secondary">View posts</button>
-          <button class="btn btn-ghost">Copy all</button>
-        </div>
+    <!-- Input bar -->
+    <div class="input-bar">
+      <div class="input-container">
+        <div class="input-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        <textarea class="input-field" rows="1" placeholder="Ask Ditto anything..." aria-label="Message Ditto"></textarea>
       </div>
-
-      <!-- What's next — the clear call to action -->
-      <div class="next-step-card">
-        <div class="next-step-label">Next step</div>
-        <div class="next-step-title">Landing page with waitlist</div>
-        <div class="next-step-body">
-          Now that your voice and first content are done, let's give people somewhere to go when they find you. I'll draft a landing page using your voice and your client profile — you'll review and approve it just like the posts.
-        </div>
-        <div class="next-step-actions">
-          <button class="btn btn-primary">Let's do it</button>
-          <button class="btn btn-secondary">Something else first</button>
-        </div>
-      </div>
-
     </div>
   </main>
 
-  <!-- ═══ SELF PANEL ═══ -->
-  <aside class="self-panel">
-    <div class="self-panel-header">
-      <span class="self-dot"></span>
-      <span class="self-panel-title">Ditto</span>
-    </div>
-
-    <!-- Knowledge summary — always visible -->
-    <div class="knowledge-summary">
-      <div class="knowledge-summary-title">What I know</div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot known"></span>
-        <span class="knowledge-mini-label">You</span>
-        Doula, education, mum
-      </div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot known"></span>
-        <span class="knowledge-mini-label">Client</span>
-        First-time mums, 30s, professional
-      </div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot known"></span>
-        <span class="knowledge-mini-label">Voice</span>
-        Safe, practical, real. Uses "bub"
-      </div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot known"></span>
-        <span class="knowledge-mini-label">Stage</span>
-        Building, not launched
-      </div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot gap"></span>
-        <span class="knowledge-mini-label">Pricing</span>
-        <span style="color: var(--text-muted); font-style: italic;">Not yet</span>
-      </div>
-      <div class="knowledge-mini-item">
-        <span class="knowledge-mini-dot gap"></span>
-        <span class="knowledge-mini-label">Competitors</span>
-        <span style="color: var(--text-muted); font-style: italic;">Not yet</span>
-      </div>
-      <a class="knowledge-see-all" href="#">See everything &rarr;</a>
-    </div>
-
-    <div class="self-messages">
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
-        Nice work. You've got 5 posts ready to put out — that's real progress in one session.
-      </div>
-
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
-        The landing page is the natural next step — it gives your Instagram audience somewhere to go. But if you'd rather work on something else, just tell me.
-      </div>
-
-      <div class="panel-msg">
-        <div class="sender-row">
-          <span class="self-dot"></span>
-          <span class="sender-name">Ditto</span>
-        </div>
-        Whenever you come back, I'll remember everything. We pick up where we left off.
+  <!-- ===== Right Panel: Ditto ===== -->
+  <aside class="right-panel" aria-label="Ditto context panel">
+    <div class="right-panel-header">
+      <div class="right-panel-title">
+        <div class="right-dot"><canvas class="dots-field" aria-hidden="true"></canvas></div>
+        Ditto
       </div>
     </div>
+    <div class="right-panel-scroll">
 
-    <div class="self-panel-input">
-      <div class="panel-input-container">
-        <input type="text" placeholder="What's on your mind?">
-        <button class="panel-send">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
+      <!-- Workspace stats -->
+      <div style="margin-bottom: 20px;">
+        <div class="section-heading" style="font-size: 14px;">Session summary</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="donut-container">
+            <svg class="donut" viewBox="0 0 36 36">
+              <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+              <circle class="donut-fill" cx="18" cy="18" r="15.9" stroke-dasharray="60 40"/>
+            </svg>
+            <div class="donut-label"><strong>Journey</strong> &mdash; 3/5 steps done</div>
+          </div>
+        </div>
       </div>
+
+      <!-- What Ditto learned -->
+      <div style="margin-bottom: 20px;">
+        <div class="section-heading" style="font-size: 14px;">What I learned</div>
+        <div class="field-table">
+          <span class="field-label">You</span><span class="field-value">Doula, educator, mum</span>
+          <span class="field-label">Client</span><span class="field-value">First-time mums, 30s, professional</span>
+          <span class="field-label">Voice</span><span class="field-value">Safe, practical, real. Uses "bub"</span>
+          <span class="field-label">Stage</span><span class="field-value">Building, not launched</span>
+          <span class="field-label">Pricing</span><span class="field-value" style="color: var(--text-muted); font-style: italic;">Not yet</span>
+          <span class="field-label">Competitors</span><span class="field-value" style="color: var(--text-muted); font-style: italic;">Not yet</span>
+        </div>
+      </div>
+
+      <!-- Suggested next steps -->
+      <div style="margin-bottom: 20px;">
+        <div class="section-heading" style="font-size: 14px;">Suggested next steps</div>
+        <ul class="checklist">
+          <li class="checklist-item">
+            <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+            <div>
+              <div>Landing page with waitlist</div>
+              <div class="checklist-detail">Natural next step &mdash; give your audience somewhere to go</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+            <div>
+              <div>Monthly content plan</div>
+              <div class="checklist-detail">Keep your Instagram consistent</div>
+            </div>
+          </li>
+          <li class="checklist-item">
+            <span class="check-icon check-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
+            <div>
+              <div>Add pricing info</div>
+              <div class="checklist-detail">Helps Ditto write better landing pages</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Ditto message -->
+      <div class="suggestion">
+        <div class="suggestion-label">From Ditto</div>
+        Nice work. You've got 5 posts ready to put out &mdash; that's real progress in one session. Whenever you come back, I'll remember everything. We pick up where we left off.
+      </div>
+
     </div>
   </aside>
 
 </div>
 
-<div class="proto-nav"><a href="10-first-output.html">&larr; First Output</a><span class="pn-t"><a href="index.html">P11 Workspace Emerges</a></span><a href="12-morning-mobile.html">Morning Mobile &rarr;</a></div><!-- pnav -->
+<script>
+  // ═══════ State toggles ═══════
+  const stateBtns = document.querySelectorAll('.state-btn');
+  const stateShapes = {
+    'taking-shape': document.getElementById('state-taking-shape'),
+    'ready-to-work': document.getElementById('state-ready-to-work'),
+  };
+
+  function setState(state) {
+    Object.values(stateShapes).forEach(el => el.style.display = 'none');
+    if (stateShapes[state]) stateShapes[state].style.display = 'block';
+  }
+
+  stateBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+      btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+      setState(btn.dataset.state);
+    });
+  });
+
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns];
+    const current = tabs.findIndex(t => t.classList.contains('active'));
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+
+  // ═══════ Theme toggle ═══════
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.toggle('theme-focus', btn.dataset.theme === 'focus');
+    });
+  });
+
+  // ═══════ Textarea auto-resize ═══════
+  document.querySelectorAll('.input-field').forEach(ta => {
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    });
+  });
+
+  // ═══════ Ditto Dots ═══════
+  const COLORS = ['#059669','#059669','#047857','#3D5A48','#10B981'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initDots(canvas) {
+    const parent = canvas.parentElement;
+    const size = Math.min(parent.offsetWidth, parent.offsetHeight) || 28;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    const cx = size/2, cy = size/2;
+    const count = Math.max(8, Math.round(size/3));
+    const maxR = size * 0.35;
+    const dots = Array.from({length:count}, (_,i) => ({
+      angle: (Math.PI*2/count)*i + Math.random()*0.3,
+      dist: 2 + Math.random()*maxR,
+      size: 1 + Math.random()*(size/16),
+      speed: 0.15 + Math.random()*0.35,
+      phase: Math.random()*Math.PI*2,
+      breathAmp: 1 + Math.random()*(maxR*0.3),
+      color: COLORS[Math.floor(Math.random()*COLORS.length)],
+      opacity: 0.5 + Math.random()*0.5,
+    }));
+    if (reducedMotion) {
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const x = cx + Math.cos(d.angle)*d.dist*0.6;
+        const y = cy + Math.sin(d.angle)*d.dist*0.6;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity; ctx.fill();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+    let raf;
+    function draw() {
+      const t = Date.now()/1000;
+      ctx.clearRect(0,0,size,size);
+      for (const d of dots) {
+        const a = d.angle + t*d.speed;
+        const breathe = Math.sin(t*1.2+d.phase)*d.breathAmp;
+        const r = Math.max(1, d.dist+breathe);
+        const x = cx + Math.cos(a)*r;
+        const y = cy + Math.sin(a)*r;
+        const pulse = 0.6 + Math.sin(t*2.5+d.phase)*0.4;
+        ctx.beginPath(); ctx.arc(x,y,d.size,0,Math.PI*2);
+        ctx.fillStyle = d.color; ctx.globalAlpha = d.opacity*pulse; ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { if (!raf) draw(); }
+      else { cancelAnimationFrame(raf); raf = null; }
+    });
+    observer.observe(canvas);
+    draw();
+  }
+  document.querySelectorAll('.dots-field').forEach(initDots);
+</script>
 </body>
 </html>

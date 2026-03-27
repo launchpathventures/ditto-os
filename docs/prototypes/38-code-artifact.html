@@ -1,0 +1,577 @@
+<!-- v1, 2026-03-27 — P38 Code Artifact: Abodo ERP Integration. Proves ADR-023 code generation with syntax highlighting and iterative refinement. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P38 — Code Artifact | Ditto Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #EDEDF0; --surface: #E2E2E6; --surface-raised: #F9F9FB;
+    --border: #D5D5DA; --border-strong: #BBBBC2;
+    --text-primary: #111118; --text-secondary: #4A4A55; --text-muted: #65656F;
+    --accent: #111118; --accent-hover: #000000; --accent-subtle: #E7E7EB; --accent-text: #F9F9FB;
+    --vivid: #059669; --vivid-deep: #3D5A48; --vivid-subtle: #ECFDF5;
+    --positive: #16a34a; --positive-subtle: #EEFAF0;
+    --caution: #D4960A; --caution-subtle: #FDF8E8;
+    --negative: #C4352A; --negative-subtle: #FDF0EE;
+    --info: #2563eb; --info-subtle: #EEF4FF;
+    --shadow-subtle: 0 1px 3px rgba(26,26,26,0.05);
+    --shadow-medium: 0 4px 16px rgba(26,26,26,0.07);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+    --font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--vivid-subtle); }
+  .skip-link { position: absolute; top: -100%; left: 16px; background: var(--accent); color: white; padding: 8px 16px; border-radius: var(--radius-md); z-index: 1000; font-size: 14px; text-decoration: none; }
+  .skip-link:focus { top: 56px; }
+
+  .proto-nav { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; font-size: 14px; }
+  .proto-nav-label { color: var(--text-muted); font-weight: 500; }
+  .proto-nav-centre { color: var(--text-secondary); font-weight: 500; }
+  .proto-nav-centre span { color: var(--text-primary); }
+  .proto-nav-right { display: flex; align-items: center; gap: 12px; }
+  .proto-arrow { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.15s ease-out; }
+  .proto-arrow:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .proto-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .state-bar { position: fixed; top: 48px; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 4px; z-index: 99; padding: 0 16px; }
+  .state-btn { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 14px; cursor: pointer; transition: all 0.15s ease-out; white-space: nowrap; }
+  .state-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+  .state-btn.active { color: var(--text-primary); background: var(--surface-raised); border-color: var(--border); box-shadow: var(--shadow-subtle); }
+  .state-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .theme-toggle { display: flex; align-items: center; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border); }
+  .theme-btn { font-family: var(--font); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 99px; padding: 4px 12px; cursor: pointer; transition: all 0.15s; }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn.active { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface); }
+  body.theme-focus { --vivid: #111118; --vivid-deep: #4A4A55; --vivid-subtle: #E7E7EB; }
+
+  .workspace { display: flex; margin-top: 92px; min-height: calc(100vh - 92px); }
+  .sidebar { width: 240px; flex-shrink: 0; background: var(--surface-raised); border-right: 1px solid var(--border); padding: 16px 0; }
+  .sidebar-label { display: flex; align-items: center; gap: 10px; padding: 7px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; transition: all 0.12s; }
+  .sidebar-label:hover { background: var(--accent-subtle); color: var(--text-primary); }
+  .sidebar-label.active { color: var(--text-primary); font-weight: 600; background: var(--accent-subtle); }
+  .sidebar-label svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .sidebar-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 16px 20px 6px; }
+
+  .centre { flex: 1; max-width: 720px; min-width: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .centre-header { padding: 20px 28px 16px; border-bottom: 1px solid var(--border); }
+  .centre-header h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .centre-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .conversation { flex: 1; padding: 20px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .right-panel { width: 420px; flex-shrink: 0; background: var(--surface-raised); overflow-y: auto; display: flex; flex-direction: column; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .panel-body { padding: 0; flex: 1; overflow-y: auto; }
+
+  .state-view { display: none; }
+  .state-view.active { display: flex; width: 100%; min-height: calc(100vh - 92px); }
+
+  .msg { font-size: 14px; line-height: 1.6; }
+  .msg-user { background: var(--accent-subtle); padding: 10px 16px; border-radius: var(--radius-lg); align-self: flex-end; max-width: 80%; }
+  .msg-ditto { display: flex; flex-direction: column; gap: 8px; }
+  .msg-ditto-label { font-size: 12px; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .msg-ditto-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vivid); }
+
+  .artifact-block { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+  .artifact-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .artifact-icon { width: 32px; height: 32px; border-radius: var(--radius-md); background: var(--vivid-subtle); color: var(--vivid-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .artifact-icon svg { width: 16px; height: 16px; }
+  .artifact-meta { flex: 1; min-width: 0; }
+  .artifact-title { font-size: 14px; font-weight: 600; }
+  .artifact-subtitle { font-size: 12px; color: var(--text-muted); }
+  .artifact-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+  .artifact-status-created { background: var(--vivid-subtle); color: var(--vivid-deep); }
+  .artifact-status-updated { background: var(--info-subtle); color: var(--info); }
+  .artifact-status-resolved { background: var(--positive-subtle); color: var(--positive); }
+  .artifact-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .artifact-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  .btn-primary { font-family: var(--font); font-size: 13px; font-weight: 600; background: var(--vivid); color: #fff; border: none; border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-primary:hover { background: var(--vivid-deep); }
+  .btn-secondary { font-family: var(--font); font-size: 13px; font-weight: 500; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 99px; padding: 6px 16px; cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }
+  .badge-positive { background: var(--positive-subtle); color: var(--positive); }
+  .badge-caution { background: var(--caution-subtle); color: var(--caution); }
+  .badge-info { background: var(--info-subtle); color: var(--info); }
+  .badge-neutral { background: var(--accent-subtle); color: var(--text-secondary); }
+  .badge-vivid { background: var(--vivid-subtle); color: var(--vivid-deep); }
+  .badge-negative { background: var(--negative-subtle); color: var(--negative); }
+
+  .provenance { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+  .provenance-icon { width: 14px; height: 14px; color: var(--vivid-deep); flex-shrink: 0; }
+
+  .version-bar { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+  .version-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .version-dot.current { background: var(--vivid); }
+  .version-dot.past { background: var(--border-strong); }
+
+  /* Code block styling */
+  .code-block {
+    background: #1e1e2e; color: #cdd6f4; font-family: var(--mono);
+    font-size: 13px; line-height: 1.7; border-radius: var(--radius-md);
+    overflow-x: auto;
+  }
+  .code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid #313244;
+    font-size: 12px; color: #a6adc8;
+  }
+  .code-header-lang { font-weight: 600; }
+  .code-content { padding: 16px; overflow-x: auto; }
+  .code-line { display: flex; gap: 16px; }
+  .code-line-num { color: #585b70; user-select: none; min-width: 24px; text-align: right; }
+  .code-line-text { flex: 1; white-space: pre; }
+  .code-line.added { background: rgba(5,150,105,0.12); }
+  .code-line.added .code-line-num { color: var(--vivid); }
+
+  /* Syntax colours (Catppuccin-inspired) */
+  .syn-key { color: #cba6f7; }
+  .syn-str { color: #a6e3a1; }
+  .syn-num { color: #fab387; }
+  .syn-comment { color: #585b70; font-style: italic; }
+  .syn-type { color: #89b4fa; }
+  .syn-fn { color: #f9e2af; }
+  .syn-prop { color: #94e2d5; }
+  .syn-bool { color: #fab387; }
+
+  /* Test results */
+  .test-result { padding: 12px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; border-top: 1px solid #313244; }
+  .test-pass { color: #a6e3a1; }
+  .test-fail { color: #f38ba8; }
+  .test-info { color: #a6adc8; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+<h1 class="sr-only">Code Artifact — Abodo Wood ERP integration configuration</h1>
+
+<nav class="proto-nav" role="navigation" aria-label="Prototype navigation">
+  <div class="proto-nav-label">Ditto Prototypes</div>
+  <div class="proto-nav-centre">Artifact · <span>Code Artifact</span></div>
+  <div class="proto-nav-right">
+    <div class="theme-toggle">
+      <button class="theme-btn active" data-theme="signature">Signature</button>
+      <button class="theme-btn" data-theme="focus">Focus</button>
+    </div>
+    <a href="index.html" class="proto-arrow" title="Index" aria-label="Index">&#8862;</a>
+    <a href="37-content-pack.html" class="proto-arrow" aria-label="Previous">&larr;</a>
+    <a href="39-email-artifact.html" class="proto-arrow" aria-label="Next">&rarr;</a>
+  </div>
+</nav>
+
+<div class="state-bar" role="tablist" aria-label="Prototype state controls">
+  <button class="state-btn active" role="tab" aria-selected="true" data-state="s1" tabindex="0">1 &middot; Generation</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s2" tabindex="-1">2 &middot; Refinement</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s3" tabindex="-1">3 &middot; Testing</button>
+  <button class="state-btn" role="tab" aria-selected="false" data-state="s4" tabindex="-1">4 &middot; Deployment</button>
+</div>
+
+<main id="main-content">
+
+<!-- ═══ STATE 1: Generation ═══ -->
+<div class="state-view active" data-view="s1" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Recent</div>
+      <div class="sidebar-label" style="font-size: 13px; color: var(--text-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Epicor integration</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Epicor ERP Integration</h2>
+        <p>Abodo Wood &middot; Systems Integration</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Set up the Epicor ERP integration for our timber inventory. I need product codes, stock levels, grades, and pricing synced to our web catalogue.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Integration config generated. I've mapped your Epicor fields to the web catalogue schema based on your existing product data structure.
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">epicor-sync.config.ts</div>
+                <div class="artifact-subtitle">TypeScript &middot; 42 lines &middot; 4 field mappings</div>
+              </div>
+              <span class="artifact-status artifact-status-created">Created</span>
+            </div>
+            <div class="artifact-body">Field mappings: productCode, stockLevel, timberGrade, pricePerUnit</div>
+            <div class="artifact-actions">
+              <button class="btn-primary">View in panel &rarr;</button>
+              <button class="btn-secondary">Copy</button>
+            </div>
+          </div>
+
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Epicor REST API docs, your product catalogue schema, industry field naming conventions
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Code preview">
+      <div class="panel-header">
+        <span class="panel-title">epicor-sync.config.ts</span>
+        <span class="badge badge-neutral">v1</span>
+      </div>
+      <div class="panel-body">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-header-lang">TypeScript</span>
+            <span>42 lines</span>
+          </div>
+          <div class="code-content">
+            <div class="code-line"><span class="code-line-num">1</span><span class="code-line-text"><span class="syn-key">import</span> { <span class="syn-type">EpicorConfig</span>, <span class="syn-type">FieldMapping</span> } <span class="syn-key">from</span> <span class="syn-str">'@abodo/integrations'</span>;</span></div>
+            <div class="code-line"><span class="code-line-num">2</span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num">3</span><span class="code-line-text"><span class="syn-key">export const</span> <span class="syn-fn">epicorConfig</span>: <span class="syn-type">EpicorConfig</span> = {</span></div>
+            <div class="code-line"><span class="code-line-num">4</span><span class="code-line-text">  <span class="syn-prop">endpoint</span>: <span class="syn-str">'https://erp.abodo.co.nz/api/v2'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">5</span><span class="code-line-text">  <span class="syn-prop">syncInterval</span>: <span class="syn-num">300_000</span>, <span class="syn-comment">// 5 minutes</span></span></div>
+            <div class="code-line"><span class="code-line-num">6</span><span class="code-line-text">  <span class="syn-prop">batchSize</span>: <span class="syn-num">50</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">7</span><span class="code-line-text">  <span class="syn-prop">retryAttempts</span>: <span class="syn-num">3</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">8</span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num">9</span><span class="code-line-text">  <span class="syn-prop">fieldMappings</span>: [</span></div>
+            <div class="code-line"><span class="code-line-num">10</span><span class="code-line-text">    {</span></div>
+            <div class="code-line"><span class="code-line-num">11</span><span class="code-line-text">      <span class="syn-prop">epicorField</span>: <span class="syn-str">'Part.PartNum'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">12</span><span class="code-line-text">      <span class="syn-prop">catalogueField</span>: <span class="syn-str">'productCode'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">13</span><span class="code-line-text">      <span class="syn-prop">transform</span>: <span class="syn-str">'uppercase'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">14</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">true</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">15</span><span class="code-line-text">    },</span></div>
+            <div class="code-line"><span class="code-line-num">16</span><span class="code-line-text">    {</span></div>
+            <div class="code-line"><span class="code-line-num">17</span><span class="code-line-text">      <span class="syn-prop">epicorField</span>: <span class="syn-str">'PartBin.OnhandQty'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">18</span><span class="code-line-text">      <span class="syn-prop">catalogueField</span>: <span class="syn-str">'stockLevel'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">19</span><span class="code-line-text">      <span class="syn-prop">transform</span>: <span class="syn-str">'integer'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">20</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">true</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">21</span><span class="code-line-text">    },</span></div>
+            <div class="code-line"><span class="code-line-num">22</span><span class="code-line-text">    {</span></div>
+            <div class="code-line"><span class="code-line-num">23</span><span class="code-line-text">      <span class="syn-prop">epicorField</span>: <span class="syn-str">'Part.ClassID'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">24</span><span class="code-line-text">      <span class="syn-prop">catalogueField</span>: <span class="syn-str">'timberGrade'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">25</span><span class="code-line-text">      <span class="syn-prop">transform</span>: <span class="syn-str">'gradeMapping'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">26</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">true</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">27</span><span class="code-line-text">    },</span></div>
+            <div class="code-line"><span class="code-line-num">28</span><span class="code-line-text">    {</span></div>
+            <div class="code-line"><span class="code-line-num">29</span><span class="code-line-text">      <span class="syn-prop">epicorField</span>: <span class="syn-str">'PriceLst.UnitPrice'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">30</span><span class="code-line-text">      <span class="syn-prop">catalogueField</span>: <span class="syn-str">'pricePerUnit'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">31</span><span class="code-line-text">      <span class="syn-prop">transform</span>: <span class="syn-str">'currency_nzd'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">32</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">true</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">33</span><span class="code-line-text">    },</span></div>
+            <div class="code-line"><span class="code-line-num">34</span><span class="code-line-text">  ],</span></div>
+            <div class="code-line"><span class="code-line-num">35</span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num">36</span><span class="code-line-text">  <span class="syn-prop">gradeMapping</span>: {</span></div>
+            <div class="code-line"><span class="code-line-num">37</span><span class="code-line-text">    <span class="syn-str">'CLR'</span>: <span class="syn-str">'Clear'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">38</span><span class="code-line-text">    <span class="syn-str">'STD'</span>: <span class="syn-str">'Standard'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">39</span><span class="code-line-text">    <span class="syn-str">'UTL'</span>: <span class="syn-str">'Utility'</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">40</span><span class="code-line-text">  },</span></div>
+            <div class="code-line"><span class="code-line-num">41</span><span class="code-line-text">};</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══ STATE 2: Refinement — add timber grade field ═══ -->
+<div class="state-view" data-view="s2" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Epicor ERP Integration</h2>
+        <p>Abodo Wood &middot; Systems Integration</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Add a treatment type field mapping too. We need to sync the timber treatment — it's in Part.ShortChar01 in Epicor.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Added treatment type mapping. New lines highlighted in the panel.
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">epicor-sync.config.ts</div>
+                <div class="artifact-subtitle">+7 lines &middot; 5 field mappings now</div>
+              </div>
+              <span class="artifact-status artifact-status-updated">Updated</span>
+            </div>
+            <div class="artifact-body">Added: Part.ShortChar01 &rarr; treatmentType with treatment label mapping</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Code preview">
+      <div class="panel-header">
+        <span class="panel-title">epicor-sync.config.ts</span>
+        <span class="badge badge-info">v2</span>
+      </div>
+      <div class="version-bar">
+        <span class="version-dot past"></span> <span style="text-decoration: line-through;">v1</span>
+        <span class="version-dot current"></span> <span style="font-weight: 500; color: var(--text-primary);">v2 (current)</span>
+      </div>
+      <div class="panel-body">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-header-lang">TypeScript</span>
+            <span>49 lines (+7)</span>
+          </div>
+          <div class="code-content">
+            <div class="code-line"><span class="code-line-num">32</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">true</span>,</span></div>
+            <div class="code-line"><span class="code-line-num">33</span><span class="code-line-text">    },</span></div>
+            <div class="code-line added"><span class="code-line-num">34</span><span class="code-line-text">    {</span></div>
+            <div class="code-line added"><span class="code-line-num">35</span><span class="code-line-text">      <span class="syn-prop">epicorField</span>: <span class="syn-str">'Part.ShortChar01'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">36</span><span class="code-line-text">      <span class="syn-prop">catalogueField</span>: <span class="syn-str">'treatmentType'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">37</span><span class="code-line-text">      <span class="syn-prop">transform</span>: <span class="syn-str">'treatmentMapping'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">38</span><span class="code-line-text">      <span class="syn-prop">required</span>: <span class="syn-bool">false</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">39</span><span class="code-line-text">    },</span></div>
+            <div class="code-line"><span class="code-line-num">40</span><span class="code-line-text">  ],</span></div>
+            <div class="code-line"><span class="code-line-num">41</span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num">42</span><span class="code-line-text">  <span class="syn-prop">gradeMapping</span>: { ... },</span></div>
+            <div class="code-line"><span class="code-line-num">43</span><span class="code-line-text"></span></div>
+            <div class="code-line added"><span class="code-line-num">44</span><span class="code-line-text">  <span class="syn-prop">treatmentMapping</span>: {</span></div>
+            <div class="code-line added"><span class="code-line-num">45</span><span class="code-line-text">    <span class="syn-str">'H3.2'</span>: <span class="syn-str">'H3.2 Treated'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">46</span><span class="code-line-text">    <span class="syn-str">'H4'</span>: <span class="syn-str">'H4 Ground Contact'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">47</span><span class="code-line-text">    <span class="syn-str">'H5'</span>: <span class="syn-str">'H5 Marine'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">48</span><span class="code-line-text">    <span class="syn-str">'NAT'</span>: <span class="syn-str">'Natural (Untreated)'</span>,</span></div>
+            <div class="code-line added"><span class="code-line-num">49</span><span class="code-line-text">  },</span></div>
+            <div class="code-line"><span class="code-line-num">50</span><span class="code-line-text">};</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══ STATE 3: Testing ═══ -->
+<div class="state-view" data-view="s3" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Epicor ERP Integration</h2>
+        <p>Abodo Wood &middot; Systems Integration</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Test it against our staging environment.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Test run complete. 4 passed, 1 warning — the treatment mapping has an unmapped value in your staging data. See results in the panel.
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon" style="background: var(--positive-subtle); color: var(--positive);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">Test Results — epicor-sync</div>
+                <div class="artifact-subtitle">4 passed &middot; 1 warning &middot; 0 failed</div>
+              </div>
+              <span class="badge badge-caution">1 warning</span>
+            </div>
+            <div class="artifact-body">Warning: Unmapped treatment code "MOD" found in 3 products. Add to treatmentMapping?</div>
+            <div class="artifact-actions">
+              <button class="btn-primary">Add MOD mapping</button>
+              <button class="btn-secondary">Ignore for now</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Test results">
+      <div class="panel-header">
+        <span class="panel-title">Test Results</span>
+        <span class="badge badge-positive">4/5 pass</span>
+      </div>
+      <div class="panel-body">
+        <div class="code-block" style="border-radius: 0;">
+          <div class="code-header">
+            <span class="code-header-lang">Test Output</span>
+            <span>staging.abodo.co.nz</span>
+          </div>
+          <div class="code-content" style="font-size: 12px;">
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Running epicor-sync integration tests...</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Target: staging.abodo.co.nz/api/v2</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; productCode mapping — 127 products synced</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; stockLevel mapping — quantities match</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; timberGrade mapping — CLR/STD/UTL resolved</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; pricePerUnit mapping — NZD currency correct</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text" style="color: #f9e2af;">&#9888; treatmentType mapping — 3 products with unmapped code "MOD"</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">  Products: ABD-DEC-140, ABD-DEC-190, ABD-VULCAN-140</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Results: <span class="test-pass">4 passed</span>, <span style="color: #f9e2af;">1 warning</span>, <span class="test-fail">0 failed</span></span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Duration: 2.3s</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══ STATE 4: Deployment ═══ -->
+<div class="state-view" data-view="s4" role="tabpanel">
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Today</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Inbox</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Work</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg> Routines</div>
+      <div class="sidebar-section">Settings</div>
+      <div class="sidebar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</div>
+    </aside>
+
+    <section class="centre">
+      <div class="centre-header">
+        <h2>Epicor ERP Integration</h2>
+        <p>Abodo Wood &middot; Systems Integration</p>
+      </div>
+      <div class="conversation">
+        <div class="msg msg-user">Add MOD as "Modified Wood" and deploy to staging.</div>
+
+        <div class="msg msg-ditto">
+          <div class="msg-ditto-label"><span class="msg-ditto-dot"></span> Ditto</div>
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Done. MOD mapping added and deployed to staging. All 5 tests passing now.
+          </div>
+
+          <div class="artifact-block">
+            <div class="artifact-header">
+              <div class="artifact-icon" style="background: var(--positive-subtle); color: var(--positive);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="artifact-meta">
+                <div class="artifact-title">epicor-sync.config.ts</div>
+                <div class="artifact-subtitle">Deployed to staging &middot; All tests pass</div>
+              </div>
+              <span class="artifact-status artifact-status-resolved">Deployed</span>
+            </div>
+            <div class="artifact-body">
+              <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 13px;">
+                <span style="color: var(--text-muted);">Environment</span><span style="font-weight: 500;">staging.abodo.co.nz</span>
+                <span style="color: var(--text-muted);">Field mappings</span><span style="font-weight: 500;">5 (productCode, stockLevel, timberGrade, pricePerUnit, treatmentType)</span>
+                <span style="color: var(--text-muted);">Products synced</span><span style="font-weight: 500;">127</span>
+                <span style="color: var(--text-muted);">Tests</span><span style="font-weight: 500;"><span style="color: var(--positive);">5/5 passing</span></span>
+                <span style="color: var(--text-muted);">Sync interval</span><span style="font-weight: 500;">Every 5 minutes</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="provenance">
+            <svg class="provenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Systems Integration process &middot; Epicor REST API &middot; 3 iterations
+          </div>
+
+          <div style="background: var(--vivid-subtle); border-radius: var(--radius-lg); padding: 12px 16px; margin-top: 4px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vivid-deep); margin-bottom: 4px;">Next step</div>
+            <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">Staging looks good. When you're ready, say "deploy to production" and I'll promote this config with a 10-product canary test first.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel" aria-label="Deployment status">
+      <div class="panel-header">
+        <span class="panel-title">Deployment Status</span>
+        <span class="badge badge-positive">Live on staging</span>
+      </div>
+      <div class="panel-body">
+        <div class="code-block" style="border-radius: 0;">
+          <div class="code-header">
+            <span class="code-header-lang">Deploy Log</span>
+            <span>staging</span>
+          </div>
+          <div class="code-content" style="font-size: 12px;">
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Deploying epicor-sync.config.ts to staging...</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; Config validated</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; 5/5 field mappings verified</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; Connection test passed</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; Initial sync: 127 products</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-pass">&#10003; Deployed successfully</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text"></span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Status: <span class="test-pass">LIVE</span> on staging.abodo.co.nz</span></div>
+            <div class="code-line"><span class="code-line-num"></span><span class="code-line-text test-info">Next sync: 5 minutes</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</main>
+
+<script>
+  const stateBtns = document.querySelectorAll('.state-bar .state-btn');
+  const stateViews = document.querySelectorAll('.state-view');
+  stateBtns.forEach(btn => btn.addEventListener('click', () => {
+    stateBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); b.setAttribute('tabindex','-1'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true'); btn.setAttribute('tabindex','0');
+    stateViews.forEach(v => v.classList.remove('active'));
+    const target = document.querySelector(`[data-view="${btn.dataset.state}"]`);
+    if (target) target.classList.add('active');
+  }));
+  document.querySelector('.state-bar').addEventListener('keydown', (e) => {
+    const tabs = [...stateBtns]; const current = tabs.findIndex(t => t.classList.contains('active')); let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else return;
+    e.preventDefault(); tabs[next].click(); tabs[next].focus();
+  });
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.theme === 'focus') document.body.classList.add('theme-focus');
+      else document.body.classList.remove('theme-focus');
+    });
+  });
+</script>
+</body>
+</html>
