@@ -1,7 +1,7 @@
 # Ditto — Current State
 
 **Last updated:** 2026-03-28
-**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (proposed):** Composable Workspace Architecture — three-tier model. **Brief 047 (draft):** Composition Engine. Next: accept ADR-024, approve + build Brief 047.
+**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (proposed):** Composable Workspace Architecture — three-tier model. **Brief 047 (draft):** Composition Engine. **Research (2026-03-28):** OpenOats meeting intelligence — pattern source for proactive intelligence (prefetch-gate-synthesize), meeting-to-process pipeline, burst-decay throttling. Report at `docs/research/openoats-meeting-intelligence.md`. Insight-106 captured. Landscape updated. Next: accept ADR-024, approve + build Brief 047. Architect to evaluate OpenOats integration options if meeting intelligence is prioritised.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---

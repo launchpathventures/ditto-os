@@ -170,6 +170,17 @@
 
 ---
 
+## Meeting Intelligence
+
+**OpenOats** — github.com/yazinsai/OpenOats
+- 2,014 stars | Active March 2026 | Swift 6.2 | MIT | macOS-only (Apple Silicon)
+- "A meeting note-taker that talks back." Real-time meeting assistant: captures mic + system audio, transcribes locally (WhisperKit/CoreML), searches user's knowledge base (markdown/text files → chunked, embedded, vector-searched), surfaces relevant talking points during conversations via three-layer suggestion pipeline (prefetch → gate → synthesize). Generates structured meeting notes from templates (1:1, Customer Discovery, Hiring, Stand-Up, Weekly) using LLM post-processing. Supports cloud (OpenRouter, Voyage AI) and fully local (Ollama) modes.
+- **Key patterns:** Three-layer suggestion pipeline (continuous prefetch with 30s TTL cache → RealtimeGate similarity/density filter → streaming LLM synthesis). Burst-decay throttle for attention management. Header-hierarchy-aware markdown chunking (80-500 words). Multi-query cosine similarity with max-score fusion + Voyage AI reranking. Template-guided note generation with 60K char transcript truncation (head/tail preserved).
+- **Ditto relevance:** MEDIUM — **pattern** source only (Swift-native, zero code transfers to TypeScript). Three patterns map to Ditto layers: prefetch-gate-synthesize → L4 Awareness proactive intelligence (Insight-106), meeting-to-process pipeline → L1 Process discovery, burst-decay throttle → ADR-011 attention model. Meeting transcripts are one of the 7 data sources identified in `process-discovery-from-organizational-data.md`. Integration possible via webhook/transcript file monitoring (Option A/D in research report).
+- **Limitation:** Swift/macOS-only — no code adoption path. 28 days old (created 2026-02-28) — patterns may reflect initial design not tested at scale. Two-speaker architecture (mic=you, system=them) with basic diarization — multi-party business meetings are an underexplored gap. See `docs/research/openoats-meeting-intelligence.md`.
+
+---
+
 ## Storage, CLI, and Infrastructure
 
 ### Storage
