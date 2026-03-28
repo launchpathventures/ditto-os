@@ -386,7 +386,7 @@ The API surface is sufficient for a native macOS companion today:
 - Local transcription privacy preserved
 - OpenOats' existing features (KB suggestions, notes) still work standalone
 
-**Engineering effort:** Days, not weeks. The webhook payload format is already defined in `WebhookService.swift` — adapt it to POST to Ditto's API instead.
+**Engineering effort:** 1-2 weeks including codebase familiarisation (best case: days if Swift-proficient). The webhook payload format is already defined in `WebhookService.swift` — adapt it to POST to Ditto's API instead.
 
 **Why this is the strongest first step:** It solves the #1 problem identified in the process discovery research — getting organisational data into Ditto. Meetings are where work originates. Today that data is lost. This captures it.
 
@@ -447,8 +447,10 @@ This fork does NOT require:
 | Solo developer upstream — maintenance risk | Low | Fork means Ditto owns the code; upstream is a bonus, not a dependency |
 | Swift 6.2 / Xcode 26 requirement | Low | Standard macOS dev toolchain |
 | 6 transcription backends = maintenance surface | Medium | Could trim to 2-3 backends (WhisperKit + Parakeet) initially |
-| API latency for Phase 2 suggestions | Medium | PreFetchCache (30s TTL) + fallback to local KB when API slow |
+| API latency for Phase 2 suggestions | Medium | PreFetchCache (30s TTL) + fallback to local KB when API slow. Timeout threshold and blending strategy TBD in brief. |
 | Ditto web app must be running for API | Medium | Phase 1 could queue transcripts locally and sync when available |
+| macOS companion API authentication | Medium | No auth mechanism exists for native app → Ditto API. Needs design: API key, token, or local-only (same machine). Affects all phases. |
+| App signing and distribution | Medium | ScreenCaptureKit + mic entitlements require Apple notarization. Code signing + distribution (Homebrew tap or DMG) adds effort to every phase. |
 
 ### Comparison: Fork OpenOats vs Build from Scratch
 
@@ -467,6 +469,6 @@ This fork does NOT require:
 
 ## Reference Docs Status
 
-- **`docs/landscape.md`:** Updated — added OpenOats under new "Meeting Intelligence" section with "pattern" composition level, Swift-native limitation, maturity note, and multi-party gap.
+- **`docs/landscape.md`:** Updated twice — (1) added OpenOats under new "Meeting Intelligence" section with Swift-native limitation, maturity note, and multi-party gap; (2) updated composition level to dual: "pattern" for TypeScript engine, "adopt" for native macOS companion app.
 - **`docs/research/api-to-tool-generation.md`:** No drift found. Browser automation deferral still valid — OpenOats is a different modality (audio, not browser).
 - **`docs/research/process-discovery-from-organizational-data.md`:** Meeting transcripts already identified as a data source. OpenOats provides a concrete capture mechanism — no update needed, but worth noting in any future revision.
