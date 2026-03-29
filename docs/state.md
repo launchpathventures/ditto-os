@@ -57,6 +57,8 @@
 
 ## In Progress
 
+- **Automaintainer Meta-Process (2026-03-28)** — Research at `docs/research/automaintainer-repos.md` (6 options surveyed, PASS WITH FLAGS). Brief 048 at `docs/briefs/048-automaintainer-process.md` designed (PASS WITH FLAGS — 2 P1s: intake/router flow clarification, sub-process invocation mechanism). Insight-106 captured. Decision: Ditto IS the automaintainer — it's a process definition, not a new product. The existing engine (dev pipeline, trust tiers, harness, feedback) handles repo maintenance with only GitHub I/O wiring added. Next: human approves brief with P1 resolutions, then `/dev-builder`.
+
 - **Prototype-as-Specification Strategy (2026-03-25 → 2026-03-27)** — Phase A structurally complete. **Prototype system overhaul executed (2026-03-27):** 28-screen navigation flow with visual vocabulary. Strategy doc at `docs/research/prototype-as-specification-strategy-ux.md`.
   - **Full 28-screen navigation flow:** P00 → P30 → P23 → P08 → P08a → P09 → P10 → P11 → P12 → P13 → P14 → P14a → P15 → P22 → P24 → P25 → P16 → P17 → P18 → P19 → P20 → P21 → P26 → P27 → P29 → P31 → P35 → P32 → index. All prev/next proto-nav links verified.
   - **All old prototypes (P09-P20) converted** from dark footer nav to warm top nav bar (consistent with new design system).
