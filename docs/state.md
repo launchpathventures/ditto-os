@@ -1,7 +1,7 @@
 # Ditto — Current State
 
 **Last updated:** 2026-03-29
-**Current phase:** Phase 10 **complete + composition engine shipped**. All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (accepted):** Composable Workspace Architecture — three-tier model (Scaffold/Canvas/Evolvable). **Brief 047 (approved, built):** Composition engine. **Brief 048 (approved, ready for build):** Artifact Mode Layout — second scaffold layout pattern. Next: `/dev-builder` for Brief 048.
+**Current phase:** Phase 10 **complete + composition engine shipped**. All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (accepted):** Composable Workspace Architecture — three-tier model (Scaffold/Canvas/Evolvable). **Brief 047 (approved, built):** Composition engine. **Brief 048 (approved, ready for build):** Artifact Mode Layout — second scaffold layout pattern. **Research (2026-03-28):** OpenOats meeting intelligence — pattern source for TS engine, **adopt** candidate for native macOS companion app. Three-phase flow: "Ditto Listens" → "Ditto Speaks" → "Ditto Lives Here". Report at `docs/research/openoats-meeting-intelligence.md`. Insight-106 captured. Landscape updated. Next: `/dev-builder` for Brief 048.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -56,6 +56,8 @@
 - ~~CLI adapter `DEFAULT_MODEL = "opus"`~~ — **Resolved 2026-03-23:** Now uses `getConfiguredModel()` from llm.ts
 
 ## In Progress
+
+- **Automaintainer Meta-Process (2026-03-28)** — Research at `docs/research/automaintainer-repos.md` (6 options surveyed, PASS WITH FLAGS). Brief 048 at `docs/briefs/048-automaintainer-process.md` designed (PASS WITH FLAGS — 2 P1s: intake/router flow clarification, sub-process invocation mechanism). Insight-106 captured. Decision: Ditto IS the automaintainer — it's a process definition, not a new product. The existing engine (dev pipeline, trust tiers, harness, feedback) handles repo maintenance with only GitHub I/O wiring added. Next: human approves brief with P1 resolutions, then `/dev-builder`.
 
 - **Prototype-as-Specification Strategy (2026-03-25 → 2026-03-27)** — Phase A structurally complete. **Prototype system overhaul executed (2026-03-27):** 28-screen navigation flow with visual vocabulary. Strategy doc at `docs/research/prototype-as-specification-strategy-ux.md`.
   - **Full 28-screen navigation flow:** P00 → P30 → P23 → P08 → P08a → P09 → P10 → P11 → P12 → P13 → P14 → P14a → P15 → P22 → P24 → P25 → P16 → P17 → P18 → P19 → P20 → P21 → P26 → P27 → P29 → P31 → P35 → P32 → index. All prev/next proto-nav links verified.
