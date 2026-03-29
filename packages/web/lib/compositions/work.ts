@@ -4,7 +4,7 @@
  * "What am I actively working on?" — Active work items with progress.
  *
  * Visual reference: P25 (tasks — Jordan, progress bars, filter tabs).
- * Provenance: Brief 047 AC8, ADR-024.
+ * Provenance: original (ADR-024, P25 prototype reference).
  */
 
 import type { ContentBlock } from "@/lib/engine";

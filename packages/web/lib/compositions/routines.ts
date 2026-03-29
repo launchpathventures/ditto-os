@@ -4,7 +4,7 @@
  * "How are my recurring processes doing?" — Process health, trust levels, metrics.
  *
  * Visual reference: P14 (process detail), P31 (process health), P29 (process model library).
- * Provenance: Brief 047 AC10, ADR-024.
+ * Provenance: original (ADR-024, P14/P31 prototype reference).
  */
 
 import type { ContentBlock } from "@/lib/engine";

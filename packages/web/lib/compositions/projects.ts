@@ -4,7 +4,7 @@
  * "What are my bigger goals?" — Goal-level items with process associations.
  *
  * Visual reference: P19 (multi-process workspace), P27 (process flow map).
- * Provenance: Brief 047 AC9, ADR-024.
+ * Provenance: original (ADR-024, P19/P27 prototype reference).
  */
 
 import type { ContentBlock } from "@/lib/engine";

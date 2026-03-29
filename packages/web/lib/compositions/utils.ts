@@ -2,7 +2,7 @@
  * Ditto — Composition Utilities
  *
  * Shared helpers used across composition functions.
- * Provenance: Brief 047.
+ * Provenance: original.
  */
 
 /** Map trust tier to user language per .impeccable.md */
@@ -23,9 +23,11 @@ export function formatTrustTier(tier: string): string {
 
 /** Format an ISO date as relative time (e.g., "5m ago", "3h ago", "2d ago") */
 export function formatRelativeTime(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime();
+  const time = new Date(isoDate).getTime();
+  if (Number.isNaN(time)) return "";
+  const diff = Date.now() - time;
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${Math.max(0, mins)}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);

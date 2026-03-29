@@ -5,7 +5,7 @@
  * of any composition, regardless of intent. Composition-immune.
  *
  * ADR-024 Constraint 5: Must-show blocks cannot be suppressed by composition.
- * Provenance: Brief 047, ADR-024.
+ * Provenance: original (ADR-024 Constraint 5).
  */
 
 import type { ContentBlock } from "@/lib/engine";

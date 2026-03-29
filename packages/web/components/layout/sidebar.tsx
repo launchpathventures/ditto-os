@@ -10,7 +10,7 @@
  * Settings is scaffold (fixed page), all others are composition intents.
  *
  * Brief 047 AC4: Sidebar shows exactly these 6 items.
- * Provenance: ADR-024, P00 v2 prototype, .impeccable.md.
+ * Provenance: original (ADR-024, P00 v2 prototype, .impeccable.md).
  */
 
 import { useMemo } from "react";
@@ -91,20 +91,19 @@ export function Sidebar({
 
   return (
     <div className="w-56 flex-shrink-0 border-r border-border bg-surface overflow-y-auto">
-      <div className="py-4 px-2 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+      <div className="py-4 px-2 flex flex-col h-full">
+        {NAV_ITEMS.filter((item) => item.id !== "settings").map((item) => {
           const isActive = activeDestination === item.id;
-          const isSettings = item.id === "settings";
 
           return (
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors mb-0.5 ${
                 isActive
                   ? "text-text-primary font-medium"
                   : "text-text-secondary hover:bg-surface-raised/50"
-              } ${isSettings ? "mt-auto" : ""}`}
+              }`}
               style={isActive ? { borderLeft: "2px solid var(--vivid)" } : undefined}
             >
               <span className={`text-xs flex-shrink-0 ${isActive ? "text-[var(--vivid)]" : "text-text-muted"}`}>
@@ -120,8 +119,23 @@ export function Sidebar({
           );
         })}
 
-        {/* Spacer before settings */}
-        <div className="pt-3 border-t border-border mt-3" />
+        {/* Settings pushed to bottom */}
+        <div className="mt-auto pt-3 border-t border-border">
+          <button
+            onClick={() => onNavigate("settings")}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+              activeDestination === "settings"
+                ? "text-text-primary font-medium"
+                : "text-text-secondary hover:bg-surface-raised/50"
+            }`}
+            style={activeDestination === "settings" ? { borderLeft: "2px solid var(--vivid)" } : undefined}
+          >
+            <span className={`text-xs flex-shrink-0 ${activeDestination === "settings" ? "text-[var(--vivid)]" : "text-text-muted"}`}>
+              ⚙
+            </span>
+            <span className="flex-1 truncate">Settings</span>
+          </button>
+        </div>
 
         {/* Quick access to routines — show process list under Routines when active */}
         {activeDestination === "routines" && processes.length > 0 && (

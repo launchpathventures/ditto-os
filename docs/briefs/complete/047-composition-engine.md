@@ -3,7 +3,7 @@
 **Date:** 2026-03-27
 **Status:** approved
 **Depends on:** Brief 045 (Component Protocol — block registry), Brief 046 (Workspace Transitions — right panel), ADR-024 (Composable Workspace Architecture)
-**Unlocks:** Self-driven composition (Phase 11+), Live Preview viewer (Brief 048), artifact mode layout (Brief 049)
+**Unlocks:** Self-driven composition (Phase 11+), artifact mode layout (Brief 048), Live Preview viewer (Brief 049)
 
 ## Goal
 
@@ -41,8 +41,8 @@ Replace the page-based centre panel (`Feed` or `ProcessDetailContainer`) with a 
 ## Non-Goals
 
 - Self-driven composition (Phase 11+ — LLM decides what blocks to show)
-- Live Preview viewer (Brief 048 — the extension seam)
-- Artifact mode layout transition (Brief 049 — conversation | artifact | context three-column)
+- Artifact mode layout transition (Brief 048 — conversation | artifact | context three-column)
+- Live Preview viewer (Brief 049 — the extension seam)
 - New block types (the 21 existing types are sufficient for MVP compositions)
 - Process Builder visual editor (conversation-first remains the MVP path)
 - Settings page redesign (Settings IS a fixed page per ADR-024 — scaffold, not canvas)
@@ -165,4 +165,4 @@ cd packages/web && pnpm dev
 1. Update `docs/state.md` with composition engine completion
 2. Update `docs/roadmap.md` — Phase 10+ status
 3. Update Brief 038 parent brief: add composition engine reference, note ADR-024 compliance
-4. Note: Live Preview viewer (Brief 048) and artifact mode layout (Brief 049) are now unblocked
+4. Note: Artifact mode layout (Brief 048) and Live Preview viewer (Brief 049) are now unblocked

@@ -10,7 +10,7 @@
  * column between the navigation and conversation/input is a ContentBlock.
  *
  * ADR-024: No custom React components in the centre canvas.
- * Provenance: Brief 047 AC5, ADR-024.
+ * Provenance: original (ADR-024 Tier 2 Canvas).
  */
 
 import { useMemo } from "react";

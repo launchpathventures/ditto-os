@@ -5,7 +5,7 @@
  * active work, risks, suggestions.
  *
  * Visual reference: P13 (daily workspace), P12 (morning mobile).
- * Provenance: Brief 047 AC6, ADR-024.
+ * Provenance: original (ADR-024, P13 prototype reference).
  */
 
 import type { ContentBlock } from "@/lib/engine";

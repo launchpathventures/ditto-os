@@ -4,7 +4,7 @@
  * Core types for the composition engine: intents, context, and results.
  * Navigation destinations map to composition intents, not pages.
  *
- * Provenance: ADR-024 (Composable Workspace Architecture), Brief 047.
+ * Provenance: original (ADR-024 Composable Workspace Architecture).
  */
 
 import type { ContentBlock } from "@/lib/engine";

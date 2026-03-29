@@ -4,7 +4,7 @@
  * "What's arrived that I haven't triaged?" — Incoming items grouped by urgency.
  *
  * Visual reference: P24 (inbox — Lisa, urgency grouping, triage donuts).
- * Provenance: Brief 047 AC7, ADR-024.
+ * Provenance: original (ADR-024, P24 prototype reference).
  */
 
 import type { ContentBlock } from "@/lib/engine";

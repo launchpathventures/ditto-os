@@ -9,7 +9,7 @@
  * Phase 11+ migration: these functions become fallbacks when the Self
  * drives composition.
  *
- * Provenance: Brief 047, ADR-024.
+ * Provenance: original (ADR-024 composition intent pattern).
  */
 
 import type { ContentBlock } from "@/lib/engine";
