@@ -1,7 +1,7 @@
 # Ditto — Current State
 
-**Last updated:** 2026-03-28
-**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (proposed):** Composable Workspace Architecture — three-tier model. **Brief 047 (draft):** Composition Engine. Next: accept ADR-024, approve + build Brief 047.
+**Last updated:** 2026-03-29
+**Current phase:** Phase 10 **complete + composition engine shipped**. All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) with 6 artifact viewers, full design system alignment. `.impeccable.md` is authoritative design spec. **ADR-024 (accepted):** Composable Workspace Architecture — three-tier model (Scaffold/Canvas/Evolvable). **Brief 047 (approved, built):** Composition engine. **Brief 048 (approved, ready for build):** Artifact Mode Layout — second scaffold layout pattern. Next: `/dev-builder` for Brief 048.
 **History:** See `docs/changelog.md` for completed phases, retrospectives, and resolved decisions.
 
 ---
@@ -131,8 +131,8 @@
     - **Spec updates:** ADR-023 Addendum (Sections 8-15: viewer taxonomy, two-tier architecture, templates, spreadsheet databases, knowledge unification, engine types, prototype coverage, security model). Insight-104 captured. `.impeccable.md` updated. PLAN.md Act 5 rewritten. index.html updated with viewer taxonomy names.
     - **Consistency pass:** All 6 use identical layout shell CSS. Proto-nav chain verified (P36→P37→P38→P39→P40→P41).
   - **Composable Workspace Architecture (2026-03-27):** Architect session established the three-tier model (Insight-105, ADR-024 proposed). Prototypes are composition references, not screen specs. Three tiers: **Scaffold** (fixed — layout, navigation, viewers, design system), **Canvas** (Self-composed from block library per context), **Evolvable** (Build meta-process extends vocabulary). MVP uses deterministic composition functions per navigation intent; Self-driven composition in Phase 11+. Must-show blocks (critical alerts, trust gate reviews) are composition-immune. Revises ADR-009 Principle D: centre canvas is a composition surface. Live Preview is the extension seam for novel output types.
-  - **Brief 047 — Composition Engine (2026-03-28):** Implementation brief written at `docs/briefs/047-composition-engine.md` (draft). 17 AC. Replaces page-based centre panel routing with composition intent routing: sidebar nav → composition function → `ContentBlock[]` → block registry. Sidebar updated to Today/Inbox/Work/Projects/Routines/Settings. Must-show blocks (critical alerts, trust gate reviews) prepended to any composition. Fallback composition on error. `ProcessDetailContainer` classified as scaffold layout mode (same tier as artifact mode). Reviewed: CONDITIONAL PASS — 5 flags, all fixed in-place.
-  - **Next:** Accept ADR-024 (prerequisite for Brief 047 build), then approve Brief 047, then invoke `/dev-builder`. Also pending: Brief 048 (Live Preview viewer), Brief 049 (artifact mode layout). Or invoke `/dev-documenter` for full retrospective.
+  - **Brief 047 — Composition Engine (2026-03-28):** Built and reviewed. ADR-024 accepted, Brief 047 approved. 12 new files: `packages/web/lib/compositions/` (types, index, must-show, today, inbox, work, projects, routines, utils), `packages/web/lib/composition-context.ts`, `packages/web/components/layout/composed-canvas.tsx`. 2 modified: sidebar.tsx (6-item nav), workspace.tsx (composition intent routing replaces page routing). 17/17 AC pass. Dev Reviewer: PASS with 5 FLAGS, all fixed (AC3 context fields added, Math.random replaced with deterministic, duplicated utilities extracted, RecordBlock status variants corrected). type-check clean, 330 tests pass.
+  - **Next:** Pending: Brief 048 (Live Preview viewer), Brief 049 (artifact mode layout). Or invoke `/dev-pm` for next work.
 
 ## Recently Completed
 
@@ -257,6 +257,8 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | Runtime process adaptation (template durable, run-scoped overrides, `adapt_process` tool, optimistic locking) | ADR-020 | Accepted |
 | Surface protocol (19 typed content blocks, action callbacks, per-surface renderers, security model) | ADR-021 | Accepted (addendum 2026-03-27: +3 visual block types — ChecklistBlock, ChartBlock, MetricBlock) |
 | Critical evaluation + homeostatic quality (failure patterns, orchestrator enrichment, conditional verification, multi-dimensional quality balance, cross-process correlation) | ADR-022 | Accepted |
+| Artifact interaction model (ArtifactBlock, six universal viewers, artifact mode layout, security model) | ADR-023 | Proposed |
+| Composable workspace architecture (Scaffold/Canvas/Evolvable three-tier model, composition intents, block library as vocabulary) | ADR-024 | Accepted |
 
 ## Active Briefs
 
@@ -271,27 +273,14 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | 043 — Proactive Engine | 10e | **Complete 2026-03-25.** 11/11 AC pass. Reviewed: PASS WITH FLAGS (2 fixed: reorder guard, suggest_next dimensions). |
 | 044 — Onboarding Experience | 10f | **Complete 2026-03-25.** 16/16 AC pass. Reviewed: PASS WITH FLAGS (2 critical fixed: reorder guard, UI component wiring). ADR-020 accepted pre-build. |
 | 045 — Component Protocol | 10g | **Complete 2026-03-25.** 17/17 AC pass. |
+| 047 — Composition Engine | ADR-024 | **Complete 2026-03-28.** 17/17 AC pass. Reviewed: PASS WITH FLAGS (5 flags, all fixed). |
+| 048 — Artifact Mode Layout | ADR-024 | **Ready 2026-03-29.** 11 AC. Reviewed: PASS WITH FLAGS (4 flags, all fixed). Approved, awaiting build. |
 
 ## Next Steps
 
-1. **Prototype design refinement is the immediate priority.** Phase A prototypes structurally complete. Design critique found systematic issues (24/40 score on P08a). Follow the 5-phase plan in `docs/briefs/prototype-design-refinement-plan.md`: design system extraction → P08a refinement → audit cascade → Phase B-D.
-2. **Phase 10 complete.** All 7 sub-briefs (039-046) shipped. 330 tests, 0 type errors.
-3. **Phase 10 architecture produced this session (2026-03-25):**
-   - Parent brief 038 + 6 sub-briefs (039-044) — 89 acceptance criteria
-   - ADR-020 (Runtime Process Adaptation) — template durability + run-scoped overrides + `adapt_process` tool
-   - Insight-093 (Onboarding is deep intake) — 9-dimension user model, AI coaching, multi-session
-   - Insight-091 (Processes are mutable at runtime) — Self adapts YAML mid-flight via `definitionOverride`
-   - Research: `docs/research/onboarding-intake-coaching-patterns.md` — 14 patterns, 5 gaps (Superhuman, SPIN, progressive profiling, AI coaching, white-glove)
-   - Interaction spec: `docs/research/onboarding-interaction-spec-ux.md` — three-act onboarding (First Contact → First Value → Deepening)
-   - Insight numbering fixed: 085-087 duplicates resolved, our new insights numbered 091. Insight-090 collision (onboarding vs integration-auth) resolved: integration-auth stays 090, onboarding renumbered to 093.
-   - Brief 037 marked superseded
-3. **Key design decisions made:**
-   - Conversation-first, dashboard-earned (Self is primary surface)
-   - No separate API server (Next.js Server Actions call engine directly)
-   - Visual identity baked in from day 1 (design tokens, not default shadcn)
-   - Integration auth via conversation (API keys only MVP, OAuth Phase 11)
-   - Onboarding as native system process with runtime adaptation
-   - `adapt_process` writes to `processRuns.definitionOverride`, not canonical template
+1. **Build Brief 048 (Artifact Mode Layout).** Invoke `/dev-builder`. Delivers the second scaffold layout pattern — three-column artifact mode (Conversation 300px | Artifact flex | Context 320px). 11 AC. Unblocks all six viewer implementations.
+2. **After 048:** Brief 049 (Live Preview Viewer) → then remaining viewers → Brief 050 (Connect compositions to real engine data).
+3. **Phase 10 complete.** All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests, 0 type errors. ADR-024 accepted.
    - AI coaching embedded in workflow, never blocking
 4. **Standards Library — ADR-019 accepted.** Build brief needed for Phase 10 MVP integration (deferred from this session — quality profiles render but don't execute in Phase 10).
 5. **Integration generation follow-ups:** LLM-assisted curation, PATCH method, generate 2-3 real integrations (Stripe, Xero, HubSpot).

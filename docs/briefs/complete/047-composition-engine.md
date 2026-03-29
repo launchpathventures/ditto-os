@@ -1,7 +1,7 @@
 # Brief: Phase 10+ — Composition Engine
 
 **Date:** 2026-03-27
-**Status:** draft
+**Status:** approved
 **Depends on:** Brief 045 (Component Protocol — block registry), Brief 046 (Workspace Transitions — right panel), ADR-024 (Composable Workspace Architecture)
 **Unlocks:** Self-driven composition (Phase 11+), Live Preview viewer (Brief 048), artifact mode layout (Brief 049)
 

@@ -3,30 +3,27 @@
 /**
  * Ditto — Workspace Layout
  *
- * Three-panel layout: sidebar (w-64) + center (flex-1) + right panel (w-72).
- * Center column has feed/detail content + conversation messages + chat input.
- * Right column is contextual intelligence, adaptive to tool results.
+ * Three-panel layout: sidebar (w-56) + center (flex-1) + right panel (w-72).
  *
- * Brief 046: Conversation messages render in workspace centre column.
- * Tool results trigger right panel transitions via transition-map.ts.
+ * Center column renders composed ContentBlock[] for canvas intents (Today, Inbox,
+ * Work, Projects, Routines) via the composition engine, OR ProcessDetailContainer
+ * for drill-down (scaffold layout mode). Conversation messages render below
+ * composed blocks, above the input bar — they are scaffold elements, not
+ * ContentBlocks within the composition.
  *
- * Redesign AC3: Chat input at bottom of center column.
- * AC14: Three-panel layout.
- * AC16: Responsive breakpoints.
- * Brief 046 AC1-3: Conversation messages between feed and input.
- * Brief 046 AC4-6: Right panel adaptive modes.
- * Brief 046 AC11: Panel override clears on navigation.
- * Brief 046 AC12: Mobile bottom sheet for artifact-review.
+ * Brief 047: Composition engine replaces page-based centre panel routing.
+ * ADR-024: Navigation destinations are composition intents, not pages.
  *
- * Provenance: P13 prototype, workspace-layout-redesign-ux.md, Brief 046
+ * Provenance: Brief 047, ADR-024, P13 prototype.
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useProcessList } from "@/lib/process-query";
-import { Sidebar } from "./sidebar";
+import { useFeed } from "@/lib/feed-query";
+import { Sidebar, type NavigationDestination } from "./sidebar";
 import { RightPanel, type PanelContext } from "./right-panel";
 import { ProcessDetailContainer } from "@/components/detail/process-detail";
-import { Feed } from "@/components/feed/feed";
+import { ComposedCanvas } from "./composed-canvas";
 import { PromptInput } from "@/components/self/prompt-input";
 import { ConversationMessage } from "@/components/self/message";
 import { TypingIndicator } from "@/components/self/typing-indicator";
@@ -34,18 +31,30 @@ import { ArtifactSheet } from "./artifact-sheet";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { resolveTransition } from "@/lib/transition-map";
+import type { CompositionIntent } from "@/lib/compositions";
 
 interface WorkspaceProps {
   userId?: string;
 }
 
+/**
+ * Center view state — either a composition intent (canvas) or a process
+ * drill-down (scaffold layout mode, AC13).
+ */
 type CenterView =
-  | { type: "feed" }
-  | { type: "process"; processId: string; runId?: string };
+  | { type: "canvas"; intent: CompositionIntent }
+  | { type: "process"; processId: string; runId?: string }
+  | { type: "settings" };
 
 export function Workspace({ userId = "default" }: WorkspaceProps) {
   const { data } = useProcessList();
-  const [centerView, setCenterView] = useState<CenterView>({ type: "feed" });
+  // Ensure feed data is in React Query cache for composition context
+  useFeed();
+
+  const [centerView, setCenterView] = useState<CenterView>({
+    type: "canvas",
+    intent: "today",
+  });
   const [panelOverride, setPanelOverride] = useState<PanelContext | null>(null);
   const [mobileSheet, setMobileSheet] = useState<PanelContext | null>(null);
   const [windowWidth, setWindowWidth] = useState(
@@ -63,11 +72,10 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   });
   const chatLoading = chatStatus === "submitted" || chatStatus === "streaming";
 
-  // Scan messages for tool-invocation parts and resolve transitions (AC5, AC6)
+  // Scan messages for tool-invocation parts and resolve transitions
   const latestTransition = useMemo(() => {
     if (messages.length === 0) return null;
 
-    // Scan from most recent message backward to find the latest completed tool result
     for (let m = messages.length - 1; m >= 0; m--) {
       const msg = messages[m];
       if (msg.role !== "assistant") continue;
@@ -92,13 +100,12 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     return null;
   }, [messages]);
 
-  // Apply transition to panel override (only when it changes)
+  // Apply transition to panel override
   useEffect(() => {
     if (!latestTransition) return;
 
     const isCompact = windowWidth < 1024;
     if (isCompact && latestTransition.type === "artifact-review") {
-      // Mobile: show bottom sheet instead of right panel
       setMobileSheet(latestTransition);
     } else {
       setPanelOverride(latestTransition);
@@ -119,14 +126,23 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const handleNavigate = useCallback((destination: NavigationDestination) => {
+    if (destination === "settings") {
+      setCenterView({ type: "settings" });
+    } else {
+      setCenterView({ type: "canvas", intent: destination });
+    }
+    setPanelOverride(null); // Clear override on navigation
+  }, []);
+
   const handleSelectProcess = useCallback((processId: string) => {
     setCenterView({ type: "process", processId });
-    setPanelOverride(null); // Clear override on navigation (AC11)
+    setPanelOverride(null);
   }, []);
 
   const handleBack = useCallback(() => {
-    setCenterView({ type: "feed" });
-    setPanelOverride(null); // Clear override on navigation (AC11)
+    setCenterView({ type: "canvas", intent: "today" });
+    setPanelOverride(null);
   }, []);
 
   const handleChatSubmit = useCallback(() => {
@@ -136,9 +152,17 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     }
   }, [input, sendMessage, setInput]);
 
-  // Handle block actions from content blocks in workspace messages
+  // Handle block actions from content blocks — both in compositions and messages
   const handleBlockAction = useCallback(
     (actionId: string, payload?: Record<string, unknown>) => {
+      // Process drill-down from composition (e.g., "view-process-xxx")
+      if (actionId.startsWith("view-process-")) {
+        const processId = actionId.replace("view-process-", "");
+        handleSelectProcess(processId);
+        return;
+      }
+
+      // Standard action messages to Self
       const actionMessages: Record<string, string> = {
         "knowledge-confirm": "That looks right.",
         "knowledge-correct": payload?.corrections
@@ -150,16 +174,24 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
       const text = actionMessages[actionId] ?? `Action: ${actionId}`;
       sendMessage({ role: "user", parts: [{ type: "text", text }] });
     },
-    [sendMessage],
+    [sendMessage, handleSelectProcess],
   );
 
   const processes = data?.processes ?? [];
   const workItems = data?.workItems ?? [];
 
-  // Responsive modes (AC16)
+  // Responsive modes
   const isFullLayout = windowWidth >= 1280;
   const isMediumLayout = windowWidth >= 1024 && windowWidth < 1280;
   const isCompactLayout = windowWidth < 1024;
+
+  // Active navigation destination for sidebar highlight
+  const activeDestination: NavigationDestination =
+    centerView.type === "canvas"
+      ? centerView.intent
+      : centerView.type === "settings"
+        ? "settings"
+        : "routines"; // Process drill-down highlights Routines
 
   // Right panel context — reactive to center view
   const panelContext: PanelContext =
@@ -191,41 +223,50 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
           <Sidebar
             processes={processes}
             workItems={workItems}
-            selectedProcessId={
-              centerView.type === "process" ? centerView.processId : null
-            }
+            activeDestination={activeDestination}
+            onNavigate={handleNavigate}
             onSelectProcess={handleSelectProcess}
-            onGoHome={handleBack}
             collapsed={isMediumLayout}
           />
         ) : (
           <MobileMenuButton
             processes={processes}
             workItems={workItems}
-            selectedProcessId={
-              centerView.type === "process" ? centerView.processId : null
-            }
+            activeDestination={activeDestination}
+            onNavigate={handleNavigate}
             onSelectProcess={handleSelectProcess}
-            onGoHome={handleBack}
           />
         )}
 
-        {/* Center panel — content + conversation + chat input at bottom */}
+        {/* Center panel — composed canvas or process detail + conversation + input */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Content area */}
           <div className="flex-1 overflow-y-auto">
             {centerView.type === "process" ? (
+              /* Scaffold layout mode — ProcessDetailContainer (AC13) */
               <ProcessDetailContainer
                 processId={centerView.processId}
                 runId={centerView.runId}
                 onBack={handleBack}
               />
-            ) : (
+            ) : centerView.type === "settings" ? (
+              /* Scaffold — Settings page */
               <div className="p-6 max-w-2xl mx-auto">
-                {/* Feed cards above conversation (AC1) */}
-                <Feed />
+                <h2 className="text-lg font-semibold text-text-primary mb-4">Settings</h2>
+                <p className="text-sm text-text-secondary">
+                  Settings page — AI connection, integrations, preferences.
+                </p>
+              </div>
+            ) : (
+              /* Canvas — composed blocks (AC5) */
+              <div className="p-6 max-w-2xl mx-auto">
+                {/* Composed ContentBlock[] from composition engine */}
+                <ComposedCanvas
+                  intent={centerView.intent}
+                  onAction={handleBlockAction}
+                />
 
-                {/* Conversation messages below feed, above input (AC1) */}
+                {/* Conversation messages — scaffold elements below composition (AC14) */}
                 {hasMessages && (
                   <div className="mt-4 space-y-1">
                     {messages.map((message) => (
@@ -252,7 +293,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
             )}
           </div>
 
-          {/* Chat input — persistent at bottom of center column (AC3) */}
+          {/* Chat input — persistent at bottom of center column (scaffold) */}
           <div className="border-t border-border bg-background px-6 py-3">
             <div className="max-w-2xl mx-auto">
               <PromptInput
@@ -265,13 +306,13 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
           </div>
         </div>
 
-        {/* Right panel — contextual intelligence (AC1, AC2) + tool-driven overrides (AC4) */}
+        {/* Right panel — contextual intelligence + tool-driven overrides */}
         {!isCompactLayout && (
           <RightPanel context={panelContext} panelOverride={panelOverride} />
         )}
       </div>
 
-      {/* Mobile bottom sheet for artifact review (AC12) */}
+      {/* Mobile bottom sheet for artifact review */}
       {isCompactLayout && mobileSheet && (
         <ArtifactSheet
           context={mobileSheet}
@@ -288,15 +329,15 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
 function MobileMenuButton({
   processes,
   workItems,
-  selectedProcessId,
+  activeDestination,
+  onNavigate,
   onSelectProcess,
-  onGoHome,
 }: {
   processes: import("@/lib/process-query").ProcessSummary[];
   workItems: import("@/lib/process-query").WorkItemSummary[];
-  selectedProcessId: string | null;
+  activeDestination: NavigationDestination;
+  onNavigate: (destination: NavigationDestination) => void;
   onSelectProcess: (id: string) => void;
-  onGoHome: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -321,9 +362,9 @@ function MobileMenuButton({
             <Sidebar
               processes={processes}
               workItems={workItems}
-              selectedProcessId={selectedProcessId}
+              activeDestination={activeDestination}
+              onNavigate={(dest) => { onNavigate(dest); setOpen(false); }}
               onSelectProcess={(id) => { onSelectProcess(id); setOpen(false); }}
-              onGoHome={() => { onGoHome(); setOpen(false); }}
             />
           </div>
           <div className="flex-1 bg-black/20" onClick={() => setOpen(false)} />

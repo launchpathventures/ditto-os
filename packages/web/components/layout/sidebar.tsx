@@ -3,191 +3,163 @@
 /**
  * Ditto — Sidebar Navigation
  *
- * Urgency-first grouping:
- * - Home (feed view)
- * - To Review (action-required items with count) — hidden when empty
- * - Running (healthy recurring processes) — hidden when empty
- * - How It Works (placeholder)
+ * Six destinations: Today / Inbox / Work / Projects / Routines / Settings
+ * per ADR-024 Section 2 and .impeccable.md nav label table.
  *
- * Redesign AC4: Action-required first with count, then running.
- * Redesign AC5: System processes never appear.
+ * Inbox shows count badge when items need attention.
+ * Settings is scaffold (fixed page), all others are composition intents.
  *
- * Provenance: workspace-layout-redesign-ux.md, P13 prototype.
+ * Brief 047 AC4: Sidebar shows exactly these 6 items.
+ * Provenance: ADR-024, P00 v2 prototype, .impeccable.md.
  */
 
 import { useMemo } from "react";
 import type { ProcessSummary, WorkItemSummary } from "@/lib/process-query";
+import type { CompositionIntent } from "@/lib/compositions";
+
+export type NavigationDestination = CompositionIntent | "settings";
 
 interface SidebarProps {
   processes: ProcessSummary[];
   workItems: WorkItemSummary[];
-  selectedProcessId: string | null;
+  activeDestination: NavigationDestination;
+  onNavigate: (destination: NavigationDestination) => void;
   onSelectProcess: (processId: string) => void;
-  onGoHome?: () => void;
   collapsed?: boolean;
 }
+
+/** Navigation items — user language per .impeccable.md */
+const NAV_ITEMS: Array<{
+  id: NavigationDestination;
+  label: string;
+  icon: string;
+}> = [
+  { id: "today", label: "Today", icon: "◉" },
+  { id: "inbox", label: "Inbox", icon: "▪" },
+  { id: "work", label: "Work", icon: "▸" },
+  { id: "projects", label: "Projects", icon: "◇" },
+  { id: "routines", label: "Routines", icon: "↻" },
+  { id: "settings", label: "Settings", icon: "⚙" },
+];
 
 export function Sidebar({
   processes,
   workItems,
-  selectedProcessId,
+  activeDestination,
+  onNavigate,
   onSelectProcess,
-  onGoHome,
   collapsed,
 }: SidebarProps) {
-  // Non-system domain processes
-  const domainProcesses = useMemo(
-    () => processes.filter((p) => !p.system && p.status === "active"),
-    [processes],
-  );
-
-  // Action-required items (needs review, waiting, in progress)
-  const actionItems = useMemo(
+  // Inbox badge count — action-required items
+  const inboxCount = useMemo(
     () =>
       workItems.filter(
         (w) => w.status !== "completed" && w.status !== "cancelled",
-      ),
+      ).length,
     [workItems],
   );
 
-  const hasActions = actionItems.length > 0;
-  const hasRunning = domainProcesses.length > 0;
-
   if (collapsed) {
     return (
-      <div className="w-14 flex-shrink-0 border-r border-border bg-surface py-4 flex flex-col items-center gap-2">
-        {/* Home */}
-        <button
-          onClick={onGoHome}
-          className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center hover:bg-accent/20 transition-colors mb-2"
-          title="Home"
-        >
-          <span className="w-2.5 h-2.5 rounded-full bg-accent" />
-        </button>
-
-        {/* Action count badge */}
-        {hasActions && (
-          <div
-            className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-xs font-medium text-accent-text"
-            title={`${actionItems.length} to review`}
-          >
-            {actionItems.length}
-          </div>
-        )}
-
-        {/* Process initials */}
-        {domainProcesses.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelectProcess(p.id)}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
-              selectedProcessId === p.id
-                ? "bg-accent text-accent-text"
-                : "bg-surface-raised text-text-secondary hover:text-text-primary"
-            }`}
-            title={p.name}
-          >
-            {p.name.charAt(0).toUpperCase()}
-          </button>
-        ))}
+      <div className="w-14 flex-shrink-0 border-r border-border bg-surface py-4 flex flex-col items-center gap-1">
+        {NAV_ITEMS.map((item) => {
+          const isActive = activeDestination === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs transition-colors relative ${
+                isActive
+                  ? "bg-surface-raised text-text-primary font-medium shadow-[var(--shadow-subtle)]"
+                  : "text-text-muted hover:bg-surface-raised/50 hover:text-text-primary"
+              }`}
+              title={item.label}
+              style={isActive ? { borderLeft: "2px solid var(--vivid)" } : undefined}
+            >
+              {item.icon}
+              {item.id === "inbox" && inboxCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-accent text-accent-text text-[9px] font-semibold min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1">
+                  {inboxCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     );
   }
 
   return (
     <div className="w-56 flex-shrink-0 border-r border-border bg-surface overflow-y-auto">
-      <div className="py-4 px-2 space-y-1">
-        {/* Home link */}
-        <button
-          onClick={onGoHome}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
-            selectedProcessId === null
-              ? "bg-surface-raised text-text-primary font-medium shadow-[var(--shadow-subtle)]"
-              : "text-text-secondary hover:bg-surface-raised/50"
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
-          Home
-        </button>
+      <div className="py-4 px-2 space-y-0.5">
+        {NAV_ITEMS.map((item) => {
+          const isActive = activeDestination === item.id;
+          const isSettings = item.id === "settings";
 
-        {/* To Review — hidden when empty (AC4) */}
-        {hasActions && (
-          <div className="pt-4">
-            <h3 className="text-[11px] font-medium text-text-muted uppercase tracking-wider px-3 mb-1 flex items-center justify-between">
-              <span>To review</span>
-              <span className="bg-accent text-accent-text text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1.5">
-                {actionItems.length}
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                isActive
+                  ? "text-text-primary font-medium"
+                  : "text-text-secondary hover:bg-surface-raised/50"
+              } ${isSettings ? "mt-auto" : ""}`}
+              style={isActive ? { borderLeft: "2px solid var(--vivid)" } : undefined}
+            >
+              <span className={`text-xs flex-shrink-0 ${isActive ? "text-[var(--vivid)]" : "text-text-muted"}`}>
+                {item.icon}
               </span>
-            </h3>
-            <div className="space-y-px">
-              {actionItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() =>
-                    item.assignedProcess && onSelectProcess(item.assignedProcess)
-                  }
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-sm hover:bg-surface-raised/50 transition-colors"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
-                  <span className="truncate text-text-primary text-[13px]">
-                    {item.content.length > 35
-                      ? item.content.slice(0, 35) + "..."
-                      : item.content}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+              <span className="flex-1 truncate">{item.label}</span>
+              {item.id === "inbox" && inboxCount > 0 && (
+                <span className="bg-accent text-accent-text text-[10px] font-semibold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1.5">
+                  {inboxCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
 
-        {/* Running — hidden when empty */}
-        {hasRunning && (
-          <div className="pt-4">
-            <h3 className="text-[11px] font-medium text-text-muted uppercase tracking-wider px-3 mb-1">
-              Running
-            </h3>
-            <div className="space-y-px">
-              {domainProcesses.map((p) => {
-                const isSelected = selectedProcessId === p.id;
+        {/* Spacer before settings */}
+        <div className="pt-3 border-t border-border mt-3" />
+
+        {/* Quick access to routines — show process list under Routines when active */}
+        {activeDestination === "routines" && processes.length > 0 && (
+          <div className="pt-2 space-y-px">
+            <p className="text-[11px] font-medium text-text-muted uppercase tracking-wider px-3 mb-1">
+              Your routines
+            </p>
+            {processes
+              .filter((p) => !p.system && p.status === "active")
+              .map((proc) => {
                 const statusIcon =
-                  p.lastRunStatus === "failed" || p.lastRunStatus === "rejected"
+                  proc.lastRunStatus === "failed" || proc.lastRunStatus === "rejected"
                     ? "⚠"
-                    : p.recentRunCount === 0
+                    : proc.recentRunCount === 0
                       ? "→"
                       : "✓";
                 const statusColor =
-                  p.lastRunStatus === "failed" || p.lastRunStatus === "rejected"
+                  proc.lastRunStatus === "failed" || proc.lastRunStatus === "rejected"
                     ? "text-caution"
-                    : p.recentRunCount === 0
+                    : proc.recentRunCount === 0
                       ? "text-text-muted"
                       : "text-positive";
 
                 return (
                   <button
-                    key={p.id}
-                    onClick={() => onSelectProcess(p.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-sm transition-colors ${
-                      isSelected
-                        ? "bg-surface-raised shadow-[var(--shadow-subtle)]"
-                        : "hover:bg-surface-raised/50"
-                    }`}
+                    key={proc.id}
+                    onClick={() => onSelectProcess(proc.id)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-sm hover:bg-surface-raised/50 transition-colors"
                   >
                     <span className={`text-xs flex-shrink-0 ${statusColor}`}>
                       {statusIcon}
                     </span>
-                    <span
-                      className={`truncate flex-1 text-[13px] ${
-                        isSelected
-                          ? "text-text-primary font-medium"
-                          : "text-text-secondary"
-                      }`}
-                    >
-                      {p.name}
+                    <span className="truncate text-text-secondary text-[13px]">
+                      {proc.name}
                     </span>
                   </button>
                 );
               })}
-            </div>
           </div>
         )}
       </div>

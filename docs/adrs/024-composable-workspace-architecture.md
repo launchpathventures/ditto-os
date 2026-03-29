@@ -1,7 +1,7 @@
 # ADR-024: Composable Workspace Architecture — Scaffold, Canvas, Evolution
 
 **Date:** 2026-03-27
-**Status:** proposed
+**Status:** accepted
 **Layers affected:** L6 Human (UI architecture), L2 Agent (Self as composer), L1 Process (Build meta-process as extender), extends ADR-009, ADR-015, ADR-023
 **Revises:** ADR-009 Principle D — centre canvas becomes a composition surface (not standard React). Scaffold elements (layout shell, sidebar, navigation) remain standard React.
 

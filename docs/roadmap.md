@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
 **Last updated:** 2026-03-28
-**Current phase:** Phase 10 **complete**. All 7 sub-briefs (039-046) shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) — full user journey + 6 artifact viewers + cross-cutting views. Design system fully aligned. `.impeccable.md` authoritative. **ADR-024 (proposed):** Composable Workspace Architecture — three-tier model (Scaffold/Canvas/Evolvable). Navigation destinations are composition intents, not pages. **Brief 047 (draft):** Composition Engine — deterministic composition functions per nav intent, must-show blocks, sidebar nav alignment. Next: accept ADR-024, approve Brief 047, build.
+**Current phase:** Phase 10 **complete + composition engine shipped**. All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) — full user journey + 6 artifact viewers + cross-cutting views. Design system fully aligned. `.impeccable.md` authoritative. **ADR-024 (accepted):** Composable Workspace Architecture — three-tier model. **Brief 047 (built):** Composition engine — 5 deterministic functions, must-show blocks, sidebar nav. Next: Brief 048 (Live Preview viewer) or `/dev-pm` for next work.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -515,9 +515,9 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Trust-governed output delivery + catalog richness | ADR-009 v2 | Original |
 | ~~No ViewSpec protocol for app's own UI — standard React~~ | ADR-009 v2 | Revised by ADR-024: centre canvas is composition surface |
 | **Composable Workspace Architecture (ADR-024, Brief 047)** | | |
-| Centre canvas as composition surface (deterministic composition functions per nav intent) | ADR-024, Brief 047 | Original — navigation-as-composition-intent |
-| Must-show blocks (critical alerts + trust gate reviews composition-immune) | ADR-024, Brief 047 | Harness pattern — never suppress critical items |
-| Sidebar navigation aligned to prototypes (Today/Inbox/Work/Projects/Routines/Settings) | ADR-024, .impeccable.md | P00 v2 prototype |
+| Centre canvas as composition surface (deterministic composition functions per nav intent) — **done (Brief 047)** | ADR-024, Brief 047 | Original — navigation-as-composition-intent |
+| Must-show blocks (critical alerts + trust gate reviews composition-immune) — **done (Brief 047)** | ADR-024, Brief 047 | Harness pattern — never suppress critical items |
+| Sidebar navigation aligned to prototypes (Today/Inbox/Work/Projects/Routines/Settings) — **done (Brief 047)** | ADR-024, .impeccable.md | P00 v2 prototype |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |
 | Output-as-interface between processes (typed contracts, sync-time validation) | ADR-009 v2 | Original |
