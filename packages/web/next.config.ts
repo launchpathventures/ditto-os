@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Disable gzip compression — it buffers small streaming chunks,
+  // preventing text-delta events from reaching the browser incrementally.
+  compress: false,
   // Allow importing engine code from parent directory
   transpilePackages: [],
   experimental: {

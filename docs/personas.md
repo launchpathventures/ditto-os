@@ -1,7 +1,7 @@
 # Ditto — User Personas and Problem Framing
 
-**Version:** 0.2.0
-**Date:** 2026-03-19
+**Version:** 0.2.1
+**Date:** 2026-03-31
 **Status:** Draft — foundational input for Designer and Architect roles
 **Scope:** Who we're building for, what their world looks like, and what problems Ditto solves from their perspective
 
@@ -251,17 +251,17 @@ The outcome owner is the person **responsible for results** — they might have 
 
 ## Jobs to Be Done (User Motivation)
 
-These are framed from what the user is *trying to accomplish*, not what the system does. Each motivational job maps to one or more of the six human interaction jobs defined in `human-layer.md` (Orient, Review, Define, Delegate, Capture, Decide) — this mapping tells the Designer which primitives serve each motivation.
+These are framed from what the user is *trying to accomplish*, not what the system does. Each motivational job maps to one or more of the six human interaction jobs defined in `human-layer.md` (Orient, Review, Define, Delegate, Capture, Decide) — this mapping tells the Designer which UI surfaces and ContentBlocks serve each motivation.
 
-| Motivational job | User says | Emotional state | Interaction jobs served | Key primitives |
-|-----------------|-----------|-----------------|------------------------|----------------|
-| **Stop doing work I've outgrown** | "I want to spend my time on strategy, not operations" | Frustrated by repetitive work | Review (approve/edit outputs), Orient (see what's done) | Review Queue, Daily Brief |
-| **Trust without blind faith** | "I want to delegate but see what's happening" | Anxious about quality | Delegate (adjust trust), Orient (visible trust data) | Trust Control, Process Card, Performance Sparkline |
-| **Teach once, not repeatedly** | "When I correct something, it should stay corrected" | Annoyed by repetition | Review (edits as feedback), Decide (confirm patterns) | Feedback Widget, Improvement Card |
-| **See the full picture** | "I need one place that shows me what matters" | Overwhelmed by fragmentation | Orient (status across processes), Decide (cross-process awareness) | Daily Brief, Process Graph, Activity Feed |
-| **Set things up without a CS degree** | "I'll describe what I need — you figure out the how" | Resigned from past tool failures | Define (describe process), Delegate (assign trust level) | Conversation Thread, Process Builder, Trust Control |
-| **Know it's working when I'm not looking** | "I need to sleep at night knowing nothing went wrong" | Worried about silent failures | Orient (monitoring), Decide (act on degradation) | Daily Brief, Process Card, Improvement Card |
-| **Keep work moving when I'm away from my desk** | "I shouldn't have to wait until I'm at a computer to approve a quote" | Guilty about delays, frustrated by work piling up | Review (mobile approve/reject), Orient (mobile brief), Capture (voice/photo on-site) | Review Queue (mobile), Daily Brief (mobile), Quick Capture |
+| Motivational job | User says | Emotional state | Interaction jobs served | Key surfaces |
+|-----------------|-----------|-----------------|------------------------|-------------|
+| **Stop doing work I've outgrown** | "I want to spend my time on strategy, not operations" | Frustrated by repetitive work | Review (approve/edit outputs), Orient (see what's done) | Inline ReviewCardBlock, Today composition briefing |
+| **Trust without blind faith** | "I want to delegate but see what's happening" | Anxious about quality | Delegate (adjust trust), Orient (visible trust data) | Trust control slider (process detail), StatusCardBlock with health, MetricBlock sparklines |
+| **Teach once, not repeatedly** | "When I correct something, it should stay corrected" | Annoyed by repetition | Review (edits as feedback), Decide (confirm patterns) | Implicit feedback capture, SuggestionBlock for pattern confirmation |
+| **See the full picture** | "I need one place that shows me what matters" | Overwhelmed by fragmentation | Orient (status across processes), Decide (cross-process awareness) | Today composition (briefing narrative + process health), sidebar process list |
+| **Set things up without a CS degree** | "I'll describe what I need — you figure out the how" | Resigned from past tool failures | Define (describe process), Delegate (assign trust level) | Conversation with Self, ProcessProposalBlock, Process Builder panel |
+| **Know it's working when I'm not looking** | "I need to sleep at night knowing nothing went wrong" | Worried about silent failures | Orient (monitoring), Decide (act on degradation) | Briefing narrative (overnight summary), ProgressBlock, AlertBlock for degradation |
+| **Keep work moving when I'm away from my desk** | "I shouldn't have to wait until I'm at a computer to approve a quote" | Guilty about delays, frustrated by work piling up | Review (mobile approve/reject), Orient (mobile brief), Capture (text on-the-go) | Mobile conversation (full width), bottom sheet artifact review, prompt input capture |
 
 ---
 
@@ -301,8 +301,8 @@ The product experience follows a specific emotional arc. **Crucially, this journ
 
 ## How to Use This Document
 
-**For the Designer:** These personas and problems are your primary lens. When designing any interaction, ask: "Would Rob use this on his phone between jobs? Would Lisa understand this at a glance? Would Jordan be able to demo this to leadership in 2 weeks? Would Nadia see her team's health at a glance?" If the answer is no for any of them, the design needs work. **Desktop is primary, mobile must be seamless** — most work happens at a desk, but simple decisions, captures, and status checks must flow naturally to the phone.
+**For the Designer:** These personas and problems are your primary lens. The interface is **conversation-first** — the user talks to the Conversational Self, and structured content (ContentBlocks) renders inline in the conversation and in composition intents (Today, Inbox, Work). When designing any interaction, ask: "Would Rob use this on his phone between jobs? Would Lisa understand this at a glance? Would Jordan be able to demo this to leadership in 2 weeks? Would Nadia see her team's health at a glance?" If the answer is no, the design needs work. **Desktop is primary, mobile must be seamless** — most work happens at a desk, but simple decisions, captures, and status checks must flow naturally to the phone. See `human-layer.md` for the workspace architecture, ContentBlock vocabulary, and AI Elements component library.
 
-**For the Architect:** The problems and jobs-to-be-done constrain what the system must deliver. When making trade-offs, these are the stakes — not technical elegance, but whether Rob can approve a quote from a job site, whether Lisa can stop rewriting product descriptions, whether Jordan can prove value in 48 hours, whether Nadia can govern quality across her team. **Single-process value is a hard constraint** — every feature must work for one process, not just for many. **Seamless mobile is a constraint** — desktop/mobile transition must be invisible.
+**For the Architect:** The problems and jobs-to-be-done constrain what the system must deliver. When making trade-offs, these are the stakes — not technical elegance, but whether Rob can approve a quote from a job site, whether Lisa can stop rewriting product descriptions, whether Jordan can prove value in 48 hours, whether Nadia can govern quality across her team. **Single-process value is a hard constraint** — every feature must work for one process, not just for many. **Seamless mobile is a constraint** — desktop/mobile transition must be invisible. **Architecture + UX briefs must be paired** (Insight-119) — invisible infrastructure doesn't serve users.
 
 **For the PM:** The emotional journey is the roadmap's north star. Each phase should move users further along the journey. If a phase doesn't advance the emotional arc, question whether it's the right next thing to build.

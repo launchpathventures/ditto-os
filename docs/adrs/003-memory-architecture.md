@@ -1,7 +1,7 @@
 # ADR-003: Memory Architecture
 
 **Date:** 2026-03-19
-**Status:** accepted (Phase 2b scope implemented; `self` scope added Brief 029; Phase 3 LLM reconciliation and Phase 7 vector search pending)
+**Status:** accepted (Phase 2b scope implemented; `self` scope added Brief 029; `solution` type + `metadata` column added Brief 060; Phase 3 LLM reconciliation and Phase 7 vector search pending)
 
 ## Context
 
@@ -37,9 +37,10 @@ memories
 ├── id: text (UUID)
 ├── scopeType: text ("agent" | "process" | "self")
 ├── scopeId: text (references agents.id, processes.id, or user identifier)
-├── type: text ("correction" | "preference" | "context" | "skill")
+├── type: text ("correction" | "preference" | "context" | "skill" | "user_model" | "solution")
 ├── content: text (the memory itself — natural language)
-├── source: text ("feedback" | "human" | "system")
+├── metadata: text (JSON, nullable — structured fields for solution memories: category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds)
+├── source: text ("feedback" | "human" | "system" | "conversation")
 ├── sourceId: text (nullable — references feedback.id if extracted from feedback)
 ├── reinforcementCount: integer (default 1 — incremented on duplicate)
 ├── lastReinforcedAt: integer (timestamp_ms)
@@ -53,11 +54,13 @@ memories
 
 - **scopeType + scopeId**: Three memory scopes. Agent-scoped memories travel with the agent. Process-scoped memories stay with the process even when agents are swapped. Self-scoped memories (ADR-016, Brief 029) belong to the Conversational Self — user preferences, communication style, cross-session continuity. `scopeId` is the user identifier for self-scoped memories. Provenance: Mem0's scope filtering (`mem0/memory/main.py`), extended for the Self.
 
-- **type**: Four memory types grounded in the human mental model:
+- **type**: Six memory types grounded in the human mental model:
   - `correction` — "Don't use formal tone" (learned from being corrected)
   - `preference` — "Uses 2-space indentation" (accumulated style/preference)
   - `context` — "Q4 deadline is Dec 15" (situational knowledge)
   - `skill` — "For invoice extraction, check date format first" (learned procedure)
+  - `user_model` — "User works in construction, prefers terse responses" (9-dimension user model, Brief 040)
+  - `solution` — "Bathroom labour estimates need 1.5x multiplier for tight access" (structured knowledge extracted from corrections, Brief 060)
 
   Not included: `identity` (already in `agents` table as role, description, adapterConfig) and `session` (execution state, not memory — handled by heartbeat snapshot, per research Section 7).
 
@@ -142,6 +145,15 @@ This ADR describes the full memory architecture. Implementation is phased:
 - Feedback-to-memory bridge: direct insert on edit/reject feedback, no LLM extraction
 - Duplicate detection: exact content match increments reinforcementCount
 - Confidence: starts at 0.3, grows with reinforcement (capped at 0.9)
+
+**Phase 2b+ (Brief 060 — knowledge compounding):**
+- `solution` memory type with structured `metadata` JSON column (category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds)
+- Knowledge extraction system process: 3 parallel extractors (context-analyzer, solution-extractor, related-finder) + assembly step
+- Significance threshold: extraction fires on moderate+ edits, rejections, retries, first 10 runs, or 3+ correction patterns
+- Trust-tier-aware scaling: supervised=all, spot-checked=50%, autonomous=degradation only, critical=all
+- Separate 1000-token solution knowledge budget in memory assembly (doesn't compete with corrections)
+- Knowledge lifecycle: confidence 0.5 at creation, decay by 0.1 after 50 runs without retrieval, pruning below 0.2, supersession of stale solutions
+- SQL-based deduplication via metadata matching (not LLM) — consistent with dogfood-scale constraint
 
 **Phase 3 (trust earning):**
 - LLM-based memory reconciliation (Mem0-style ADD/UPDATE/DELETE/NONE)

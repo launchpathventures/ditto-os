@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { AlertTriangle, XCircle, Info } from "lucide-react";
 import type { AlertBlock } from "@/lib/engine";
 
 interface Props {
@@ -8,21 +9,28 @@ interface Props {
   onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
-export function AlertBlockComponent({ block, onAction }: Props) {
-  const severityStyles = {
-    info: { dot: "bg-accent", bg: "bg-accent/5", border: "border-accent/20" },
-    warning: { dot: "bg-warning", bg: "bg-warning/5", border: "border-warning/20" },
-    error: { dot: "bg-negative", bg: "bg-negative/5", border: "border-negative/20" },
-  };
+const SEVERITY_ICONS = {
+  info: Info,
+  warning: AlertTriangle,
+  error: XCircle,
+} as const;
 
-  const style = severityStyles[block.severity];
+const SEVERITY_STYLES = {
+  info: { icon: "text-info", bg: "bg-info/5", border: "border-info/20" },
+  warning: { icon: "text-caution", bg: "bg-caution/5", border: "border-caution/20" },
+  error: { icon: "text-negative", bg: "bg-negative/5", border: "border-negative/20" },
+} as const;
+
+export function AlertBlockComponent({ block, onAction }: Props) {
+  const style = SEVERITY_STYLES[block.severity];
+  const IconComponent = SEVERITY_ICONS[block.severity];
 
   return (
-    <div className={cn("my-2 rounded-lg border p-3", style.bg, style.border)}>
+    <div className={cn("my-2 rounded-lg border p-2.5 px-3.5", style.bg, style.border)}>
       <div className="flex items-start gap-2">
-        <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", style.dot)} />
+        <IconComponent size={18} className={cn("mt-0.5 flex-shrink-0", style.icon)} />
         <div className="flex-1">
-          <div className="text-sm font-medium text-text-primary">{block.title}</div>
+          <div className="text-sm font-semibold text-text-primary">{block.title}</div>
           <p className="text-sm text-text-secondary mt-0.5">{block.content}</p>
           {block.actions && block.actions.length > 0 && (
             <div className="flex gap-2 mt-2">

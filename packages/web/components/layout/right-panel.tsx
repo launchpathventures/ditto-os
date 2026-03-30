@@ -14,7 +14,8 @@
  * Redesign AC12: Sensible default state.
  * Redesign AC13: Reactive states defined.
  *
- * Provenance: P13 prototype (converged design), workspace-layout-redesign-ux.md
+ * Provenance: P00 workspace shell prototype, P13 prototype (converged design),
+ * workspace-layout-redesign-ux.md
  */
 
 import { useState, useCallback } from "react";
@@ -23,6 +24,7 @@ import { ProcessBuilderPanel } from "./process-builder-panel";
 import { ArtifactViewerPanel } from "./artifact-viewer-panel";
 import type { ContentBlock } from "@/lib/engine";
 import { BlockList } from "../blocks/block-registry";
+import { DotParticles } from "@/app/setup/dot-particles";
 
 // Context types that the panel reacts to
 export type PanelContext =
@@ -53,61 +55,78 @@ export function RightPanel({
 
   if (collapsed) {
     return (
-      <div className="w-12 flex-shrink-0 border-l border-border bg-surface flex flex-col items-center py-4">
+      <div
+        className="flex-shrink-0 border-l border-border bg-surface flex flex-col items-center py-4"
+        style={{ width: 56 }}
+      >
         <button
           onClick={toggle}
-          className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center hover:bg-accent/20 transition-colors"
+          className="w-7 h-7 rounded-sm flex items-center justify-center hover:bg-surface-raised transition-colors"
           title="Show Ditto's thinking"
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-accent" />
+          <DotParticles size={24} />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="w-72 flex-shrink-0 border-l border-border bg-background flex flex-col">
+    <div className="w-80 flex-shrink-0 border-l border-border bg-surface flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div
+        className="flex items-center justify-between flex-shrink-0"
+        style={{ padding: "20px 20px 12px" }}
+      >
         <div className="flex items-center gap-2">
-          <span
-            className="w-2 h-2 rounded-full bg-accent"
-            style={{ animation: "pulse-dot 3s ease-in-out infinite" }}
-          />
-          <span className="text-sm font-medium text-text-primary">Ditto</span>
-          <span className="text-xs text-text-muted">Watching your work</span>
+          <DotParticles size={24} />
+          <span style={{ fontSize: 14, fontWeight: 600 }} className="text-text-primary">
+            Ditto
+          </span>
         </div>
         <button
           onClick={toggle}
-          className="text-text-muted hover:text-text-primary transition-colors text-sm"
+          className="flex items-center justify-center text-text-muted hover:bg-surface-raised transition-colors rounded-sm"
+          style={{ width: 28, height: 28, background: "transparent" }}
           title="Collapse"
         >
-          ×
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </button>
       </div>
 
-      {/* Contextual content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {activeContext.type === "feed" && <FeedContext />}
-        {activeContext.type === "process" && (
-          <ProcessContext processId={activeContext.processId} />
-        )}
-        {activeContext.type === "process-builder" && (
-          <ProcessBuilderPanel yaml={activeContext.yaml} slug={activeContext.slug} />
-        )}
-        {activeContext.type === "process_run" && (
-          <ProcessRunContext runId={activeContext.runId} processSlug={activeContext.processSlug} />
-        )}
-        {activeContext.type === "artifact-review" && (
-          <ArtifactViewerPanel runId={activeContext.runId} processId={activeContext.processId} />
-        )}
-        {activeContext.type === "briefing" && (
-          <BriefingContext data={activeContext.data} />
-        )}
-        {activeContext.type === "blocks" && (
-          <BlocksContext blocks={activeContext.blocks} title={activeContext.title} />
-        )}
-        {activeContext.type === "empty" && <DefaultContext />}
+      {/* Scroll area */}
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ padding: "0 20px 20px" }}
+      >
+        <div className="space-y-5">
+          {activeContext.type === "feed" && <FeedContext />}
+          {activeContext.type === "process" && (
+            <ProcessContext processId={activeContext.processId} />
+          )}
+          {activeContext.type === "process-builder" && (
+            <ProcessBuilderPanel yaml={activeContext.yaml} slug={activeContext.slug} />
+          )}
+          {activeContext.type === "process_run" && (
+            <ProcessRunContext runId={activeContext.runId} processSlug={activeContext.processSlug} />
+          )}
+          {activeContext.type === "artifact-review" && (
+            <ArtifactViewerPanel runId={activeContext.runId} processId={activeContext.processId} />
+          )}
+          {activeContext.type === "briefing" && (
+            <BriefingContext data={activeContext.data} />
+          )}
+          {activeContext.type === "blocks" && (
+            <BlocksContext blocks={activeContext.blocks} title={activeContext.title} />
+          )}
+          {activeContext.type === "empty" && <DefaultContext />}
+        </div>
       </div>
     </div>
   );
@@ -116,26 +135,14 @@ export function RightPanel({
 /** Feed view context — morning thoughts + general suggestions */
 function FeedContext() {
   return (
-    <>
-      {/* Ditto's thinking */}
-      <div className="text-sm text-text-secondary leading-relaxed">
-        <p>
-          Everything looks good this morning. No urgent items need your
-          attention right now.
-        </p>
-      </div>
-
-      {/* Suggestions */}
-      <div>
-        <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-          Suggestions
-        </p>
-        <div className="space-y-2">
-          <SuggestionItem text="Review any items in your feed that need attention" />
-          <SuggestionItem text="Check how your recurring processes are doing" />
-        </div>
-      </div>
-    </>
+    <div
+      className="flex items-center justify-center text-text-muted text-center"
+      style={{ marginTop: 40 }}
+    >
+      <p style={{ fontSize: 14, maxWidth: 240, lineHeight: "1.5" }}>
+        Contextual analysis, suggestions, and process intelligence appear here as you work.
+      </p>
+    </div>
   );
 }
 
@@ -146,9 +153,9 @@ function ProcessContext({ processId }: { processId: string }) {
   if (isLoading) {
     return (
       <div className="space-y-3">
-        <div className="h-4 bg-surface animate-pulse rounded w-3/4" />
-        <div className="h-4 bg-surface animate-pulse rounded w-1/2" />
-        <div className="h-20 bg-surface animate-pulse rounded" />
+        <div className="h-4 bg-surface-raised animate-pulse rounded w-3/4" />
+        <div className="h-4 bg-surface-raised animate-pulse rounded w-1/2" />
+        <div className="h-20 bg-surface-raised animate-pulse rounded" />
       </div>
     );
   }
@@ -161,7 +168,7 @@ function ProcessContext({ processId }: { processId: string }) {
   return (
     <>
       {/* Ditto's analysis */}
-      <div className="text-sm text-text-secondary leading-relaxed">
+      <div className="text-text-secondary leading-relaxed" style={{ fontSize: 14 }}>
         <p>
           {trustState.runsInWindow === 0
             ? `${process.name} hasn't run yet. I'll show you the first output for review.`
@@ -176,10 +183,8 @@ function ProcessContext({ processId }: { processId: string }) {
       {/* What I've checked */}
       {trustState.runsInWindow > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            Track record
-          </p>
-          <div className="space-y-1.5">
+          <SectionTitle>Track record</SectionTitle>
+          <div className="space-y-1.5 mt-2">
             <CheckItem
               passed={true}
               label={`${trustState.approvals} approved without changes`}
@@ -212,10 +217,8 @@ function ProcessContext({ processId }: { processId: string }) {
 
       {/* Confidence */}
       <div>
-        <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-          My confidence
-        </p>
-        <div className="h-2 bg-surface rounded-full overflow-hidden">
+        <SectionTitle>My confidence</SectionTitle>
+        <div className="h-2 bg-surface-raised rounded-full overflow-hidden mt-2">
           <div
             className={`h-full rounded-full transition-all ${
               approvalPct >= 90
@@ -227,7 +230,7 @@ function ProcessContext({ processId }: { processId: string }) {
             style={{ width: `${Math.max(approvalPct, 5)}%` }}
           />
         </div>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="text-text-muted mt-1" style={{ fontSize: 12 }}>
           Based on {trustState.runsInWindow} recent runs
         </p>
       </div>
@@ -235,17 +238,15 @@ function ProcessContext({ processId }: { processId: string }) {
       {/* Steps */}
       {process.steps.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            How it works
-          </p>
-          <div className="space-y-1">
+          <SectionTitle>How it works</SectionTitle>
+          <div className="space-y-1 mt-2">
             {process.steps.slice(0, 5).map((step, i) => (
-              <p key={step.id} className="text-xs text-text-muted">
+              <p key={step.id} className="text-text-muted" style={{ fontSize: 12 }}>
                 {i + 1}. {step.name}
               </p>
             ))}
             {process.steps.length > 5 && (
-              <p className="text-xs text-text-muted">
+              <p className="text-text-muted" style={{ fontSize: 12 }}>
                 +{process.steps.length - 5} more steps
               </p>
             )}
@@ -260,13 +261,11 @@ function ProcessContext({ processId }: { processId: string }) {
 function ProcessRunContext({ runId, processSlug }: { runId: string; processSlug: string }) {
   return (
     <>
-      <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-        Pipeline Run
-      </p>
-      <div className="space-y-3">
-        <div className="text-sm text-text-secondary">
+      <SectionTitle>Pipeline Run</SectionTitle>
+      <div className="space-y-3 mt-2">
+        <div className="text-text-secondary" style={{ fontSize: 14 }}>
           <p className="font-medium text-text-primary">{processSlug}</p>
-          <p className="text-xs text-text-muted mt-1">Run: {runId.slice(0, 8)}...</p>
+          <p className="text-text-muted mt-1" style={{ fontSize: 12 }}>Run: {runId.slice(0, 8)}...</p>
           <p className="mt-2">
             Pipeline is running. Progress updates appear in the conversation and Today view.
           </p>
@@ -280,11 +279,7 @@ function ProcessRunContext({ runId, processSlug }: { runId: string; processSlug:
 function BlocksContext({ blocks, title }: { blocks: ContentBlock[]; title?: string }) {
   return (
     <>
-      {title && (
-        <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-          {title}
-        </p>
-      )}
+      {title && <SectionHeading>{title}</SectionHeading>}
       <BlockList blocks={blocks} />
     </>
   );
@@ -293,33 +288,13 @@ function BlocksContext({ blocks, title }: { blocks: ContentBlock[]; title?: stri
 /** Default/empty context */
 function DefaultContext() {
   return (
-    <div className="text-sm text-text-secondary leading-relaxed">
-      <p>
-        I&apos;m here. Ask me anything using the chat bar below, or click on
-        something to see what I think about it.
+    <div
+      className="flex items-center justify-center text-text-muted text-center"
+      style={{ marginTop: 40 }}
+    >
+      <p style={{ fontSize: 14, maxWidth: 240, lineHeight: "1.5" }}>
+        Contextual analysis, suggestions, and process intelligence appear here as you work.
       </p>
-    </div>
-  );
-}
-
-function CheckItem({ passed, label }: { passed: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span
-        className={`flex-shrink-0 text-xs ${passed ? "text-positive" : "text-caution"}`}
-      >
-        {passed ? "✓" : "!"}
-      </span>
-      <span className="text-text-secondary">{label}</span>
-    </div>
-  );
-}
-
-function SuggestionItem({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-2 text-sm">
-      <span className="text-accent flex-shrink-0 mt-0.5">→</span>
-      <span className="text-text-secondary">{text}</span>
     </div>
   );
 }
@@ -335,19 +310,17 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
   return (
     <>
       {focus && (
-        <div className="text-sm text-text-secondary leading-relaxed">
+        <div className="text-text-secondary leading-relaxed" style={{ fontSize: 14 }}>
           <p>{focus}</p>
         </div>
       )}
 
       {attention && attention.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            Needs attention
-          </p>
-          <div className="space-y-1.5">
+          <SectionTitle>Needs attention</SectionTitle>
+          <div className="space-y-1.5 mt-2">
             {attention.map((item, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm">
+              <div key={i} className="flex items-start gap-2" style={{ fontSize: 14 }}>
                 <span className="text-caution flex-shrink-0 mt-0.5">!</span>
                 <span className="text-text-secondary">{item}</span>
               </div>
@@ -358,12 +331,10 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
 
       {upcoming && upcoming.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            Coming up
-          </p>
-          <div className="space-y-1.5">
+          <SectionTitle>Coming up</SectionTitle>
+          <div className="space-y-1.5 mt-2">
             {upcoming.map((item, i) => (
-              <div key={i} className="text-sm text-text-secondary">{item}</div>
+              <div key={i} className="text-text-secondary" style={{ fontSize: 14 }}>{item}</div>
             ))}
           </div>
         </div>
@@ -371,10 +342,8 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
 
       {risks && risks.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            Worth knowing
-          </p>
-          <div className="space-y-1.5">
+          <SectionTitle>Worth knowing</SectionTitle>
+          <div className="space-y-2 mt-2">
             {risks.map((item, i) => (
               <SuggestionItem key={i} text={item} />
             ))}
@@ -384,10 +353,8 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
 
       {suggestions && suggestions.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
-            Suggestions
-          </p>
-          <div className="space-y-2">
+          <SectionTitle>Suggestions</SectionTitle>
+          <div className="space-y-2 mt-2">
             {suggestions.map((item, i) => (
               <SuggestionItem key={i} text={item} />
             ))}
@@ -399,5 +366,66 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
         <DefaultContext />
       )}
     </>
+  );
+}
+
+// ── Shared primitives ──────────────────────────────────────────────────────────
+
+/** Section heading: 14px, font-weight 600, text-text-primary */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-text-primary" style={{ fontSize: 14, fontWeight: 600 }}>
+      {children}
+    </p>
+  );
+}
+
+/** Section title (uppercase label): 12px, font-weight 600, uppercase, letter-spacing, text-text-muted, border-bottom */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      className="text-text-muted border-b border-border pb-1"
+      style={{
+        fontSize: 12,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function CheckItem({ passed, label }: { passed: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2" style={{ fontSize: 14 }}>
+      <span
+        className={`flex-shrink-0 text-xs ${passed ? "text-positive" : "text-caution"}`}
+      >
+        {passed ? "✓" : "!"}
+      </span>
+      <span className="text-text-secondary">{label}</span>
+    </div>
+  );
+}
+
+/** Suggestion block: bg-vivid-subtle, rounded-lg, 12px 16px padding */
+function SuggestionItem({ text }: { text: string }) {
+  return (
+    <div
+      className="bg-vivid-subtle rounded-lg"
+      style={{ padding: "12px 16px" }}
+    >
+      <p
+        className="text-vivid-deep uppercase mb-1"
+        style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em" }}
+      >
+        Suggestion
+      </p>
+      <p className="text-text-secondary" style={{ fontSize: 13, lineHeight: "1.5" }}>
+        {text}
+      </p>
+    </div>
   );
 }

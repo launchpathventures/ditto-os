@@ -180,6 +180,7 @@ function createTables(sqlite: Database.Database): void {
       scope_id TEXT NOT NULL,
       type TEXT NOT NULL,
       content TEXT NOT NULL,
+      metadata TEXT,
       source TEXT NOT NULL,
       source_id TEXT,
       reinforcement_count INTEGER NOT NULL DEFAULT 1,

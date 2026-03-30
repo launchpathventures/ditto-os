@@ -132,6 +132,19 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     }
   }, [latestTransition, windowWidth]);
 
+  // Self speaks first — static welcome message (Brief 057 AC14)
+  // No LLM call needed for the greeting. The Self's personality comes through
+  // in subsequent real conversations. This avoids stream lifecycle race conditions.
+  const [welcomeMessage] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const dayZeroSeen = localStorage.getItem("ditto-day-zero-seen") === "true";
+    if (!dayZeroSeen) return null;
+    const alreadyGreeted = sessionStorage.getItem("ditto-greeted") === "true";
+    if (alreadyGreeted) return null;
+    sessionStorage.setItem("ditto-greeted", "true");
+    return "Hi. I'm ready when you are — ask me anything, give me a task, or tell me about your work.";
+  });
+
   // Auto-scroll to latest message (workspace mode only)
   useEffect(() => {
     if (centerView.type !== "artifact") {
@@ -277,19 +290,6 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
       ? { type: "process", processId: centerView.processId }
       : { type: "feed" };
 
-  // Extract status message from streaming data parts
-  const statusMessage = (() => {
-    if (!chatLoading || messages.length === 0) return undefined;
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg.role !== "assistant") return undefined;
-    for (let i = lastMsg.parts.length - 1; i >= 0; i--) {
-      const part = lastMsg.parts[i];
-      if ("type" in part && (part as { type: string }).type === "data-status") {
-        return ((part as { data: { message: string } }).data).message;
-      }
-    }
-    return undefined;
-  })();
 
   const hasMessages = messages.length > 0;
 
@@ -309,7 +309,6 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
             runId={centerView.runId}
             messages={messages}
             chatLoading={chatLoading}
-            statusMessage={statusMessage}
             input={input}
             onInputChange={setInput}
             onSubmit={handleChatSubmit}
@@ -333,7 +332,6 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
         runId={centerView.runId}
         messages={messages}
         chatLoading={chatLoading}
-        statusMessage={statusMessage}
         input={input}
         onInputChange={setInput}
         onSubmit={handleChatSubmit}
@@ -389,26 +387,41 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                 </p>
               </div>
             ) : centerView.type === "canvas" ? (
-              /* Canvas — composed blocks */
-              <div className="p-6 max-w-2xl mx-auto">
+              /* Canvas — composed blocks (P00: 720px centred, generous padding) */
+              <div className="max-w-[720px] mx-auto" style={{ padding: "32px 24px 24px" }}>
                 {/* Composed ContentBlock[] from composition engine */}
                 <ComposedCanvas
                   intent={centerView.intent}
                   onAction={handleBlockAction}
                 />
 
-                {/* Conversation messages — scaffold elements below composition */}
+                {/* Welcome message — static Self greeting for first visit */}
+                {welcomeMessage && !hasMessages && !chatLoading && (
+                  <div className="mt-4 space-y-1">
+                    <div className="max-w-[720px] mx-auto flex gap-3 py-3">
+                      <div className="flex-shrink-0 mt-1.5">
+                        <div className="w-2 h-2 rounded-full bg-vivid" />
+                      </div>
+                      <div className="flex-1 text-base leading-relaxed text-text-primary">
+                        {welcomeMessage}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conversation messages */}
                 {hasMessages && (
                   <div className="mt-4 space-y-1">
-                    {messages.map((message) => (
+                    {messages.map((message, _idx, arr) => (
                       <ConversationMessage
                         key={message.id}
                         message={message}
+                        isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
                         onAction={handleBlockAction}
                       />
                     ))}
 
-                    {chatLoading && <TypingIndicator status={statusMessage} />}
+                    {chatLoading && <TypingIndicator />}
 
                     <div ref={messagesEndRef} />
                   </div>
@@ -417,16 +430,16 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                 {/* Typing indicator when no messages yet but loading */}
                 {!hasMessages && chatLoading && (
                   <div className="mt-4">
-                    <TypingIndicator status={statusMessage} />
+                    <TypingIndicator />
                   </div>
                 )}
               </div>
             ) : null /* artifact mode handled by early return above */}
           </div>
 
-          {/* Chat input — persistent at bottom of center column (scaffold) */}
-          <div className="border-t border-border bg-background px-6 py-3">
-            <div className="max-w-2xl mx-auto">
+          {/* Chat input — persistent at bottom of center column (P00 input bar) */}
+          <div className="bg-background" style={{ padding: "12px 24px 20px" }}>
+            <div>
               <PromptInput
                 value={input}
                 onChange={setInput}

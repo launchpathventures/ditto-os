@@ -89,7 +89,7 @@ Every work item carries **goal ancestry** — the chain of parent goals that exp
 
 Ditto's core orchestration capabilities are not hardcoded infrastructure — they are **meta-processes** with system agents going through the same harness pipeline as user processes. They start supervised. They earn trust. They get corrected. They improve.
 
-Ten system agents drive the framework (see ADR-008 + ADR-010):
+Eleven system agents drive the framework (see ADR-008 + ADR-010):
 
 | Agent | Purpose | Earns trust in |
 |-------|---------|---------------|
@@ -97,6 +97,7 @@ Ten system agents drive the framework (see ADR-008 + ADR-010):
 | **orchestrator** | Decomposes goals into tasks, tracks progress | Decomposition quality |
 | **router** | Matches tasks to the right process | Routing accuracy |
 | **trust-evaluator** | Calculates trust scores, recommends changes | Evaluation accuracy |
+| **knowledge-extractor** | Extracts structured solution knowledge from corrections | Extraction quality |
 | **brief-synthesizer** | Produces the Daily Brief | Prioritisation quality |
 | **improvement-scanner** | Detects patterns, proposes improvements | Suggestion quality |
 | **process-analyst** | Helps formalise processes via conversation | Process definition quality |
@@ -182,9 +183,9 @@ Every significant component starts with a research step: scout the gold standard
 ```
 ┌─────────────────────────────────────────────────┐
 │  6. HUMAN LAYER                                  │
-│  Living workspace: conversation pervasive,       │
-│  unified task surface, process graph as nav,     │
-│  daily brief with memory, review + capture       │
+│  Conversation-first workspace: Self as primary   │
+│  interface, composition intents, ContentBlock     │
+│  rendering, artifact mode, memory visible        │
 ├─────────────────────────────────────────────────┤
 │  5. LEARNING LAYER                               │
 │  Feedback loops, correction patterns,            │
@@ -328,7 +329,7 @@ Each layer has a distinct responsibility. The Conversational Self is the membran
 | **Self-scoped** (ADR-016) | User knowledge spanning all processes and agents | All conversations, all processes | "This user prefers terse responses; their business is in construction" |
 | **Intra-run context** (Brief 027) | Prior step outputs within the current run | Current run only (ephemeral) | Output from step 1 available to step 2 within same process run |
 
-Durable scopes stored in the `memory` table with `scope_type` (`agent`, `process`, or `self`) and `scope_id`. Intra-run context assembled from `stepRuns` within the active process run (separate 1500-token budget). The harness merges relevant memories into the agent's context at invocation time, applying progressive disclosure (most relevant first, within context budget).
+Durable scopes stored in the `memory` table with `scope_type` (`agent`, `process`, or `self`) and `scope_id`. Memory types: `correction`, `preference`, `context`, `skill`, `user_model`, and `solution` (Brief 060). Solution memories carry structured `metadata` (JSON): category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds. Intra-run context assembled from `stepRuns` within the active process run (separate 1500-token budget). Solution knowledge has its own 1000-token budget (Brief 060) — it doesn't compete with corrections/preferences. The harness merges relevant memories into the agent's context at invocation time, applying progressive disclosure (most relevant first, within context budget).
 
 **Org structure**: Agents have roles, reporting lines, permissions. They serve processes — the human's mental model is "my invoice process" not "Agent #7."
 
@@ -465,6 +466,8 @@ Every process tracks three feedback signals:
 - Meta-processes query these signals via SQL to observe: which outputs get viewed vs ignored, navigation frequency patterns, average review response times, brief engagement rates.
 
 **6. Brief lifecycle sync** (Brief 056) — The `briefs` table mirrors brief markdown files from `docs/briefs/` into the database. `syncBriefs()` parses frontmatter, upserts with mtime-based invalidation, and soft-deletes removed files. This enables the project-orchestration meta-process to track brief velocity (days in each status) and project progress without filesystem access.
+
+**7. Explicit knowledge extraction** (Brief 060) — When a significant correction occurs (edit severity ≥ moderate, rejection, retry, first 10 runs, or correction pattern count ≥ 3), the `knowledge-extraction` system process fires. Three parallel extractors classify the correction (context-analyzer: category, tags, severity), extract solution knowledge (solution-extractor: root cause, failed approaches, prevention), and find related existing solutions (related-finder: SQL-based metadata matching, not LLM). An assembly step merges results: high overlap → reinforce existing memory; moderate → create with cross-reference; low/none → create new. Trust-tier-aware scaling: supervised extracts on every significant correction, spot-checked samples ~50%, autonomous only on degradation (rejections), critical on every correction. Solution memories start at confidence 0.5 (higher than corrections at 0.3), decay by 0.1 after 50 runs without retrieval, and are pruned when confidence drops below 0.2. Newer solutions supersede older low-confidence ones in the same category. This complements implicit feedback — the system now learns structured knowledge (root cause, prevention, what failed) not just that something was edited.
 
 **Reactive-to-repetitive lifecycle (ADR-010):** Beyond improving existing processes, Layer 5 also watches for patterns in ad-hoc work. When the system notices the user creating similar work items repeatedly (e.g., Rob keeps manually entering bathroom reno quotes), it proposes formalising the pattern as a new process. The user confirms, refines, and activates — the ad-hoc work becomes a governed, trust-earning process. This is how the system grows its capabilities from user behaviour.
 
@@ -648,91 +651,110 @@ The Self is singular per user/workspace. Identity lives in the engine, not the s
 
 ### Layer 6: Human Layer (The Interface)
 
-A living workspace, not a dashboard. The user works IN Ditto — it's always open, actively working on their behalf, and pulls them in when judgment is needed. Three design principles govern the layer:
+A conversation-first workspace, not a dashboard. The user works IN Ditto — it's always open, actively working on their behalf, and pulls them in when judgment is needed. Three design principles govern the layer:
 
-**1. Conversation is pervasive.** Available on every view, not just setup. The user can talk from any context — ask questions, give instructions, capture work. The Conversation Thread (Primitive 8) is the universal interaction surface.
+**1. Conversation is the primary interaction.** The user talks to the Conversational Self. Self understands intent, assembles context, delegates to processes, and renders structured results back into the conversation as ContentBlocks. The conversation IS the workspace — not a feature buried in a tab.
 
-**2. The unified task surface.** The user sees one list of things needing their attention — not separate queues for reviews, actions, and goals. Three types of work items surface together:
-- **Review tasks** — "check this output" (from harness review patterns)
-- **Action tasks** — "do this thing" (from human steps in processes)
-- **Goal-driven tasks** — "work toward this" (decomposed by orchestrator agent)
+**2. The unified task surface.** Composition intents (Today, Inbox, Work, Projects, Routines) render ContentBlock arrays in the center column. The user sees one workspace with things needing their attention — reviews, active work, process health — surfaced as structured blocks, not separate pages. Three types of work items surface together:
+- **Review tasks** — "check this output" (from harness review patterns, rendered as ReviewCardBlock)
+- **Action tasks** — "do this thing" (from human steps in processes, rendered as ActionBlock)
+- **Goal-driven tasks** — "work toward this" (decomposed by orchestrator agent, rendered as StatusCardBlock)
 
 **3. Memory is visible.** The system demonstrates accumulated context on every surface. The Daily Brief feels like a briefing from a chief of staff who knows everything. Processes show their learning history. The system never feels like "new chat." (Insight-028)
 
 Three activity contexts coexist (not hard mode switches):
-- **Analyze** — connected data views, pattern reports, evidence-informed discovery
-- **Explore** — conversation + process builder, guided process definition
-- **Operate** — process graph, review queue, brief, metrics, daily workspace
+- **Analyze** — conversation with Self + data/chart blocks in response
+- **Explore** — conversation with Self → `generate_process` tool → Process Builder in right panel
+- **Operate** — composition intents (Today/Work/Inbox) + pipeline progress + inline review
+
+**Workspace architecture:** Three-panel layout — sidebar (navigation to composition intents + process list) + center column (composed canvas + conversation + prompt input) + right panel (context-reactive: feed, process detail, briefing). Artifact mode for deep review: conversation (compact) + artifact host (ContentBlock[] via BlockList) + context panel. See `human-layer.md` for full workspace specification.
 
 ---
 
-## Universal UI Primitives
+## Rendering Architecture
 
-16 composable components that assemble into any view. Domain-agnostic — the same primitives serve marketing, finance, real estate, coding, or any other domain.
+### ContentBlocks: The Universal Unit
 
-### Orient (What's going on?)
+Everything the user sees flows through **ContentBlocks** — typed, structured data units defined in the engine (`src/engine/content-blocks.ts`) and rendered by the block registry (`packages/web/components/blocks/block-registry.tsx`). 22 ContentBlock types form a discriminated union with compile-time exhaustiveness checking.
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 1 | **Daily Brief** | Synthesised priorities, risks, reviews needed. Personalised per role. Explains reasoning. |
-| 2 | **Process Card** | Visual representation of any process: name, status, health, trust tier, last run, trend. Works at glance (grid) or expanded (detail). |
-| 3 | **Activity Feed** | What happened, when, by whom/what. Filterable. The audit trail in human-readable form. |
-| 4 | **Performance Sparkline** | Tiny trend line attachable to anything measurable. "Is this getting better or worse?" |
+**Design rule:** ALL rendering flows through ContentBlocks. No bespoke viewers. Artifact mode renders BlockList. The composition engine produces BlockList. Self responses contain BlockList. This is the most critical architecture principle. (Insight-107)
 
-### Review (Is this right?)
+### Two-Layer UI Architecture
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 5 | **Review Queue** | The primary review surface. Outputs that genuinely need human judgment — supervised outputs, sampled spot-checked outputs, and confidence-flagged outputs. Any output type, same interaction: review → approve / edit / reject / escalate. Includes "Auto-approve similar" for trust building. Autonomous process outputs appear as digest summaries (via Daily Brief or Process Card), not individual queue items (ADR-011). |
-| 6 | **Output Viewer** | Universal renderer for process outputs and knowledge items. Six viewer types: Document (rich text, markdown/HTML), Spreadsheet (interactive table with CRUD — also serves user-defined databases), Image (gallery/carousel with zoom/compare), Live Preview (sandboxed iframe for vibe-coded dashboards, presentations, forms, tools), Email (mail-client preview), PDF (page-faithful rendering via PDF.js). These viewers also serve as the knowledge base interaction layer — every knowledge item is viewable through its viewer type. The meta dev process creates templates that customise each viewer for specific processes. See ADR-023 Addendum (Sections 8-15) for full taxonomy, engine types, and security model. |
-| 7 | **Feedback Widget** | Embedded in review actions. Edits ARE feedback. Rejections ARE feedback. System captures structurally without forms. "Teach this" button bridges feedback to permanent learning. |
+| Layer | Concern | Location |
+|-------|---------|----------|
+| **ContentBlock types** | WHAT to render (engine data model) | `src/engine/content-blocks.ts` — 22 types |
+| **AI Elements** | HOW to render (React components) | `packages/web/components/ai-elements/` — 15 components |
+| **Block renderers** | Block → AI Element mapping | `packages/web/components/blocks/` — 22 renderers |
 
-### Define (What needs to happen?)
+AI Elements are adopted from Vercel AI Elements (Brief 058+061) using the composable subcomponent pattern: Context Provider + named subcomponents + backward-compatible default export. Block renderers consume ContentBlock data and render using AI Elements.
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 8 | **Conversation Thread** | Universal conversation surface. In Explore: dual-pane process building. In Operate: command/query interface for entering work, asking questions, giving instructions. Available on every view. Routes input through intake-classifier → router meta-processes. |
-| 9 | **Process Builder** | Structured editor for process definitions. Populated by conversation or edited directly. Universal structure: inputs → steps → outputs → quality → feedback. |
+### Conceptual Primitives
 
-### Delegate (Who does it?)
+The 16 user-facing concepts from the original design (v0.1.0) remain valid as experience goals. They are now realized through ContentBlock types, composition intents, and workspace surfaces:
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 10 | **Agent Card** | Like Process Card but for agents. Name, role, processes served, status, trust, performance, cost. Can represent AI agent, script, rules engine, or human. |
-| 11 | **Trust Control** | Visible, adjustable dial per process. Shows current tier, how earned, what changes if adjusted. Human can always override. System recommends upgrades based on track record. |
+#### Orient (What's going on?)
 
-### Capture (Here's context)
+| Primitive | Realized as |
+|-----------|-------------|
+| **Daily Brief** | TextBlock narrative assembled by `briefing-assembler.ts`, delivered via Today composition or Self's `get_briefing` tool |
+| **Process Card** | StatusCardBlock in compositions + process detail view (3 variants: living-roadmap, domain-process, process-runner) |
+| **Activity Feed** | Unified timeline in process detail view, filterable. Human+system actions. |
+| **Performance Sparkline** | ChartBlock + MetricBlock in compositions |
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 12 | **Quick Capture** | Always accessible. Text, voice, files, links. Context-aware (knows where you are). Auto-classifies and routes. Distinguishes "new task" vs "just context." |
+#### Review (Is this right?)
 
-### Decide (What should change?)
+| Primitive | Realized as |
+|-----------|-------------|
+| **Review Queue** | ReviewCardBlock in Inbox composition + inline review prompts in conversation via `use-pipeline-review.ts` |
+| **Output Viewer** | BlockList in artifact mode — same block registry, wider canvas (720px max-width). Six viewer types per ADR-023 Addendum. |
+| **Feedback Widget** | Implicit capture — edits ARE feedback, rejections ARE feedback. Pattern notification after 3+ corrections. "Teach this" (future). |
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 13 | **Improvement Card** | Surfaced by learning layer. What changed, why, evidence, proposed fix, predicted impact. Always a human decision: apply / modify / dismiss / discuss. |
-| 14 | **Process Graph** | Primary navigation surface. Three layers: goals (top) → processes (middle) → live execution state (bottom). Each process node is a Process Card. Colour-coded by health. Shows data flow, bottlenecks, impact propagation, what's waiting for human input. How a non-technical person sees their business operating as a system. |
+#### Define (What needs to happen?)
 
-### Research & Analytics
+| Primitive | Realized as |
+|-----------|-------------|
+| **Conversation Thread** | Center column conversation with Self. Self's tools handle routing, process definition, work capture. |
+| **Process Builder** | Right panel surface, populated by `generate_process` tool. YAML structure with "Drafting" badge. |
 
-| # | Primitive | Purpose |
-|---|-----------|---------|
-| 15 | **Data View** | Tables, charts, comparisons, trend lines. Any agent producing structured data renders through this. Domain-agnostic quantitative display. |
-| 16 | **Evidence Trail** | Sources cited, confidence per claim, links to original material. Attached to any research or analytical output. Drill-through to "where did this come from?" |
+#### Delegate (Who does it?)
 
-### View Compositions
+| Primitive | Realized as |
+|-----------|-------------|
+| **Agent Card** | Not yet built as a standalone surface. Agent info surfaces in process detail. |
+| **Trust Control** | Natural language slider in process detail ("Check everything" ↔ "Let it run") with evidence narrative. `adjust_trust` tool. Session trust overrides via `start_pipeline`. |
 
-| View | Primitives | Who |
-|------|-----------|-----|
-| **Home** | Daily Brief + Unified Task Surface (top 5: review + action + goal tasks) + Quick Capture + Conversation Thread | Everyone, every morning |
-| **Review** | Unified Task Surface (full) + Output Viewer + Feedback Widget | Anyone reviewing or completing work |
-| **Map** | Process Graph (full screen, three layers: goals → processes → live state) — primary navigation | Everyone — the "see my business operating" view |
-| **Process Detail** | Process Card (expanded) + Activity Feed + Performance Sparklines + Trust Control | Process owner |
-| **Setup** | Conversation Thread (centre) + Process Builder (right panel) | New process creation |
-| **Team** | Agent Cards + Performance Sparklines + cost summary | Managers |
-| **Improvements** | Improvement Cards + Performance trends | Process owners, analysts |
-| **Capture** | Quick Capture (full screen) | Mobile, on-the-go |
+#### Capture (Here's context)
+
+| Primitive | Realized as |
+|-----------|-------------|
+| **Quick Capture** | Prompt input (text + drag-drop) + Self's `quick_capture` tool. Auto-classifies and routes. |
+
+#### Decide (What should change?)
+
+| Primitive | Realized as |
+|-----------|-------------|
+| **Improvement Card** | SuggestionBlock in compositions. Self's `suggest_next` tool. |
+| **Process Graph** | Not yet built. Architecture describes 3-layer graph (goals → processes → live state). |
+
+#### Research & Analytics
+
+| Primitive | Realized as |
+|-----------|-------------|
+| **Data View** | DataBlock, ChartBlock, MetricBlock, InteractiveTableBlock in compositions |
+| **Evidence Trail** | KnowledgeCitationBlock + ReasoningTraceBlock. InlineCitation + Sources AI Elements (Brief 061). |
+
+### Workspace Compositions
+
+| Intent | ContentBlocks used | Who |
+|--------|-------------------|-----|
+| **Today** | TextBlock (brief), ReviewCardBlock, ProgressBlock, SuggestionBlock | Everyone, every morning |
+| **Inbox** | ReviewCardBlock, AlertBlock, SuggestionBlock, ActionBlock | Anyone reviewing or completing work |
+| **Work** | StatusCardBlock, ProgressBlock, ChecklistBlock | Active work tracking |
+| **Projects** | StatusCardBlock, MetricBlock, ChartBlock | Process portfolio health |
+| **Routines** | StatusCardBlock, DataBlock | Recurring process management |
+| **Process Detail** | StatusCardBlock + activity log + trust control + sparklines | Process owner (drill-down from sidebar) |
+| **Artifact Mode** | Any ContentBlock[] via BlockList — review lifecycle (approve/edit/reject) | Deep review of process outputs |
 
 ---
 
@@ -776,7 +798,7 @@ Ditto composes proven patterns rather than inventing from scratch:
 - Work evolution — a single input evolves through multiple processes, spawning new work (ADR-010)
 - Reactive-to-repetitive lifecycle — system notices ad-hoc patterns and proposes processes (ADR-010)
 - The process-first internal model (not task-first, not agent-first)
-- The human layer (16 universal primitives + conversation as pervasive layer)
+- The human layer (conversation-first workspace, composition intents, ContentBlock rendering architecture)
 - Progressive trust that's earned, not configured
 - Implicit feedback capture (edits ARE feedback)
 - Human steps in processes — processes pause for real-world human actions, then resume (ADR-010)

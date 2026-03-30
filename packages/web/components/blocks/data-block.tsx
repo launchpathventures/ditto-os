@@ -7,6 +7,8 @@ import type { DataBlock, FieldAnnotation } from "@/lib/engine";
  * DataBlock — schema-driven structured data display.
  * Replaces shape-detection in inline-data.tsx. Format is declared on the block.
  * Visual design matches existing InlineTable (AC8).
+ *
+ * Brief 063: Table header typography upgrade + format-hint cell rendering.
  */
 export function DataBlockComponent({ block }: { block: DataBlock }) {
   if (block.format === "table") {
@@ -25,7 +27,7 @@ function FieldAnnotations({ annotation }: { annotation?: FieldAnnotation }) {
   return (
     <>
       {annotation.provenance && (
-        <span className="text-xs text-text-muted ml-1">← {annotation.provenance}</span>
+        <span className="text-xs text-text-muted ml-1">&larr; {annotation.provenance}</span>
       )}
       {annotation.flag && (
         <span className={cn(
@@ -33,11 +35,72 @@ function FieldAnnotations({ annotation }: { annotation?: FieldAnnotation }) {
           annotation.flag.level === "error" ? "text-negative" :
           annotation.flag.level === "warning" ? "text-caution" : "text-info",
         )}>
-          {annotation.flag.level === "error" ? "✗" : "⚠"} {annotation.flag.message}
+          {annotation.flag.level === "error" ? "\u2717" : "\u26A0"} {annotation.flag.message}
         </span>
       )}
     </>
   );
+}
+
+/** Format-hint badge for table cells */
+const BADGE_VARIANTS: Record<string, string> = {
+  approved: "bg-positive/10 text-positive",
+  done: "bg-positive/10 text-positive",
+  complete: "bg-positive/10 text-positive",
+  review: "bg-caution/10 text-caution",
+  pending: "bg-caution/10 text-caution",
+  draft: "bg-surface-secondary text-text-secondary",
+  error: "bg-negative/10 text-negative",
+  failed: "bg-negative/10 text-negative",
+  rejected: "bg-negative/10 text-negative",
+};
+
+function formatBadgeVariant(value: string): string {
+  return BADGE_VARIANTS[value.toLowerCase()] ?? "bg-surface-secondary text-text-secondary";
+}
+
+/** Render a cell value with format-hint awareness */
+function FormattedCell({ value, annotation }: { value: string; annotation?: FieldAnnotation }) {
+  const format = annotation?.format;
+
+  if (format === "badge") {
+    return (
+      <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", formatBadgeVariant(value))}>
+        {value}
+      </span>
+    );
+  }
+
+  if (format === "currency") {
+    const num = parseFloat(value.replace(/[^0-9.-]/g, ""));
+    const formatted = !isNaN(num)
+      ? `$${num.toLocaleString("en-US", { minimumFractionDigits: 0 })}`
+      : value;
+    return <span className="tabular-nums">{formatted}</span>;
+  }
+
+  if (format === "confidence") {
+    const num = parseFloat(value);
+    const dotColor = !isNaN(num)
+      ? num >= 0.7 ? "bg-positive" : num >= 0.4 ? "bg-caution" : "bg-negative"
+      : "bg-surface-secondary";
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className={cn("w-2 h-2 rounded-full", dotColor)} />
+        {value}
+      </span>
+    );
+  }
+
+  if (format === "percentage") {
+    return <span className="tabular-nums">{value}</span>;
+  }
+
+  if (format === "date") {
+    return <span className="tabular-nums text-text-secondary">{value}</span>;
+  }
+
+  return <>{value}</>;
 }
 
 function TableView({ block }: { block: DataBlock }) {
@@ -57,7 +120,10 @@ function TableView({ block }: { block: DataBlock }) {
         <thead>
           <tr className="bg-surface-secondary/50">
             {headers.map((h, i) => (
-              <th key={i} className="px-3 py-2 text-left font-medium text-text-secondary">
+              <th
+                key={i}
+                className="px-3 py-2 text-left text-xs font-semibold tracking-wider uppercase text-text-secondary"
+              >
                 {h}
               </th>
             ))}
@@ -74,9 +140,10 @@ function TableView({ block }: { block: DataBlock }) {
             >
               {headers.map((h, ci) => {
                 const annotation = block.annotations?.[h];
+                const cellValue = String(row[h] ?? "");
                 return (
                   <td key={ci} className="px-3 py-2 text-text-primary">
-                    <span>{String(row[h] ?? "")}</span>
+                    <FormattedCell value={cellValue} annotation={annotation} />
                     <FieldAnnotations annotation={annotation} />
                   </td>
                 );
@@ -125,7 +192,7 @@ function ListView({ block }: { block: DataBlock }) {
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <span className="text-text-secondary mt-1">-</span>
-            <span>{Object.values(item).join(" — ")}</span>
+            <span>{Object.values(item).join(" \u2014 ")}</span>
           </li>
         ))}
       </ul>

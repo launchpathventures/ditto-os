@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
 **Last updated:** 2026-03-30
-**Current phase:** Phase 10 **complete**. All briefs (039-056) shipped. 411 unit tests (25 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI: composition engine, artifact mode, planning workflow, pipeline execution + review gates + session trust, roadmap scope selection, observability layer. Phase 10 retrospective done. Next: `/dev-pm` for Phase 11 sequencing.
+**Current phase:** Phase 10 **complete**. Phase 11 (Chat UX & Experience) **in progress** — Briefs 062 + 063 approved, ready to build. 440 unit tests (26 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -366,6 +366,10 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Capability | Source doc | Build from |
 |-----------|-----------|------------|
 | Correction pattern extraction from diffs | architecture.md L5 | Original (implicit feedback) |
+| **Explicit knowledge extraction from corrections (Brief 060)** | architecture.md L5, ADR-003 | CE compound (pattern), Reflexion (evidence-grounded), Devin (structured extraction) | **done** — `processes/knowledge-extraction.yaml`, `src/engine/system-agents/knowledge-extractor.ts` |
+| **Solution memory type with structured metadata (Brief 060)** | ADR-003 | memU reinforcement, Mem0 scope filtering | **done** — `src/db/schema.ts` (solution type + metadata column) |
+| **Solution-aware retrieval with separate token budget (Brief 060)** | architecture.md L2 | Ditto memory-assembly pattern (Brief 027) | **done** — `src/engine/harness-handlers/memory-assembly.ts` (1000-token budget) |
+| **Knowledge lifecycle: decay, supersession, pruning (Brief 060)** | Insight-022 | CE compound-refresh (pattern) | **done** — confidence decay after 50 runs, supersession of stale solutions |
 | Performance decay detection | architecture.md L5 | Original |
 | Improvement proposal generation | architecture.md L5 | compound-product self-improvement cycle |
 | Three feedback signals: output quality, process efficiency, outcome impact | architecture.md L5 | Original |
@@ -526,6 +530,10 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Testing infrastructure (Playwright e2e, MOCK_LLM, expect-cli AI tests, CI) — **done (Brief 054)** | Brief 054 | @playwright/test (depend), millionco/expect via ACP (adopt) |
 | Scope selection + roadmap visualization (Roadmap composition, brief index) — **done (Brief 055)** | Brief 055, ADR-024 | Composition engine pattern (existing) + Markdown header parsing (original) |
 | Observability layer (interaction events, brief sync, meta-process signals) — **done (Brief 056)** | Brief 056, architecture.md L5 | PostHog event model (pattern) + existing activity recording |
+| AI SDK & Elements Adoption — full useChat API surface + adopted AI Elements components + streamdown markdown — **done (Brief 058)** | Brief 058, Insight-114 | AI Elements (adopt), streamdown (depend), use-stick-to-bottom (depend), Zod v4 dataPartSchemas |
+| AI Elements Deep Adoption — composable subcomponents, Radix primitives, 4 block renderer upgrades, 7 new AI Elements, Shiki syntax highlighting — **done (Brief 061)** | Brief 061, Insight-114, Insight-117 | AI Elements (adopt), Radix UI (depend), Shiki (depend) |
+| Conversation Experience Activation — conversation chrome (reasoning, tools, confirmations, citations, typing indicator) + message queueing — **approved, ready to build (Brief 062)** | Brief 062, Insight-119 | AI Elements composable subcomponents (Brief 061), Claude.ai queue pattern |
+| Block Renderer Polish — Tier 2→Tier 1 visual quality for 7 block renderers — **approved, ready to build (Brief 063)** | Brief 063, P30 prototype | Tier 1 block patterns (existing), Lucide icons (depend) |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |
 | Output-as-interface between processes (typed contracts, sync-time validation) | ADR-009 v2 | Original |

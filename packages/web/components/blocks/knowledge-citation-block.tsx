@@ -1,33 +1,54 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * KnowledgeCitationBlock Renderer (Brief 061 — Block Renderer Upgrade)
+ *
+ * Uses Sources + InlineCitation AI Elements internally. Maps
+ * KnowledgeCitationBlock fields to composable subcomponents.
+ * Hover previews only for sources with excerpts.
+ *
+ * Two-layer architecture: ContentBlock type defines WHAT (engine),
+ * AI Elements define HOW (React UI).
+ */
+
 import type { KnowledgeCitationBlock } from "@/lib/engine";
+import {
+  Sources,
+  SourcesTrigger,
+  SourcesContent,
+  Source,
+} from "@/components/ai-elements/sources";
+import {
+  InlineCitationCard,
+  InlineCitationSource,
+  InlineCitationQuote,
+} from "@/components/ai-elements/inline-citation";
 
 export function KnowledgeCitationBlockComponent({ block }: { block: KnowledgeCitationBlock }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
-    <div className="my-1">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="text-xs text-text-secondary hover:text-text-primary transition-colors"
-      >
-        {block.label}: {block.sources.map((s) => s.name).join(", ")}
-        {block.sources.some((s) => s.excerpt) && (expanded ? " ▾" : " ▸")}
-      </button>
-      {expanded && (
-        <div className="mt-1 pl-3 border-l border-border/50 space-y-1">
-          {block.sources.map((source, i) => (
-            <div key={i} className="text-xs text-text-secondary">
-              <span className="font-medium">{source.name}</span>
-              <span className="text-text-secondary/60"> ({source.type})</span>
-              {source.excerpt && (
-                <p className="mt-0.5 italic">{source.excerpt}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Sources>
+      <SourcesTrigger>
+        {block.label || `Used ${block.sources.length} source${block.sources.length !== 1 ? "s" : ""}`}
+      </SourcesTrigger>
+      <SourcesContent>
+        {block.sources.map((source, i) =>
+          source.excerpt ? (
+            <InlineCitationCard
+              key={i}
+              trigger={
+                <button className="block text-left">
+                  <Source name={source.name} type={source.type} />
+                </button>
+              }
+            >
+              <InlineCitationSource name={source.name} type={source.type} />
+              <InlineCitationQuote>{source.excerpt}</InlineCitationQuote>
+            </InlineCitationCard>
+          ) : (
+            <Source key={i} name={source.name} type={source.type} />
+          ),
+        )}
+      </SourcesContent>
+    </Sources>
   );
 }

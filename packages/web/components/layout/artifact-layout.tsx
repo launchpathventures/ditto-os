@@ -45,8 +45,6 @@ export interface ArtifactLayoutProps {
   messages: UIMessage[];
   /** Chat loading state */
   chatLoading: boolean;
-  /** Status message from streaming */
-  statusMessage?: string;
   /** Chat input value */
   input: string;
   /** Chat input change handler */
@@ -82,7 +80,6 @@ export function ArtifactLayout({
   runId,
   messages,
   chatLoading,
-  statusMessage,
   input,
   onInputChange,
   onSubmit,
@@ -164,14 +161,15 @@ export function ArtifactLayout({
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           <div className="space-y-1">
-            {messages.map((message) => (
+            {messages.map((message, _idx, arr) => (
               <ConversationMessage
                 key={message.id}
                 message={message}
+                isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
                 onAction={onAction}
               />
             ))}
-            {chatLoading && <TypingIndicator status={statusMessage} />}
+            {chatLoading && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
         </div>

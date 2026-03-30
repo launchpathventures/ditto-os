@@ -410,6 +410,7 @@ export const memoryTypeValues = [
   "context",
   "skill",
   "user_model",
+  "solution",
 ] as const;
 export type MemoryType = (typeof memoryTypeValues)[number];
 
@@ -431,6 +432,11 @@ export const memories = sqliteTable("memories", {
 
   type: text("type").notNull().$type<MemoryType>(),
   content: text("content").notNull(),
+
+  // Structured metadata for solution memories (Brief 060)
+  // Contains category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds
+  metadata: text("metadata", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
 
   source: text("source").notNull().$type<MemorySource>(),
   sourceId: text("source_id"),

@@ -1,40 +1,72 @@
 @import "tailwindcss";
 
+/* Streamdown — Tailwind content scanning for streaming markdown (Brief 058) */
+@source "../../../node_modules/streamdown/dist/*.js";
+@source "../../../node_modules/@streamdown/code/dist/*.js";
+
+/* Streamdown design token bridge — maps shadcn/ui variables to Ditto tokens */
+:root {
+  --background: var(--color-background);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-surface-raised);
+  --card-foreground: var(--color-text-primary);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-text-muted);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-vivid);
+  --primary: var(--color-vivid);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-surface);
+  --secondary-foreground: var(--color-text-primary);
+  --accent: var(--color-accent);
+  --accent-foreground: var(--color-accent-text);
+  --destructive: var(--color-negative);
+  --destructive-foreground: #ffffff;
+  --radius: 0.5rem;
+}
+
 /*
  * Ditto Design Tokens
- * Source: docs/research/visual-identity-design-system-ux.md
- * Palette: Warm professional — natural tones, terracotta accent
+ * Source: .impeccable.md — authoritative design spec
+ * Palette: Cool grey canvas + two-green signature (emerald + forest)
  */
 
 @theme {
-  /* Foundation (backgrounds and surfaces) */
-  --color-background: hsl(40 20% 98%);
-  --color-surface: hsl(40 15% 96%);
-  --color-surface-raised: hsl(0 0% 100%);
-  --color-border: hsl(40 10% 90%);
-  --color-border-strong: hsl(40 8% 82%);
+  /* Foundation — Cool Grey Canvas */
+  --color-background: #EDEDF0;
+  --color-surface: #E2E2E6;
+  --color-surface-raised: #F9F9FB;
+  --color-border: #D5D5DA;
+  --color-border-strong: #BBBBC2;
 
   /* Text */
-  --color-text-primary: hsl(30 10% 15%);
-  --color-text-secondary: hsl(30 6% 40%);
-  --color-text-muted: hsl(30 4% 50%);
+  --color-text-primary: #111118;
+  --color-text-secondary: #4A4A55;
+  --color-text-muted: #65656F;
 
-  /* Accent (action and identity) — warm terracotta/burnt orange */
-  --color-accent: hsl(24 80% 38%);
-  --color-accent-hover: hsl(24 80% 32%);
-  --color-accent-subtle: hsl(24 60% 95%);
-  --color-accent-text: hsl(0 0% 100%);
+  /* Accent — Phase 1: mapped to emerald green to preserve 83 existing usages.
+   * Phase 2 (follow-up brief): migrate accent usages to vivid, then set accent = black (#111118). */
+  --color-accent: #059669;
+  --color-accent-hover: #047857;
+  --color-accent-subtle: #E7E7EB;
+  --color-accent-text: #F9F9FB;
+
+  /* Vivid — Brand Signature (Two-Green System) */
+  --color-vivid: #059669;
+  --color-vivid-deep: #3D5A48;
+  --color-vivid-subtle: #ECFDF5;
 
   /* Semantic */
-  --color-positive: hsl(145 55% 40%);
-  --color-caution: hsl(48 85% 50%);
-  --color-negative: hsl(0 65% 50%);
-  --color-info: hsl(210 50% 50%);
+  --color-positive: #16a34a;
+  --color-caution: #D4960A;
+  --color-negative: #C4352A;
+  --color-info: #2563eb;
 
-  /* Shadows — warm, not pure black */
-  --shadow-subtle: 0 1px 2px hsl(30 10% 15% / 0.05);
-  --shadow-medium: 0 4px 12px hsl(30 10% 15% / 0.08);
-  --shadow-large: 0 8px 24px hsl(30 10% 15% / 0.12);
+  /* Shadows — cool-tinted (rgba 26,26,26) */
+  --shadow-subtle: 0 1px 3px rgba(26, 26, 26, 0.05);
+  --shadow-medium: 0 4px 16px rgba(26, 26, 26, 0.07);
+  --shadow-large: 0 8px 24px rgba(26, 26, 26, 0.12);
 
   /* Border radius */
   --radius-sm: 6px;
@@ -44,7 +76,7 @@
   --radius-full: 9999px;
 
   /* Typography — Major Third scale (1.25 ratio), 16px base */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --text-xs: 0.75rem;
@@ -72,6 +104,39 @@
   --spacing-12: 48px;
 }
 
+/* Dark mode token overrides — CSS custom property overrides only */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #111118;
+    --color-surface: #1A1A22;
+    --color-surface-raised: #222230;
+    --color-border: #2A2A35;
+    --color-border-strong: #3A3A45;
+
+    --color-text-primary: #F9F9FB;
+    --color-text-secondary: #A0A0AD;
+    --color-text-muted: #8A8A96;
+
+    --color-accent: #10B981;
+    --color-accent-hover: #34D399;
+    --color-accent-subtle: #2A2A35;
+    --color-accent-text: #111118;
+
+    --color-vivid: #10B981;
+    --color-vivid-deep: #6B8F71;
+    --color-vivid-subtle: #1A2E22;
+
+    --color-positive: #22c55e;
+    --color-caution: #E5A820;
+    --color-negative: #E8453A;
+    --color-info: #3B82F6;
+
+    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow-large: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+}
+
 /* Base styles */
 body {
   font-family: var(--font-sans);
@@ -86,4 +151,57 @@ body {
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
+}
+
+/* Prose styling for markdown in conversation messages */
+.prose-ditto p { margin-bottom: 0.75rem; }
+.prose-ditto p:last-child { margin-bottom: 0; }
+.prose-ditto ol { list-style: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+.prose-ditto ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+.prose-ditto li { margin-bottom: 0.25rem; line-height: 1.6; }
+.prose-ditto strong { font-weight: 600; color: var(--color-text-primary); }
+.prose-ditto em { font-style: italic; }
+.prose-ditto code { font-size: 0.875rem; background: var(--color-surface); padding: 0.125rem 0.375rem; border-radius: 4px; font-family: var(--font-mono); }
+.prose-ditto pre { background: var(--color-surface); padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: 0.75rem; border: 1px solid var(--color-border); }
+.prose-ditto blockquote { border-left: 2px solid var(--color-vivid); padding-left: 1rem; margin: 0.75rem 0; color: var(--color-text-secondary); }
+.prose-ditto h1, .prose-ditto h2, .prose-ditto h3 { font-weight: 600; color: var(--color-text-primary); margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.prose-ditto h1:first-child, .prose-ditto h2:first-child, .prose-ditto h3:first-child { margin-top: 0; }
+.prose-ditto h1 { font-size: 1.25rem; }
+.prose-ditto h2 { font-size: 1.125rem; }
+.prose-ditto h3 { font-size: 1rem; }
+.prose-ditto a { color: var(--color-vivid); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Reasoning shimmer — gradient sweep for "Thinking..." text */
+@keyframes reasoning-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.reasoning-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-text-muted) 0%,
+    var(--color-text-secondary) 40%,
+    var(--color-text-muted) 60%,
+    var(--color-text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: reasoning-shimmer 2s ease-in-out infinite;
+}
+
+/* Day Zero staggered entrance animation */
+@keyframes day-zero-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

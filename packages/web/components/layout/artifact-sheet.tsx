@@ -133,7 +133,6 @@ export interface FullArtifactSheetProps {
   runId?: string;
   messages: UIMessage[];
   chatLoading: boolean;
-  statusMessage?: string;
   input: string;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
@@ -148,7 +147,6 @@ export function FullArtifactSheet({
   runId,
   messages,
   chatLoading,
-  statusMessage,
   input,
   onInputChange,
   onSubmit,
@@ -240,14 +238,15 @@ export function FullArtifactSheet({
           {/* Panel 1: Conversation */}
           <div className="w-1/3 h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
-              {messages.map((message) => (
+              {messages.map((message, _idx, arr) => (
                 <ConversationMessage
                   key={message.id}
                   message={message}
+                  isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
                   onAction={onAction}
                 />
               ))}
-              {chatLoading && <TypingIndicator status={statusMessage} />}
+              {chatLoading && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
             <div className="border-t border-border px-3 py-2">

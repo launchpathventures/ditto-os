@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Trigger:** Architect asked "how to restructure growing docs?" — human challenged: "why not build this as a first-class meta-process so Ditto also benefits?"
 **Layers affected:** L1 Process, L3 Harness, L5 Learning, L6 Human
-**Status:** active
+**Status:** partially-absorbed
 
 ## The Insight
 
@@ -26,3 +26,16 @@ This is the same insight as Insight-032 (dev process is the first workspace) app
 - Architecture.md: knowledge lifecycle as a system process (alongside intake-classifier, orchestrator, trust-evaluator)
 - ADR-008: potentially an 11th system agent role (knowledge-manager) or a responsibility of the improvement-scanner
 - Brief for implementation: after Brief 016 delivers CLI adapter + conditional routing
+
+## Absorption Status (2026-03-30)
+
+**Partially absorbed via Brief 060 (Knowledge Compounding):**
+- ✅ Knowledge extraction runs as a system process on the engine (`processes/knowledge-extraction.yaml`)
+- ✅ Solution memories with structured metadata stored in L2 memory model
+- ✅ Confidence lifecycle (decay after 50 runs, pruning below 0.2, supersession)
+
+**Still active — full lifecycle not yet on engine:**
+- State generation as a process step
+- Research freshness tracking via learning layer
+- Insight lifecycle audits as process steps
+- Context tiering via engine
