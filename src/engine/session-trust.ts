@@ -9,7 +9,7 @@
  *   - Critical-tier steps cannot be relaxed
  *   - Overrides are cleared when the run completes or fails
  *
- * Provenance: CI runner environment variables (temporary trust per execution context).
+ * Provenance: original (scoped-override-with-auto-cleanup pattern).
  */
 
 import type { TrustTier } from "../db/schema";

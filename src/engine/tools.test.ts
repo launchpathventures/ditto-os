@@ -172,8 +172,9 @@ describe("validateCommand — allowlist enforcement", () => {
     expect(validateCommand("pnpm", ["test"])).toBeNull();
   });
 
-  it("allows pnpm exec", () => {
-    expect(validateCommand("pnpm", ["exec", "tsc", "--noEmit"])).toBeNull();
+  it("denies pnpm exec", () => {
+    const error = validateCommand("pnpm", ["exec", "tsc", "--noEmit"]);
+    expect(error).toContain("not in the allowlist");
   });
 
   it("allows pnpm install --frozen-lockfile", () => {
@@ -315,6 +316,21 @@ describe("validateCommand — allowlist enforcement", () => {
 
   it("denies node --input-type", () => {
     const error = validateCommand("node", ["--input-type=module", "script.js"]);
+    expect(error).toContain("eval/print flags are blocked");
+  });
+
+  it("denies node --require", () => {
+    const error = validateCommand("node", ["script.js", "--require", "./malicious.js"]);
+    expect(error).toContain("eval/print flags are blocked");
+  });
+
+  it("denies node -r", () => {
+    const error = validateCommand("node", ["script.js", "-r", "./malicious.js"]);
+    expect(error).toContain("eval/print flags are blocked");
+  });
+
+  it("denies node --import", () => {
+    const error = validateCommand("node", ["script.js", "--import", "./malicious.js"]);
     expect(error).toContain("eval/print flags are blocked");
   });
 

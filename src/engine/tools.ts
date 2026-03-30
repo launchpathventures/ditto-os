@@ -212,7 +212,8 @@ const writeFileTool: LlmToolDefinition = {
  */
 export const COMMAND_ALLOWLIST: Record<string, { allowed: string[]; denied: string[] } | null> = {
   pnpm: {
-    allowed: ["run", "test", "exec", "install"],
+    allowed: ["run", "test", "install"],
+    // exec blocked: runs arbitrary binaries from node_modules/.bin or PATH
     denied: ["publish", "link"],
   },
   npm: {
@@ -221,7 +222,7 @@ export const COMMAND_ALLOWLIST: Record<string, { allowed: string[]; denied: stri
   },
   node: {
     allowed: [], // Special: validated by file extension check
-    denied: ["-e", "--eval", "--input-type", "-p", "--print"],
+    denied: ["-e", "--eval", "--input-type", "-p", "--print", "-r", "--require", "--import", "--loader", "--experimental-loader"],
   },
   git: {
     allowed: ["status", "log", "diff", "show", "branch", "ls-files", "rev-parse"],

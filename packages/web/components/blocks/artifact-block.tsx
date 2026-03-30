@@ -7,7 +7,7 @@
  * Title, status badge (variant-coloured), summary text, "Open" action button.
  * Clicking "Open" dispatches action `open-artifact-{artifactId}`.
  *
- * Brief 050, ADR-023.
+ * Provenance: original. Brief 050, ADR-023.
  */
 
 import type { ArtifactBlock } from "@/lib/engine";
