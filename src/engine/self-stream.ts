@@ -44,6 +44,7 @@ import { registerBlockActions } from "./surface-actions";
 
 export type SelfStreamEvent =
   | { type: "text-delta"; text: string }
+  | { type: "thinking-delta"; text: string }
   | { type: "tool-call-start"; toolName: string; toolCallId: string }
   | { type: "tool-call-result"; toolCallId: string; result: string; blocks?: ContentBlock[]; metadata?: Record<string, unknown> }
   | { type: "structured-data"; data: Record<string, unknown> }
@@ -136,6 +137,8 @@ export async function* selfConverseStream(
       if (event.type === "text-delta") {
         turnText += event.text;
         yield { type: "text-delta", text: event.text };
+      } else if (event.type === "thinking-delta") {
+        yield { type: "thinking-delta", text: event.text };
       } else if (event.type === "content-complete") {
         turnContent = event.content;
         turnToolUses = extractToolUse(event.content);
@@ -173,18 +176,6 @@ export async function* selfConverseStream(
         type: "tool-call-start",
         toolName: toolUse.name,
         toolCallId: toolUse.id,
-      };
-      yield {
-        type: "status",
-        message: toolUse.name === "consult_role"
-          ? `Consulting ${input.role}...`
-          : toolUse.name === "start_dev_role"
-            ? `Delegating to ${input.role}...`
-            : toolUse.name === "plan_with_role"
-              ? `Planning with ${input.role}...`
-              : toolUse.name === "start_pipeline"
-                ? `Starting pipeline: ${(input.processSlug as string) ?? "dev-pipeline"}...`
-                : `Running ${toolUse.name}...`,
       };
 
       const result = await executeDelegation(toolUse.name, input);

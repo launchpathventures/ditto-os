@@ -18,6 +18,7 @@ import type { HarnessHandler, HarnessContext } from "../harness";
 import { classifyEdit } from "../trust-diff";
 import { evaluateTrust } from "../trust-evaluator";
 import { startSystemAgentRun } from "../heartbeat";
+import { checkSignificanceThreshold } from "../system-agents/knowledge-extractor";
 
 export const feedbackRecorderHandler: HarnessHandler = {
   name: "feedback-recorder",
@@ -283,6 +284,18 @@ export async function recordEditFeedback(params: {
 
   // AC-15: Evaluate trust after feedback via system agent (014a)
   await triggerTrustEvaluation(params.processId);
+
+  // Brief 060: Trigger knowledge extraction if significance threshold met
+  await triggerKnowledgeExtraction({
+    processId: params.processId,
+    feedbackId: fb.id,
+    feedbackType: "edit",
+    editSeverity,
+    originalOutput: params.originalText,
+    editedOutput: params.editedText,
+    diff: JSON.stringify({ changes: diff.changes, stats: diff.stats }),
+    comment: params.comment,
+  });
 }
 
 /**
@@ -359,6 +372,18 @@ export async function recordRejectionFeedback(params: {
 
   // AC-15: Evaluate trust after feedback via system agent (014a)
   await triggerTrustEvaluation(params.processId);
+
+  // Brief 060: Trigger knowledge extraction if significance threshold met
+  // For rejections, we get the original output from the step run output
+  const originalOutput = await getOutputText(params.outputId);
+  await triggerKnowledgeExtraction({
+    processId: params.processId,
+    feedbackId: fb.id,
+    feedbackType: "reject",
+    originalOutput,
+    diff: JSON.stringify({ type: "rejection", comment: params.comment }),
+    comment: params.comment,
+  });
 }
 
 /**
@@ -381,4 +406,127 @@ export async function recordApprovalFeedback(params: {
 
   // AC-15: Evaluate trust after feedback via system agent (014a)
   await triggerTrustEvaluation(params.processId);
+}
+
+/**
+ * Get the text content of a process output for knowledge extraction.
+ */
+async function getOutputText(outputId: string): Promise<string> {
+  const [output] = await db
+    .select()
+    .from(schema.processOutputs)
+    .where(eq(schema.processOutputs.id, outputId))
+    .limit(1);
+
+  if (!output) return "";
+
+  const content = output.content as Record<string, unknown>;
+  // Extract text from content — handles both string and object content
+  if (typeof content === "string") return content;
+  if (content.text) return String(content.text);
+  if (content.response) return String(content.response);
+  return JSON.stringify(content).slice(0, 5000);
+}
+
+/**
+ * Brief 060: Trigger knowledge extraction via system agent process.
+ * Checks significance threshold before triggering. Non-blocking — errors
+ * are logged but don't fail the feedback recording.
+ */
+async function triggerKnowledgeExtraction(params: {
+  processId: string;
+  feedbackId: string;
+  feedbackType: "edit" | "reject";
+  editSeverity?: string;
+  originalOutput?: string;
+  editedOutput?: string;
+  diff: string;
+  comment?: string;
+}): Promise<void> {
+  try {
+    // Get the process trust tier for scaling
+    const [proc] = await db
+      .select()
+      .from(schema.processes)
+      .where(eq(schema.processes.id, params.processId))
+      .limit(1);
+
+    if (!proc) return;
+
+    // Don't trigger extraction for system processes (avoid recursive loops)
+    const definition = proc.definition as Record<string, unknown>;
+    if (definition?.system === true) return;
+
+    // Find the process run ID from the feedback's associated output
+    const [fbRecord] = await db
+      .select()
+      .from(schema.feedback)
+      .where(eq(schema.feedback.id, params.feedbackId))
+      .limit(1);
+
+    let processRunId: string | undefined;
+    if (fbRecord?.outputId) {
+      const [output] = await db
+        .select()
+        .from(schema.processOutputs)
+        .where(eq(schema.processOutputs.id, fbRecord.outputId))
+        .limit(1);
+      processRunId = output?.processRunId;
+    }
+    if (!processRunId) {
+      const [recentRun] = await db
+        .select()
+        .from(schema.processRuns)
+        .where(eq(schema.processRuns.processId, params.processId))
+        .limit(1);
+      processRunId = recentRun?.id ?? "unknown";
+    }
+
+    // AC5: Detect retries — check if any step in the run had a retry decision
+    let retryTriggered = false;
+    if (processRunId && processRunId !== "unknown") {
+      const retryDecisions = await db
+        .select()
+        .from(schema.harnessDecisions)
+        .where(
+          and(
+            eq(schema.harnessDecisions.processRunId, processRunId),
+            eq(schema.harnessDecisions.reviewResult, "retry"),
+          ),
+        )
+        .limit(1);
+      retryTriggered = retryDecisions.length > 0;
+    }
+
+    const shouldExtract = await checkSignificanceThreshold({
+      processId: params.processId,
+      feedbackType: params.feedbackType,
+      editSeverity: params.editSeverity,
+      trustTier: proc.trustTier,
+      retryTriggered,
+    });
+
+    if (!shouldExtract) return;
+
+    await startSystemAgentRun(
+      "knowledge-extraction",
+      {
+        processRunId,
+        processId: params.processId,
+        feedbackId: params.feedbackId,
+        originalOutput: params.originalOutput ?? "",
+        editedOutput: params.editedOutput ?? "",
+        diff: params.diff,
+        comment: params.comment ?? "",
+        feedbackType: params.feedbackType,
+      },
+      "system:feedback-recorder",
+    );
+  } catch (error) {
+    // Non-blocking — log but don't fail feedback recording
+    console.error(
+      "Knowledge extraction trigger failed (non-blocking):",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }

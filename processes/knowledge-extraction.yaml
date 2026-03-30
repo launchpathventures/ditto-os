@@ -1,0 +1,170 @@
+# Ditto — System Agent Process Definition
+# Process: Knowledge Extraction
+# Extracts structured solution knowledge from human corrections (edits/rejections).
+# 3 parallel extractors + assembly step. Triggered by feedback-recorder on significant corrections.
+#
+# Provenance: CE compound (3 parallel extractors pattern), Reflexion (evidence-grounded),
+# Devin (structured extraction > self-summarization), Brief 060
+
+name: Knowledge Extraction
+id: knowledge-extraction
+version: 1
+status: active
+system: true
+
+description: >
+  System agent that extracts structured solution knowledge from human corrections.
+  When a significant edit or rejection occurs, three parallel extractors analyze the
+  correction (context classification, solution extraction, related knowledge lookup),
+  then an assembly step merges results and creates or updates a solution memory.
+  Runs through the harness pipeline for auditability and trust earning.
+
+trigger:
+  type: event
+  event: feedback.significant_correction
+  description: Triggered by feedback-recorder when correction meets significance threshold
+
+inputs:
+  - name: processRunId
+    type: text
+    source: system
+    required: true
+    description: The run that produced the corrected output
+  - name: processId
+    type: text
+    source: system
+    required: true
+    description: The process this correction belongs to
+  - name: feedbackId
+    type: text
+    source: system
+    required: true
+    description: The feedback record that triggered extraction
+  - name: originalOutput
+    type: text
+    source: system
+    required: true
+    description: What the agent produced
+  - name: editedOutput
+    type: text
+    source: system
+    required: false
+    description: What the human corrected it to (edits only)
+  - name: diff
+    type: text
+    source: system
+    required: true
+    description: Structured diff from feedback-recorder
+  - name: comment
+    type: text
+    source: system
+    required: false
+    description: Human's edit/rejection comment
+  - name: feedbackType
+    type: text
+    source: system
+    required: true
+    description: '"edit" or "reject"'
+
+steps:
+  - id: parallel-extract
+    name: Parallel Extraction
+    parallel_group: extract
+    steps:
+      - id: context-analyzer
+        name: Analyze Correction Context
+        executor: script
+        description: >
+          Classify the correction: category, tags, severity, problem type.
+          Grounded in diff, original output, step definition, process definition.
+        config:
+          systemAgent: knowledge-context-analyzer
+        inputs:
+          - processRunId
+          - processId
+          - diff
+          - originalOutput
+          - comment
+          - feedbackType
+        outputs:
+          - context-analysis
+
+      - id: solution-extractor
+        name: Extract Solution Knowledge
+        executor: script
+        description: >
+          Extract root cause, failed approaches, solution, prevention.
+          All fields optional — extractor populates what's relevant.
+          Grounded in diff, correction comment, original vs edited output.
+        config:
+          systemAgent: knowledge-solution-extractor
+        inputs:
+          - diff
+          - originalOutput
+          - editedOutput
+          - comment
+          - feedbackType
+        outputs:
+          - solution-extraction
+
+      - id: related-finder
+        name: Find Related Solutions
+        executor: script
+        description: >
+          Query existing solution memories for this process.
+          Match on category + tags overlap using SQL (not LLM).
+          Return overlap assessment: high/moderate/low/none.
+        config:
+          systemAgent: knowledge-related-finder
+        inputs:
+          - processId
+        outputs:
+          - related-solutions
+
+  - id: assemble
+    name: Assemble and Store Knowledge
+    executor: script
+    description: >
+      Merge outputs from all 3 extractors. If high overlap: update existing
+      memory (reinforce). If moderate overlap: create new with cross-reference.
+      If low/none: create new memory.
+    config:
+      systemAgent: knowledge-assembler
+    depends_on:
+      - parallel-extract
+    inputs:
+      - processId
+      - processRunId
+      - feedbackId
+    outputs:
+      - knowledge-result
+
+outputs:
+  - name: knowledge-result
+    type: data
+    destination: system
+    description: "Created or updated solution memory ID, action taken (created/reinforced/superseded)"
+
+quality_criteria:
+  - Extraction must reference specific evidence from the diff (not vague)
+  - Category must be from the constrained list
+  - Tags must be lowercase, hyphen-separated, max 8
+  - Prevention must be actionable (a check, not a platitude)
+
+feedback:
+  metrics:
+    - name: extraction_quality
+      description: Whether extracted knowledge accurately captures the correction
+      target: ">90% approved without edits"
+  capture:
+    - Solution memories created/updated in memories table
+    - Extraction quality tracked via trust pipeline
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "20 runs at >90% extraction quality"
+      upgrade_to: spot_checked
+  downgrade_triggers:
+    - "Extracted knowledge edited 3+ times in 10 runs"
+    - "False positive extractions (knowledge not useful)"

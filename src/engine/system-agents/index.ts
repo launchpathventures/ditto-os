@@ -13,6 +13,12 @@ import { executeTrustEvaluator } from "./trust-evaluator";
 import { executeIntakeClassifier } from "./intake-classifier";
 import { executeRouter } from "./router";
 import { executeOrchestrator } from "./orchestrator";
+import {
+  executeContextAnalyzer,
+  executeSolutionExtractor,
+  executeRelatedFinder,
+  executeKnowledgeAssembler,
+} from "./knowledge-extractor";
 
 export type SystemAgentHandler = (
   inputs: Record<string, unknown>,
@@ -24,6 +30,10 @@ const registry = new Map<string, SystemAgentHandler>([
   ["intake-classifier", executeIntakeClassifier],
   ["router", executeRouter],
   ["orchestrator", executeOrchestrator],
+  ["knowledge-context-analyzer", executeContextAnalyzer],
+  ["knowledge-solution-extractor", executeSolutionExtractor],
+  ["knowledge-related-finder", executeRelatedFinder],
+  ["knowledge-assembler", executeKnowledgeAssembler],
 ]);
 
 /**

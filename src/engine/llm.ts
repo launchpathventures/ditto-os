@@ -32,7 +32,13 @@ export interface LlmToolUseBlock {
   input: Record<string, unknown>;
 }
 
-export type LlmContentBlock = LlmTextBlock | LlmToolUseBlock;
+export interface LlmThinkingBlock {
+  type: "thinking";
+  thinking: string;
+  signature: string;
+}
+
+export type LlmContentBlock = LlmTextBlock | LlmToolUseBlock | LlmThinkingBlock;
 
 export interface LlmToolResultBlock {
   type: "tool_result";
@@ -146,6 +152,10 @@ function toAnthropicMessages(messages: LlmMessage[]): Anthropic.Messages.Message
     return {
       role: msg.role,
       content: blocks.map((block) => {
+        if (block.type === "thinking") {
+          const tb = block as LlmThinkingBlock;
+          return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
+        }
         if (block.type === "text") {
           return { type: "text" as const, text: (block as LlmTextBlock).text };
         }
@@ -166,6 +176,10 @@ function toAnthropicMessages(messages: LlmMessage[]): Anthropic.Messages.Message
 /** Convert Anthropic response content to Ditto content blocks */
 function fromAnthropicContent(content: Anthropic.Messages.ContentBlock[]): LlmContentBlock[] {
   return content.map((block) => {
+    if (block.type === "thinking") {
+      const tb = block as { type: "thinking"; thinking: string; signature: string };
+      return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
+    }
     if (block.type === "text") {
       return { type: "text" as const, text: block.text };
     }

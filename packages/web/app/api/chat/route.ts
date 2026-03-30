@@ -9,17 +9,23 @@
  * - tool-call-start → tool-input-start + tool-input-available
  * - tool-call-result → tool-output-available (with ContentBlock[] as output)
  * - credential-request → data-credential-request custom part
- * - status → data-status custom part
+ * - status → data-status custom part (transient — AC12)
  * - content-block → data-content-block custom part
  *
- * AC3: Uses AI SDK v6 native streaming
- * AC5: Route handler at /api/chat connects useChat to selfConverseStream()
- * AC11: Engine credentials and internals never reach the browser
+ * AC8: Custom data parts emitted with typed schemas (no `as never` casts)
+ * AC12: data-status emitted with transient: true
+ * AC13: consumeStream() ensures completion on client disconnect
+ * AC14: onFinish callback for future persistence
  *
- * Provenance: AI SDK v6 createUIMessageStream, Brief 045.
+ * Provenance: AI SDK v6 createUIMessageStream, Brief 058.
  */
 
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  consumeStream,
+  type UIMessageStreamWriter,
+} from "ai";
 import { getEngine } from "@/lib/engine";
 import { loadConfig, applyConfigToEnv } from "@/lib/config";
 
@@ -72,14 +78,46 @@ export async function POST(req: Request) {
 
   // Create v6 UIMessageStream from SelfStreamEvents
   const stream = createUIMessageStream({
-    execute: async ({ writer }) => {
-      let textPartId = "text-0";
+    // AC14: onFinish callback — logs session metadata (placeholder for future persistence)
+    onFinish({ messages: finishedMessages }) {
+      console.log(`[/api/chat] Stream finished. Messages: ${finishedMessages?.length ?? 0}`);
+    },
+    execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
+      let partSeq = 0;
+      let textPartId = `text-${partSeq++}`;
       let textStarted = false;
+      let reasoningPartId = `reasoning-${partSeq++}`;
+      let reasoningStarted = false;
 
       try {
         for await (const event of selfConverseStream(userId, userText)) {
           switch (event.type) {
+            case "thinking-delta": {
+              // Close any open text part before reasoning
+              if (textStarted) {
+                writer.write({ type: "text-end", id: textPartId });
+                textStarted = false;
+                textPartId = `text-${partSeq++}`;
+              }
+              if (!reasoningStarted) {
+                writer.write({ type: "reasoning-start", id: reasoningPartId });
+                reasoningStarted = true;
+              }
+              writer.write({
+                type: "reasoning-delta",
+                id: reasoningPartId,
+                delta: event.text,
+              });
+              break;
+            }
+
             case "text-delta": {
+              // Close reasoning part before text starts
+              if (reasoningStarted) {
+                writer.write({ type: "reasoning-end", id: reasoningPartId });
+                reasoningStarted = false;
+                reasoningPartId = `reasoning-${partSeq++}`;
+              }
               if (!textStarted) {
                 writer.write({ type: "text-start", id: textPartId });
                 textStarted = true;
@@ -93,11 +131,16 @@ export async function POST(req: Request) {
             }
 
             case "tool-call-start": {
-              // Close current text part if open
+              // Close current text/reasoning parts if open
+              if (reasoningStarted) {
+                writer.write({ type: "reasoning-end", id: reasoningPartId });
+                reasoningStarted = false;
+                reasoningPartId = `reasoning-${partSeq++}`;
+              }
               if (textStarted) {
                 writer.write({ type: "text-end", id: textPartId });
                 textStarted = false;
-                textPartId = `text-${Date.now()}`;
+                textPartId = `text-${partSeq++}`;
               }
               // Emit tool input start + available (we have args immediately)
               writer.write({
@@ -132,50 +175,57 @@ export async function POST(req: Request) {
             }
 
             case "content-block": {
-              // Custom data part for content blocks
+              // AC8: Custom data part — type-safe via dataPartSchemas
               writer.write({
-                type: `data-content-block`,
-                id: `cb-${Date.now()}`,
+                type: "data-content-block",
+                id: `cb-${partSeq++}`,
                 data: event.block,
-              } as never); // Type assertion needed for custom data parts
+              });
               break;
             }
 
             case "credential-request": {
+              // AC8: Custom data part — type-safe via dataPartSchemas
               writer.write({
-                type: `data-credential-request`,
-                id: `cred-${Date.now()}`,
+                type: "data-credential-request",
+                id: `cred-${partSeq++}`,
                 data: {
                   service: event.service,
                   processSlug: event.processSlug,
                   fieldLabel: event.fieldLabel,
                   placeholder: event.placeholder,
                 },
-              } as never);
+              });
               break;
             }
 
             case "status": {
+              // AC12: Status updates are transient — don't persist in message history
               writer.write({
-                type: `data-status`,
-                id: `status-${Date.now()}`,
+                type: "data-status",
+                id: `status-${partSeq++}`,
                 data: { message: event.message },
-              } as never);
+                transient: true,
+              });
               break;
             }
 
             case "structured-data": {
-              // Legacy: still emit for backward compat during migration
+              // AC8: Custom data part — type-safe via dataPartSchemas
               writer.write({
-                type: `data-structured`,
-                id: `sd-${Date.now()}`,
+                type: "data-structured",
+                id: `sd-${partSeq++}`,
                 data: event.data,
-              } as never);
+              });
               break;
             }
 
             case "finish": {
-              // Close any open text part
+              // Close any open parts
+              if (reasoningStarted) {
+                writer.write({ type: "reasoning-end", id: reasoningPartId });
+                reasoningStarted = false;
+              }
               if (textStarted) {
                 writer.write({ type: "text-end", id: textPartId });
                 textStarted = false;
@@ -210,5 +260,19 @@ export async function POST(req: Request) {
     },
   });
 
-  return createUIMessageStreamResponse({ stream });
+  // AC13: consumeStream ensures completion even if client disconnects
+  // Tee the stream: one for the response, one for consumeStream
+  const [responseStream, consumeStreamCopy] = stream.tee();
+
+  const response = createUIMessageStreamResponse({
+    stream: responseStream,
+    headers: {
+      "X-Accel-Buffering": "no", // Disable Nginx/proxy buffering
+      "Cache-Control": "no-cache, no-transform", // Prevent compression caching
+    },
+  });
+
+  consumeStream({ stream: consumeStreamCopy });
+
+  return response;
 }

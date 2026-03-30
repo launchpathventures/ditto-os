@@ -1,13 +1,18 @@
 "use client";
 
 /**
- * Ditto Typing Indicator
+ * Ditto Typing Indicator (Brief 062 AC7)
  *
- * Three subtle dots pulsing in accent colour.
- * "Not bouncing — gently fading in and out. Calm, not anxious."
+ * Vivid dot + shimmer "Thinking..." text — Self's visual presence while thinking.
+ * Status text replaces generic "Thinking..." when available.
  *
- * Visual spec: docs/research/visual-identity-design-system-ux.md §4.4
+ * Matches conversation message layout: max-width 720px, vivid dot, left-aligned.
+ * Mirrors Self's message structure (vivid dot + text), not a disconnected animation.
+ *
+ * Provenance: P30 prototype gathering_indicator.
  */
+
+import { Shimmer } from "@/components/ai-elements/shimmer";
 
 interface TypingIndicatorProps {
   status?: string;
@@ -15,39 +20,15 @@ interface TypingIndicatorProps {
 
 export function TypingIndicator({ status }: TypingIndicatorProps) {
   return (
-    <div className="flex gap-3 px-4 py-3 max-w-3xl mx-auto">
-      {/* Self indicator dot */}
-      <div className="flex-shrink-0 mt-1.5">
-        <div className="w-2 h-2 rounded-full bg-accent" />
-      </div>
+    <div className="max-w-[720px] mx-auto py-3">
+      <div className="flex items-center gap-3">
+        {/* Vivid dot — matches Self message identity dot */}
+        <div className="w-2 h-2 rounded-full bg-vivid flex-shrink-0" />
 
-      <div className="flex flex-col gap-1">
-        {/* Pulsing dots */}
-        <div className="flex items-center gap-1.5">
-          <div
-            className="w-1.5 h-1.5 rounded-full bg-accent"
-            style={{ animation: "pulse-dot 1.4s ease-in-out infinite" }}
-          />
-          <div
-            className="w-1.5 h-1.5 rounded-full bg-accent"
-            style={{
-              animation: "pulse-dot 1.4s ease-in-out infinite",
-              animationDelay: "0.2s",
-            }}
-          />
-          <div
-            className="w-1.5 h-1.5 rounded-full bg-accent"
-            style={{
-              animation: "pulse-dot 1.4s ease-in-out infinite",
-              animationDelay: "0.4s",
-            }}
-          />
-        </div>
-
-        {/* Status text (e.g., "Delegating to researcher...") */}
-        {status && (
-          <span className="text-sm text-text-muted">{status}</span>
-        )}
+        {/* Status text with shimmer, or default "Thinking..." */}
+        <span className="text-sm text-text-secondary">
+          <Shimmer>{status ?? "Thinking..."}</Shimmer>
+        </span>
       </div>
     </div>
   );

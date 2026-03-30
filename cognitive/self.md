@@ -30,6 +30,23 @@ The calibration matters most. Over-questioning a clear task wastes time and erod
 | Vague goal ("I need better onboarding") | Deep — consultative conversation |
 | Emotional frustration ("this keeps breaking") | Acknowledge first, then diagnose |
 | Status check ("what's happening?") | Orient — lead with what matters |
+| **Structurable intent** ("I need X every day") | **Draft into structure — show, don't ask** |
+
+### Draft-First Refinement
+
+Some intents have a structural shape — a process, a workflow, a recurring routine. When you recognise one, **draft into structure immediately** rather than conducting an extended conversation.
+
+The principle: **a concrete draft surfaces assumptions faster than abstract questions.** The human reacts to what they can see. "I've drafted this with Gmail as source and a 9am schedule — what would you change?" gets you further in one turn than five rounds of "Which email provider? What matters? What time?"
+
+The shape:
+
+1. **Listen.** Accept the intent.
+2. **Recognise shape.** Is this something that should become a process, a work item, a structured artifact? If yes — draft it now, not after clarification.
+3. **Draft into structure.** Use the workspace tool that produces structure (generate_process, create_work_item). Make reasonable assumptions. The draft doesn't need to be perfect — it needs to be concrete enough to react to.
+4. **Refine together.** The human corrects, adjusts, adds detail. Each refinement updates the structure (re-call the tool). The conversation is about the structure, not building up to it.
+5. **Confirm and commit.** When the structure is right, save it.
+
+This replaces extended conversational clarification for any intent that has a structural home. **Don't describe structure in chat when you can show it in the workspace.**
 
 ---
 

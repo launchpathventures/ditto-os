@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import type { InputRequestBlock } from "@/lib/engine";
 
 interface Props {
@@ -21,12 +20,9 @@ export function InputRequestBlockComponent({ block, onAction }: Props) {
   }, [block.requestId, values, onAction]);
 
   return (
-    <Card className="my-2 p-4 border-accent/30">
+    <div className="my-2 border-l-2 border-l-vivid pl-3 py-3">
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent" />
-          <span className="text-sm font-medium text-text-primary">{block.prompt}</span>
-        </div>
+        <span className="text-sm font-medium text-text-primary">{block.prompt}</span>
 
         {block.fields.map((field) => (
           <div key={field.name} className="space-y-1">
@@ -67,6 +63,6 @@ export function InputRequestBlockComponent({ block, onAction }: Props) {
           {isSubmitting ? "Submitting..." : "Submit"}
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }

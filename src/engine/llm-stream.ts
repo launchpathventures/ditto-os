@@ -29,6 +29,7 @@ import { mockCreateStreamingCompletion } from "./llm-mock";
 
 export type StreamEvent =
   | { type: "text-delta"; text: string }
+  | { type: "thinking-delta"; text: string }
   | { type: "content-complete"; content: LlmContentBlock[]; costCents: number; tokensUsed: number };
 
 // ============================================================
@@ -48,6 +49,10 @@ async function* streamAnthropic(request: LlmCompletionRequest): AsyncGenerator<S
     return {
       role: msg.role,
       content: blocks.map((block) => {
+        if (block.type === "thinking") {
+          const tb = block as { type: "thinking"; thinking: string; signature: string };
+          return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
+        }
         if (block.type === "text") return { type: "text" as const, text: (block as LlmTextBlock).text };
         if (block.type === "tool_use") {
           const tu = block as LlmToolUseBlock;
@@ -69,24 +74,37 @@ async function* streamAnthropic(request: LlmCompletionRequest): AsyncGenerator<S
     input_schema: tool.input_schema as Anthropic.Messages.Tool.InputSchema,
   }));
 
+  // Enable extended thinking for models that support it (claude-3-5+, claude-4+)
+  // Provenance: Anthropic Extended Thinking API (docs.anthropic.com/en/docs/build-with-claude/extended-thinking)
+  const supportsThinking = /claude-(3-5|3\.5|4|sonnet-4|opus-4|haiku-4)/.test(model);
+
   const stream = client.messages.stream({
     model,
-    max_tokens: request.maxTokens || 8192,
+    max_tokens: supportsThinking ? 16384 : (request.maxTokens || 8192),
     system: request.system,
     messages,
     ...(tools && tools.length > 0 ? { tools } : {}),
+    ...(supportsThinking ? { thinking: { type: "enabled", budget_tokens: 8192 } } : {}),
   });
 
-  // Yield text deltas as they arrive
+  // Yield text and thinking deltas as they arrive
   for await (const event of stream) {
-    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-      yield { type: "text-delta", text: event.delta.text };
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "text_delta") {
+        yield { type: "text-delta", text: event.delta.text };
+      } else if (event.delta.type === "thinking_delta") {
+        yield { type: "thinking-delta", text: (event.delta as { type: string; thinking: string }).thinking };
+      }
     }
   }
 
   // Yield complete response metadata
   const finalMessage = await stream.finalMessage();
   const content: LlmContentBlock[] = finalMessage.content.map((block) => {
+    if (block.type === "thinking") {
+      const tb = block as { type: "thinking"; thinking: string; signature: string };
+      return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
+    }
     if (block.type === "text") return { type: "text" as const, text: block.text };
     if (block.type === "tool_use") {
       return {

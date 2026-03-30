@@ -18,7 +18,7 @@
  */
 
 import { db, schema } from "../../db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { resolveTools } from "../tool-resolver";
 
@@ -34,6 +34,13 @@ const CHARS_PER_TOKEN = 4;
  * doesn't starve durable agent/process memories.
  */
 export const RUN_CONTEXT_TOKEN_BUDGET = 1500;
+
+/**
+ * Separate token budget for solution knowledge (Brief 060, AC9).
+ * Solution memories are structured knowledge extracted from corrections.
+ * They don't compete with operational corrections/preferences.
+ */
+export const SOLUTION_KNOWLEDGE_TOKEN_BUDGET = 1000;
 
 /**
  * Render a single memory as a formatted line.
@@ -102,7 +109,7 @@ export const memoryAssemblyHandler: HarnessHandler = {
         );
     }
 
-    // Load process-scoped memories
+    // Load process-scoped memories (excluding solution type — those have their own budget)
     const processMemories = await db
       .select({
         type: schema.memories.type,
@@ -115,7 +122,8 @@ export const memoryAssemblyHandler: HarnessHandler = {
         and(
           eq(schema.memories.scopeType, "process"),
           eq(schema.memories.scopeId, context.processRun.processId),
-          eq(schema.memories.active, true)
+          eq(schema.memories.active, true),
+          ne(schema.memories.type, "solution"),
         )
       )
       .orderBy(
@@ -164,6 +172,55 @@ export const memoryAssemblyHandler: HarnessHandler = {
       }
       if (lines.length > 1) {
         sections.push(lines.join("\n"));
+      }
+    }
+
+    // --- Solution knowledge (Brief 060, AC9-10) ---
+    // Separate budget for solution memories. Category-filtered, salience-sorted.
+    const solutionCharBudget = SOLUTION_KNOWLEDGE_TOKEN_BUDGET * CHARS_PER_TOKEN;
+    const solutionMemories = await db
+      .select({
+        id: schema.memories.id,
+        content: schema.memories.content,
+        confidence: schema.memories.confidence,
+        reinforcementCount: schema.memories.reinforcementCount,
+        metadata: schema.memories.metadata,
+      })
+      .from(schema.memories)
+      .where(
+        and(
+          eq(schema.memories.scopeType, "process"),
+          eq(schema.memories.scopeId, context.processRun.processId),
+          eq(schema.memories.type, "solution"),
+          eq(schema.memories.active, true),
+        ),
+      )
+      .orderBy(
+        desc(schema.memories.reinforcementCount),
+        desc(schema.memories.confidence),
+      );
+
+    if (solutionMemories.length > 0) {
+      const header = "## Prior Solution Knowledge";
+      let solutionChars = header.length + 1;
+      const solutionLines: string[] = [header];
+
+      for (const sol of solutionMemories) {
+        // Salience: confidence × log(reinforcementCount + 1)
+        const meta = (sol.metadata ?? {}) as Record<string, unknown>;
+        const category = (meta.category as string) || "unknown";
+        const confidence = sol.confidence;
+        const reinforced = sol.reinforcementCount;
+
+        const line = `- [${category}] ${sol.content} (confidence: ${confidence}, reinforced: ${reinforced}x)`;
+        if (solutionChars + line.length + 1 > solutionCharBudget) break;
+        solutionLines.push(line);
+        solutionChars += line.length + 1;
+        injectedCount++;
+      }
+
+      if (solutionLines.length > 1) {
+        sections.push(solutionLines.join("\n"));
       }
     }
 

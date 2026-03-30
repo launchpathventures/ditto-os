@@ -10,7 +10,10 @@ interface Props {
 
 export function SuggestionBlockComponent({ block, onAction }: Props) {
   return (
-    <div className="my-2 rounded-lg border border-accent/20 bg-accent/5 p-3">
+    <div className="my-2 rounded-lg bg-vivid-subtle py-3 px-4">
+      <div className="text-xs font-semibold tracking-wider text-vivid-deep uppercase mb-1.5">
+        Suggestion
+      </div>
       <p className="text-sm text-text-primary">{block.content}</p>
       {block.reasoning && (
         <p className="mt-1 text-xs text-text-secondary italic">{block.reasoning}</p>
@@ -22,9 +25,9 @@ export function SuggestionBlockComponent({ block, onAction }: Props) {
               key={action.id}
               onClick={() => onAction?.(action.id, action.payload)}
               className={cn(
-                "text-xs font-medium px-3 py-1 rounded-md transition-colors",
+                "text-xs font-medium px-3 py-1 rounded-full transition-colors",
                 action.style === "primary"
-                  ? "bg-accent text-white hover:bg-accent/90"
+                  ? "bg-vivid text-white hover:bg-vivid/90"
                   : "text-text-secondary hover:bg-surface-secondary",
               )}
             >
