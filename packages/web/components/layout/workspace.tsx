@@ -3,18 +3,19 @@
 /**
  * Ditto — Workspace Layout
  *
- * Three-panel layout: sidebar (w-56) + center (flex-1) + right panel (w-72).
+ * Two layout modes (ADR-024 Tier 1 Scaffold):
  *
- * Center column renders composed ContentBlock[] for canvas intents (Today, Inbox,
- * Work, Projects, Routines) via the composition engine, OR ProcessDetailContainer
- * for drill-down (scaffold layout mode). Conversation messages render below
- * composed blocks, above the input bar — they are scaffold elements, not
- * ContentBlocks within the composition.
+ * 1. **Workspace mode** (Brief 047): Sidebar (w-56) + center (flex-1) + right panel (w-72)
+ *    Center renders composed ContentBlock[] for canvas intents (Today, Inbox,
+ *    Work, Projects, Routines) via composition engine, OR ProcessDetailContainer
+ *    for drill-down, OR Settings.
  *
- * Brief 047: Composition engine replaces page-based centre panel routing.
- * ADR-024: Navigation destinations are composition intents, not pages.
+ * 2. **Artifact mode** (Brief 048): Conversation (300px) | Artifact (flex) | Context (320px)
+ *    Triggered when Self produces an artifact. Sidebar collapses. Artifact
+ *    takes centre stage. Conversation narrows to left column.
  *
- * Provenance: Brief 047, ADR-024, P13 prototype.
+ * Provenance: Brief 047 (composition engine), Brief 048 (artifact mode layout),
+ * ADR-024 (composable workspace architecture), P36 prototype.
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
@@ -24,32 +25,36 @@ import { Sidebar, type NavigationDestination } from "./sidebar";
 import { RightPanel, type PanelContext } from "./right-panel";
 import { ProcessDetailContainer } from "@/components/detail/process-detail";
 import { ComposedCanvas } from "./composed-canvas";
+import { ArtifactLayout } from "./artifact-layout";
+import { ArtifactSheet, FullArtifactSheet } from "./artifact-sheet";
 import { PromptInput } from "@/components/self/prompt-input";
 import { ConversationMessage } from "@/components/self/message";
 import { TypingIndicator } from "@/components/self/typing-indicator";
-import { ArtifactSheet } from "./artifact-sheet";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { resolveTransition } from "@/lib/transition-map";
+import type { ArtifactCenterView } from "@/lib/transition-map";
 import type { CompositionIntent } from "@/lib/compositions";
+import { useInteractionEvent } from "@/hooks/use-interaction-events";
 
 interface WorkspaceProps {
   userId?: string;
 }
 
 /**
- * Center view state — either a composition intent (canvas) or a process
- * drill-down (scaffold layout mode, AC13).
+ * Center view state — canvas, process drill-down, settings, or artifact mode (AC1).
  */
 type CenterView =
   | { type: "canvas"; intent: CompositionIntent }
   | { type: "process"; processId: string; runId?: string }
-  | { type: "settings" };
+  | { type: "settings" }
+  | ArtifactCenterView;
 
 export function Workspace({ userId = "default" }: WorkspaceProps) {
   const { data } = useProcessList();
   // Ensure feed data is in React Query cache for composition context
   useFeed();
+  const { emit: emitInteraction } = useInteractionEvent();
 
   const [centerView, setCenterView] = useState<CenterView>({
     type: "canvas",
@@ -57,6 +62,12 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   });
   const [panelOverride, setPanelOverride] = useState<PanelContext | null>(null);
   const [mobileSheet, setMobileSheet] = useState<PanelContext | null>(null);
+  // Store previous view for artifact mode exit (AC8)
+  // Uses ref to avoid stale closure in transition effect (F2 fix)
+  const previousViewRef = useRef<CenterView>({
+    type: "canvas",
+    intent: "today",
+  });
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1400,
   );
@@ -72,7 +83,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   });
   const chatLoading = chatStatus === "submitted" || chatStatus === "streaming";
 
-  // Scan messages for tool-invocation parts and resolve transitions
+  // Scan messages for tool-invocation parts and resolve transitions (AC7)
   const latestTransition = useMemo(() => {
     if (messages.length === 0) return null;
 
@@ -100,22 +111,33 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     return null;
   }, [messages]);
 
-  // Apply transition to panel override
+  // Apply transitions — panel overrides OR center view changes (AC7)
   useEffect(() => {
     if (!latestTransition) return;
 
-    const isCompact = windowWidth < 1024;
-    if (isCompact && latestTransition.type === "artifact-review") {
-      setMobileSheet(latestTransition);
-    } else {
-      setPanelOverride(latestTransition);
+    if (latestTransition.target === "panel") {
+      const isCompact = windowWidth < 1024;
+      if (isCompact && latestTransition.context.type === "artifact-review") {
+        setMobileSheet(latestTransition.context);
+      } else {
+        setPanelOverride(latestTransition.context);
+      }
+    } else if (latestTransition.target === "center") {
+      // Artifact mode transition — store current view for exit (AC8)
+      setCenterView((current) => {
+        previousViewRef.current = current;
+        return latestTransition.view;
+      });
+      setPanelOverride(null);
     }
   }, [latestTransition, windowWidth]);
 
-  // Auto-scroll to latest message
+  // Auto-scroll to latest message (workspace mode only)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, chatLoading]);
+    if (centerView.type !== "artifact") {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, chatLoading, centerView.type]);
 
   // Track window width for responsive breakpoints
   useEffect(() => {
@@ -126,17 +148,31 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Navigation — exits artifact mode (AC8)
   const handleNavigate = useCallback((destination: NavigationDestination) => {
+    // Brief 056 AC8: Emit composition_navigated event
+    const fromIntent = centerView.type === "canvas" ? centerView.intent : centerView.type;
+    emitInteraction("composition_navigated", destination, {
+      intent: destination,
+      fromIntent,
+    });
+
     if (destination === "settings") {
       setCenterView({ type: "settings" });
     } else {
       setCenterView({ type: "canvas", intent: destination });
     }
-    setPanelOverride(null); // Clear override on navigation
-  }, []);
+    setPanelOverride(null);
+  }, [centerView, emitInteraction]);
 
   const handleSelectProcess = useCallback((processId: string) => {
     setCenterView({ type: "process", processId });
+    setPanelOverride(null);
+  }, []);
+
+  // Exit artifact mode — restore previous view (AC8, F2 fix: read from ref)
+  const handleExitArtifact = useCallback(() => {
+    setCenterView(previousViewRef.current);
     setPanelOverride(null);
   }, []);
 
@@ -162,6 +198,43 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
         return;
       }
 
+      // Open artifact from ArtifactBlock "Open" button (Brief 050)
+      if (actionId.startsWith("open-artifact-")) {
+        const artifactId = actionId.replace("open-artifact-", "");
+        const processSlug = (payload?.processSlug as string) ?? "unknown";
+        setCenterView((current) => {
+          previousViewRef.current = current;
+          return {
+            type: "artifact",
+            artifactType: "document",
+            artifactId,
+            processId: processSlug,
+            runId: artifactId,
+          };
+        });
+        setPanelOverride(null);
+        return;
+      }
+
+      // Brief 055: Scope selection from roadmap composition
+      if (actionId.startsWith("select-brief-")) {
+        const briefNumber = actionId.replace("select-brief-", "");
+        const briefName = (payload?.briefName as string) ?? "";
+        const briefStatus = (payload?.briefStatus as string) ?? "ready";
+        const padded = briefNumber.padStart(3, "0");
+        const prefix = briefStatus === "draft" ? "Plan" : "Build";
+        const text = `${prefix} Brief ${padded}: ${briefName}`;
+
+        // Brief 056 AC10: Emit brief_selected event
+        emitInteraction("brief_selected", `brief-${briefNumber}`, {
+          briefNumber: parseInt(briefNumber, 10),
+          action: briefStatus === "draft" ? "plan" : "build",
+        });
+
+        setInput(text);
+        return;
+      }
+
       // Standard action messages to Self
       const actionMessages: Record<string, string> = {
         "knowledge-confirm": "That looks right.",
@@ -174,7 +247,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
       const text = actionMessages[actionId] ?? `Action: ${actionId}`;
       sendMessage({ role: "user", parts: [{ type: "text", text }] });
     },
-    [sendMessage, handleSelectProcess],
+    [sendMessage, handleSelectProcess, emitInteraction],
   );
 
   const processes = data?.processes ?? [];
@@ -185,13 +258,18 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   const isMediumLayout = windowWidth >= 1024 && windowWidth < 1280;
   const isCompactLayout = windowWidth < 1024;
 
+  // Is artifact mode active?
+  const isArtifactMode = centerView.type === "artifact";
+
   // Active navigation destination for sidebar highlight
   const activeDestination: NavigationDestination =
     centerView.type === "canvas"
       ? centerView.intent
       : centerView.type === "settings"
         ? "settings"
-        : "routines"; // Process drill-down highlights Routines
+        : centerView.type === "process"
+          ? "routines" // Process drill-down highlights Routines
+          : "today"; // Artifact mode — no specific highlight
 
   // Right panel context — reactive to center view
   const panelContext: PanelContext =
@@ -215,6 +293,59 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
 
   const hasMessages = messages.length > 0;
 
+  // ==========================================
+  // Artifact mode — full artifact layout (AC2)
+  // ==========================================
+  if (isArtifactMode && !isCompactLayout) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar: icon rail at ≥1440px, hidden at 1024-1439px (AC3) */}
+          {/* ArtifactLayout handles its own icon rail and back button */}
+          <ArtifactLayout
+            artifactType={centerView.artifactType}
+            artifactId={centerView.artifactId}
+            processId={centerView.processId}
+            runId={centerView.runId}
+            messages={messages}
+            chatLoading={chatLoading}
+            statusMessage={statusMessage}
+            input={input}
+            onInputChange={setInput}
+            onSubmit={handleChatSubmit}
+            onAction={handleBlockAction}
+            onExit={handleExitArtifact}
+            onNavigate={handleNavigate}
+            windowWidth={windowWidth}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Artifact mode on mobile — full-screen artifact with swipe (AC9, F3 fix)
+  if (isArtifactMode && isCompactLayout) {
+    return (
+      <FullArtifactSheet
+        artifactType={centerView.artifactType}
+        artifactId={centerView.artifactId}
+        processId={centerView.processId}
+        runId={centerView.runId}
+        messages={messages}
+        chatLoading={chatLoading}
+        statusMessage={statusMessage}
+        input={input}
+        onInputChange={setInput}
+        onSubmit={handleChatSubmit}
+        onAction={handleBlockAction}
+        onExit={handleExitArtifact}
+      />
+    );
+  }
+
+  // ==========================================
+  // Workspace mode — standard layout (AC11)
+  // ==========================================
   return (
     <div className="h-screen flex flex-col bg-background">
       <div className="flex-1 flex overflow-hidden">
@@ -239,11 +370,11 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
         )}
 
         {/* Center panel — composed canvas or process detail + conversation + input */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div data-testid="center-panel" className="flex-1 flex flex-col overflow-hidden">
           {/* Content area */}
           <div className="flex-1 overflow-y-auto">
             {centerView.type === "process" ? (
-              /* Scaffold layout mode — ProcessDetailContainer (AC13) */
+              /* Scaffold layout mode — ProcessDetailContainer */
               <ProcessDetailContainer
                 processId={centerView.processId}
                 runId={centerView.runId}
@@ -257,8 +388,8 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                   Settings page — AI connection, integrations, preferences.
                 </p>
               </div>
-            ) : (
-              /* Canvas — composed blocks (AC5) */
+            ) : centerView.type === "canvas" ? (
+              /* Canvas — composed blocks */
               <div className="p-6 max-w-2xl mx-auto">
                 {/* Composed ContentBlock[] from composition engine */}
                 <ComposedCanvas
@@ -266,7 +397,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                   onAction={handleBlockAction}
                 />
 
-                {/* Conversation messages — scaffold elements below composition (AC14) */}
+                {/* Conversation messages — scaffold elements below composition */}
                 {hasMessages && (
                   <div className="mt-4 space-y-1">
                     {messages.map((message) => (
@@ -290,7 +421,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                   </div>
                 )}
               </div>
-            )}
+            ) : null /* artifact mode handled by early return above */}
           </div>
 
           {/* Chat input — persistent at bottom of center column (scaffold) */}

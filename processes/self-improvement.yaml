@@ -44,6 +44,15 @@ inputs:
     required: true
     description: What the human keeps fixing — systematic correction patterns
 
+  - name: interaction-events
+    type: data
+    source: engine
+    required: false
+    description: >
+      UI interaction signals (Brief 056) — which outputs get viewed vs ignored,
+      which compositions are frequented, average review response time.
+      Implicit signals for meta-process optimization.
+
 steps:
   - parallel_group: scan
     depends_on: []
@@ -55,7 +64,9 @@ steps:
         description: >
           Analyse feedback data across all processes. What's degrading?
           What corrections repeat? Where is time being wasted?
-        inputs: [performance-metrics, correction-patterns]
+          Include UI interaction signals: which outputs get viewed vs
+          ignored, average review response time, navigation patterns.
+        inputs: [performance-metrics, correction-patterns, interaction-events]
         outputs: [performance-analysis]
 
       - id: scan-ecosystem

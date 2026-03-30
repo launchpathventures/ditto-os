@@ -266,13 +266,13 @@ Software development has a self-governing quality infrastructure: linters, type 
 
 Ditto development applies this principle directly:
 
-1. **Automated checks run first** — `pnpm run type-check` + `pnpm test` + smoke test from the brief
+1. **Automated checks run first** — `pnpm run type-check` + `pnpm test` + `pnpm test:e2e` (Playwright, Brief 054) + smoke test from the brief
 2. **Structured review second** — Dev Reviewer checks against the 12-point architecture checklist, including verification that the Builder ran tests and smoke test
 3. **Human judgment last** — only on what passed everything else
 
 The Builder owns all automated quality gates: type-check, test suite, smoke test execution, and test authoring for new code. The Reviewer verifies these were run (checking for evidence) and challenges the work architecturally. There is no separate QA/Tester role — testing is a quality dimension distributed across Builder (execution) and Reviewer (verification). See Insight-038.
 
-**Re-entry condition:** When a web UI ships (Phase 10), revisit whether a dedicated QA role with browser-based behavioral testing is needed (gstack `/qa` pattern).
+**Re-entry condition (resolved):** Web UI shipped (Phase 10). Browser-based behavioral testing added via Playwright e2e tests (Brief 054) with mock LLM layer (`MOCK_LLM=true`). No dedicated QA role — testing remains distributed across Builder (execution) and Reviewer (verification).
 
 This layering is the seed for the harness's general quality infrastructure (see Insight-001: Quality Criteria Are Additive).
 

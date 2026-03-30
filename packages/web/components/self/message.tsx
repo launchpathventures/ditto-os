@@ -30,6 +30,7 @@ export function ConversationMessage({ message, onAction }: MessageProps) {
 
   return (
     <div
+      data-testid={isSelf ? "assistant-message" : "user-message"}
       className={cn(
         "flex gap-3 px-4 py-3 max-w-3xl mx-auto",
         !isSelf && "flex-row-reverse",

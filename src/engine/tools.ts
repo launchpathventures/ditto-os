@@ -16,8 +16,11 @@
 
 import fs from "fs";
 import path from "path";
-import { execFileSync } from "child_process";
+import { execFileSync, execFile } from "child_process";
+import { promisify } from "util";
 import type { LlmToolDefinition } from "./llm";
+
+const execFileAsync = promisify(execFile);
 
 // ============================================================
 // Security: deny-list for secret files
@@ -196,6 +199,128 @@ const writeFileTool: LlmToolDefinition = {
   },
 };
 
+// ============================================================
+// Shell execution: run_command tool (Brief 051)
+// ============================================================
+
+/**
+ * Command allowlist: executable → allowed subcommands/flags.
+ * Subcommand is args[0]. Null means executable is entirely blocked.
+ * Special entries:
+ *   - `node`: args[0] must end in .js/.ts/.mjs/.cjs (no -e/--eval/--print/-p/--input-type)
+ *   - `pnpm install`: only with --frozen-lockfile
+ */
+export const COMMAND_ALLOWLIST: Record<string, { allowed: string[]; denied: string[] } | null> = {
+  pnpm: {
+    allowed: ["run", "test", "install"],
+    // exec blocked: runs arbitrary binaries from node_modules/.bin or PATH
+    denied: ["publish", "link"],
+  },
+  npm: {
+    allowed: ["run", "test"],
+    denied: ["exec", "publish", "link", "install"],
+  },
+  node: {
+    allowed: [], // Special: validated by file extension check
+    denied: ["-e", "--eval", "--input-type", "-p", "--print", "-r", "--require", "--import", "--loader", "--experimental-loader"],
+  },
+  git: {
+    allowed: ["status", "log", "diff", "show", "branch", "ls-files", "rev-parse"],
+    denied: ["push", "reset", "checkout", "clean", "merge", "rebase"],
+  },
+  npx: null, // Entirely blocked
+};
+
+/** Max output buffer for command execution (10MB) */
+const MAX_COMMAND_BUFFER = 10 * 1024 * 1024;
+
+/** Default command timeout (120 seconds) */
+const DEFAULT_COMMAND_TIMEOUT = 120_000;
+
+/**
+ * Validate an executable + args against the command allowlist.
+ * Returns null if allowed, error string if denied.
+ */
+export function validateCommand(executable: string, args: string[]): string | null {
+  const entry = COMMAND_ALLOWLIST[executable];
+
+  // Executable not in allowlist at all
+  if (entry === undefined) {
+    return `Command not allowed: '${executable}' is not in the allowlist. Allowed: ${Object.keys(COMMAND_ALLOWLIST).filter(k => COMMAND_ALLOWLIST[k] !== null).join(", ")}`;
+  }
+
+  // Executable entirely blocked (e.g., npx)
+  if (entry === null) {
+    return `Command not allowed: '${executable}' is blocked entirely`;
+  }
+
+  const subcommand = args[0];
+
+  // Special case: node — first arg must be a file path, no eval flags
+  if (executable === "node") {
+    for (const flag of args) {
+      // Check exact match and prefix match (e.g., --input-type=module matches --input-type)
+      const isDenied = entry.denied.some(d => flag === d || flag.startsWith(d + "="));
+      if (isDenied) {
+        return `Command not allowed: 'node ${flag}' — eval/print flags are blocked`;
+      }
+    }
+    if (!subcommand || !/\.(js|ts|mjs|cjs)$/.test(subcommand)) {
+      return `Command not allowed: 'node' requires a file path as first argument (must end in .js, .ts, .mjs, or .cjs)`;
+    }
+    return null;
+  }
+
+  // Check subcommand is present
+  if (!subcommand) {
+    return `Command not allowed: '${executable}' requires a subcommand. Allowed: ${entry.allowed.join(", ")}`;
+  }
+
+  // Check denied first (takes precedence)
+  if (entry.denied.includes(subcommand)) {
+    return `Command not allowed: '${executable} ${subcommand}' is denied`;
+  }
+
+  // Check allowed
+  if (!entry.allowed.includes(subcommand)) {
+    return `Command not allowed: '${executable} ${subcommand}' is not in the allowlist. Allowed: ${entry.allowed.join(", ")}`;
+  }
+
+  // Special case: pnpm install requires --frozen-lockfile
+  if (executable === "pnpm" && subcommand === "install") {
+    if (!args.includes("--frozen-lockfile")) {
+      return `Command not allowed: 'pnpm install' requires --frozen-lockfile flag`;
+    }
+  }
+
+  return null;
+}
+
+const runCommandTool: LlmToolDefinition = {
+  name: "run_command",
+  description:
+    "Run an allowlisted shell command in the project directory. Use this to run tests (pnpm test), type-check (pnpm run type-check), check git status, or execute node scripts. Commands are executed via execFile (no shell interpretation). Only allowlisted executables and subcommands are permitted: pnpm (run/test/exec/install --frozen-lockfile), npm (run/test), node (file paths only, no -e/--eval), git (status/log/diff/show/branch/ls-files/rev-parse).",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      executable: {
+        type: "string",
+        description: "The executable to run (e.g., 'pnpm', 'git', 'node')",
+      },
+      args: {
+        type: "array",
+        items: { type: "string" },
+        description: "Arguments to pass to the executable (e.g., ['run', 'type-check'] or ['test'])",
+      },
+      timeout: {
+        type: "number",
+        description: "Optional timeout in seconds (default: 120). Command is killed if it exceeds this.",
+      },
+    },
+    required: ["executable", "args"],
+  },
+};
+
 /** Read-only tools: read_file, search_files, list_files */
 export const readOnlyTools: LlmToolDefinition[] = [
   readFileTool,
@@ -207,6 +332,12 @@ export const readOnlyTools: LlmToolDefinition[] = [
 export const readWriteTools: LlmToolDefinition[] = [
   ...readOnlyTools,
   writeFileTool,
+];
+
+/** Exec tools: read-write + run_command (Brief 051) */
+export const execTools: LlmToolDefinition[] = [
+  ...readWriteTools,
+  runCommandTool,
 ];
 
 /** @deprecated Use readOnlyTools or readWriteTools instead */
@@ -223,16 +354,20 @@ interface ToolInput {
   pattern?: string;
   glob?: string;
   content?: string;
+  executable?: string;
+  args?: string[];
+  timeout?: number;
 }
 
 /**
  * Execute a tool call and return the result text.
+ * Synchronous for read/write tools, returns Promise<string> for run_command.
  */
 export function executeTool(
   toolName: string,
   input: ToolInput,
   workDir: string = process.cwd()
-): string {
+): string | Promise<string> {
   switch (toolName) {
     case "read_file":
       return readFile(input, workDir);
@@ -242,6 +377,8 @@ export function executeTool(
       return listFiles(input, workDir);
     case "write_file":
       return writeFile(input, workDir);
+    case "run_command":
+      return executeCommand(input, workDir);
     default:
       return `Unknown tool: ${toolName}`;
   }
@@ -466,5 +603,132 @@ function writeFile(input: ToolInput, workDir: string): string {
     return `Written: ${input.path} (${lineCount} lines)`;
   } catch (e) {
     return `Error writing file: ${(e as Error).message}`;
+  }
+}
+
+// ============================================================
+// run_command handler (Brief 051)
+// ============================================================
+
+/**
+ * Scrub output for references to secret files.
+ * Filename-based pattern matching using SECRET_PATTERNS.
+ * Note: does NOT detect inline secrets (API keys, tokens) — accepted limitation.
+ */
+function scrubOutput(text: string): string {
+  let scrubbed = text;
+  for (const pattern of SECRET_PATTERNS) {
+    if (pattern.startsWith("*") && pattern.endsWith("*")) {
+      const inner = pattern.slice(1, -1);
+      const re = new RegExp(`\\S*${inner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\S*`, "gi");
+      scrubbed = scrubbed.replace(re, "[REDACTED]");
+    } else if (pattern.startsWith("*")) {
+      const suffix = pattern.slice(1);
+      const re = new RegExp(`\\S*${suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi");
+      scrubbed = scrubbed.replace(re, "[REDACTED]");
+    } else if (pattern.endsWith("*")) {
+      const prefix = pattern.slice(0, -1);
+      const re = new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\S*`, "gi");
+      scrubbed = scrubbed.replace(re, "[REDACTED]");
+    } else if (pattern.includes(".*")) {
+      const prefix = pattern.replace(".*", ".");
+      const re = new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\S*`, "gi");
+      scrubbed = scrubbed.replace(re, "[REDACTED]");
+    } else {
+      const re = new RegExp(`(^|\\s|/)${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$|/)`, "gi");
+      scrubbed = scrubbed.replace(re, "$1[REDACTED]$2");
+    }
+  }
+  return scrubbed;
+}
+
+/**
+ * Execute an allowlisted shell command via execFile (no shell interpretation).
+ * Returns structured output or error message.
+ */
+async function executeCommand(input: ToolInput, workDir: string): Promise<string> {
+  const { executable, args = [], timeout } = input;
+
+  if (!executable) {
+    return "Error: 'executable' parameter is required";
+  }
+
+  // Validate against allowlist
+  const validationError = validateCommand(executable, args);
+  if (validationError) {
+    return `Error: ${validationError}`;
+  }
+
+  // Validate working directory is within project root
+  const resolvedWorkDir = path.resolve(workDir);
+  const projectRoot = path.resolve(process.cwd());
+  if (!resolvedWorkDir.startsWith(projectRoot) && resolvedWorkDir !== projectRoot) {
+    return "Error: working directory must be within project root";
+  }
+
+  const timeoutMs = timeout ? timeout * 1000 : DEFAULT_COMMAND_TIMEOUT;
+  const cmdDisplay = `${executable} ${args.join(" ")}`.trim();
+
+  try {
+    const { stdout, stderr } = await execFileAsync(executable, args, {
+      cwd: workDir,
+      timeout: timeoutMs,
+      maxBuffer: MAX_COMMAND_BUFFER,
+      env: { ...process.env },
+    });
+
+    const parts: string[] = [`$ ${cmdDisplay}`, ""];
+
+    if (stdout) {
+      const scrubbedStdout = scrubOutput(stdout.trim());
+      // Truncate if over buffer
+      if (scrubbedStdout.length > MAX_COMMAND_BUFFER) {
+        parts.push("[stdout — truncated to 10MB]");
+        parts.push(scrubbedStdout.slice(0, MAX_COMMAND_BUFFER));
+      } else {
+        parts.push(scrubbedStdout);
+      }
+    }
+
+    if (stderr) {
+      const scrubbedStderr = scrubOutput(stderr.trim());
+      if (scrubbedStderr) {
+        parts.push("", "[stderr]", scrubbedStderr);
+      }
+    }
+
+    if (!stdout && !stderr) {
+      parts.push("(no output)");
+    }
+
+    parts.push("", `Exit code: 0`);
+    return parts.join("\n");
+  } catch (error) {
+    const execError = error as {
+      stdout?: string;
+      stderr?: string;
+      code?: number | string;
+      killed?: boolean;
+      signal?: string;
+    };
+
+    // Timeout
+    if (execError.killed || execError.signal === "SIGTERM") {
+      return `Error: Command timed out after ${Math.round(timeoutMs / 1000)}s: ${cmdDisplay}`;
+    }
+
+    // Command failed with exit code
+    const parts: string[] = [`$ ${cmdDisplay}`, ""];
+
+    if (execError.stdout) {
+      parts.push(scrubOutput(execError.stdout.trim()));
+    }
+    if (execError.stderr) {
+      parts.push("", "[stderr]", scrubOutput(execError.stderr.trim()));
+    }
+
+    const exitCode = typeof execError.code === "number" ? execError.code : 1;
+    parts.push("", `Exit code: ${exitCode}`);
+    return parts.join("\n");
   }
 }

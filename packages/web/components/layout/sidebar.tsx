@@ -3,13 +3,13 @@
 /**
  * Ditto — Sidebar Navigation
  *
- * Six destinations: Today / Inbox / Work / Projects / Routines / Settings
+ * Seven destinations: Today / Inbox / Work / Projects / Routines / Roadmap / Settings
  * per ADR-024 Section 2 and .impeccable.md nav label table.
  *
  * Inbox shows count badge when items need attention.
  * Settings is scaffold (fixed page), all others are composition intents.
  *
- * Brief 047 AC4: Sidebar shows exactly these 6 items.
+ * Brief 047 AC4 + Brief 055 AC6: Sidebar navigation items.
  * Provenance: original (ADR-024, P00 v2 prototype, .impeccable.md).
  */
 
@@ -39,6 +39,7 @@ const NAV_ITEMS: Array<{
   { id: "work", label: "Work", icon: "▸" },
   { id: "projects", label: "Projects", icon: "◇" },
   { id: "routines", label: "Routines", icon: "↻" },
+  { id: "roadmap", label: "Roadmap", icon: "◈" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
 

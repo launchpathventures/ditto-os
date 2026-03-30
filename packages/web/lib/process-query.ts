@@ -177,6 +177,29 @@ export function useProcessActivities(processId: string | null) {
 }
 
 /**
+ * Fetch process run output as ContentBlock[] for artifact rendering.
+ * Brief 050: Engine-connected artifact content.
+ */
+export function useProcessRunOutput(runId: string | null) {
+  return useQuery<{
+    blocks: Array<{ type: string; [key: string]: unknown }>;
+    processName: string;
+    status: string;
+  }>({
+    queryKey: ["processRunOutput", runId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/processes?action=getRunOutput&runId=${runId}`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch run output");
+      return res.json();
+    },
+    enabled: !!runId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Update trust tier for a process.
  */
 export function useUpdateTrust() {

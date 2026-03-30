@@ -4,7 +4,7 @@
  * Ditto — Block Registry (ADR-021 Surface Protocol)
  *
  * Unified component registry: maps ContentBlock.type → React component.
- * Handles all 21 block types. Unknown types fall back to text rendering.
+ * Handles all 22 block types. Unknown types fall back to text rendering.
  *
  * Provenance: Brief 045, ADR-021, existing item-registry.tsx pattern.
  */
@@ -31,6 +31,7 @@ import { ChartBlockComponent } from "./chart-block";
 import { MetricBlockComponent } from "./metric-block";
 import { RecordBlockComponent } from "./record-block";
 import { InteractiveTableBlockComponent } from "./interactive-table-block";
+import { ArtifactBlockComponent } from "./artifact-block";
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -81,6 +82,8 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <RecordBlockComponent block={block} onAction={onAction} />;
     case "interactive_table":
       return <InteractiveTableBlockComponent block={block} onAction={onAction} />;
+    case "artifact":
+      return <ArtifactBlockComponent block={block} onAction={onAction} />;
     default: {
       // Exhaustiveness check — TypeScript will error if a type is missing (AC15)
       const _exhaustive: never = block;

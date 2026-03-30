@@ -15,11 +15,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import {
   calculateCostCents,
+  isMockLlmMode,
   type LlmCompletionRequest,
   type LlmContentBlock,
   type LlmTextBlock,
   type LlmToolUseBlock,
 } from "./llm";
+import { mockCreateStreamingCompletion } from "./llm-mock";
 
 // ============================================================
 // Stream event types
@@ -481,6 +483,12 @@ async function* spawnCliStream(
 export async function* createStreamingCompletion(
   request: LlmCompletionRequest,
 ): AsyncGenerator<StreamEvent> {
+  // Mock mode: deterministic canned responses (Brief 054 — e2e testing)
+  if (isMockLlmMode()) {
+    yield* mockCreateStreamingCompletion(request);
+    return;
+  }
+
   const connection = process.env.DITTO_CONNECTION;
   const provider = process.env.LLM_PROVIDER;
 

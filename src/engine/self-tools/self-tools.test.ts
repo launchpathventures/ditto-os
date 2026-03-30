@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 16 tools (5 original + 7 Brief 040 + 3 Brief 043 + 1 Brief 044)", async () => {
+  it("has 17 tools (5 original + 1 Brief 052 + 7 Brief 040 + 3 Brief 043 + 1 Brief 044)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(16);
+    expect(selfTools).toHaveLength(18);
 
     const names = selfTools.map((t) => t.name);
     // Original 5

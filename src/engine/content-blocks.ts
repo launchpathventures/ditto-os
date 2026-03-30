@@ -1,7 +1,7 @@
 /**
  * Ditto — Content Block Types (ADR-021 Surface Protocol)
  *
- * The 21 typed content block types that flow from the Self to surfaces.
+ * The 22 typed content block types that flow from the Self to surfaces.
  * This is the single source of truth for the block vocabulary.
  *
  * Lives in the engine so the web package imports from engine (one-way
@@ -284,6 +284,25 @@ export interface InteractiveTableBlock {
   batchActions?: ActionDef[];
 }
 
+/** ArtifactBlock — Reference card for an artifact (ADR-023 Section 1)
+ *  Rendered inline in conversation as a compact card. "Open" action transitions to artifact mode.
+ *  Provenance: ADR-023, Brief 050.
+ */
+export interface ArtifactBlock {
+  type: "artifact";
+  artifactId: string;
+  title: string;
+  artifactType: "document" | "spreadsheet" | "image" | "preview" | "email" | "pdf";
+  status: {
+    label: string;
+    variant: "positive" | "caution" | "negative" | "neutral" | "info";
+  };
+  summary?: string;
+  changed?: string;
+  version?: number;
+  actions?: ActionDef[];
+}
+
 // ============================================================
 // Discriminated union
 // ============================================================
@@ -309,7 +328,8 @@ export type ContentBlock =
   | ChartBlock
   | MetricBlock
   | RecordBlock
-  | InteractiveTableBlock;
+  | InteractiveTableBlock
+  | ArtifactBlock;
 
 /** All possible content block type strings */
 export type ContentBlockType = ContentBlock["type"];
@@ -527,6 +547,11 @@ export function renderBlockToText(block: ContentBlock): string {
         parts.push(block.batchActions.map((a) => `[${a.label}]`).join(" "));
       }
       return parts.filter(Boolean).join("\n");
+    }
+
+    case "artifact": {
+      const statusStr = block.status ? ` — ${block.status.label}` : "";
+      return `[${block.artifactType}] ${block.title}${statusStr}\n${block.summary ?? ""}`;
     }
 
     default: {

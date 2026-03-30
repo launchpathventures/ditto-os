@@ -29,7 +29,7 @@ steps:
     agent_role: reviewer
     config:
       role_contract: .claude/commands/dev-reviewer.md
-      tools: read-only
+      tools: read-write-exec
     description: >
       Execute the Reviewer role: check code changes against
       architecture spec and review checklist, produce verdict.

@@ -13,6 +13,7 @@
 import { db, schema } from "../db";
 import { eq, and, desc, gte } from "drizzle-orm";
 import { updateWorkingPatterns } from "./user-model";
+import { buildInteractionSummary } from "./interaction-events";
 
 const CHARS_PER_TOKEN = 4;
 
@@ -30,8 +31,9 @@ export interface WorkStateSummary {
 /**
  * Load a summary of current work state: active runs, pending reviews,
  * recent completions (last 24h). Returns both counts and a human-readable summary.
+ * Optional userId for interaction signal scoping (defaults to "default" for single-user MVP).
  */
-export async function loadWorkStateSummary(): Promise<WorkStateSummary> {
+export async function loadWorkStateSummary(userId: string = "default"): Promise<WorkStateSummary> {
   // Active process runs (running or queued)
   const activeRuns = await db
     .select()
@@ -83,6 +85,17 @@ export async function loadWorkStateSummary(): Promise<WorkStateSummary> {
   }
   if (lines.length === 0) {
     lines.push("No active work. Ready for new tasks.");
+  }
+
+  // Brief 056 AC12: Include interaction signal summary
+  try {
+    const interactionSummary = await buildInteractionSummary(userId);
+    if (interactionSummary) {
+      lines.push("--- UI signals ---");
+      lines.push(interactionSummary);
+    }
+  } catch {
+    // Non-critical — interaction signals are supplementary
   }
 
   return {
@@ -336,7 +349,7 @@ export async function appendSessionTurn(
  * Provenance: Activity logging pattern from feedback-recorder.ts.
  */
 export async function recordSelfDecision(params: {
-  decisionType: "delegation" | "consultation" | "inline_response";
+  decisionType: "delegation" | "consultation" | "inline_response" | "planning" | "pipeline";
   details: Record<string, unknown>;
   costCents: number;
 }): Promise<void> {

@@ -145,6 +145,7 @@ Navigation destinations are NOT pages. They are **composition intents** — sign
 | **Work** | "What am I actively working on?" | Active work items with progress |
 | **Projects** | "What are my bigger goals?" | Goal-level items with decomposition |
 | **Routines** | "How are my recurring processes doing?" | Process health, trust levels, metrics |
+| **Roadmap** | "What's the project state and what can I work on?" | Phase progress, brief status, scope selection (Brief 055) |
 | **Settings** | "Configure my system" | Static settings (this IS a fixed page — scaffold) |
 
 Settings is the one exception — it's scaffold, not canvas. The user expects a predictable settings interface.

@@ -62,6 +62,7 @@ export function PromptInput({
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
+            data-testid="chat-input"
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
@@ -84,6 +85,7 @@ export function PromptInput({
           size="icon"
           className="flex-shrink-0"
           aria-label="Send message"
+          data-testid="send-button"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

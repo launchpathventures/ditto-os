@@ -1,7 +1,7 @@
 # ADR-023: Artifact Interaction Model
 
 **Date:** 2026-03-27
-**Status:** proposed
+**Status:** accepted
 **Layers affected:** L2 Agent (Self emits artifact references), L3 Harness (artifact lifecycle management), L6 Human (right panel becomes artifact workspace)
 
 ## Context

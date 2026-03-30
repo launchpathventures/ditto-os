@@ -299,6 +299,29 @@ function createTables(sqlite: Database.Database): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       UNIQUE(process_id, service)
     );
+
+    CREATE TABLE IF NOT EXISTS interaction_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      entity_id TEXT,
+      properties TEXT DEFAULT '{}',
+      timestamp INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS interaction_events_user_timestamp
+      ON interaction_events(user_id, timestamp);
+
+    CREATE TABLE IF NOT EXISTS briefs (
+      number INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      depends_on TEXT,
+      unlocks TEXT,
+      file_path TEXT,
+      last_modified INTEGER,
+      synced_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
   `);
 }
 

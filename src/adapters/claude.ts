@@ -20,7 +20,7 @@ import fs from "fs";
 import nodePath from "path";
 import type { ProcessDefinition, StepDefinition } from "../engine/process-loader";
 import type { StepExecutionResult, ToolCallRecord } from "../engine/step-executor";
-import { readOnlyTools, readWriteTools, toolDefinitions, executeTool, MAX_TOOL_CALLS } from "../engine/tools";
+import { readOnlyTools, readWriteTools, execTools, toolDefinitions, executeTool, MAX_TOOL_CALLS } from "../engine/tools";
 import {
   createCompletion,
   extractText,
@@ -33,7 +33,7 @@ import { resolveModel } from "../engine/model-routing";
 import type { ResolvedTools } from "../engine/tool-resolver";
 
 /** Set of codebase tool names — used to dispatch to the right handler */
-const CODEBASE_TOOL_NAMES = new Set(["read_file", "search_files", "list_files", "write_file"]);
+const CODEBASE_TOOL_NAMES = new Set(["read_file", "search_files", "list_files", "write_file", "run_command"]);
 
 /**
  * Build a system prompt for an agent step based on its role and context.
@@ -271,7 +271,9 @@ export const claudeAdapter = {
     // 3. Default: no codebase tools
     const toolsConfig = step.config?.tools as string | undefined;
     let codebaseTools: LlmToolDefinition[] = [];
-    if (toolsConfig === "read-write") {
+    if (toolsConfig === "read-write-exec") {
+      codebaseTools = execTools;
+    } else if (toolsConfig === "read-write") {
       codebaseTools = readWriteTools;
     } else if (toolsConfig === "read-only") {
       codebaseTools = readOnlyTools;
@@ -355,8 +357,9 @@ export const claudeAdapter = {
         let result: string;
 
         if (CODEBASE_TOOL_NAMES.has(toolBlock.name)) {
-          // Codebase tool — synchronous dispatch
-          result = executeTool(toolBlock.name, toolInput);
+          // Codebase tool — sync for read/write, async for run_command
+          const toolResult = executeTool(toolBlock.name, toolInput);
+          result = typeof toolResult === "string" ? toolResult : await toolResult;
         } else if (resolvedTools) {
           // Integration tool — async dispatch (Brief 025)
           result = await resolvedTools.executeIntegrationTool(toolBlock.name, toolInput);

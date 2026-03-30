@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 /**
  * Hook for subscribing to real-time harness events via SSE.
@@ -8,8 +9,20 @@ import { useEffect, useCallback, useRef, useState } from "react";
  * Connects to /api/events and emits parsed events to a callback.
  * Auto-reconnects on connection loss.
  *
+ * Brief 053: Also invalidates the activeRuns query key on pipeline-related events
+ * so compositions re-render with fresh progress data.
+ *
  * AC8: SSE events (step-complete, gate-pause, gate-advance, run-complete)
  */
+
+/** Events that should trigger activeRuns cache invalidation */
+const PIPELINE_EVENTS = new Set([
+  "step-complete",
+  "gate-pause",
+  "gate-advance",
+  "run-complete",
+  "run-failed",
+]);
 
 export interface HarnessEventData {
   type: string;
@@ -32,6 +45,7 @@ export function useHarnessEvents({
   const eventSourceRef = useRef<EventSource | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  const queryClient = useQueryClient();
 
   const connect = useCallback(() => {
     if (!enabled) return;
@@ -47,6 +61,11 @@ export function useHarnessEvents({
       try {
         const data = JSON.parse(event.data) as HarnessEventData;
         onEventRef.current?.(data);
+
+        // Brief 053 AC7: Invalidate activeRuns on pipeline-related events
+        if (PIPELINE_EVENTS.has(data.type)) {
+          queryClient.invalidateQueries({ queryKey: ["activeRuns"] });
+        }
       } catch {
         // Ignore parse errors (heartbeats, malformed data)
       }

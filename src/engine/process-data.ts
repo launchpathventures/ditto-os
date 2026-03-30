@@ -11,6 +11,7 @@ import { db, schema } from "../db";
 import { eq, desc, and, or, inArray } from "drizzle-orm";
 import { computeTrustState, executeTierChange } from "./trust";
 import type { TrustTier } from "../db/schema";
+import type { ContentBlock } from "./content-blocks";
 
 // ============================================================
 // Types
@@ -442,4 +443,176 @@ export async function updateProcessTrust(
     reason,
     actor: "human",
   });
+}
+
+// ============================================================
+// Active Runs (Brief 053)
+// ============================================================
+
+export interface ActiveRunSummary {
+  runId: string;
+  processSlug: string;
+  processName: string;
+  currentStep: string;
+  totalSteps: number;
+  completedSteps: number;
+  status: string;
+  startedAt: string;
+}
+
+/**
+ * Get all active (running or waiting_review) process runs with step progress.
+ * Uses joined queries to avoid N+1. Step definitions loaded from YAML once per slug.
+ *
+ * Brief 053 AC6.
+ */
+export async function getActiveRuns(): Promise<ActiveRunSummary[]> {
+  // Single joined query: runs + process info
+  const runs = await db
+    .select({
+      id: schema.processRuns.id,
+      processId: schema.processRuns.processId,
+      status: schema.processRuns.status,
+      createdAt: schema.processRuns.createdAt,
+      processName: schema.processes.name,
+      processSlug: schema.processes.slug,
+    })
+    .from(schema.processRuns)
+    .innerJoin(schema.processes, eq(schema.processRuns.processId, schema.processes.id))
+    .where(
+      or(
+        eq(schema.processRuns.status, "running"),
+        eq(schema.processRuns.status, "waiting_review"),
+      ),
+    )
+    .orderBy(desc(schema.processRuns.createdAt));
+
+  if (runs.length === 0) return [];
+
+  // Batch fetch all step runs for active runs in one query
+  const runIds = runs.map((r) => r.id);
+  const allStepRuns = await db
+    .select({
+      processRunId: schema.stepRuns.processRunId,
+      stepId: schema.stepRuns.stepId,
+      status: schema.stepRuns.status,
+    })
+    .from(schema.stepRuns)
+    .where(inArray(schema.stepRuns.processRunId, runIds))
+    .orderBy(schema.stepRuns.createdAt);
+
+  // Group step runs by processRunId
+  const stepRunsByRun = new Map<string, typeof allStepRuns>();
+  for (const sr of allStepRuns) {
+    const existing = stepRunsByRun.get(sr.processRunId) ?? [];
+    existing.push(sr);
+    stepRunsByRun.set(sr.processRunId, existing);
+  }
+
+  // Cache process definitions by slug (avoid re-reading YAML per run)
+  const defCache = new Map<string, { totalSteps: number; stepNames: Map<string, string> }>();
+  function getProcessDef(slug: string) {
+    if (defCache.has(slug)) return defCache.get(slug)!;
+    try {
+      const { resolve } = require("path") as typeof import("path");
+      const { loadProcessFile, flattenSteps } = require("./process-loader") as typeof import("./process-loader");
+      const processDir = resolve(process.cwd(), "processes");
+      const definition = loadProcessFile(resolve(processDir, `${slug}.yaml`));
+      const allSteps = flattenSteps(definition);
+      const stepNames = new Map(allSteps.map((s) => [s.id, s.name]));
+      const result = { totalSteps: allSteps.length, stepNames };
+      defCache.set(slug, result);
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  const summaries: ActiveRunSummary[] = [];
+
+  for (const run of runs) {
+    const stepRuns = stepRunsByRun.get(run.id) ?? [];
+
+    const completedSteps = stepRuns.filter(
+      (s) => s.status === "approved" || s.status === "skipped",
+    ).length;
+
+    const currentStepRun = stepRuns.find(
+      (s) => s.status === "running" || s.status === "waiting_review",
+    );
+
+    const def = getProcessDef(run.processSlug);
+    const totalSteps = def?.totalSteps ?? stepRuns.length;
+    let currentStep = currentStepRun?.stepId ?? "Unknown";
+    if (currentStepRun && def) {
+      currentStep = def.stepNames.get(currentStepRun.stepId) ?? currentStepRun.stepId;
+    }
+
+    summaries.push({
+      runId: run.id,
+      processSlug: run.processSlug,
+      processName: run.processName,
+      currentStep,
+      totalSteps,
+      completedSteps,
+      status: run.status,
+      startedAt: run.createdAt?.toISOString() ?? new Date().toISOString(),
+    });
+  }
+
+  return summaries;
+}
+
+/**
+ * Get the output content of a process run as ContentBlock[].
+ * Extracts text/code outputs from step runs and wraps them as typed blocks.
+ *
+ * Brief 050: Engine-connected artifact content.
+ */
+export async function getRunOutput(
+  runId: string,
+): Promise<{ blocks: ContentBlock[]; processName: string; status: string } | null> {
+  const run = await db
+    .select()
+    .from(schema.processRuns)
+    .where(eq(schema.processRuns.id, runId))
+    .limit(1);
+
+  if (!run[0]) return null;
+  const r = run[0];
+
+  // Get process name
+  const proc = await db
+    .select({ name: schema.processes.name })
+    .from(schema.processes)
+    .where(eq(schema.processes.id, r.processId))
+    .limit(1);
+
+  // Get step runs with outputs
+  const steps = await db
+    .select()
+    .from(schema.stepRuns)
+    .where(eq(schema.stepRuns.processRunId, r.id))
+    .orderBy(schema.stepRuns.createdAt);
+
+  const blocks: ContentBlock[] = [];
+
+  for (const step of steps) {
+    const outputs = (step.outputs ?? {}) as Record<string, unknown>;
+    const outputText = (outputs.output as string) ?? (outputs.text as string) ?? "";
+
+    if (!outputText) continue;
+
+    // Wrap as TextBlock (markdown content)
+    blocks.push({
+      type: "text" as const,
+      text: outputText,
+    });
+  }
+
+  return {
+    blocks,
+    processName: proc[0]?.name ?? "Unknown",
+    status: r.status,
+  };
 }

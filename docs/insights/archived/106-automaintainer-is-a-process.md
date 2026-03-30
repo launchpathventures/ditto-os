@@ -3,7 +3,7 @@
 **Date:** 2026-03-28
 **Trigger:** Architect evaluation of automaintainer research — user wants automated repo maintenance through the full dev cycle using Ditto's existing engine
 **Layers affected:** L1 Process, L2 Agent, L3 Harness, L4 Awareness, L5 Learning
-**Status:** active
+**Status:** absorbed into Brief 049
 
 ## The Insight
 

@@ -29,6 +29,7 @@ export type PanelContext =
   | { type: "feed" }
   | { type: "process"; processId: string }
   | { type: "process-builder"; yaml: string; slug?: string }
+  | { type: "process_run"; runId: string; processSlug: string }
   | { type: "artifact-review"; runId: string; processId: string }
   | { type: "briefing"; data: Record<string, unknown> }
   | { type: "blocks"; blocks: ContentBlock[]; title?: string }
@@ -93,6 +94,9 @@ export function RightPanel({
         )}
         {activeContext.type === "process-builder" && (
           <ProcessBuilderPanel yaml={activeContext.yaml} slug={activeContext.slug} />
+        )}
+        {activeContext.type === "process_run" && (
+          <ProcessRunContext runId={activeContext.runId} processSlug={activeContext.processSlug} />
         )}
         {activeContext.type === "artifact-review" && (
           <ArtifactViewerPanel runId={activeContext.runId} processId={activeContext.processId} />
@@ -248,6 +252,26 @@ function ProcessContext({ processId }: { processId: string }) {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/** Process run context — shows pipeline run detail in the right panel (Brief 053) */
+function ProcessRunContext({ runId, processSlug }: { runId: string; processSlug: string }) {
+  return (
+    <>
+      <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
+        Pipeline Run
+      </p>
+      <div className="space-y-3">
+        <div className="text-sm text-text-secondary">
+          <p className="font-medium text-text-primary">{processSlug}</p>
+          <p className="text-xs text-text-muted mt-1">Run: {runId.slice(0, 8)}...</p>
+          <p className="mt-2">
+            Pipeline is running. Progress updates appear in the conversation and Today view.
+          </p>
+        </div>
+      </div>
     </>
   );
 }

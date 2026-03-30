@@ -58,12 +58,14 @@ export async function POST(req: Request) {
     return new Response("No user message text", { status: 400 });
   }
 
-  // Apply LLM config
+  // Apply LLM config (skip when MOCK_LLM=true — Brief 054 e2e testing)
   const config = loadConfig();
-  if (!config) {
+  if (!config && process.env.MOCK_LLM !== "true") {
     return new Response("Not configured. Please complete setup.", { status: 503 });
   }
-  applyConfigToEnv(config);
+  if (config) {
+    applyConfigToEnv(config);
+  }
 
   // Lazy-load engine
   const { selfConverseStream } = await getEngine();
@@ -115,13 +117,14 @@ export async function POST(req: Request) {
             }
 
             case "tool-call-result": {
-              // Emit tool output with content blocks as the typed output
+              // Emit tool output with content blocks + metadata as the typed output
               writer.write({
                 type: "tool-output-available",
                 toolCallId: event.toolCallId,
                 output: {
                   result: event.result,
                   blocks: event.blocks ?? [],
+                  metadata: event.metadata,
                 },
                 dynamic: true,
               });

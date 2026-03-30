@@ -56,6 +56,30 @@ After implementation passes automated checks, you MUST run the review loop befor
 
 Do NOT skip this step. Do NOT present implementation without review findings alongside it.
 
+## Shell Execution
+
+The `run_command` tool is available when running through the engine with `tools: read-write-exec`. Use it to run allowlisted commands:
+
+| Command | Example |
+|---------|---------|
+| `pnpm run <script>` | `run_command("pnpm", ["run", "type-check"])` |
+| `pnpm test` | `run_command("pnpm", ["test"])` |
+| `pnpm exec <tool>` | `run_command("pnpm", ["exec", "tsc", "--noEmit"])` |
+| `git status` | `run_command("git", ["status"])` |
+| `git diff` | `run_command("git", ["diff"])` |
+| `node <file>` | `run_command("node", ["script.js"])` |
+
+**Not allowed:** `npx`, `npm exec`, `node -e`, `git push/reset/checkout/clean/merge/rebase`, `rm`, `curl`, `ssh`, `mv`, `cp`.
+
+**You MUST run these commands and include the output as evidence in your handoff:**
+1. `run_command("pnpm", ["run", "type-check"])` — must show 0 errors
+2. `run_command("pnpm", ["test"])` — must show all tests passing
+3. `run_command("pnpm", ["test:e2e"])` — must show all e2e tests passing (manual Playwright specs)
+4. `run_command("pnpm", ["test:e2e:auto"])` — must run AI-generated tests from diff (expect-cli via Claude Code ACP)
+5. Smoke test from the brief (if applicable)
+
+The Reviewer will independently verify by running the same commands.
+
 ## Handoff
 
 → **Automated checks** first (type-check, tests, smoke test, acceptance criteria)

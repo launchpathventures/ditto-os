@@ -32,3 +32,5 @@ pnpm-debug.log*
 
 # Test
 coverage/
+playwright-report/
+test-results/

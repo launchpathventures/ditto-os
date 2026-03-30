@@ -18,7 +18,21 @@ import { formatTrustTier } from "./utils";
  */
 export function composeToday(context: CompositionContext): ContentBlock[] {
   const blocks: ContentBlock[] = [];
-  const { processes, workItems, feedItems, pendingReviews } = context;
+  const { processes, workItems, feedItems, pendingReviews, activeRuns } = context;
+
+  // Brief 053 AC8: Prepend ProgressBlock for each active pipeline run
+  if (activeRuns && activeRuns.length > 0) {
+    for (const run of activeRuns) {
+      blocks.push({
+        type: "progress",
+        processRunId: run.runId,
+        currentStep: run.currentStep,
+        totalSteps: run.totalSteps,
+        completedSteps: run.completedSteps,
+        status: run.status === "waiting_review" ? "paused" : "running",
+      });
+    }
+  }
 
   // 1. Brief narrative (TextBlock) — greeting + summary
   const hour = context.now.getHours();

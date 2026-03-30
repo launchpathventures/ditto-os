@@ -263,7 +263,7 @@ Process: [Name]
 **Model routing** (Brief 033): Process steps can declare `config.model_hint` (`fast`, `capable`, `default`) on `ai-agent` steps. `resolveModel(hint)` maps hints to provider-specific models (e.g., `fast` → Haiku for Anthropic, gpt-4o-mini for OpenAI). Steps without hints use the deployment default. Model is recorded on every step run for learning. `generateModelRecommendations()` analyzes accumulated data (20+ runs) to surface advisory cost/quality trade-offs — system recommends, human decides. Provenance: Vercel AI SDK alias pattern, RouteLLM economics.
 
 Current adapters:
-- **Claude API adapter** (`ai-agent`, primary): Calls LLM via `createCompletion()`. Per-token cost. Tool use loop with codebase tools — two subsets: `readOnlyTools` (read_file, search_files, list_files) and `readWriteTools` (+ write_file). Step config declares which subset via `config.tools: "read-only" | "read-write"`. Loads role contracts from `.claude/commands/dev-*.md` via `step.config.role_contract` (fallback to hardcoded prompts). Parses `CONFIDENCE: high|medium|low` from response text. All 7 dev roles execute via this adapter (Brief 031). Provenance: Claude Code tool patterns, OpenClaw SOUL.md/skills.
+- **Claude API adapter** (`ai-agent`, primary): Calls LLM via `createCompletion()`. Per-token cost. Tool use loop with codebase tools — three subsets: `readOnlyTools` (read_file, search_files, list_files), `readWriteTools` (+ write_file), and `execTools` (+ run_command — Brief 051). Step config declares which subset via `config.tools: "read-only" | "read-write" | "read-write-exec"`. The `run_command` tool executes allowlisted shell commands via `execFile` (no shell interpretation): pnpm (run/test/exec/install --frozen-lockfile), npm (run/test), node (file paths only, no -e/--eval), git (read-only: status/log/diff/show/branch/ls-files/rev-parse). npx is entirely blocked. Executable+subcommand allowlist enforced. Output scrubbed for secret file references. 120s timeout, 10MB buffer cap. Builder and Reviewer roles use `read-write-exec` so they can verify code (type-check, tests) and include evidence. Loads role contracts from `.claude/commands/dev-*.md` via `step.config.role_contract` (fallback to hardcoded prompts). Parses `CONFIDENCE: high|medium|low` from response text. All 7 dev roles execute via this adapter (Brief 031). Provenance: Claude Code tool patterns, OpenClaw SOUL.md/skills, CI runner sandbox patterns (Brief 051).
 - **CLI adapter** (`cli-agent`, optional fallback, Brief 016a): Spawns `claude -p` (or `codex`) as subprocess. Loads role contracts as `--append-system-prompt`. Subscription-based ($0 per step). Fresh context per step (ralph pattern). Available for tasks requiring full Claude Code capabilities (terminal, project scanning). No dev roles use this by default since Brief 031. Provenance: ralph autonomous loop, Paperclip adapter pattern.
 - **Script adapter** (`script`): Deterministic commands via `child_process`. No AI cost.
 
@@ -456,6 +456,16 @@ Every process tracks three feedback signals:
 - Recommends upgrade when current model quality is low (<80% approval rate)
 - Advisory only — the Self surfaces recommendations, human decides
 
+**5. Implicit UI signals** (Brief 056) — How does the user interact with the workspace?
+- Semantic interaction events recorded to the `interaction_events` table: `artifact_viewed` (with duration), `composition_navigated` (intent transitions), `brief_selected`, `block_action_taken`, `review_prompt_seen` (with response time), `pipeline_progress_viewed`
+- These are **implicit** signals — weaker than explicit feedback but high-volume and pattern-rich
+- **Critical constraint: implicit signals do NOT feed trust computation.** Trust tiers remain based exclusively on explicit human feedback (approve/edit/reject). Implicit signals feed only meta-processes (self-improvement, project-orchestration) and the Self's proactive context assembly.
+- Privacy by design: events contain entity IDs and timestamps, not content. No keystroke logging, no scroll depth, no mouse tracking.
+- Fire-and-forget on the frontend: `navigator.sendBeacon()` with `fetch()` fallback. Lost events are acceptable — these are statistical signals, not transactional data.
+- Meta-processes query these signals via SQL to observe: which outputs get viewed vs ignored, navigation frequency patterns, average review response times, brief engagement rates.
+
+**6. Brief lifecycle sync** (Brief 056) — The `briefs` table mirrors brief markdown files from `docs/briefs/` into the database. `syncBriefs()` parses frontmatter, upserts with mtime-based invalidation, and soft-deletes removed files. This enables the project-orchestration meta-process to track brief velocity (days in each status) and project progress without filesystem access.
+
 **Reactive-to-repetitive lifecycle (ADR-010):** Beyond improving existing processes, Layer 5 also watches for patterns in ad-hoc work. When the system notices the user creating similar work items repeatedly (e.g., Rob keeps manually entering bathroom reno quotes), it proposes formalising the pattern as a new process. The user confirms, refines, and activates — the ad-hoc work becomes a governed, trust-earning process. This is how the system grows its capabilities from user behaviour.
 
 ### Cross-Cutting: Governance and Agent Authentication
@@ -629,9 +639,10 @@ The Conversational Self is the outermost harness ring (see babushka diagram abov
 The Self is singular per user/workspace. Identity lives in the engine, not the surface. It delegates to roles/processes internally but presents a unified face. It thinks through the cognitive framework (ADR-014, ADR-015) — it doesn't just route.
 
 **Key mechanisms:**
-- **Self context assembly:** Tiered loading — core identity + user knowledge always in context (~4K tokens); work state summarized; session context for current conversation; recall + deep knowledge on demand via tools
+- **Self context assembly:** Tiered loading — core identity + user knowledge always in context (~6K tokens); work state summarized; session context for current conversation; recall + deep knowledge on demand via tools
 - **Self memory scope:** Third scope (`self`) alongside `agent` and `process` — stores user preferences, business context, relationship history spanning all processes
 - **Session persistence:** `sessions` table tracks conversation turns across surfaces, enabling cross-session and cross-surface continuity
+- **Planning vs execution:** The Self distinguishes two modes. **Planning** (`plan_with_role`) engages roles (PM, Researcher, Designer, Architect) with read-only codebase access for collaborative analysis, scoping, and document production — Architect can additionally propose writes to `docs/` paths, subject to user confirmation. **Execution** (`start_dev_role`) delegates to any role through the full harness pipeline. **Consultation** (`consult_role`) is a quick perspective check. The Self intuits which mode to use from conversation context. (Brief 052)
 
 **Provenance:** Letta (tiered memory, self-editing blocks), Anthropic multi-agent (orchestrator-as-identity, just-in-time context), SOAR (metacognitive monitoring), Claude Code (auto-memory selectivity), Mem0 (extraction-reconciliation), Zep (temporal invalidation). Combining persistent identity + self-editing memory + delegation to governed processes + cross-surface coherence is Original to Ditto. See ADR-016.
 

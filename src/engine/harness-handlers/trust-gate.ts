@@ -10,12 +10,18 @@
  * - Autonomous: advance unless review flagged
  * - Critical: always pause, canAutoAdvance=false
  *
+ * Session trust overrides (Brief 053): Before checking the process trust tier,
+ * check for a session-scoped override. Overrides can only relax (supervised →
+ * spot_checked), never tighten. Ignored for builder/reviewer roles and critical-tier steps.
+ *
  * Provenance: Original — no system implements graduated trust with percentage-based sampling.
  */
 
 import { createHash } from "crypto";
 import type { HarnessHandler, HarnessContext } from "../harness";
+import type { TrustTier } from "../../db/schema";
 import { SPOT_CHECK_RATE } from "../trust-constants";
+import { getSessionTrustOverride } from "../session-trust";
 
 /**
  * Salt for sampling hash. Prevents gaming by making the hash unpredictable
@@ -39,6 +45,14 @@ function shouldSample(samplingHash: string): boolean {
   return value < SPOT_CHECK_RATE;
 }
 
+/** Trust tier ordering: higher index = less restrictive */
+const TIER_ORDER: TrustTier[] = ["critical", "supervised", "spot_checked", "autonomous"];
+
+/** Returns true if `a` is strictly less restrictive than `b`. */
+function isLessRestrictive(a: TrustTier, b: TrustTier): boolean {
+  return TIER_ORDER.indexOf(a) > TIER_ORDER.indexOf(b);
+}
+
 export const trustGateHandler: HarnessHandler = {
   name: "trust-gate",
 
@@ -48,8 +62,21 @@ export const trustGateHandler: HarnessHandler = {
   },
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
-    const { trustTier, reviewResult } = context;
+    let { trustTier } = context;
+    const { reviewResult } = context;
     const confidence = context.stepResult?.confidence;
+
+    // Brief 053: Check for session-scoped trust override.
+    // Override can only relax, never tighten. Ignored for critical-tier steps.
+    if (trustTier !== "critical") {
+      const roleName = context.stepDefinition.agent_role;
+      if (roleName) {
+        const override = getSessionTrustOverride(context.processRun.id, roleName);
+        if (override && isLessRestrictive(override, trustTier)) {
+          trustTier = override;
+        }
+      }
+    }
 
     // AC15: Low confidence overrides tier — always pause regardless of trust level
     // Provenance: ADR-011, SAE Level 3 self-assessment

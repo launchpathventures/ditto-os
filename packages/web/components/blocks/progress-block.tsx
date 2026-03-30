@@ -15,7 +15,7 @@ export function ProgressBlockComponent({ block }: { block: ProgressBlock }) {
   };
 
   return (
-    <div className="my-2 space-y-1.5">
+    <div data-testid="progress-block" className="my-2 space-y-1.5">
       <div className="flex items-center justify-between text-sm">
         <span className="text-text-primary">{block.currentStep}</span>
         <span className="text-text-secondary">

@@ -14,6 +14,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { mockCreateCompletion } from "./llm-mock";
 
 // ============================================================
 // Ditto-native LLM types (no SDK types leak beyond this file)
@@ -432,10 +433,25 @@ let activeProvider: LlmProvider | null = null;
 let configuredModel: string | null = null;
 
 /**
+ * Check if mock LLM mode is active (MOCK_LLM=true).
+ * Used by both llm.ts and llm-stream.ts.
+ */
+export function isMockLlmMode(): boolean {
+  return process.env.MOCK_LLM === "true";
+}
+
+/**
  * Initialize the LLM provider. Must be called during app startup.
- * Throws with a clear setup message if not configured.
+ * When MOCK_LLM=true, short-circuits — no API keys or provider config needed.
+ * Throws with a clear setup message if not configured (in non-mock mode).
  */
 export function initLlm(): void {
+  // Mock mode: skip all provider setup (Brief 054 — e2e testing)
+  if (isMockLlmMode()) {
+    configuredModel = "mock-model";
+    return;
+  }
+
   const providerName = process.env.LLM_PROVIDER;
   const model = process.env.LLM_MODEL;
 
@@ -494,10 +510,14 @@ export function getProviderName(): string {
 /**
  * Create an LLM completion. All Ditto code that needs LLM inference
  * calls this function instead of instantiating SDK clients directly.
+ * When MOCK_LLM=true, delegates to mock (Brief 054).
  */
 export async function createCompletion(
   request: LlmCompletionRequest,
 ): Promise<LlmCompletionResponse> {
+  if (isMockLlmMode()) {
+    return mockCreateCompletion(request);
+  }
   if (!activeProvider) {
     throw new Error("LLM not initialized. Call initLlm() during startup.");
   }

@@ -20,6 +20,7 @@ import { composeInbox } from "./inbox";
 import { composeWork } from "./work";
 import { composeProjects } from "./projects";
 import { composeRoutines } from "./routines";
+import { composeRoadmap } from "./roadmap";
 
 export type { CompositionIntent, CompositionContext } from "./types";
 
@@ -35,6 +36,7 @@ const COMPOSITION_FUNCTIONS: Record<
   work: composeWork,
   projects: composeProjects,
   routines: composeRoutines,
+  roadmap: composeRoadmap,
 };
 
 /**

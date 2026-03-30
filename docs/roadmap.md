@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-03-28
-**Current phase:** Phase 10 **complete + composition engine shipped**. All 7 sub-briefs (039-046) + Brief 047 shipped. 330 tests (23 test files). **Prototype-as-specification complete:** 28 prototypes (P00-P41) — full user journey + 6 artifact viewers + cross-cutting views. Design system fully aligned. `.impeccable.md` authoritative. **ADR-024 (accepted):** Composable Workspace Architecture — three-tier model. **Brief 047 (built):** Composition engine — 5 deterministic functions, must-show blocks, sidebar nav. Next: Brief 048 (Live Preview viewer) or `/dev-pm` for next work.
+**Last updated:** 2026-03-30
+**Current phase:** Phase 10 **complete**. All briefs (039-056) shipped. 411 unit tests (25 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI: composition engine, artifact mode, planning workflow, pipeline execution + review gates + session trust, roadmap scope selection, observability layer. Phase 10 retrospective done. Next: `/dev-pm` for Phase 11 sequencing.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -197,8 +197,8 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Confidence-based routing in trust gate (low → item review regardless of tier) | done | ADR-011, Brief 016 | SAE Level 3 (system self-assessment) | `src/engine/harness-handlers/trust-gate.ts` |
 | Agent system prompt instruction for confidence self-assessment | done | ADR-011, Brief 016 | Original | `src/adapters/cli.ts` |
 | **Cognitive model (Phase 4 scope)** | | | | |
-| `cognitive_mode` field on process definitions (optional, default: analytical) | not started | ADR-013 | Original | `src/db/schema.ts`, process YAML |
-| Challenge `concern` field on confidence metadata | not started | ADR-013 | Edmondson psychological safety + SAE Level 3 | `src/db/schema.ts` |
+| `cognitive_mode` field on process definitions (optional, default: analytical) | deferred | ADR-013 | Original | Re-entry: Cognitive Architecture A1 begins |
+| Challenge `concern` field on confidence metadata | deferred | ADR-013 | Edmondson psychological safety + SAE Level 3 | Re-entry: Cognitive Architecture A1 begins |
 
 ---
 
@@ -215,11 +215,11 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Process template library (`templates/` directory) | done | ADR-008, Brief 020 | n8n/Zapier pattern + Original governance declarations | `templates/` with 3 non-coding templates |
 | Template sync + adoption flow | done | ADR-008, Brief 020 | Process loader pattern + Original | `src/engine/process-loader.ts` (loads from templates/ as draft) |
 | **Attention model (Phase 5 scope)** | | | | |
-| Digest mode for autonomous processes (outputs not in Review Queue, summary in Daily Brief) | not started | ADR-011 | Zapier Digest + GitHub Copilot PR-as-batch | CLI status output / Daily Brief |
-| Silence-as-feature verified (autonomous clean runs produce no notifications) | not started | ADR-011 | Management by Exception, PagerDuty | Verification |
+| Digest mode for autonomous processes (outputs not in Review Queue, summary in Daily Brief) | deferred | ADR-011 | Zapier Digest + GitHub Copilot PR-as-batch | Re-entry: when autonomous tier processes running in web app |
+| Silence-as-feature verified (autonomous clean runs produce no notifications) | deferred | ADR-011 | Management by Exception, PagerDuty | Re-entry: when autonomous tier processes running in web app |
 | **Cognitive model (Phase 5 scope)** | | | | |
-| Mode-aware review framing in CLI (analytical + creative) | not started | ADR-013 | Kahneman System 1/2, Bloom taxonomy | CLI review commands |
-| Enriched rejection vocabulary (tagged + gut rejection) | not started | ADR-013 | Polanyi tacit knowledge, knowledge elicitation literature | Feedback capture |
+| Mode-aware review framing in CLI (analytical + creative) | deferred | ADR-013 | Kahneman System 1/2, Bloom taxonomy | Re-entry: Cognitive Architecture A1 begins |
+| Enriched rejection vocabulary (tagged + gut rejection) | deferred | ADR-013 | Polanyi tacit knowledge, knowledge elicitation literature | Re-entry: Cognitive Architecture A1 begins |
 
 ---
 
@@ -470,7 +470,7 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Activity Feed | human-layer.md | Original design |
 | Performance Sparkline | human-layer.md | Original design |
 | Review Queue (part of unified task surface) | human-layer.md, ADR-010 | Original design |
-| Output Viewer (6 presentation types within view catalog; renders process outputs per ADR-009 v2) | human-layer.md, ADR-009 v2 | Original design + json-render patterns (adopt) |
+| Output Viewer (renders through BlockList, not bespoke viewers — ADR-021/023) — **first viewer done (Brief 050: document/markdown)** | human-layer.md, ADR-009 v2, ADR-023, Brief 050 | Original design + react-markdown (depend) |
 | Feedback Widget (implicit capture) | human-layer.md | Original design |
 | Conversation Thread (universal — Explore + Operate) | human-layer.md, ADR-010 | Original design |
 | Process Builder | human-layer.md | Original design |
@@ -504,7 +504,7 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Mobile bottom sheet for artifact review (<1024px) | Brief 046 | iOS/Android bottom sheet convention |
 | Auto-switch conversation → workspace on first process creation | Brief 046 | Custom event bus |
 | **Surface Protocol (ADR-021)** — **web surface done (Brief 045)** | | |
-| Self emits typed ContentBlock[] (16 block types, not string) — **done** | ADR-021 | Original — Adaptive Cards (pattern), Vercel AI SDK v6 (depend), Slack/Telegram (pattern) |
+| Self emits typed ContentBlock[] (22 block types incl. ArtifactBlock, not string) — **done** | ADR-021, ADR-023 | Original — Adaptive Cards (pattern), Vercel AI SDK v6 (depend), Slack/Telegram (pattern) |
 | Per-surface renderers (web=React **done**, Telegram=inline keyboards, CLI=prompts) | ADR-021 | Original |
 | Action callbacks via handleSurfaceAction() — single entry point — **done (web)** | ADR-021 | Slack action_id + Telegram callback_data (pattern) |
 | Graceful degradation — unknown blocks fall back to text — **done** | ADR-021 | Adaptive Cards fallbackText (pattern) |
@@ -518,6 +518,14 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Centre canvas as composition surface (deterministic composition functions per nav intent) — **done (Brief 047)** | ADR-024, Brief 047 | Original — navigation-as-composition-intent |
 | Must-show blocks (critical alerts + trust gate reviews composition-immune) — **done (Brief 047)** | ADR-024, Brief 047 | Harness pattern — never suppress critical items |
 | Sidebar navigation aligned to prototypes (Today/Inbox/Work/Projects/Routines/Settings) — **done (Brief 047)** | ADR-024, .impeccable.md | P00 v2 prototype |
+| ArtifactBlock type + engine-connected artifact mode (BlockList renders content from API) — **done (Brief 050)** | ADR-023, ADR-024, Brief 050 | react-markdown + remark-gfm (depend) |
+| TextBlock markdown rendering (headings, tables, code, GFM) — **done (Brief 050)** | ADR-021, Brief 050 | react-markdown (depend) |
+| Shell execution tool for ai-agent executor (`run_command`, allowlisted commands) — **done (Brief 051)** | Brief 051, architecture.md | Node.js `execFile` + CI runner allowlist pattern |
+| Planning workflow (`plan_with_role` Self tool for collaborative planning) — **done (Brief 052)** | Brief 052, ADR-016 | consult_role pattern (extend) + codebase tools |
+| Execution pipeline wiring (`start_pipeline`, ProgressBlock, review gates, session trust) — **done (Brief 053)** | Brief 053, ADR-024 | SSE event pattern (existing) + session-scoped trust (original) |
+| Testing infrastructure (Playwright e2e, MOCK_LLM, expect-cli AI tests, CI) — **done (Brief 054)** | Brief 054 | @playwright/test (depend), millionco/expect via ACP (adopt) |
+| Scope selection + roadmap visualization (Roadmap composition, brief index) — **done (Brief 055)** | Brief 055, ADR-024 | Composition engine pattern (existing) + Markdown header parsing (original) |
+| Observability layer (interaction events, brief sync, meta-process signals) — **done (Brief 056)** | Brief 056, architecture.md L5 | PostHog event model (pattern) + existing activity recording |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |
 | Output-as-interface between processes (typed contracts, sync-time validation) | ADR-009 v2 | Original |

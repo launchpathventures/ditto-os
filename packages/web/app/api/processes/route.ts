@@ -5,6 +5,7 @@
  * GET /api/processes?id=<id> — get process detail
  * GET /api/processes?id=<id>&activities=true — get process activities
  * GET /api/processes?runId=<id> — get process run detail
+ * GET /api/processes?action=getRunOutput&runId=<id> — get run output as ContentBlock[]
  * POST /api/processes — update trust tier
  *
  * Provenance: Brief 042 (Navigation & Detail).
@@ -28,6 +29,22 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get("id");
     const activities = searchParams.get("activities");
     const runId = searchParams.get("runId");
+    const action = searchParams.get("action");
+
+    // Active runs with step progress (Brief 053)
+    if (action === "activeRuns") {
+      const activeRuns = await engine.getActiveRuns();
+      return NextResponse.json({ activeRuns });
+    }
+
+    // Run output as ContentBlock[] (Brief 050)
+    if (action === "getRunOutput" && runId) {
+      const output = await engine.getRunOutput(runId);
+      if (!output) {
+        return NextResponse.json({ error: "Run not found" }, { status: 404 });
+      }
+      return NextResponse.json(output);
+    }
 
     // Process run detail
     if (runId) {

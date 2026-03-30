@@ -8,7 +8,7 @@
  * zero-setup pattern from snarktank/antfarm /src/db.ts
  */
 
-import { sqliteTable, text, integer, real, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, unique, index } from "drizzle-orm/sqlite-core";
 import { randomUUID } from "crypto";
 
 // ============================================================
@@ -790,4 +790,54 @@ export const sessions = sqliteTable("sessions", {
     .notNull()
     .$type<Array<{ role: string; content: string; timestamp: number; surface: string }>>()
     .default([]),
+});
+
+// ============================================================
+// Interaction Events — UI observability signals (Brief 056)
+// ============================================================
+
+/**
+ * Interaction events — semantic UI signals for the learning layer.
+ * Implicit signals (weaker than explicit feedback) feed meta-processes,
+ * NOT trust computation. Privacy by design: entity IDs + timestamps, not content.
+ * Provenance: PostHog/Segment event model (pattern), Brief 056.
+ */
+export const interactionEvents = sqliteTable("interaction_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  eventType: text("event_type").notNull(),
+  entityId: text("entity_id"),
+  properties: text("properties", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .default({}),
+  timestamp: integer("timestamp", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("interaction_events_user_timestamp").on(table.userId, table.timestamp),
+]);
+
+// ============================================================
+// Briefs — lifecycle sync from files to DB (Brief 056)
+// ============================================================
+
+/**
+ * Brief lifecycle state synced from markdown files to DB.
+ * Meta-processes (project-orchestration) query this table, not the filesystem.
+ * Soft-deleted when file removed (status → "deleted").
+ * Provenance: brief-index.ts file parsing (Brief 055), Brief 056.
+ */
+export const briefs = sqliteTable("briefs", {
+  number: integer("number").primaryKey(),
+  name: text("name").notNull(),
+  status: text("status").notNull(),
+  dependsOn: text("depends_on"),
+  unlocks: text("unlocks"),
+  filePath: text("file_path"),
+  lastModified: integer("last_modified", { mode: "timestamp_ms" }),
+  syncedAt: integer("synced_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });

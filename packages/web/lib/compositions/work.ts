@@ -16,7 +16,22 @@ import { formatRelativeTime } from "./utils";
  */
 export function composeWork(context: CompositionContext): ContentBlock[] {
   const blocks: ContentBlock[] = [];
-  const { workItems, processes } = context;
+  const { workItems, processes, activeRuns } = context;
+
+  // Brief 053 AC9: Show ProgressBlock for active pipeline runs
+  if (activeRuns && activeRuns.length > 0) {
+    blocks.push({ type: "text", text: "**Running pipelines**" });
+    for (const run of activeRuns) {
+      blocks.push({
+        type: "progress",
+        processRunId: run.runId,
+        currentStep: run.currentStep,
+        totalSteps: run.totalSteps,
+        completedSteps: run.completedSteps,
+        status: run.status === "waiting_review" ? "paused" : "running",
+      });
+    }
+  }
 
   const active = workItems.filter(
     (w) => w.status !== "completed" && w.status !== "cancelled",

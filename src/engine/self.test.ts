@@ -295,8 +295,8 @@ describe("loadSessionTurns", () => {
 // ============================================================
 
 describe("selfTools", () => {
-  it("defines all delegation, consultation, workspace, proactive, and onboarding tools", () => {
-    expect(selfTools).toHaveLength(16);
+  it("defines all delegation, consultation, planning, workspace, proactive, and onboarding tools", () => {
+    expect(selfTools).toHaveLength(18);
     const names = selfTools.map((t) => t.name);
     // Original 5
     expect(names).toContain("start_dev_role");
@@ -304,6 +304,8 @@ describe("selfTools", () => {
     expect(names).toContain("edit_review");
     expect(names).toContain("reject_review");
     expect(names).toContain("consult_role");
+    // Brief 052 — Planning Workflow
+    expect(names).toContain("plan_with_role");
     // Brief 040 — 7 new tools
     expect(names).toContain("create_work_item");
     expect(names).toContain("generate_process");
@@ -420,10 +422,10 @@ describe("assembleSelfContext", () => {
     expect(context.sessionId).toBeTruthy();
   });
 
-  it("fits within ~4K token budget", async () => {
+  it("fits within ~6K token budget", async () => {
     const context = await assembleSelfContext("creator", "telegram");
-    // 4K tokens * 4 chars/token = 16K chars
-    expect(context.systemPrompt.length).toBeLessThanOrEqual(16000);
+    // 6K tokens * 4 chars/token = 24K chars
+    expect(context.systemPrompt.length).toBeLessThanOrEqual(24000);
   });
 });
 
@@ -432,10 +434,11 @@ describe("assembleSelfContext", () => {
 // ============================================================
 
 describe("consult_role tool definition", () => {
-  it("selfTools contains 16 tools including consult_role", () => {
-    expect(selfTools).toHaveLength(16);
+  it("selfTools contains 17 tools including consult_role and plan_with_role", () => {
+    expect(selfTools).toHaveLength(18);
     const names = selfTools.map((t) => t.name);
     expect(names).toContain("consult_role");
+    expect(names).toContain("plan_with_role");
   });
 
   it("consult_role accepts role enum, question, and optional context", () => {
@@ -485,6 +488,240 @@ describe("consult_role tool definition", () => {
     expect(callArgs.system).toContain("consulted briefly");
     expect(callArgs.messages[0].content).toContain("Does this design make sense?");
     expect(callArgs.messages[0].content).toContain("metacognitive check handler");
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+});
+
+// ============================================================
+// Brief 052: Planning Workflow Tool
+// ============================================================
+
+describe("plan_with_role tool definition", () => {
+  it("plan_with_role accepts only planning roles (pm, researcher, designer, architect)", () => {
+    const planTool = selfTools.find((t) => t.name === "plan_with_role")!;
+    expect(planTool).toBeDefined();
+    const props = (planTool.input_schema as any).properties;
+    expect(props.role.enum).toEqual(["pm", "researcher", "designer", "architect"]);
+    expect(props.objective.type).toBe("string");
+    expect(props.context.type).toBe("string");
+    expect(props.documents.type).toBe("array");
+    expect((planTool.input_schema as any).required).toEqual(["role", "objective"]);
+  });
+
+  it("plan_with_role rejects builder role with clear error", async () => {
+    const result = await executeDelegation("plan_with_role", {
+      role: "builder",
+      objective: "Build something",
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toBe("Planning uses PM, Researcher, Designer, and Architect roles. For execution, use start_dev_role.");
+  });
+
+  it("plan_with_role rejects reviewer role", async () => {
+    const result = await executeDelegation("plan_with_role", {
+      role: "reviewer",
+      objective: "Review something",
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Planning uses PM, Researcher, Designer, and Architect roles");
+  });
+
+  it("plan_with_role rejects documenter role", async () => {
+    const result = await executeDelegation("plan_with_role", {
+      role: "documenter",
+      objective: "Document something",
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("For execution, use start_dev_role");
+  });
+
+  it("plan_with_role with PM returns analysis with structured metadata", async () => {
+    // Mock LLM to return a direct text response (no tool_use)
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "Based on the roadmap analysis, Phase 11 should focus on the automaintainer." }],
+      costCents: 2,
+      tokensUsed: 80,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("Based on the roadmap analysis, Phase 11 should focus on the automaintainer.");
+
+    const result = await executeDelegation("plan_with_role", {
+      role: "pm",
+      objective: "What should we work on next?",
+      context: "Just finished Phase 10",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("roadmap analysis");
+    expect(result.costCents).toBe(2);
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.role).toBe("pm");
+    expect(result.metadata!.outputType).toBe("analysis");
+    expect(result.metadata!.filesRead).toEqual([]);
+
+    // Verify system prompt includes role contract or fallback
+    const callArgs = mockCreateCompletion.mock.calls[0][0];
+    expect(callArgs.system).toContain("planning conversation");
+    expect(callArgs.messages[0].content).toContain("What should we work on next?");
+
+    // Verify decision was recorded
+    const activities = testDb.select().from(schema.activities).all();
+    const planningDecision = activities.find((a) => a.action === "self.decision.planning");
+    expect(planningDecision).toBeDefined();
+    expect((planningDecision!.metadata as any).role).toBe("pm");
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+
+  it("plan_with_role with architect includes write_file in tools", async () => {
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "Here is the proposed brief." }],
+      costCents: 3,
+      tokensUsed: 100,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("Here is the proposed brief.");
+
+    await executeDelegation("plan_with_role", {
+      role: "architect",
+      objective: "Draft a brief for dark mode",
+    });
+
+    const callArgs = mockCreateCompletion.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("search_files");
+    expect(toolNames).toContain("list_files");
+    expect(toolNames).toContain("write_file");
+    expect(toolNames).toHaveLength(4); // 3 read-only + 1 write
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+
+  it("plan_with_role with PM does NOT include write_file in tools", async () => {
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "Priority analysis complete." }],
+      costCents: 1,
+      tokensUsed: 40,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("Priority analysis complete.");
+
+    await executeDelegation("plan_with_role", {
+      role: "pm",
+      objective: "Triage the backlog",
+    });
+
+    const callArgs = mockCreateCompletion.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("search_files");
+    expect(toolNames).toContain("list_files");
+    expect(toolNames).not.toContain("write_file");
+    expect(toolNames).toHaveLength(3); // read-only only
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+
+  it("plan_with_role architect write to non-docs path is rejected", async () => {
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [
+        { type: "text", text: "Let me write that." },
+        { type: "tool_use", id: "tu1", name: "write_file", input: { path: "src/engine/hack.ts", content: "bad stuff" } },
+      ],
+      costCents: 1,
+      tokensUsed: 30,
+      stopReason: "tool_use",
+    });
+    mockExtractText.mockReturnValueOnce("Let me write that.");
+    // After tool result, LLM responds with final text
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "The write was rejected — path must be within docs/." }],
+      costCents: 1,
+      tokensUsed: 30,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("The write was rejected — path must be within docs/.");
+
+    const result = await executeDelegation("plan_with_role", {
+      role: "architect",
+      objective: "Try to write outside docs",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.metadata!.proposedWrites).toBeUndefined(); // No proposed writes collected
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+
+  it("plan_with_role architect write to docs/ path traversal is rejected", async () => {
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [
+        { type: "text", text: "Attempting traversal." },
+        { type: "tool_use", id: "tu1", name: "write_file", input: { path: "docs/../src/engine/evil.ts", content: "exploit" } },
+      ],
+      costCents: 1,
+      tokensUsed: 30,
+      stopReason: "tool_use",
+    });
+    mockExtractText.mockReturnValueOnce("Attempting traversal.");
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "Traversal rejected." }],
+      costCents: 1,
+      tokensUsed: 20,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("Traversal rejected.");
+
+    const result = await executeDelegation("plan_with_role", {
+      role: "architect",
+      objective: "Attempt path traversal",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.metadata!.proposedWrites).toBeUndefined();
+
+    mockCreateCompletion.mockReset();
+    mockExtractText.mockReset();
+  });
+
+  it("plan_with_role architect valid docs/ write collects as proposedWrites", async () => {
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [
+        { type: "text", text: "Here is the brief." },
+        { type: "tool_use", id: "tu1", name: "write_file", input: { path: "docs/briefs/099-dark-mode.md", content: "# Brief 099: Dark Mode" } },
+      ],
+      costCents: 2,
+      tokensUsed: 50,
+      stopReason: "tool_use",
+    });
+    mockExtractText.mockReturnValueOnce("Here is the brief.");
+    mockCreateCompletion.mockResolvedValueOnce({
+      content: [{ type: "text", text: "I've proposed a brief for dark mode at docs/briefs/099-dark-mode.md." }],
+      costCents: 1,
+      tokensUsed: 30,
+      stopReason: "end_turn",
+    });
+    mockExtractText.mockReturnValueOnce("I've proposed a brief for dark mode at docs/briefs/099-dark-mode.md.");
+
+    const result = await executeDelegation("plan_with_role", {
+      role: "architect",
+      objective: "Draft a dark mode brief",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.metadata!.outputType).toBe("brief");
+    expect(result.metadata!.proposedWrites).toBeDefined();
+    const writes = result.metadata!.proposedWrites as Array<{ path: string; content: string }>;
+    expect(writes).toHaveLength(1);
+    expect(writes[0].path).toBe("docs/briefs/099-dark-mode.md");
+    expect(writes[0].content).toBe("# Brief 099: Dark Mode");
 
     mockCreateCompletion.mockReset();
     mockExtractText.mockReset();
@@ -653,8 +890,9 @@ describe("standalone YAML structure (Brief 031)", () => {
   const path = require("path");
   const processDir = path.resolve(__dirname, "../../processes");
 
-  const readOnlyRoles = ["pm", "researcher", "designer", "reviewer"];
-  const readWriteRoles = ["architect", "builder", "documenter"];
+  const readOnlyRoles = ["pm", "researcher", "designer"];
+  const readWriteRoles = ["architect", "documenter"];
+  const readWriteExecRoles = ["builder", "reviewer"];
 
   for (const role of readOnlyRoles) {
     it(`dev-${role}-standalone uses ai-agent with read-only tools`, () => {
@@ -690,8 +928,25 @@ describe("standalone YAML structure (Brief 031)", () => {
     });
   }
 
+  for (const role of readWriteExecRoles) {
+    it(`dev-${role}-standalone uses ai-agent with read-write-exec tools`, () => {
+      const content = fs.readFileSync(
+        path.join(processDir, `dev-${role}-standalone.yaml`),
+        "utf-8"
+      );
+      const def = yaml.parse(content);
+      const step = def.steps[0];
+      expect(step.executor).toBe("ai-agent");
+      expect(step.config.tools).toBe("read-write-exec");
+      expect(step.config.role_contract).toContain(`dev-${role}.md`);
+      // No repository input
+      const repoInput = def.inputs?.find((i: { type: string }) => i.type === "repository");
+      expect(repoInput).toBeUndefined();
+    });
+  }
+
   it("all standalone YAMLs are version 2", () => {
-    const allRoles = [...readOnlyRoles, ...readWriteRoles];
+    const allRoles = [...readOnlyRoles, ...readWriteRoles, ...readWriteExecRoles];
     for (const role of allRoles) {
       const content = fs.readFileSync(
         path.join(processDir, `dev-${role}-standalone.yaml`),

@@ -37,6 +37,19 @@ Challenge the work against the architecture specification and review checklist. 
 - Specific issues with file/line references
 - Overall verdict
 
+## Verification
+
+The `run_command` tool is available when running through the engine with `tools: read-write-exec`. You MUST independently verify the Builder's claims by running:
+
+1. `run_command("pnpm", ["run", "type-check"])` — verify 0 type errors
+2. `run_command("pnpm", ["test"])` — verify all tests pass
+3. Smoke test commands from the brief (if applicable)
+
+Do NOT trust the Builder's claim that tests pass — run them yourself and include the output in your review report. If the Builder did not provide test evidence, FLAG it. If your independent run produces different results, FLAG it.
+
+**Allowed commands:** `pnpm` (run/test/exec), `npm` (run/test), `git` (status/log/diff/show/branch/ls-files/rev-parse), `node` (file paths only).
+**Not allowed:** `npx`, `npm exec`, `node -e`, destructive git operations, `rm`, `curl`, `ssh`.
+
 ## Handoff
 
 → **Human** (for the final approve / reject / revise decision)

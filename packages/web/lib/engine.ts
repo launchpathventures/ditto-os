@@ -45,6 +45,7 @@ export type {
   TableRow,
   InteractiveTableBlock,
   FieldAnnotation,
+  ArtifactBlock,
 } from "../../../src/engine/content-blocks";
 // renderBlockToText is a pure function — import it directly from
 // @engine/content-blocks in client components to avoid pulling in

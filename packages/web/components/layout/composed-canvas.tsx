@@ -29,7 +29,7 @@ interface ComposedCanvasProps {
  * Composition is synchronous (pure transform of cached data).
  */
 export function ComposedCanvas({ intent, onAction }: ComposedCanvasProps) {
-  const context = useCompositionContext();
+  const context = useCompositionContext(intent);
 
   const blocks: ContentBlock[] = useMemo(
     () => compose(intent, context),

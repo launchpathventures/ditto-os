@@ -44,6 +44,8 @@ export function saveConfig(config: DittoConfig): void {
 }
 
 export function isConfigured(): boolean {
+  // Mock LLM mode: skip config check (Brief 054 — e2e testing)
+  if (process.env.MOCK_LLM === "true") return true;
   return loadConfig() !== null;
 }
 

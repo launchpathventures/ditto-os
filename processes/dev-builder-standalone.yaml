@@ -29,7 +29,7 @@ steps:
     agent_role: builder
     config:
       role_contract: .claude/commands/dev-builder.md
-      tools: read-write
+      tools: read-write-exec
     description: >
       Execute the Builder role: implement the approved plan,
       run type-check, follow the brief precisely.

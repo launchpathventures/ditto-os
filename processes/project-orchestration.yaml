@@ -58,6 +58,24 @@ inputs:
     required: false
     description: Process performance trends — what's improving, what's degrading
 
+  - name: interaction-events
+    type: data
+    source: engine
+    required: false
+    description: >
+      UI interaction signals (Brief 056) — navigation patterns, artifact
+      engagement, brief selection frequency. Implicit signals for understanding
+      how the user actually works.
+
+  - name: brief-lifecycle
+    type: data
+    source: engine
+    required: false
+    description: >
+      Brief lifecycle state from the briefs table (Brief 056). Tracks
+      brief velocity (days in each status), brief engagement, and
+      project progress.
+
 steps:
   - id: gather-state
     name: Gather current state
@@ -66,7 +84,9 @@ steps:
     description: >
       Pull current state from all sources. What's active, what's
       waiting, what's blocked, what completed since last run.
-    inputs: [process-states, git-activity, briefs, captures]
+      Include brief lifecycle data (velocity, days in each status)
+      and UI interaction signals (navigation patterns, engagement).
+    inputs: [process-states, git-activity, briefs, captures, interaction-events, brief-lifecycle]
     outputs: [current-state]
 
   - id: analyse

@@ -11,7 +11,7 @@ export function ChecklistBlockComponent({ block }: { block: ChecklistBlock }) {
   };
 
   return (
-    <div className="my-2 space-y-1">
+    <div data-testid="checklist-block" className="my-2 space-y-1">
       {block.title && (
         <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1.5">
           {block.title}

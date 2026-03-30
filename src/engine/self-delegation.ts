@@ -26,10 +26,12 @@
 
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import type { LlmToolDefinition } from "./llm";
-import { createCompletion, extractText } from "./llm";
+import type { LlmToolDefinition, LlmMessage, LlmToolResultBlock } from "./llm";
+import { createCompletion, extractText, extractToolUse } from "./llm";
 import { startProcessRun, fullHeartbeat } from "./heartbeat";
 import { approveRun, editRun, rejectRun, getWaitingStepOutput } from "./review-actions";
+import { readOnlyTools, executeTool } from "./tools";
+import { recordSelfDecision } from "./self-context";
 import { handleCreateWorkItem } from "./self-tools/create-work-item";
 import { handleGenerateProcess } from "./self-tools/generate-process";
 import { handleQuickCapture } from "./self-tools/quick-capture";
@@ -41,6 +43,9 @@ import { handleDetectRisks } from "./self-tools/detect-risks";
 import { handleSuggestNext } from "./self-tools/suggest-next";
 import { handleAdaptProcess } from "./self-tools/adapt-process";
 import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
+import { setSessionTrust } from "./session-trust";
+import { loadProcessFile } from "./process-loader";
+import { flattenSteps } from "./process-loader";
 
 // ============================================================
 // Tool Definitions (Ditto-native format)
@@ -155,6 +160,66 @@ export const selfTools: LlmToolDefinition[] = [
         },
       },
       required: ["role", "question"],
+    },
+  },
+  // ============================================================
+  // Brief 052 — Planning Workflow Tool
+  // ============================================================
+  {
+    name: "plan_with_role",
+    description:
+      "Collaborative planning with a dev role's perspective. The role reads project documents, analyzes the situation, and produces structured output (briefs, ADRs, insights, roadmap analysis). Richer than consult_role (document access, multi-turn tool use) but lighter than start_dev_role (no harness pipeline). Planning roles only: PM, Researcher, Designer, Architect. The Architect can additionally propose writes to docs/ — proposed content returns to you for user confirmation before persisting. Use this for planning conversations: scoping features, reviewing architecture, prioritizing work, exploring ideas.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        role: {
+          type: "string",
+          enum: ["pm", "researcher", "designer", "architect"],
+          description: "Which planning role to engage (pm, researcher, designer, architect only)",
+        },
+        objective: {
+          type: "string",
+          description: "What the planning conversation should achieve",
+        },
+        context: {
+          type: "string",
+          description: "Optional: relevant context from the conversation so far",
+        },
+        documents: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: file paths to read (e.g., 'docs/roadmap.md', 'docs/briefs/052-planning-workflow.md')",
+        },
+      },
+      required: ["role", "objective"],
+    },
+  },
+  // ============================================================
+  // Brief 053 — Execution Pipeline Wiring
+  // ============================================================
+  {
+    name: "start_pipeline",
+    description:
+      "Trigger the full dev pipeline for a task. Unlike start_dev_role (single role), this runs the full pipeline: PM → Researcher → Designer → Architect → Builder → Reviewer → Documenter. The pipeline runs asynchronously — you get back immediately with a runId and can track progress via SSE events. Use this when the human says 'Build Brief X', 'implement X', or otherwise requests end-to-end execution through the pipeline.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Process to run (default: 'dev-pipeline')",
+        },
+        task: {
+          type: "string",
+          description: "The work description — what the pipeline should accomplish",
+        },
+        sessionTrust: {
+          type: "object",
+          description:
+            "Optional: per-role trust overrides for this run. Keys are role names, values must be 'spot_checked'. Cannot relax builder or reviewer (maker-checker). Example: { 'researcher': 'spot_checked', 'designer': 'spot_checked' }",
+          additionalProperties: { type: "string", enum: ["spot_checked"] },
+        },
+      },
+      required: ["task"],
     },
   },
   // ============================================================
@@ -416,6 +481,8 @@ export interface DelegationResult {
   output: string;
   /** Cost of this tool call in cents (used for decision tracking). */
   costCents?: number;
+  /** Structured metadata from the tool execution (e.g., runId, processId). */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -453,6 +520,23 @@ export async function executeDelegation(
         toolInput.question as string,
         toolInput.context as string | undefined,
       );
+
+    // Brief 052 — Planning Workflow
+    case "plan_with_role":
+      return await handlePlanWithRole({
+        role: toolInput.role as string,
+        objective: toolInput.objective as string,
+        context: toolInput.context as string | undefined,
+        documents: toolInput.documents as string[] | undefined,
+      });
+
+    // Brief 053 — Execution Pipeline Wiring
+    case "start_pipeline":
+      return await handleStartPipeline({
+        processSlug: (toolInput.processSlug as string) ?? "dev-pipeline",
+        task: toolInput.task as string,
+        sessionTrust: toolInput.sessionTrust as Record<string, string> | undefined,
+      });
 
     // Brief 040 — Self Extension Tools
     case "create_work_item":
@@ -596,12 +680,91 @@ async function handleStartDevRole(
       output: outputText
         ? `Role: ${role}\nStatus: ${result.status}\nRun ID: ${runId}\n\n${outputText}`
         : `Role: ${role}\nStatus: ${result.status}\nRun ID: ${runId}\nSteps executed: ${result.stepsExecuted}\n${result.message}`,
+      metadata: { runId, processSlug, role },
     };
   } catch (err) {
     return {
       toolName: "start_dev_role",
       success: false,
       output: `Failed to run ${role}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Trigger the full dev pipeline asynchronously (Brief 053).
+ *
+ * Calls startProcessRun(), then kicks off fullHeartbeat() in a detached
+ * async context (non-blocking). Returns immediately with runId and step list.
+ * Session trust overrides are validated and stored before the pipeline starts.
+ */
+async function handleStartPipeline(params: {
+  processSlug: string;
+  task: string;
+  sessionTrust?: Record<string, string>;
+}): Promise<DelegationResult> {
+  const { processSlug, task, sessionTrust } = params;
+
+  try {
+    // Load process definition to get step names
+    let stepNames: string[];
+    try {
+      const processDir = resolve(process.cwd(), "processes");
+      const definition = loadProcessFile(resolve(processDir, `${processSlug}.yaml`));
+      stepNames = flattenSteps(definition).map((s) => s.name);
+    } catch {
+      return {
+        toolName: "start_pipeline",
+        success: false,
+        output: `Process not found: ${processSlug}. Check that processes/${processSlug}.yaml exists.`,
+      };
+    }
+
+    // Start the process run
+    const runId = await startProcessRun(processSlug, { task }, "self");
+
+    // Set session trust overrides if provided
+    let trustInfo = "";
+    if (sessionTrust && Object.keys(sessionTrust).length > 0) {
+      const { stored, errors } = setSessionTrust(runId, sessionTrust);
+      if (Object.keys(stored).length > 0) {
+        trustInfo = `\nSession trust overrides: ${Object.entries(stored).map(([r, t]) => `${r}=${t}`).join(", ")}`;
+      }
+      if (errors.length > 0) {
+        trustInfo += `\nRejected overrides: ${errors.map((e) => `${e.role}: ${e.reason}`).join("; ")}`;
+      }
+    }
+
+    // Kick off fullHeartbeat in a detached async context (non-blocking)
+    setImmediate(() => {
+      fullHeartbeat(runId).catch((err) => {
+        console.error(`Pipeline ${runId} failed:`, err);
+      });
+    });
+
+    const result: Record<string, unknown> = {
+      runId,
+      processSlug,
+      status: "started",
+      steps: stepNames,
+    };
+
+    // Include trust override feedback so the Self can inform the user
+    if (trustInfo) {
+      result.trustInfo = trustInfo;
+    }
+
+    return {
+      toolName: "start_pipeline",
+      success: true,
+      output: JSON.stringify(result),
+      metadata: { runId, processSlug, steps: stepNames },
+    };
+  } catch (err) {
+    return {
+      toolName: "start_pipeline",
+      success: false,
+      output: `Failed to start pipeline: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
@@ -733,6 +896,237 @@ You are being consulted briefly by a teammate (Ditto's Conversational Self). The
       toolName: "consult_role",
       success: false,
       output: `Consultation failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+// ============================================================
+// Planning Workflow Handler (Brief 052)
+// ============================================================
+
+const PLANNING_ROLES = ["pm", "researcher", "designer", "architect"] as const;
+type PlanningRole = (typeof PLANNING_ROLES)[number];
+
+/** Max tool-use turns for document reading in plan_with_role */
+const MAX_PLANNING_TOOL_TURNS = 5;
+
+/**
+ * Plan with a dev role — collaborative planning with document access.
+ *
+ * Richer than consult_role (document access, multi-turn tool use) but
+ * lighter than start_dev_role (no harness pipeline, no process run).
+ *
+ * All planning roles get read-only codebase tools.
+ * Architect additionally gets write_file restricted to docs/ paths.
+ * Proposed writes return to the Self for user confirmation.
+ *
+ * Provenance: consult_role pattern (Brief 034a) + codebase tools (Brief 031).
+ */
+async function handlePlanWithRole(params: {
+  role: string;
+  objective: string;
+  context?: string;
+  documents?: string[];
+}): Promise<DelegationResult> {
+  const { role, objective, context, documents } = params;
+
+  // AC4: Reject non-planning roles
+  if (!PLANNING_ROLES.includes(role as PlanningRole)) {
+    return {
+      toolName: "plan_with_role",
+      success: false,
+      output: "Planning uses PM, Researcher, Designer, and Architect roles. For execution, use start_dev_role.",
+    };
+  }
+
+  try {
+    // Load role contract (same pattern as handleConsultRole)
+    let roleContract: string;
+    try {
+      const contractPath = resolve(
+        process.cwd(),
+        ".claude",
+        "commands",
+        `dev-${role}.md`,
+      );
+      roleContract = readFileSync(contractPath, "utf-8");
+    } catch {
+      roleContract = `You are a ${role} on a software development team.`;
+    }
+
+    // AC2: Build planning tools — read-only for all, architect gets docs-restricted write
+    const planningTools = [...readOnlyTools];
+
+    // AC5: Architect gets write_file restricted to docs/ paths
+    if (role === "architect") {
+      planningTools.push({
+        name: "write_file",
+        description:
+          "Propose content for a file within the docs/ directory. The proposed content will be reviewed by the user before being persisted. Path MUST start with 'docs/'.",
+        input_schema: {
+          type: "object" as const,
+          properties: {
+            path: {
+              type: "string",
+              description: "File path relative to project root (MUST be within docs/)",
+            },
+            content: {
+              type: "string",
+              description: "The full content to write to the file",
+            },
+          },
+          required: ["path", "content"],
+        },
+      });
+    }
+
+    // Build planning system prompt
+    const systemPrompt = `${roleContract}
+
+---
+
+You are being engaged for a **planning conversation** by Ditto's Conversational Self. Your job is to analyze, think through, and produce structured output for the objective below.
+
+**Your tools:** You have read-only access to the codebase (read_file, search_files, list_files)${role === "architect" ? " and can propose writes to files within docs/ (write_file)" : ""}. Use these to read relevant documents, understand the current state, and ground your analysis in the actual codebase.
+
+**Your output should be structured:**
+- Lead with your analysis or recommendation
+- Reference specific documents you read
+- If producing a document (brief, ADR, insight), include the full content
+- If proposing file writes, include the complete file content
+
+${role === "architect" ? "**IMPORTANT:** When you use write_file, the content will be returned to the user for approval — it will NOT be persisted immediately. Propose writes only for paths within docs/." : ""}`;
+
+    // Build user message with objective + context + requested documents
+    const userParts: string[] = [`**Objective:** ${objective}`];
+    if (context) {
+      userParts.push(`\n**Context:** ${context}`);
+    }
+    if (documents && documents.length > 0) {
+      userParts.push(`\n**Documents to review:** ${documents.join(", ")}`);
+    }
+
+    // AC3: Tool-use loop (up to MAX_PLANNING_TOOL_TURNS turns)
+    const messages: LlmMessage[] = [
+      { role: "user", content: userParts.join("\n") },
+    ];
+
+    let totalCostCents = 0;
+    let finalOutput = "";
+    const filesRead: string[] = [];
+    const proposedWrites: Array<{ path: string; content: string }> = [];
+
+    for (let turn = 0; turn < MAX_PLANNING_TOOL_TURNS; turn++) {
+      const completion = await createCompletion({
+        system: systemPrompt,
+        messages,
+        tools: planningTools,
+        maxTokens: 4096,
+      });
+
+      totalCostCents += completion.costCents;
+
+      const textContent = extractText(completion.content);
+      const toolUses = extractToolUse(completion.content);
+
+      if (toolUses.length === 0) {
+        // Final response — no tool calls
+        finalOutput = textContent;
+        break;
+      }
+
+      // Add assistant message with tool_use blocks
+      messages.push({ role: "assistant", content: completion.content });
+
+      // Execute tool calls
+      const toolResults: LlmToolResultBlock[] = [];
+
+      for (const toolUse of toolUses) {
+        const input = toolUse.input as Record<string, unknown>;
+        let toolResult: string;
+
+        if (toolUse.name === "write_file") {
+          // AC5: Validate path is within docs/ (resolve to prevent traversal)
+          const filePath = input.path as string;
+          const resolvedWrite = resolve(process.cwd(), filePath);
+          const docsDir = resolve(process.cwd(), "docs");
+          if (!resolvedWrite.startsWith(docsDir + "/") && resolvedWrite !== docsDir) {
+            toolResult = "Error: Planning write access is restricted to docs/ directory. Path must resolve to within docs/.";
+          } else {
+            // AC6: Don't persist — collect as proposed writes
+            proposedWrites.push({
+              path: filePath,
+              content: input.content as string,
+            });
+            toolResult = `Proposed write to ${filePath} (${(input.content as string).split("\n").length} lines). This will be presented to the user for approval.`;
+          }
+        } else {
+          // Read-only tools — execute normally
+          const result = executeTool(toolUse.name, input as Parameters<typeof executeTool>[1]);
+          toolResult = typeof result === "string" ? result : await result;
+
+          // Track files read
+          if (toolUse.name === "read_file" && input.path) {
+            filesRead.push(input.path as string);
+          }
+        }
+
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: toolResult,
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+
+      // If this was the last turn, extract text from what we have
+      if (turn === MAX_PLANNING_TOOL_TURNS - 1) {
+        finalOutput = textContent || "(Planning tool turn limit reached)";
+      }
+    }
+
+    // AC12: Determine output type from content
+    let outputType: "brief" | "adr" | "insight" | "task" | "update" | "analysis" = "analysis";
+    const lowerOutput = finalOutput.toLowerCase();
+    if (proposedWrites.some((w) => w.path.includes("briefs/"))) outputType = "brief";
+    else if (proposedWrites.some((w) => w.path.includes("adrs/"))) outputType = "adr";
+    else if (proposedWrites.some((w) => w.path.includes("insights/"))) outputType = "insight";
+    else if (lowerOutput.includes("# brief") || lowerOutput.includes("## brief")) outputType = "brief";
+    else if (lowerOutput.includes("# adr") || lowerOutput.includes("## decision")) outputType = "adr";
+    else if (lowerOutput.includes("roadmap") && lowerOutput.includes("update")) outputType = "update";
+    else if (lowerOutput.includes("task") && lowerOutput.includes("create")) outputType = "task";
+
+    // AC7: Record planning decision
+    await recordSelfDecision({
+      decisionType: "planning",
+      details: {
+        role,
+        objective: objective.slice(0, 200),
+        outputType,
+        filesRead,
+        proposedWriteCount: proposedWrites.length,
+      },
+      costCents: totalCostCents,
+    });
+
+    return {
+      toolName: "plan_with_role",
+      success: true,
+      output: finalOutput,
+      costCents: totalCostCents,
+      metadata: {
+        role,
+        outputType,
+        filesRead,
+        proposedWrites: proposedWrites.length > 0 ? proposedWrites : undefined,
+      },
+    };
+  } catch (err) {
+    return {
+      toolName: "plan_with_role",
+      success: false,
+      output: `Planning failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

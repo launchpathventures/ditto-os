@@ -7,11 +7,25 @@
  * Provenance: original (ADR-024 MVP strategy).
  */
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { CompositionContext } from "./compositions/types";
+import type { CompositionContext, ActiveRunSummary, RoadmapData } from "./compositions/types";
 import type { ProcessSummary, WorkItemSummary } from "./process-query";
 import type { FeedResponse, FeedItem } from "./feed-types";
+
+/** Fetch active runs from the API (Brief 053) */
+async function fetchActiveRuns(): Promise<{ activeRuns: ActiveRunSummary[] }> {
+  const res = await fetch("/api/processes?action=activeRuns");
+  if (!res.ok) return { activeRuns: [] };
+  return res.json();
+}
+
+/** Fetch roadmap data from the API (Brief 055) */
+async function fetchRoadmap(): Promise<RoadmapData> {
+  const res = await fetch("/api/roadmap");
+  if (!res.ok) return { phases: [], briefs: [], stats: { total: 0, ready: 0, inProgress: 0, complete: 0, draft: 0 } };
+  return res.json();
+}
 
 /**
  * Hook: assemble CompositionContext from React Query cache.
@@ -24,7 +38,7 @@ import type { FeedResponse, FeedItem } from "./feed-types";
  * queryClient.getQueryData is cheap and the parent re-renders
  * when useProcessList/useFeed queries update.
  */
-export function useCompositionContext(): CompositionContext {
+export function useCompositionContext(intent?: string): CompositionContext {
   const queryClient = useQueryClient();
 
   // Read from React Query cache — synchronous, no network.
@@ -38,6 +52,22 @@ export function useCompositionContext(): CompositionContext {
 
   const feedData = queryClient.getQueryData<FeedResponse>(["feed"]);
 
+  // Brief 053: Fetch active runs — initial load + SSE-driven invalidation
+  const { data: activeRunsData } = useQuery({
+    queryKey: ["activeRuns"],
+    queryFn: fetchActiveRuns,
+    refetchInterval: 30_000, // Fallback poll every 30s in case SSE misses
+    staleTime: 5_000,
+  });
+
+  // Brief 055: Lazy roadmap data — only fetched when roadmap intent is active
+  const { data: roadmapData } = useQuery({
+    queryKey: ["roadmap"],
+    queryFn: fetchRoadmap,
+    enabled: intent === "roadmap",
+    staleTime: 10_000,
+  });
+
   const processes = (processData?.processes ?? []).filter(
     (p) => !p.system && p.status === "active",
   );
@@ -46,6 +76,7 @@ export function useCompositionContext(): CompositionContext {
   const pendingReviews = feedItems.filter(
     (item) => item.itemType === "review",
   );
+  const activeRuns = activeRunsData?.activeRuns ?? [];
 
   return useMemo(
     () => ({
@@ -53,8 +84,10 @@ export function useCompositionContext(): CompositionContext {
       workItems,
       feedItems,
       pendingReviews,
+      activeRuns,
+      roadmap: roadmapData,
       now: new Date(),
     }),
-    [processes, workItems, feedItems, pendingReviews],
+    [processes, workItems, feedItems, pendingReviews, activeRuns, roadmapData],
   );
 }

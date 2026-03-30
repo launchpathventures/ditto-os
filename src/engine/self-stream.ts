@@ -45,7 +45,7 @@ import { registerBlockActions } from "./surface-actions";
 export type SelfStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call-start"; toolName: string; toolCallId: string }
-  | { type: "tool-call-result"; toolCallId: string; result: string; blocks?: ContentBlock[] }
+  | { type: "tool-call-result"; toolCallId: string; result: string; blocks?: ContentBlock[]; metadata?: Record<string, unknown> }
   | { type: "structured-data"; data: Record<string, unknown> }
   | { type: "content-block"; block: ContentBlock }
   | { type: "credential-request"; service: string; processSlug: string | null; fieldLabel: string; placeholder: string }
@@ -180,13 +180,26 @@ export async function* selfConverseStream(
           ? `Consulting ${input.role}...`
           : toolUse.name === "start_dev_role"
             ? `Delegating to ${input.role}...`
-            : `Running ${toolUse.name}...`,
+            : toolUse.name === "plan_with_role"
+              ? `Planning with ${input.role}...`
+              : toolUse.name === "start_pipeline"
+                ? `Starting pipeline: ${(input.processSlug as string) ?? "dev-pipeline"}...`
+                : `Running ${toolUse.name}...`,
       };
 
       const result = await executeDelegation(toolUse.name, input);
 
       // Record decisions
-      if (toolUse.name === "start_dev_role") {
+      if (toolUse.name === "start_pipeline") {
+        await recordSelfDecision({
+          decisionType: "pipeline",
+          details: {
+            processSlug: (input.processSlug as string) ?? "dev-pipeline",
+            task: (input.task as string).slice(0, 200),
+          },
+          costCents: 0,
+        });
+      } else if (toolUse.name === "start_dev_role") {
         const role = input.role as string;
         if (lastDelegatedRole && role !== lastDelegatedRole) {
           const { isRedirect } = detectSelfRedirect(message);
@@ -216,6 +229,7 @@ export async function* selfConverseStream(
         toolCallId: toolUse.id,
         result: result.output.slice(0, 500),
         blocks,
+        metadata: result.metadata,
       };
 
       // Register action IDs for session-scoped validation (AC14)
@@ -287,13 +301,107 @@ import type {
   StatusCardBlock,
   ReviewCardBlock,
   AlertBlock,
+  CodeBlock,
+  ChecklistBlock,
   DataBlock,
   GatheringIndicatorBlock,
   ProcessProposalBlock,
   KnowledgeSynthesisBlock,
+  ArtifactBlock,
+  TextBlock,
+  ProgressBlock,
 } from "./content-blocks";
 import { getUserModel } from "./user-model";
 import type { DelegationResult } from "./self-delegation";
+
+/**
+ * Parse command output sections from a dev role result into typed ContentBlocks.
+ * Looks for `$ <command>` markers in the output (produced by run_command).
+ * Emits CodeBlock for stdout/stderr, ChecklistBlock for test summaries,
+ * AlertBlock for failures/timeouts. (Brief 051)
+ */
+function parseCommandOutputBlocks(output: string): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+
+  // Match command output sections: starts with "$ executable args"
+  const cmdPattern = /^\$ (.+)$/gm;
+  let match: RegExpExecArray | null;
+  const cmdStarts: { command: string; index: number }[] = [];
+
+  while ((match = cmdPattern.exec(output)) !== null) {
+    cmdStarts.push({ command: match[1], index: match.index });
+  }
+
+  for (let i = 0; i < cmdStarts.length; i++) {
+    const start = cmdStarts[i];
+    const endIndex = i + 1 < cmdStarts.length ? cmdStarts[i + 1].index : output.length;
+    const section = output.slice(start.index, endIndex).trim();
+
+    // Extract exit code
+    const exitMatch = section.match(/Exit code: (\d+)/);
+    const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : null;
+
+    // Check for timeout
+    if (section.includes("timed out")) {
+      const alertBlock: AlertBlock = {
+        type: "alert",
+        severity: "error",
+        title: `Command Timed Out`,
+        content: `\`${start.command}\` exceeded the timeout limit.`,
+      };
+      blocks.push(alertBlock);
+      continue;
+    }
+
+    // Check for test results (vitest/jest patterns)
+    const testSummaryMatch = section.match(/Tests\s+.*?(\d+)\s+passed/);
+    const testFailMatch = section.match(/(\d+)\s+failed/);
+    if (testSummaryMatch) {
+      const passed = parseInt(testSummaryMatch[1], 10);
+      const failed = testFailMatch ? parseInt(testFailMatch[1], 10) : 0;
+      const items: ChecklistBlock["items"] = [];
+      if (passed > 0) {
+        items.push({ label: `${passed} tests passed`, status: "done" });
+      }
+      if (failed > 0) {
+        items.push({ label: `${failed} tests failed`, status: "warning" });
+      }
+      const checkBlock: ChecklistBlock = {
+        type: "checklist",
+        title: start.command,
+        items,
+      };
+      blocks.push(checkBlock);
+      continue;
+    }
+
+    // Check for type-check results
+    if (start.command.includes("type-check") || start.command.includes("tsc")) {
+      const isPass = exitCode === 0;
+      const alertBlock: AlertBlock = {
+        type: "alert",
+        severity: isPass ? "info" : "error",
+        title: isPass ? "Type-check passed" : "Type-check failed",
+        content: `\`${start.command}\` exited with code ${exitCode ?? "unknown"}.`,
+      };
+      blocks.push(alertBlock);
+      continue;
+    }
+
+    // Generic command output → CodeBlock
+    if (section.length > 50) {
+      const codeBlock: CodeBlock = {
+        type: "code",
+        language: "shell",
+        content: section,
+        filename: start.command,
+      };
+      blocks.push(codeBlock);
+    }
+  }
+
+  return blocks;
+}
 
 /**
  * Convert a tool result into typed content blocks for surface rendering.
@@ -458,6 +566,134 @@ async function toolResultToContentBlocks(
         // Not parseable
       }
       return [];
+    }
+
+    case "plan_with_role": {
+      const blocks: ContentBlock[] = [];
+      const metadata = result.metadata ?? {};
+      const proposedWrites = metadata.proposedWrites as Array<{ path: string; content: string }> | undefined;
+
+      if (proposedWrites && proposedWrites.length > 0) {
+        // AC10: Proposed files → ArtifactBlock with "Pending Approval"
+        for (const pw of proposedWrites) {
+          const block: ArtifactBlock = {
+            type: "artifact",
+            artifactId: `planning-${pw.path.replace(/[/\\]/g, "-")}-${Date.now()}`,
+            title: pw.path,
+            artifactType: "document",
+            status: { label: "Pending Approval", variant: "caution" },
+            summary: pw.content.slice(0, 200) + (pw.content.length > 200 ? "..." : ""),
+            version: 1,
+          };
+          blocks.push(block);
+        }
+      }
+
+      // Check for action items / checklist patterns in the output
+      const output = result.output;
+      const hasChecklist = /^[-*]\s+\[[ x]\]/m.test(output) || /^\d+\.\s+\[[ x]\]/m.test(output);
+      if (hasChecklist) {
+        const items: ChecklistBlock["items"] = [];
+        const checklistLines = output.match(/^[-*\d.]+\s+\[([x ])\]\s*(.+)$/gm) ?? [];
+        for (const line of checklistLines) {
+          const match = line.match(/\[([x ])\]\s*(.+)$/);
+          if (match) {
+            items.push({
+              label: match[2].trim(),
+              status: match[1] === "x" ? "done" : "pending",
+            });
+          }
+        }
+        if (items.length > 0) {
+          const checkBlock: ChecklistBlock = {
+            type: "checklist",
+            title: "Action Items",
+            items,
+          };
+          blocks.push(checkBlock);
+        }
+      }
+
+      // If no proposed writes and no checklist, emit as TextBlock for inline analysis
+      if (blocks.length === 0 && output.length > 0) {
+        const textBlock: TextBlock = {
+          type: "text",
+          text: output,
+        };
+        blocks.push(textBlock);
+      }
+
+      return blocks;
+    }
+
+    case "start_pipeline": {
+      // Brief 053 AC5: Emit ProgressBlock for pipeline start
+      try {
+        const parsed = JSON.parse(result.output) as {
+          runId: string;
+          processSlug: string;
+          status: string;
+          steps: string[];
+        };
+        const blocks: ContentBlock[] = [];
+
+        const progressBlock: ProgressBlock = {
+          type: "progress",
+          processRunId: parsed.runId,
+          currentStep: parsed.steps[0] ?? "Starting",
+          totalSteps: parsed.steps.length,
+          completedSteps: 0,
+          status: "running",
+        };
+        blocks.push(progressBlock);
+
+        const textBlock: TextBlock = {
+          type: "text",
+          text: `Starting the dev pipeline (${parsed.steps.length} steps). I'll keep you updated as steps complete.`,
+        };
+        blocks.push(textBlock);
+
+        return blocks;
+      } catch {
+        return [];
+      }
+    }
+
+    case "start_dev_role": {
+      const role = (input.role as string) ?? "unknown";
+      const output = result.output;
+      const runId = result.metadata?.runId as string | undefined;
+
+      // Extract command output blocks from the result (Brief 051)
+      const commandBlocks = parseCommandOutputBlocks(output);
+
+      if (output.length > 500) {
+        // Substantial output → ArtifactBlock reference card + command blocks
+        const processSlug = result.metadata?.processSlug as string | undefined;
+        const block: ArtifactBlock = {
+          type: "artifact",
+          artifactId: runId ?? `dev-${role}-${Date.now()}`,
+          title: `${role.charAt(0).toUpperCase() + role.slice(1)} Output`,
+          artifactType: "document",
+          status: { label: "Ready for Review", variant: "caution" },
+          summary: output.slice(0, 200) + (output.length > 200 ? "..." : ""),
+          version: 1,
+          actions: [{
+            id: `open-artifact-${runId ?? role}`,
+            label: "Open",
+            style: "primary",
+            payload: { processSlug: processSlug ?? `dev-${role}-standalone` },
+          }],
+        };
+        return [block, ...commandBlocks];
+      }
+
+      // Short output → TextBlock rendered inline + command blocks
+      const textBlock: TextBlock = {
+        type: "text",
+        text: output,
+      };
+      return [textBlock, ...commandBlocks];
     }
 
     default:
