@@ -374,11 +374,14 @@ describe("connect_service block emission (AC7)", () => {
       ok(output),
     );
 
-    expect(blocks).toHaveLength(1);
+    expect(blocks.length).toBeGreaterThanOrEqual(1);
     const card = blocks[0] as StatusCardBlock;
     expect(card.type).toBe("status_card");
     expect(card.title).toBe("github");
     expect(card.status).toBe("connected");
+    // Brief 072: also emits ConnectionSetupBlock
+    const connBlock = blocks.find((b) => b.type === "connection_setup");
+    expect(connBlock).toBeDefined();
   });
 
   it("emits StatusCard for setup guide", async () => {
@@ -397,10 +400,13 @@ describe("connect_service block emission (AC7)", () => {
       ok(output),
     );
 
-    expect(blocks).toHaveLength(1);
+    expect(blocks.length).toBeGreaterThanOrEqual(1);
     const card = blocks[0] as StatusCardBlock;
     expect(card.status).toBe("setup required");
     expect(card.details["Auth"]).toBe("oauth");
+    // Brief 072: also emits ConnectionSetupBlock
+    const connBlock = blocks.find((b) => b.type === "connection_setup");
+    expect(connBlock).toBeDefined();
   });
 });
 
