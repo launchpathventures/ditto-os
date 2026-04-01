@@ -264,7 +264,7 @@ describe("Task-to-process routing", () => {
 
     expect(result.processSlug).toBe("dev-pipeline");
     expect(result.confidence).toBe(1.0);
-    expect(result.reasoning).toContain("Slug exact match");
+    expect(result.reasoning).toContain("Slug word-boundary match");
   });
 
   it("matches by keyword when content shares terms with process name/description", async () => {

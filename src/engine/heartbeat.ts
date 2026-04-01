@@ -1266,112 +1266,133 @@ export interface GoalHeartbeatLoopResult {
   tasksPending: number;
 }
 
+/** Active goal loops — prevents duplicate invocations (F074-2 fix) */
+const activeGoalLoops = new Set<string>();
+
 /**
  * Continuously call orchestratorHeartbeat() until the goal completes,
  * all tasks are paused/failed, or no progress can be made.
  *
  * Uses setImmediate between iterations to avoid blocking.
  * Trust overrides flow to child process runs (can only LOWER trust).
+ * Duplicate invocations for the same goal are rejected (F074-2).
  */
 export async function goalHeartbeatLoop(
   goalWorkItemId: string,
   trustOverrides?: Record<string, import("../db/schema").TrustTier>,
 ): Promise<GoalHeartbeatLoopResult> {
-  let iterations = 0;
-  const MAX_ITERATIONS = 100; // safety cap
+  // Prevent duplicate invocations for the same goal
+  if (activeGoalLoops.has(goalWorkItemId)) {
+    return {
+      goalWorkItemId,
+      status: "partial",
+      tasksCompleted: 0,
+      tasksPaused: 0,
+      tasksFailed: 0,
+      tasksPending: 0,
+    };
+  }
+  activeGoalLoops.add(goalWorkItemId);
 
-  while (iterations < MAX_ITERATIONS) {
-    iterations++;
+  try {
+    let iterations = 0;
+    const MAX_ITERATIONS = 100; // safety cap
 
-    // Check if goal is paused (goal-level pause)
+    while (iterations < MAX_ITERATIONS) {
+      iterations++;
+
+      // Check if goal is paused (goal-level pause)
+      const [goalItem] = await db
+        .select()
+        .from(schema.workItems)
+        .where(eq(schema.workItems.id, goalWorkItemId))
+        .limit(1);
+
+      if (!goalItem) {
+        return {
+          goalWorkItemId,
+          status: "failed",
+          tasksCompleted: 0,
+          tasksPaused: 0,
+          tasksFailed: 0,
+          tasksPending: 0,
+        };
+      }
+
+      // If goal was paused externally, stop
+      if (goalItem.status === "waiting_human") {
+        const counts = getTaskCounts(goalItem);
+        return {
+          goalWorkItemId,
+          status: "paused",
+          ...counts,
+        };
+      }
+
+      // Run one orchestrator heartbeat iteration
+      const result = await orchestratorHeartbeat(goalWorkItemId, trustOverrides);
+
+      if (result.status === "completed") {
+        await logActivity("goal.completed", goalWorkItemId, "work_item", {
+          tasksCompleted: result.tasksCompleted,
+          iterations,
+        });
+        return {
+          goalWorkItemId,
+          status: "completed",
+          tasksCompleted: result.tasksCompleted,
+          tasksPaused: 0,
+          tasksFailed: 0,
+          tasksPending: 0,
+        };
+      }
+
+      if (result.status === "escalated" || result.status === "paused") {
+        // No more progress possible — all remaining tasks blocked or paused
+        await logActivity("goal.paused", goalWorkItemId, "work_item", {
+          tasksCompleted: result.tasksCompleted,
+          tasksPaused: result.tasksPaused,
+          tasksRemaining: result.tasksRemaining,
+          reason: result.escalation?.reason || "All tasks paused or blocked",
+          iterations,
+        });
+        return {
+          goalWorkItemId,
+          status: "paused",
+          tasksCompleted: result.tasksCompleted,
+          tasksPaused: result.tasksPaused,
+          tasksFailed: 0,
+          tasksPending: result.tasksRemaining - result.tasksPaused,
+        };
+      }
+
+      // "advancing" — made progress, check if more work is available
+      // Use setImmediate to avoid blocking the event loop
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    // Safety cap reached
     const [goalItem] = await db
       .select()
       .from(schema.workItems)
       .where(eq(schema.workItems.id, goalWorkItemId))
       .limit(1);
 
-    if (!goalItem) {
-      return {
-        goalWorkItemId,
-        status: "failed",
-        tasksCompleted: 0,
-        tasksPaused: 0,
-        tasksFailed: 0,
-        tasksPending: 0,
-      };
-    }
+    const counts = goalItem ? getTaskCounts(goalItem) : {
+      tasksCompleted: 0,
+      tasksPaused: 0,
+      tasksFailed: 0,
+      tasksPending: 0,
+    };
 
-    // If goal was paused externally, stop
-    if (goalItem.status === "waiting_human") {
-      const counts = getTaskCounts(goalItem);
-      return {
-        goalWorkItemId,
-        status: "paused",
-        ...counts,
-      };
-    }
-
-    // Run one orchestrator heartbeat iteration
-    const result = await orchestratorHeartbeat(goalWorkItemId, trustOverrides);
-
-    if (result.status === "completed") {
-      await logActivity("goal.completed", goalWorkItemId, "work_item", {
-        tasksCompleted: result.tasksCompleted,
-        iterations,
-      });
-      return {
-        goalWorkItemId,
-        status: "completed",
-        tasksCompleted: result.tasksCompleted,
-        tasksPaused: 0,
-        tasksFailed: 0,
-        tasksPending: 0,
-      };
-    }
-
-    if (result.status === "escalated" || result.status === "paused") {
-      // No more progress possible — all remaining tasks blocked or paused
-      await logActivity("goal.paused", goalWorkItemId, "work_item", {
-        tasksCompleted: result.tasksCompleted,
-        tasksPaused: result.tasksPaused,
-        tasksRemaining: result.tasksRemaining,
-        reason: result.escalation?.reason || "All tasks paused or blocked",
-        iterations,
-      });
-      return {
-        goalWorkItemId,
-        status: "paused",
-        tasksCompleted: result.tasksCompleted,
-        tasksPaused: result.tasksPaused,
-        tasksFailed: 0,
-        tasksPending: result.tasksRemaining - result.tasksPaused,
-      };
-    }
-
-    // "advancing" — made progress, check if more work is available
-    // Use setImmediate to avoid blocking the event loop
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    return {
+      goalWorkItemId,
+      status: "partial",
+      ...counts,
+    };
+  } finally {
+    activeGoalLoops.delete(goalWorkItemId);
   }
-
-  // Safety cap reached
-  const [goalItem] = await db
-    .select()
-    .from(schema.workItems)
-    .where(eq(schema.workItems.id, goalWorkItemId))
-    .limit(1);
-
-  const counts = goalItem ? getTaskCounts(goalItem) : {
-    tasksCompleted: 0,
-    tasksPaused: 0,
-    tasksFailed: 0,
-    tasksPending: 0,
-  };
-
-  return {
-    goalWorkItemId,
-    status: "partial",
-    ...counts,
-  };
 }
 
 /**

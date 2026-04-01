@@ -53,6 +53,7 @@ export function registerAction(
 
 /**
  * Register all action IDs from a set of content blocks.
+ * Also registers form-submit tokens for interactive blocks (Brief 072 — F072-1 fix).
  */
 export function registerBlockActions(
   blocks: ContentBlock[],
@@ -63,6 +64,16 @@ export function registerBlockActions(
       for (const action of block.actions) {
         registerAction(action.id, sessionId, action.payload ?? {});
       }
+    }
+    // Register form-submit capability for interactive blocks
+    if (block.type === "process_proposal" && "interactive" in block && block.interactive) {
+      registerAction(`form-submit:process_proposal`, sessionId, { blockType: "process_proposal" });
+    }
+    if (block.type === "work_item_form") {
+      registerAction(`form-submit:work_item_form`, sessionId, { blockType: "work_item_form" });
+    }
+    if (block.type === "connection_setup") {
+      registerAction(`form-submit:connection_setup`, sessionId, { blockType: "connection_setup" });
     }
   }
 }
@@ -114,8 +125,17 @@ export async function handleSurfaceAction(
   actionId: string,
   payload?: Record<string, unknown>,
 ): Promise<SurfaceActionResult> {
-  // Brief 072: form-submit actions are not pre-registered — they originate from interactive blocks
+  // Brief 072: form-submit actions validated via block-type-scoped registry tokens (F072-1 fix)
   if (actionId === "form-submit") {
+    const blockType = (payload as Record<string, unknown> | undefined)?.blockType as string | undefined;
+    const registryKey = blockType ? `form-submit:${blockType}` : null;
+    if (!registryKey || !validateAction(registryKey, userId)) {
+      return {
+        success: false,
+        message: "Form submission expired or invalid. Please refresh and try again.",
+        blocks: [],
+      };
+    }
     return handleFormSubmit(userId, payload);
   }
 

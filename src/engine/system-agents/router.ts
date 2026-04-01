@@ -226,13 +226,16 @@ export function matchTaskToProcessFromList(
 ): TaskRouteMatch {
   const contentLower = taskContent.toLowerCase();
 
-  // 1. Slug exact match — highest confidence
+  // 1. Slug word-boundary match — highest confidence
+  // Uses word boundary regex to avoid false positives (e.g., "report" matching "reporting")
   for (const proc of processes) {
-    if (contentLower.includes(proc.slug.toLowerCase())) {
+    const slugLower = proc.slug.toLowerCase();
+    const boundaryPattern = new RegExp(`\\b${slugLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    if (boundaryPattern.test(contentLower)) {
       return {
         processSlug: proc.slug,
         confidence: 1.0,
-        reasoning: `Slug exact match: content contains "${proc.slug}"`,
+        reasoning: `Slug word-boundary match: content contains "${proc.slug}"`,
       };
     }
   }
