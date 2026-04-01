@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
 **Last updated:** 2026-04-01
-**Current phase:** Phase 10 **complete**. Phase 11 (Chat UX & Experience) **in progress** — Briefs 057-062, 064, 065, 068, 069 complete (AI Elements, streaming fix, conversation core feel, confidence card, rich block emission). Brief 063 ready (block renderer polish). Brief 070 drafted (activity progressive disclosure, supersedes 067). 478 unit tests (28 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI.
+**Current phase:** Phase 10 **complete**. Phases 11-13 **in progress** — Universal Work Loop activation (parent Brief 071) sub-briefs shipping. Briefs 057-069, 072, 073, 074 complete. Brief 063 verified complete. Brief 070 drafted (activity progressive disclosure). Brief 062 approved (conversation experience). 490 unit tests (28 test files) + 14 e2e tests (4 spec files). Interactive ContentBlocks (072), orchestrator auto-wiring (074), composition intent activation (073) all shipped.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -537,7 +537,10 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Conversation Core Feel — floating prompt input, streaming cursor (vivid caret on text-delta), dot breathing, tool step compaction, reasoning content display — **done (Brief 065)** | Brief 065, Insight-110, Insight-124, Insight-125 | Claude.ai (pattern), ChatGPT (pattern), Cursor (pattern) |
 | Confidence & Trust Card — response-level confidence assessment, ConfidenceCard UI component, uncertainties-first display — **done (Brief 068)** | Brief 068, Insight-128, Insight-129 | Claude.ai (pattern), uncertainty-first display (original) |
 | Rich Block Emission — all 19 Self tools produce appropriate ContentBlocks (Record, Metric, Suggestion, Alert, Checklist, etc.), metadata-first block mapping pattern — **done (Brief 069)** | Brief 069, Insight-131, Insight-134 | Deterministic tool→block mapping (original), metadata-first pattern (original) |
-| Block Renderer Polish — Tier 2→Tier 1 visual quality for 7 block renderers — **approved, ready to build (Brief 063)** | Brief 063, P30 prototype | Tier 1 block patterns (existing), Lucide icons (depend) |
+| Block Renderer Polish — Tier 2→Tier 1 visual quality for 7 block renderers — **done (Brief 063, verified 2026-04-01)** | Brief 063, P30 prototype | Tier 1 block patterns (existing), Lucide icons (depend) |
+| Interactive ContentBlocks — editable ProcessProposalBlock, WorkItemFormBlock, ConnectionSetupBlock, form-submit action routing — **done (Brief 072)** | Brief 072, ADR-021, Insight-135 | Notion block editor (pattern), Paperclip.ai (pattern), ADR-021 handleSurfaceAction (extend) |
+| Orchestrator Auto-Wiring — goalHeartbeatLoop, auto-decompose → route → execute → chain, pause_goal tool, keyword+slug task routing — **done (Brief 074)** | Brief 074, ADR-010, ADR-015, Insight-132/133 | Temporal workflow engine (pattern), Mastra control-flow (adopt) |
+| Composition Intent Activation — 6 intent compose functions with empty/active states, intentContext in Self system prompt — **done (Brief 073)** | Brief 073, ADR-024, Insight-134/136 | Linear empty states (pattern), ADR-024 deterministic composition (extend) |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |
 | Output-as-interface between processes (typed contracts, sync-time validation) | ADR-009 v2 | Original |
