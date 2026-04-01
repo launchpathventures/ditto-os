@@ -1467,7 +1467,7 @@ export async function pauseGoal(goalWorkItemId: string): Promise<void> {
       .where(inArray(schema.workItems.id, childIds));
 
     for (const child of childItems) {
-      if (child.status === "in_progress" || child.status === "active") {
+      if (child.status === "in_progress" || child.status === "routed") {
         // Pause the child work item
         await db
           .update(schema.workItems)

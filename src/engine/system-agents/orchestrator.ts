@@ -354,7 +354,7 @@ async function routeDecomposedTasks(
           .update(schema.workItems)
           .set({
             assignedProcess: proc.id,
-            status: "active",
+            status: "routed",
             context: {
               ...(childItem.context as Record<string, unknown> || {}),
               processSlug: match.processSlug,
