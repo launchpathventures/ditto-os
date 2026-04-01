@@ -1,15 +1,10 @@
 "use client";
 
 /**
- * ChainOfThought — Adopted from AI Elements (Brief 061, Brief 070)
+ * ChainOfThought — Adopted from AI Elements (Brief 061)
  *
  * Step-by-step reasoning display with per-step status indicators
  * (complete/active/pending), connector lines, and Radix Collapsible.
- *
- * Three-level progressive disclosure (Brief 070):
- *   Level 1 (default): Human-language summary — no tool names, no file paths.
- *   Level 2 (click to expand): Outcome-oriented steps with result hints.
- *   Level 3 (Ctrl+Shift+E developer toggle): Raw tool names, file paths, monospace reasoning.
  *
  * Provenance: vercel/ai-elements chain-of-thought.tsx, adapted for Ditto design tokens.
  */
@@ -19,18 +14,11 @@ import * as Collapsible from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import { useControllableState } from "./use-controllable-state";
 
-// --- Disclosure Level ---
-
-/** Progressive disclosure level for activity groups (Brief 070). */
-export type DisclosureLevel = 1 | 2 | 3;
-
 // --- Context ---
 
 interface ChainOfThoughtContextValue {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Current disclosure level for content rendering. */
-  disclosureLevel: DisclosureLevel;
 }
 
 const ChainOfThoughtContext = createContext<ChainOfThoughtContextValue | null>(null);
@@ -47,8 +35,6 @@ interface ChainOfThoughtProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Disclosure level: 1 = summary, 2 = outcome steps, 3 = raw detail (Brief 070). */
-  disclosureLevel?: DisclosureLevel;
   children: ReactNode;
   className?: string;
 }
@@ -57,7 +43,6 @@ function ChainOfThought({
   open: openProp,
   defaultOpen = false,
   onOpenChange: onOpenChangeProp,
-  disclosureLevel = 1,
   children,
   className,
 }: ChainOfThoughtProps) {
@@ -68,7 +53,7 @@ function ChainOfThought({
   });
 
   return (
-    <ChainOfThoughtContext.Provider value={{ open, onOpenChange, disclosureLevel }}>
+    <ChainOfThoughtContext.Provider value={{ open, onOpenChange }}>
       <Collapsible.Root open={open} onOpenChange={onOpenChange} className={cn("my-2", className)}>
         {children}
       </Collapsible.Root>
@@ -224,4 +209,3 @@ export {
   ChainOfThoughtSearchResults,
   ChainOfThoughtImage,
 };
-// DisclosureLevel already exported at type definition (line 25)
