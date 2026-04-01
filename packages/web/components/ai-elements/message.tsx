@@ -281,18 +281,21 @@ function getActivityHeader(parts: UIMessage["parts"], active: boolean): { text: 
   // Complete — reasoning-only groups preserve current behavior
   if (toolParts.length === 0) return { text: "Thought for a moment", shimmer: false };
 
-  // "Checked {N} sources — {deduplicated category list}" (Option C from Designer spec)
+  // AC2 (070): "Checked {N} sources" for read-only, "Completed {N} steps" for mixed read/write
+  const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "Bash", "Agent"]);
   const categories = new Set<string>();
+  let hasMutation = false;
   for (const tp of toolParts) {
     categories.add(getToolDisplayLabel(tp.toolName ?? "tool").category);
+    if (WRITE_TOOLS.has(tp.toolName ?? "")) hasMutation = true;
   }
-  const totalSources = toolParts.length;
+  const total = toolParts.length;
   const categoryList = [...categories];
-  const categoryText = categoryList.length > 5
-    ? undefined // Falls back to "items" when >5 unique categories
-    : categoryList.join(", ");
+  const categoryText = categoryList.length > 5 ? undefined : categoryList.join(", ");
   const suffix = categoryText ? ` — ${categoryText}` : "";
-  return { text: `Checked ${totalSources} source${totalSources !== 1 ? "s" : ""}${suffix}`, shimmer: false };
+  const verb = hasMutation ? "Completed" : "Checked";
+  const noun = hasMutation ? `step${total !== 1 ? "s" : ""}` : `source${total !== 1 ? "s" : ""}`;
+  return { text: `${verb} ${total} ${noun}${suffix}`, shimmer: false };
 }
 
 /**
