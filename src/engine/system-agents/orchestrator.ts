@@ -26,6 +26,8 @@ import {
   type ProcessDefinition,
 } from "../process-loader";
 import { startProcessRun } from "../heartbeat";
+import { matchTaskToProcess, type TaskRouteMatch } from "./router";
+import type { TrustTier } from "../../db/schema";
 
 // ============================================================
 // Types
@@ -79,6 +81,7 @@ export async function executeOrchestrator(
   const workItemId = inputs.workItemId as string;
   const workItemContent = inputs.content as string;
   const workItemType = inputs.workItemType as string | undefined;
+  const goalTrustOverrides = inputs.goalTrustOverrides as Record<string, TrustTier> | undefined;
 
   if (!processSlug) {
     return makeResult({
@@ -97,9 +100,26 @@ export async function executeOrchestrator(
     });
   }
 
-  // For goals: decompose into tasks
+  // For goals: decompose into tasks, then auto-start goalHeartbeatLoop
   if (workItemType === "goal" || workItemType === "outcome") {
-    return decomposeGoal(processSlug, workItemId, workItemContent);
+    const result = await decomposeGoal(processSlug, workItemId, workItemContent);
+
+    const orchestration = result.outputs["orchestration-result"] as OrchestrationResult;
+    if (orchestration.action === "decomposed" && workItemId) {
+      // Auto-route decomposed tasks to processes (Brief 074)
+      await routeDecomposedTasks(workItemId, orchestration.tasks);
+
+      // Auto-trigger goalHeartbeatLoop (non-blocking)
+      // Import lazily to avoid circular dependency
+      const { goalHeartbeatLoop } = await import("../heartbeat");
+      setImmediate(() => {
+        goalHeartbeatLoop(workItemId, goalTrustOverrides).catch((err) => {
+          console.error(`Goal heartbeat loop failed for ${workItemId}:`, err);
+        });
+      });
+    }
+
+    return result;
   }
 
   // For tasks/questions: pass-through (backward-compatible)
@@ -273,6 +293,95 @@ async function passThroughOrchestration(
       },
       reasoning: `Failed to start process ${processSlug}: ${errMsg}`,
     });
+  }
+}
+
+// ============================================================
+// Task-to-process routing (Brief 074)
+// ============================================================
+
+/**
+ * Route decomposed tasks to processes using rule-based matching.
+ * For each task, match against available processes. If confidence >= 0.6,
+ * auto-route. Otherwise, set to "waiting_human" with escalation context.
+ *
+ * All routing decisions are logged to the activity log.
+ */
+async function routeDecomposedTasks(
+  goalWorkItemId: string,
+  tasks: DecompositionTask[],
+): Promise<void> {
+  const CONFIDENCE_THRESHOLD = 0.6;
+
+  for (const task of tasks) {
+    // Load the child work item
+    const [childItem] = await db
+      .select()
+      .from(schema.workItems)
+      .where(eq(schema.workItems.id, task.taskId))
+      .limit(1);
+
+    if (!childItem) continue;
+
+    // Attempt to match task content to a process
+    const match: TaskRouteMatch = await matchTaskToProcess(childItem.content);
+
+    // Log the routing decision
+    await db.insert(schema.activities).values({
+      action: "orchestrator.routing",
+      actorType: "system",
+      entityType: "work_item",
+      entityId: task.taskId,
+      metadata: {
+        goalWorkItemId,
+        processSlug: match.processSlug,
+        confidence: match.confidence,
+        reasoning: match.reasoning,
+        autoRouted: match.confidence >= CONFIDENCE_THRESHOLD && match.processSlug !== null,
+      },
+    });
+
+    if (match.processSlug && match.confidence >= CONFIDENCE_THRESHOLD) {
+      // Auto-route: assign process to task
+      const [proc] = await db
+        .select()
+        .from(schema.processes)
+        .where(eq(schema.processes.slug, match.processSlug))
+        .limit(1);
+
+      if (proc) {
+        await db
+          .update(schema.workItems)
+          .set({
+            assignedProcess: proc.id,
+            status: "active",
+            context: {
+              ...(childItem.context as Record<string, unknown> || {}),
+              processSlug: match.processSlug,
+              routingConfidence: match.confidence,
+              routingReasoning: match.reasoning,
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.workItems.id, task.taskId));
+      }
+    } else {
+      // No match or low confidence — escalate to user
+      await db
+        .update(schema.workItems)
+        .set({
+          status: "waiting_human",
+          context: {
+            ...(childItem.context as Record<string, unknown> || {}),
+            routingEscalation: true,
+            routingConfidence: match.confidence,
+            routingReasoning: match.reasoning,
+            routingAttemptedSlug: match.processSlug,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.workItems.id, task.taskId));
+    }
   }
 }
 

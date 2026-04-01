@@ -996,6 +996,7 @@ export interface OrchestratorHeartbeatResult {
  */
 export async function orchestratorHeartbeat(
   goalWorkItemId: string,
+  trustOverrides?: Record<string, import("../db/schema").TrustTier>,
 ): Promise<OrchestratorHeartbeatResult> {
   // Load the goal work item
   const [goalItem] = await db
@@ -1232,6 +1233,257 @@ export async function orchestratorHeartbeat(
     confidence: tasksRemaining > completedTaskIds.size ? "medium" : "high",
     status: tasksAdvanced > 0 ? "advancing" : "paused",
   };
+}
+
+// ============================================================
+// Goal Heartbeat Loop (Brief 074)
+// Continuously orchestrates a goal until all tasks complete,
+// all are paused/failed, or goal is explicitly paused.
+//
+// Provenance: Temporal workflow engine (dependency-aware task chaining)
+// ============================================================
+
+export interface GoalHeartbeatLoopResult {
+  goalWorkItemId: string;
+  status: "completed" | "paused" | "failed" | "partial";
+  tasksCompleted: number;
+  tasksPaused: number;
+  tasksFailed: number;
+  tasksPending: number;
+}
+
+/**
+ * Continuously call orchestratorHeartbeat() until the goal completes,
+ * all tasks are paused/failed, or no progress can be made.
+ *
+ * Uses setImmediate between iterations to avoid blocking.
+ * Trust overrides flow to child process runs (can only LOWER trust).
+ */
+export async function goalHeartbeatLoop(
+  goalWorkItemId: string,
+  trustOverrides?: Record<string, import("../db/schema").TrustTier>,
+): Promise<GoalHeartbeatLoopResult> {
+  let iterations = 0;
+  const MAX_ITERATIONS = 100; // safety cap
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+
+    // Check if goal is paused (goal-level pause)
+    const [goalItem] = await db
+      .select()
+      .from(schema.workItems)
+      .where(eq(schema.workItems.id, goalWorkItemId))
+      .limit(1);
+
+    if (!goalItem) {
+      return {
+        goalWorkItemId,
+        status: "failed",
+        tasksCompleted: 0,
+        tasksPaused: 0,
+        tasksFailed: 0,
+        tasksPending: 0,
+      };
+    }
+
+    // If goal was paused externally, stop
+    if (goalItem.status === "waiting_human") {
+      const counts = getTaskCounts(goalItem);
+      return {
+        goalWorkItemId,
+        status: "paused",
+        ...counts,
+      };
+    }
+
+    // Run one orchestrator heartbeat iteration
+    const result = await orchestratorHeartbeat(goalWorkItemId, trustOverrides);
+
+    if (result.status === "completed") {
+      await logActivity("goal.completed", goalWorkItemId, "work_item", {
+        tasksCompleted: result.tasksCompleted,
+        iterations,
+      });
+      return {
+        goalWorkItemId,
+        status: "completed",
+        tasksCompleted: result.tasksCompleted,
+        tasksPaused: 0,
+        tasksFailed: 0,
+        tasksPending: 0,
+      };
+    }
+
+    if (result.status === "escalated" || result.status === "paused") {
+      // No more progress possible — all remaining tasks blocked or paused
+      await logActivity("goal.paused", goalWorkItemId, "work_item", {
+        tasksCompleted: result.tasksCompleted,
+        tasksPaused: result.tasksPaused,
+        tasksRemaining: result.tasksRemaining,
+        reason: result.escalation?.reason || "All tasks paused or blocked",
+        iterations,
+      });
+      return {
+        goalWorkItemId,
+        status: "paused",
+        tasksCompleted: result.tasksCompleted,
+        tasksPaused: result.tasksPaused,
+        tasksFailed: 0,
+        tasksPending: result.tasksRemaining - result.tasksPaused,
+      };
+    }
+
+    // "advancing" — made progress, check if more work is available
+    // Use setImmediate to avoid blocking the event loop
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
+  // Safety cap reached
+  const [goalItem] = await db
+    .select()
+    .from(schema.workItems)
+    .where(eq(schema.workItems.id, goalWorkItemId))
+    .limit(1);
+
+  const counts = goalItem ? getTaskCounts(goalItem) : {
+    tasksCompleted: 0,
+    tasksPaused: 0,
+    tasksFailed: 0,
+    tasksPending: 0,
+  };
+
+  return {
+    goalWorkItemId,
+    status: "partial",
+    ...counts,
+  };
+}
+
+/**
+ * Resume a goal after an approval. Re-enters the goal heartbeat loop
+ * to check for newly unblocked tasks.
+ */
+export async function resumeGoal(
+  goalWorkItemId: string,
+  trustOverrides?: Record<string, import("../db/schema").TrustTier>,
+): Promise<GoalHeartbeatLoopResult> {
+  // Mark goal as back in progress if it was paused
+  const [goalItem] = await db
+    .select()
+    .from(schema.workItems)
+    .where(eq(schema.workItems.id, goalWorkItemId))
+    .limit(1);
+
+  if (!goalItem) {
+    return {
+      goalWorkItemId,
+      status: "failed",
+      tasksCompleted: 0,
+      tasksPaused: 0,
+      tasksFailed: 0,
+      tasksPending: 0,
+    };
+  }
+
+  if (goalItem.status === "waiting_human" || goalItem.status === "routed") {
+    await db
+      .update(schema.workItems)
+      .set({ status: "in_progress", updatedAt: new Date() })
+      .where(eq(schema.workItems.id, goalWorkItemId));
+  }
+
+  await logActivity("goal.resumed", goalWorkItemId, "work_item");
+
+  return goalHeartbeatLoop(goalWorkItemId, trustOverrides);
+}
+
+/**
+ * Pause a goal — halts all active child runs and prevents new ones from starting.
+ */
+export async function pauseGoal(goalWorkItemId: string): Promise<void> {
+  const [goalItem] = await db
+    .select()
+    .from(schema.workItems)
+    .where(eq(schema.workItems.id, goalWorkItemId))
+    .limit(1);
+
+  if (!goalItem) return;
+
+  // Mark goal as paused
+  await db
+    .update(schema.workItems)
+    .set({ status: "waiting_human", updatedAt: new Date() })
+    .where(eq(schema.workItems.id, goalWorkItemId));
+
+  // Halt all active child runs
+  const decomposition = goalItem.decomposition as Array<{
+    taskId: string;
+    stepId: string;
+    dependsOn: string[];
+    status: string;
+  }> | null;
+
+  if (decomposition) {
+    const childIds = decomposition.map((t) => t.taskId);
+    const childItems = await db
+      .select()
+      .from(schema.workItems)
+      .where(inArray(schema.workItems.id, childIds));
+
+    for (const child of childItems) {
+      if (child.status === "in_progress" || child.status === "active") {
+        // Pause the child work item
+        await db
+          .update(schema.workItems)
+          .set({ status: "waiting_human", updatedAt: new Date() })
+          .where(eq(schema.workItems.id, child.id));
+
+        // Pause any active process runs for this child
+        const executionIds = (child.executionIds as string[]) || [];
+        for (const runId of executionIds) {
+          await db
+            .update(schema.processRuns)
+            .set({ status: "cancelled" })
+            .where(eq(schema.processRuns.id, runId));
+        }
+      }
+    }
+  }
+
+  await logActivity("goal.paused_by_user", goalWorkItemId, "work_item", {
+    reason: "Goal paused by user request",
+  });
+}
+
+/** Extract task counts from a goal work item's decomposition. */
+function getTaskCounts(goalItem: typeof schema.workItems.$inferSelect): {
+  tasksCompleted: number;
+  tasksPaused: number;
+  tasksFailed: number;
+  tasksPending: number;
+} {
+  const decomposition = goalItem.decomposition as Array<{
+    taskId: string;
+    stepId: string;
+    dependsOn: string[];
+    status: string;
+  }> | null;
+
+  if (!decomposition) {
+    return { tasksCompleted: 0, tasksPaused: 0, tasksFailed: 0, tasksPending: 0 };
+  }
+
+  let completed = 0, paused = 0, failed = 0, pending = 0;
+  for (const task of decomposition) {
+    switch (task.status) {
+      case "completed": completed++; break;
+      case "paused": paused++; break;
+      case "failed": failed++; break;
+      default: pending++; break;
+    }
+  }
+  return { tasksCompleted: completed, tasksPaused: paused, tasksFailed: failed, tasksPending: pending };
 }
 
 // Helper to log activities

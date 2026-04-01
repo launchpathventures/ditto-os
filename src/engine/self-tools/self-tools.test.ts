@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 19 tools (5 original + 1 Brief 052 + 7 Brief 040 + 3 Brief 043 + 1 Brief 044 + 1 Brief 068)", async () => {
+  it("has 20 tools (5 original + 1 Brief 052 + 7 Brief 040 + 1 Brief 074 + 3 Brief 043 + 1 Brief 044 + 1 Brief 068)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(19);
+    expect(selfTools).toHaveLength(20);
 
     const names = selfTools.map((t) => t.name);
     // Original 5
@@ -442,6 +442,8 @@ describe("selfTools definitions", () => {
     expect(names).toContain("adapt_process");
     // Brief 068 — Confidence Assessment
     expect(names).toContain("assess_confidence");
+    // Brief 074 — Goal Pause
+    expect(names).toContain("pause_goal");
   });
 
   it("all tools have valid schemas", async () => {

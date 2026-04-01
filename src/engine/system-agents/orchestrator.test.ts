@@ -243,3 +243,65 @@ describe("Orchestrator confidence and escalation", () => {
     expect(orchestration.escalation.type).toBe("blocked");
   });
 });
+
+// ============================================================
+// Task-to-process routing (Brief 074)
+// ============================================================
+
+describe("Task-to-process routing", () => {
+  it("matches by slug exact match when content contains process slug", async () => {
+    const { matchTaskToProcessFromList } = await import("./router");
+
+    const processes = [
+      { slug: "dev-pipeline", name: "Development Pipeline", description: "Full dev pipeline" },
+      { slug: "review-process", name: "Review Process", description: "Code review process" },
+    ];
+
+    const result = matchTaskToProcessFromList(
+      "Build Brief 069 using the dev-pipeline process",
+      processes,
+    );
+
+    expect(result.processSlug).toBe("dev-pipeline");
+    expect(result.confidence).toBe(1.0);
+    expect(result.reasoning).toContain("Slug exact match");
+  });
+
+  it("matches by keyword when content shares terms with process name/description", async () => {
+    const { matchTaskToProcessFromList } = await import("./router");
+
+    const processes = [
+      { slug: "build-sys", name: "Build Pipeline", description: "Build and deploy code" },
+      { slug: "code-rev", name: "Code Review", description: "Review code changes" },
+    ];
+
+    const result = matchTaskToProcessFromList(
+      "Review the code changes for the new feature",
+      processes,
+    );
+
+    expect(result.processSlug).toBe("code-rev");
+    expect(result.confidence).toBeGreaterThan(0);
+    expect(result.reasoning).toContain("Keyword match");
+  });
+
+  it("returns null with low confidence when no process matches", async () => {
+    const { matchTaskToProcessFromList } = await import("./router");
+
+    const processes = [
+      { slug: "billing-process", name: "Billing", description: "Generate invoices and billing" },
+    ];
+
+    const result = matchTaskToProcessFromList(
+      "Deploy the quantum entanglement stabilizer",
+      processes,
+    );
+
+    // Should either match with very low confidence or return null
+    if (result.processSlug !== null) {
+      expect(result.confidence).toBeLessThan(0.6);
+    } else {
+      expect(result.confidence).toBe(0);
+    }
+  });
+});

@@ -13,10 +13,18 @@
 
 import type { StepExecutionResult } from "../step-executor";
 import { createCompletion, extractText, getConfiguredModel } from "../llm";
+import { db, schema } from "../../db";
+import { eq } from "drizzle-orm";
 
 interface RoutingResult {
   processSlug: string | null;
   confidence: "high" | "medium" | "low";
+  reasoning: string;
+}
+
+export interface TaskRouteMatch {
+  processSlug: string | null;
+  confidence: number; // 0-1
   reasoning: string;
 }
 
@@ -164,4 +172,125 @@ function parseRoutingResponse(
       reasoning: `Failed to parse routing response: ${text.slice(0, 100)}`,
     };
   }
+}
+
+// ============================================================
+// Rule-based task-to-process matching (Brief 074)
+//
+// Keyword matching + slug exact match for v1.
+// LLM-based routing (executeRouter above) is for v2.
+//
+// Provenance: Brief 074 — deterministic routing before LLM routing
+// ============================================================
+
+/**
+ * Match a task's content to an available process using rule-based matching.
+ * Returns confidence 0-1 and the matched process slug.
+ *
+ * Strategy:
+ * 1. Slug exact match: if taskContent contains a process slug → confidence 1.0
+ * 2. Keyword matching: tokenize content and match against process name/description
+ *    → confidence based on keyword overlap ratio
+ */
+export async function matchTaskToProcess(
+  taskContent: string,
+): Promise<TaskRouteMatch> {
+  // Load all active domain processes
+  const processes = await db
+    .select({
+      slug: schema.processes.slug,
+      name: schema.processes.name,
+      description: schema.processes.description,
+    })
+    .from(schema.processes)
+    .where(eq(schema.processes.status, "active"));
+
+  if (processes.length === 0) {
+    return {
+      processSlug: null,
+      confidence: 0,
+      reasoning: "No active processes available for matching",
+    };
+  }
+
+  return matchTaskToProcessFromList(taskContent, processes);
+}
+
+/**
+ * Pure matching logic — testable without DB.
+ * Exported for testing.
+ */
+export function matchTaskToProcessFromList(
+  taskContent: string,
+  processes: Array<{ slug: string; name: string; description: string | null }>,
+): TaskRouteMatch {
+  const contentLower = taskContent.toLowerCase();
+
+  // 1. Slug exact match — highest confidence
+  for (const proc of processes) {
+    if (contentLower.includes(proc.slug.toLowerCase())) {
+      return {
+        processSlug: proc.slug,
+        confidence: 1.0,
+        reasoning: `Slug exact match: content contains "${proc.slug}"`,
+      };
+    }
+  }
+
+  // 2. Keyword matching against process name and description
+  const contentTokens = tokenize(contentLower);
+
+  let bestMatch: TaskRouteMatch = {
+    processSlug: null,
+    confidence: 0,
+    reasoning: "No matching process found via keyword matching",
+  };
+
+  for (const proc of processes) {
+    const nameTokens = tokenize(proc.name.toLowerCase());
+    const descTokens = proc.description
+      ? tokenize(proc.description.toLowerCase())
+      : [];
+    const processTokens = [...new Set([...nameTokens, ...descTokens])];
+
+    if (processTokens.length === 0) continue;
+
+    // Count how many process tokens appear in the content
+    const matchedTokens = processTokens.filter((token) =>
+      contentTokens.includes(token),
+    );
+
+    // Confidence = matched / total process tokens, capped at 1.0
+    const confidence = matchedTokens.length / processTokens.length;
+
+    if (confidence > bestMatch.confidence) {
+      bestMatch = {
+        processSlug: proc.slug,
+        confidence: Math.round(confidence * 100) / 100,
+        reasoning: `Keyword match: ${matchedTokens.length}/${processTokens.length} tokens matched (${matchedTokens.join(", ")})`,
+      };
+    }
+  }
+
+  return bestMatch;
+}
+
+/** Tokenize a string into meaningful words (drop short/common words). */
+function tokenize(text: string): string[] {
+  const stopWords = new Set([
+    "a", "an", "the", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will",
+    "would", "could", "should", "may", "might", "shall", "can",
+    "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "as", "into", "through", "during", "before", "after", "and",
+    "but", "or", "nor", "not", "so", "yet", "both", "either",
+    "neither", "each", "every", "all", "any", "few", "more",
+    "most", "other", "some", "such", "no", "only", "own", "same",
+    "than", "too", "very", "just", "because", "this", "that",
+    "these", "those", "it", "its", "if", "then", "else",
+  ]);
+
+  return text
+    .split(/[^a-z0-9-]+/)
+    .filter((word) => word.length >= 2 && !stopWords.has(word));
 }

@@ -28,7 +28,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import type { LlmToolDefinition, LlmMessage, LlmToolResultBlock } from "./llm";
 import { createCompletion, extractText, extractToolUse } from "./llm";
-import { startProcessRun, fullHeartbeat } from "./heartbeat";
+import { startProcessRun, fullHeartbeat, pauseGoal, goalHeartbeatLoop } from "./heartbeat";
 import { approveRun, editRun, rejectRun, getWaitingStepOutput } from "./review-actions";
 import { readOnlyTools, executeTool } from "./tools";
 import { recordSelfDecision } from "./self-context";
@@ -243,6 +243,21 @@ export const selfTools: LlmToolDefinition[] = [
         },
       },
       required: ["content"],
+    },
+  },
+  {
+    name: "pause_goal",
+    description:
+      "Pause a goal — halts all active child runs, prevents new ones from starting. Use when the user wants to stop goal execution temporarily. The goal can be resumed later via approve_review on a child task.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goalWorkItemId: {
+          type: "string",
+          description: "The goal work item ID to pause",
+        },
+      },
+      required: ["goalWorkItemId"],
     },
   },
   {
@@ -588,6 +603,10 @@ export async function executeDelegation(
         sessionTrust: toolInput.sessionTrust as Record<string, string> | undefined,
       });
 
+    // Brief 074 — Goal Pause
+    case "pause_goal":
+      return await handlePauseGoal(toolInput.goalWorkItemId as string);
+
     // Brief 040 — Self Extension Tools
     case "create_work_item":
       return await handleCreateWorkItem({
@@ -830,17 +849,75 @@ async function handleStartPipeline(params: {
 
 async function handleApproveReview(runId: string): Promise<DelegationResult> {
   try {
-    const { action, heartbeat } = await approveRun(runId);
+    const { action, heartbeat: hb } = await approveRun(runId);
+
+    // Brief 074: after approving, check if this run belongs to a goal's child task.
+    // If so, trigger goalHeartbeatLoop to check for newly unblocked tasks.
+    if (hb.status === "completed") {
+      try {
+        await checkAndResumeGoal(runId);
+      } catch {
+        // Non-critical: if goal resume check fails, don't break approval
+      }
+    }
+
     return {
       toolName: "approve_review",
       success: action.success,
-      output: `${action.message} Pipeline status: ${heartbeat.status}`,
+      output: `${action.message} Pipeline status: ${hb.status}`,
     };
   } catch (err) {
     return {
       toolName: "approve_review",
       success: false,
       output: `Approve failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Check if a completed run belongs to a goal's child task, and if so,
+ * trigger goalHeartbeatLoop to check for newly unblocked tasks.
+ * Brief 074.
+ */
+async function checkAndResumeGoal(runId: string): Promise<void> {
+  const { db: dbRef, schema: schemaRef } = await import("../db");
+
+  // Find work items associated with this run
+  const workItems = await dbRef
+    .select()
+    .from(schemaRef.workItems)
+    .limit(50);
+
+  for (const wi of workItems) {
+    const execIds = (wi.executionIds as string[]) || [];
+    if (execIds.includes(runId) && wi.spawnedFrom) {
+      // This work item is a child of a goal — trigger goal heartbeat loop
+      goalHeartbeatLoop(wi.spawnedFrom).catch((err: unknown) => {
+        console.error(`Goal heartbeat resume failed for ${wi.spawnedFrom}:`, err);
+      });
+      break;
+    }
+  }
+}
+
+/**
+ * Pause a goal — halts all active child runs, prevents new ones from starting.
+ * Brief 074.
+ */
+async function handlePauseGoal(goalWorkItemId: string): Promise<DelegationResult> {
+  try {
+    await pauseGoal(goalWorkItemId);
+    return {
+      toolName: "pause_goal",
+      success: true,
+      output: `Goal ${goalWorkItemId} paused. All active child runs halted.`,
+    };
+  } catch (err) {
+    return {
+      toolName: "pause_goal",
+      success: false,
+      output: `Failed to pause goal: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

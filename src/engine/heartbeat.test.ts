@@ -32,7 +32,7 @@ vi.mock("../db", async () => {
 });
 
 // Import after mock setup
-const { heartbeat, fullHeartbeat, resumeHumanStep, orchestratorHeartbeat } = await import("./heartbeat");
+const { heartbeat, fullHeartbeat, resumeHumanStep, orchestratorHeartbeat, goalHeartbeatLoop, resumeGoal, pauseGoal } = await import("./heartbeat");
 
 beforeEach(() => {
   const result = createTestDb();
@@ -369,5 +369,230 @@ describe("orchestratorHeartbeat", () => {
     expect(result.tasksPaused).toBeGreaterThanOrEqual(1); // child1 still paused
     // child2 was independent — should have been attempted
     expect(result.status).not.toBe("escalated"); // Should NOT escalate because independent work exists
+  });
+});
+
+// ============================================================
+// goalHeartbeatLoop (Brief 074)
+// ============================================================
+
+describe("goalHeartbeatLoop", () => {
+  it("completes when all tasks are already done (happy path)", async () => {
+    // Create goal with 2 completed children
+    const [child1] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "completed",
+      content: "task 1",
+      source: "system_generated",
+    }).returning();
+    const [child2] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "completed",
+      content: "task 2",
+      source: "system_generated",
+    }).returning();
+
+    const decomposition = [
+      { taskId: child1.id, stepId: "step-1", dependsOn: [], status: "completed" },
+      { taskId: child2.id, stepId: "step-2", dependsOn: [], status: "completed" },
+    ];
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "in_progress",
+      content: "test goal",
+      source: "capture",
+      spawnedItems: [child1.id, child2.id],
+      decomposition: decomposition as unknown as typeof schema.workItems.$inferInsert["decomposition"],
+    }).returning();
+
+    const result = await goalHeartbeatLoop(goalItem.id);
+    expect(result.status).toBe("completed");
+    expect(result.tasksCompleted).toBe(2);
+    expect(result.tasksPending).toBe(0);
+  });
+
+  it("reports paused when all remaining tasks are blocked/paused (partial completion)", async () => {
+    // 1 completed, 1 paused, 1 blocked by paused
+    const [child1] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "completed",
+      content: "done task",
+      source: "system_generated",
+    }).returning();
+    const [child2] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "waiting_human",
+      content: "paused task",
+      source: "system_generated",
+    }).returning();
+    const [child3] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "intake",
+      content: "blocked task",
+      source: "system_generated",
+      context: { processSlug: "nonexistent", stepId: "step-3" },
+    }).returning();
+
+    const decomposition = [
+      { taskId: child1.id, stepId: "step-1", dependsOn: [], status: "completed" },
+      { taskId: child2.id, stepId: "step-2", dependsOn: [], status: "paused" },
+      { taskId: child3.id, stepId: "step-3", dependsOn: [child2.id], status: "pending" },
+    ];
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "in_progress",
+      content: "partial goal",
+      source: "capture",
+      spawnedItems: [child1.id, child2.id, child3.id],
+      decomposition: decomposition as unknown as typeof schema.workItems.$inferInsert["decomposition"],
+    }).returning();
+
+    const result = await goalHeartbeatLoop(goalItem.id);
+    expect(result.status).toBe("paused");
+    expect(result.tasksCompleted).toBe(1);
+    expect(result.tasksPaused).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns paused when goal is externally paused (pause_goal)", async () => {
+    const [child1] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "intake",
+      content: "task 1",
+      source: "system_generated",
+      context: { processSlug: "nonexistent", stepId: "step-1" },
+    }).returning();
+
+    const decomposition = [
+      { taskId: child1.id, stepId: "step-1", dependsOn: [], status: "pending" },
+    ];
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "waiting_human", // already paused
+      content: "paused goal",
+      source: "capture",
+      spawnedItems: [child1.id],
+      decomposition: decomposition as unknown as typeof schema.workItems.$inferInsert["decomposition"],
+    }).returning();
+
+    const result = await goalHeartbeatLoop(goalItem.id);
+    expect(result.status).toBe("paused");
+  });
+
+  it("returns failed when goal work item does not exist", async () => {
+    const result = await goalHeartbeatLoop("nonexistent-goal-id");
+    expect(result.status).toBe("failed");
+    expect(result.tasksCompleted).toBe(0);
+  });
+
+  it("enforces dependency ordering — blocked tasks wait for dependencies", async () => {
+    // Create process for task execution
+    const procDef = makeTestProcessDefinition({
+      name: "Dep Test",
+      id: "dep-test",
+      steps: [
+        { id: "step-1", name: "Step 1", executor: "script", commands: ["echo 1"] },
+      ],
+    });
+
+    await testDb.insert(schema.processes).values({
+      name: "Dep Test",
+      slug: "dep-test",
+      definition: procDef as unknown as Record<string, unknown>,
+      status: "active",
+      trustTier: "autonomous",
+    });
+
+    // Task 1: completed. Task 2: depends on task 1, should be eligible.
+    // Task 3: depends on task 2, should NOT run yet.
+    const [child1] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "completed",
+      content: "done task",
+      source: "system_generated",
+    }).returning();
+    const [child2] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "intake",
+      content: "ready task",
+      source: "system_generated",
+      context: { processSlug: "dep-test", stepId: "step-1" },
+    }).returning();
+    const [child3] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "intake",
+      content: "blocked task",
+      source: "system_generated",
+      context: { processSlug: "dep-test", stepId: "step-1" },
+    }).returning();
+
+    const decomposition = [
+      { taskId: child1.id, stepId: "step-1", dependsOn: [], status: "completed" },
+      { taskId: child2.id, stepId: "step-2", dependsOn: [child1.id], status: "pending" },
+      { taskId: child3.id, stepId: "step-3", dependsOn: [child2.id], status: "pending" },
+    ];
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "in_progress",
+      content: "dep ordering goal",
+      source: "capture",
+      spawnedItems: [child1.id, child2.id, child3.id],
+      decomposition: decomposition as unknown as typeof schema.workItems.$inferInsert["decomposition"],
+    }).returning();
+
+    // Run loop — task 2 should execute (dep on task 1 is met),
+    // then task 3 should execute (dep on task 2 is met after task 2 completes)
+    const result = await goalHeartbeatLoop(goalItem.id);
+
+    // All 3 tasks should eventually complete (task 1 was already done)
+    expect(result.status).toBe("completed");
+    expect(result.tasksCompleted).toBe(3);
+  });
+});
+
+// ============================================================
+// pauseGoal (Brief 074)
+// ============================================================
+
+describe("pauseGoal", () => {
+  it("pauses goal and marks active children as waiting_human", async () => {
+    const [child1] = await testDb.insert(schema.workItems).values({
+      type: "task",
+      status: "in_progress",
+      content: "active task",
+      source: "system_generated",
+    }).returning();
+
+    const decomposition = [
+      { taskId: child1.id, stepId: "step-1", dependsOn: [], status: "pending" },
+    ];
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "in_progress",
+      content: "goal to pause",
+      source: "capture",
+      spawnedItems: [child1.id],
+      decomposition: decomposition as unknown as typeof schema.workItems.$inferInsert["decomposition"],
+    }).returning();
+
+    await pauseGoal(goalItem.id);
+
+    // Goal should be paused
+    const [updatedGoal] = await testDb
+      .select()
+      .from(schema.workItems)
+      .where(eq(schema.workItems.id, goalItem.id));
+    expect(updatedGoal.status).toBe("waiting_human");
+
+    // Child should be paused
+    const [updatedChild] = await testDb
+      .select()
+      .from(schema.workItems)
+      .where(eq(schema.workItems.id, child1.id));
+    expect(updatedChild.status).toBe("waiting_human");
   });
 });
