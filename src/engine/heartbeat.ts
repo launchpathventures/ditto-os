@@ -1141,9 +1141,23 @@ export async function orchestratorHeartbeat(
           content: childItem.content,
           stepId: task.stepId,
           triggeredByOrchestrator: true,
+          ...(trustOverrides ? { goalTrustOverrides: trustOverrides } : {}),
         },
         "system:orchestrator",
       );
+
+      // Apply goal-level trust overrides to child run via session trust.
+      // Session trust can only relax (supervised → spot_checked), so for
+      // tightening overrides we store them in run inputs for the trust-gate
+      // handler to check. Currently the trust-gate handler does not read
+      // goalTrustOverrides from inputs — this is flagged for the Architect.
+      if (trustOverrides && Object.keys(trustOverrides).length > 0) {
+        await logActivity("orchestrator.trust-override", processRunId, "process_run", {
+          goalWorkItemId,
+          overrides: trustOverrides,
+          note: "Goal-level trust overrides applied to child run inputs",
+        });
+      }
 
       // Update child work item status
       await db.update(schema.workItems)
