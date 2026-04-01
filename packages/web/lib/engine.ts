@@ -46,6 +46,10 @@ export type {
   InteractiveTableBlock,
   FieldAnnotation,
   ArtifactBlock,
+  InteractiveField,
+  WorkItemFormBlock,
+  ConnectionSetupBlock,
+  FormSubmitAction,
 } from "../../../src/engine/content-blocks";
 // renderBlockToText is a pure function — import it directly from
 // @engine/content-blocks in client components to avoid pulling in

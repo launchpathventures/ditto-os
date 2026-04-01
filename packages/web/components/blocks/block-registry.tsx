@@ -32,6 +32,8 @@ import { MetricBlockComponent } from "./metric-block";
 import { RecordBlockComponent } from "./record-block";
 import { InteractiveTableBlockComponent } from "./interactive-table-block";
 import { ArtifactBlockComponent } from "./artifact-block";
+import { WorkItemFormBlockComponent } from "./work-item-form-block";
+import { ConnectionSetupBlockComponent } from "./connection-setup-block";
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -84,6 +86,10 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <InteractiveTableBlockComponent block={block} onAction={onAction} />;
     case "artifact":
       return <ArtifactBlockComponent block={block} onAction={onAction} />;
+    case "work_item_form":
+      return <WorkItemFormBlockComponent block={block} onAction={onAction} />;
+    case "connection_setup":
+      return <ConnectionSetupBlockComponent block={block} onAction={onAction} />;
     default: {
       // Exhaustiveness check — TypeScript will error if a type is missing (AC15)
       const _exhaustive: never = block;

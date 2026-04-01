@@ -160,12 +160,51 @@ export interface KnowledgeSynthesisBlock {
   totalDimensions: number;
 }
 
-/** ProcessProposalBlock — Onboarding: proposed process in plain language (Brief 044) */
+/** InteractiveField — editable field definition for interactive blocks (Brief 072) */
+export interface InteractiveField {
+  name: string;
+  label: string;
+  type: "text" | "select" | "number" | "toggle";
+  value?: string | number | boolean;
+  options?: string[];  // for select type
+  required?: boolean;
+  placeholder?: string;
+}
+
+/** ProcessProposalBlock — Onboarding: proposed process in plain language (Brief 044)
+ *  Extended with interactive editing support (Brief 072). */
 export interface ProcessProposalBlock {
   type: "process_proposal";
   name: string;
   description?: string;
   steps: Array<{ name: string; description?: string; status: "done" | "current" | "pending" }>;
+  interactive?: boolean;
+  fields?: InteractiveField[];
+  trigger?: string;
+}
+
+/** WorkItemFormBlock — structured work item creation form (Brief 072) */
+export interface WorkItemFormBlock {
+  type: "work_item_form";
+  fields: InteractiveField[];
+  defaults?: Record<string, unknown>;
+}
+
+/** ConnectionSetupBlock — service connection initiation (Brief 072) */
+export interface ConnectionSetupBlock {
+  type: "connection_setup";
+  serviceName: string;
+  serviceDisplayName: string;
+  connectionStatus: "disconnected" | "connecting" | "connected" | "error";
+  errorMessage?: string;
+  fields?: InteractiveField[];  // for credential-based connections
+}
+
+/** FormSubmitAction — action type for form submissions (Brief 072) */
+export interface FormSubmitAction {
+  type: "form-submit";
+  blockType: "process_proposal" | "work_item_form" | "connection_setup";
+  values: Record<string, unknown>;
 }
 
 /** GatheringIndicatorBlock — Onboarding: subtle learning indicator (Brief 044) */
@@ -361,7 +400,9 @@ export type ContentBlock =
   | MetricBlock
   | RecordBlock
   | InteractiveTableBlock
-  | ArtifactBlock;
+  | ArtifactBlock
+  | WorkItemFormBlock
+  | ConnectionSetupBlock;
 
 /** All possible content block type strings */
 export type ContentBlockType = ContentBlock["type"];
@@ -584,6 +625,27 @@ export function renderBlockToText(block: ContentBlock): string {
     case "artifact": {
       const statusStr = block.status ? ` — ${block.status.label}` : "";
       return `[${block.artifactType}] ${block.title}${statusStr}\n${block.summary ?? ""}`;
+    }
+
+    case "work_item_form": {
+      const fieldLines = block.fields.map((f) => {
+        const val = f.value !== undefined ? ` = ${f.value}` : "";
+        return `  ${f.label}${f.required ? " (required)" : ""}${val}`;
+      });
+      return ["Work Item Form:", ...fieldLines].join("\n");
+    }
+
+    case "connection_setup": {
+      const parts: string[] = [
+        `${block.serviceDisplayName} (${block.serviceName}) — ${block.connectionStatus}`,
+      ];
+      if (block.errorMessage) parts.push(`Error: ${block.errorMessage}`);
+      if (block.fields) {
+        for (const f of block.fields) {
+          parts.push(`  ${f.label}${f.required ? " (required)" : ""}`);
+        }
+      }
+      return parts.join("\n");
     }
 
     default: {
