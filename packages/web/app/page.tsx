@@ -7,10 +7,10 @@ import { EntryPoint } from "./entry-point";
  *
  * State-based routing:
  * - No config → redirect to /setup
- * - Configured → progressive reveal (conversation-only or workspace)
+ * - Configured → EntryPoint (Day Zero check, then workspace)
  *
- * Brief 042 AC15: Progressive reveal — new users see conversation-only;
- * Self can trigger workspace transition; user preference persisted.
+ * Brief 057: Workspace always shown for all users. Day Zero welcome
+ * appears once after setup, then workspace from then on.
  */
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,5 @@ export default function Home() {
     applyConfigToEnv(config);
   }
 
-  // Server-side: check if user has active processes
-  // Pass this to the client for progressive reveal decision
   return <EntryPoint userId="default" />;
 }

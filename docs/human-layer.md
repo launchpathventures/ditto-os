@@ -225,6 +225,7 @@ ContentBlocks define WHAT to render (engine concern). **AI Elements** define HOW
 | **Sources** | Composable (Trigger + Content + Source) | Collapsible bibliography |
 | **Task** | Composable (Trigger + Content + File) | Collapsible task container |
 | **CodeBlock** | Flat | Shiki syntax highlighting with copy-to-clipboard |
+| **ConfidenceCard** | Flat | Trust signal card: collapsed/auto-expand/user-expand, uncertainties-first (Brief 068) |
 
 **Composable subcomponent pattern** (Brief 061): Components use Context Provider + named subcomponents + backward-compatible default export. This enables custom compositions while preserving the standard API.
 

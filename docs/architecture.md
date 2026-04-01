@@ -265,7 +265,7 @@ Process: [Name]
 
 Current adapters:
 - **Claude API adapter** (`ai-agent`, primary): Calls LLM via `createCompletion()`. Per-token cost. Tool use loop with codebase tools — three subsets: `readOnlyTools` (read_file, search_files, list_files), `readWriteTools` (+ write_file), and `execTools` (+ run_command — Brief 051). Step config declares which subset via `config.tools: "read-only" | "read-write" | "read-write-exec"`. The `run_command` tool executes allowlisted shell commands via `execFile` (no shell interpretation): pnpm (run/test/exec/install --frozen-lockfile), npm (run/test), node (file paths only, no -e/--eval), git (read-only: status/log/diff/show/branch/ls-files/rev-parse). npx is entirely blocked. Executable+subcommand allowlist enforced. Output scrubbed for secret file references. 120s timeout, 10MB buffer cap. Builder and Reviewer roles use `read-write-exec` so they can verify code (type-check, tests) and include evidence. Loads role contracts from `.claude/commands/dev-*.md` via `step.config.role_contract` (fallback to hardcoded prompts). Parses `CONFIDENCE: high|medium|low` from response text. All 7 dev roles execute via this adapter (Brief 031). Provenance: Claude Code tool patterns, OpenClaw SOUL.md/skills, CI runner sandbox patterns (Brief 051).
-- **CLI adapter** (`cli-agent`, optional fallback, Brief 016a): Spawns `claude -p` (or `codex`) as subprocess. Loads role contracts as `--append-system-prompt`. Subscription-based ($0 per step). Fresh context per step (ralph pattern). Available for tasks requiring full Claude Code capabilities (terminal, project scanning). No dev roles use this by default since Brief 031. Provenance: ralph autonomous loop, Paperclip adapter pattern.
+- **CLI adapter** (`cli-agent`, optional fallback, Brief 016a): Spawns `claude -p` (or `codex`) as subprocess. `--include-partial-messages` enables real-time streaming deltas (`stream_event` with `text_delta`/`thinking_delta`) rather than complete-message-only output. Deduplication guard prevents double-yielding when both stream deltas and complete `assistant` message arrive. Falls back to `assistant`/`result` parsing when flag is unavailable (older CLI). Loads role contracts as `--append-system-prompt`. Subscription-based ($0 per step). Fresh context per step (ralph pattern). Available for tasks requiring full Claude Code capabilities (terminal, project scanning). No dev roles use this by default since Brief 031. Provenance: ralph autonomous loop, Paperclip adapter pattern.
 - **Script adapter** (`script`): Deterministic commands via `child_process`. No AI cost.
 
 The `integration` executor (Phase 6) resolves a service and protocol from the integration registry, executes the external call (CLI, MCP, or REST), and returns structured output — subject to the full harness pipeline like any other executor.
@@ -679,12 +679,15 @@ Everything the user sees flows through **ContentBlocks** — typed, structured d
 
 **Design rule:** ALL rendering flows through ContentBlocks. No bespoke viewers. Artifact mode renders BlockList. The composition engine produces BlockList. Self responses contain BlockList. This is the most critical architecture principle. (Insight-107)
 
+**Exception: Response-level metadata** (Insight-129). Not everything the engine produces is content. Some structured data describes the *response itself* — metadata about how confident the engine is, not a discrete content unit. `ConfidenceAssessment` is the first example: exported from `content-blocks.ts` for type co-location but NOT a member of the `ContentBlock` discriminated union. It flows via custom data parts (`data-confidence`) and is rendered by the Message component as conversation chrome, not by the block registry. The 22 ContentBlock count is unchanged. Litmus test: "Can this appear independently in a Today briefing?" If yes → ContentBlock. If no → response metadata.
+
 ### Two-Layer UI Architecture
 
 | Layer | Concern | Location |
 |-------|---------|----------|
 | **ContentBlock types** | WHAT to render (engine data model) | `src/engine/content-blocks.ts` — 22 types |
-| **AI Elements** | HOW to render (React components) | `packages/web/components/ai-elements/` — 15 components |
+| **Response metadata types** | Metadata ABOUT the response (not portable content) | `src/engine/content-blocks.ts` — `ConfidenceAssessment` |
+| **AI Elements** | HOW to render (React components) | `packages/web/components/ai-elements/` — 16 components |
 | **Block renderers** | Block → AI Element mapping | `packages/web/components/blocks/` — 22 renderers |
 
 AI Elements are adopted from Vercel AI Elements (Brief 058+061) using the composable subcomponent pattern: Context Provider + named subcomponents + backward-compatible default export. Block renderers consume ContentBlock data and render using AI Elements.

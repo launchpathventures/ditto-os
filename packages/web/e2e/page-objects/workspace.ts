@@ -5,6 +5,7 @@
  * Uses data-testid attributes for stable selectors.
  *
  * Provenance: Brief 054, Playwright page object pattern.
+ * Updated: Brief 057 — bypass Day Zero, wait for center panel instead of networkidle.
  */
 
 import type { Page, Locator } from "@playwright/test";
@@ -24,10 +25,14 @@ export class WorkspacePage {
     this.artifactConversation = page.getByTestId("artifact-conversation");
   }
 
-  /** Navigate to the workspace */
+  /** Navigate to the workspace, bypassing Day Zero welcome (Brief 057) */
   async goto(): Promise<void> {
+    await this.page.addInitScript(() => {
+      localStorage.setItem("ditto-day-zero-seen", "true");
+    });
     await this.page.goto("/");
-    await this.page.waitForLoadState("networkidle");
+    // Wait for center panel instead of networkidle (workspace has persistent polling)
+    await this.centerPanel.waitFor({ state: "visible", timeout: 15_000 });
   }
 
   /** Check if artifact mode is active (three-column layout) */

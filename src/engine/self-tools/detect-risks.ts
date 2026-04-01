@@ -38,6 +38,14 @@ export async function handleDetectRisks(
       toolName: "detect_risks",
       success: true,
       output: `${risks.length} signal(s) detected:\n${lines.join("\n")}`,
+      metadata: {
+        risks: risks.map((r) => ({
+          severity: r.severity,
+          type: r.type,
+          entityLabel: r.entityLabel,
+          detail: r.detail,
+        })),
+      },
     };
   } catch (err) {
     return {

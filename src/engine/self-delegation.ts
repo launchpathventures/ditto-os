@@ -42,6 +42,7 @@ import { handleGetBriefing } from "./self-tools/get-briefing";
 import { handleDetectRisks } from "./self-tools/detect-risks";
 import { handleSuggestNext } from "./self-tools/suggest-next";
 import { handleAdaptProcess } from "./self-tools/adapt-process";
+import { handleAssessConfidence } from "./self-tools/assess-confidence";
 import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
 import { setSessionTrust } from "./session-trust";
 import { loadProcessFile } from "./process-loader";
@@ -469,6 +470,55 @@ export const selfTools: LlmToolDefinition[] = [
       required: ["runId", "adaptedDefinition", "reasoning"],
     },
   },
+  // ============================================================
+  // Brief 068 — Confidence Assessment Tool
+  // ============================================================
+  {
+    name: "assess_confidence",
+    description:
+      "Assess your confidence in the current response after completing tool-assisted work. Call this as your FINAL tool call when you used other tools during this conversation turn. Be conservative — it's better to flag a minor uncertainty than to miss something the user should check. Do NOT call this for conversational responses where no tools were used.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        level: {
+          type: "string",
+          enum: ["high", "medium", "low"],
+          description: "high = all data current and complete. medium = some data stale or assumptions made. low = critical data missing or significant assumptions needed.",
+        },
+        summary: {
+          type: "string",
+          description: "Compact summary of what was checked, in outcome language the user understands (e.g., 'Checked pricing, project history, margins'). No file paths or tool names.",
+        },
+        checks: {
+          type: "array",
+          description: "What was verified — outcome-oriented labels (not file paths or tool names).",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "What was checked (e.g., 'Henderson project history')" },
+              detail: { type: "string", description: "Brief result (e.g., '2 similar quotes found')" },
+              category: { type: "string", description: "Source category: knowledge, files, code, web, processes, or other" },
+            },
+            required: ["label", "detail", "category"],
+          },
+        },
+        uncertainties: {
+          type: "array",
+          description: "What the user should watch out for. Be specific and actionable. Flag anything that could affect the user's decision.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "What is uncertain (e.g., 'Q4 copper pricing unavailable')" },
+              detail: { type: "string", description: "What the user should do about it (e.g., 'Used Q3 estimates — verify before sending')" },
+              severity: { type: "string", enum: ["minor", "major"], description: "minor = informational caveat, major = could significantly affect the outcome" },
+            },
+            required: ["label", "detail", "severity"],
+          },
+        },
+      },
+      required: ["level", "summary", "checks", "uncertainties"],
+    },
+  },
 ];
 
 // ============================================================
@@ -612,6 +662,15 @@ export async function executeDelegation(
         adaptedDefinition: toolInput.adaptedDefinition as Record<string, unknown>,
         reasoning: toolInput.reasoning as string,
         expectedVersion: toolInput.expectedVersion as number | undefined,
+      });
+
+    // Brief 068 — Confidence Assessment
+    case "assess_confidence":
+      return await handleAssessConfidence({
+        level: toolInput.level as string,
+        summary: toolInput.summary as string,
+        checks: toolInput.checks as Array<{ label: string; detail: string; category: string }>,
+        uncertainties: toolInput.uncertainties as Array<{ label: string; detail: string; severity: string }>,
       });
 
     case "update_user_model": {

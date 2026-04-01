@@ -5,6 +5,7 @@
  * Uses data-testid attributes for stable selectors.
  *
  * Provenance: Brief 054, Playwright page object pattern.
+ * Updated: Brief 057 — bypass Day Zero, wait for chat input instead of networkidle.
  */
 
 import type { Page, Locator } from "@playwright/test";
@@ -26,10 +27,14 @@ export class ConversationPage {
     this.textBlocks = page.getByTestId("text-block");
   }
 
-  /** Navigate to the workspace */
+  /** Navigate to the workspace, bypassing Day Zero welcome (Brief 057) */
   async goto(): Promise<void> {
+    await this.page.addInitScript(() => {
+      localStorage.setItem("ditto-day-zero-seen", "true");
+    });
     await this.page.goto("/");
-    await this.page.waitForLoadState("networkidle");
+    // Wait for chat input instead of networkidle (workspace has persistent polling)
+    await this.messageInput.waitFor({ state: "visible", timeout: 15_000 });
   }
 
   /** Send a message via the chat input */

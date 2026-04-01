@@ -47,6 +47,7 @@ export async function handleSuggestNext(
   try {
     const userModel = await getUserModel(userId);
     const suggestions: string[] = [];
+    const structuredSuggestions: Array<{ type: string; content: string }> = [];
 
     // 1. Industry coverage gaps (AC9: industry patterns)
     const signals = userModel.entries.map((e) => e.content);
@@ -66,9 +67,9 @@ export async function handleSuggestNext(
       const topGap = coreGaps[0] ?? gaps[0];
 
       if (topGap) {
-        suggestions.push(
-          `Coverage: Other ${industry.name.toLowerCase()} businesses find ${topGap.name.toLowerCase()} useful — ${topGap.description.toLowerCase()}.`,
-        );
+        const content = `Other ${industry.name.toLowerCase()} businesses find ${topGap.name.toLowerCase()} useful — ${topGap.description.toLowerCase()}.`;
+        suggestions.push(`Coverage: ${content}`);
+        structuredSuggestions.push({ type: "Coverage", content });
       }
     }
 
@@ -92,9 +93,9 @@ export async function handleSuggestNext(
         trustState.approvalRate >= 0.9 &&
         trustState.consecutiveCleanRuns >= 5
       ) {
-        suggestions.push(
-          `Trust: ${proc.name} has been running smoothly (${Math.round(trustState.approvalRate * 100)}% approval, ${trustState.consecutiveCleanRuns} clean in a row). You could let it handle more on its own.`,
-        );
+        const content = `${proc.name} has been running smoothly (${Math.round(trustState.approvalRate * 100)}% approval, ${trustState.consecutiveCleanRuns} clean in a row). You could let it handle more on its own.`;
+        suggestions.push(`Trust: ${content}`);
+        structuredSuggestions.push({ type: "Trust", content });
         break; // Only suggest one trust upgrade at a time
       }
     }
@@ -114,9 +115,9 @@ export async function handleSuggestNext(
         : immediateMissing[0] ?? userModel.missingDimensions[0];
 
       if (target) {
-        suggestions.push(
-          `Understanding: I'd like to learn more about your ${target}. It helps me work better for you.`,
-        );
+        const content = `I'd like to learn more about your ${target}. It helps me work better for you.`;
+        suggestions.push(`Understanding: ${content}`);
+        structuredSuggestions.push({ type: "Understanding", content });
       }
     }
 
@@ -135,9 +136,9 @@ export async function handleSuggestNext(
         if (matchingProc) {
           const trustState = await computeTrustState(matchingProc.id);
           if (trustState.correctionRate > 0.2 && trustState.runsInWindow >= 3) {
-            suggestions.push(
-              `Improvement: ${matchingProc.name} corrections suggest it could work better for you. Want me to look at the patterns?`,
-            );
+            const content = `${matchingProc.name} corrections suggest it could work better for you. Want me to look at the patterns?`;
+            suggestions.push(`Improvement: ${content}`);
+            structuredSuggestions.push({ type: "Improvement", content });
             break;
           }
         }
@@ -148,9 +149,9 @@ export async function handleSuggestNext(
     if (suggestions.length < 2) {
       const patterns = await getWorkingPatterns(userId);
       if (patterns && patterns.sessionsObserved >= 5 && patterns.checkFrequency < 0.5) {
-        suggestions.push(
-          `Timing: You check in about ${patterns.checkFrequency} times a day. Some of your work could benefit from more frequent check-ins — want me to flag things that need quick attention?`,
-        );
+        const content = `You check in about ${patterns.checkFrequency} times a day. Some of your work could benefit from more frequent check-ins — want me to flag things that need quick attention?`;
+        suggestions.push(`Timing: ${content}`);
+        structuredSuggestions.push({ type: "Timing", content });
       }
     }
 
@@ -169,6 +170,7 @@ export async function handleSuggestNext(
       toolName: "suggest_next",
       success: true,
       output: `Suggestions (${capped.length}):\n${capped.join("\n")}`,
+      metadata: { suggestions: structuredSuggestions.slice(0, 2) },
     };
   } catch (err) {
     return {

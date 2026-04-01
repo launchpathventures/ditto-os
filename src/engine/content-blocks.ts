@@ -304,6 +304,38 @@ export interface ArtifactBlock {
 }
 
 // ============================================================
+// Response-level metadata types (Insight-129: NOT ContentBlocks)
+// ============================================================
+
+/**
+ * ConfidenceAssessment — Structured confidence metadata for Self responses.
+ *
+ * This is response-level metadata, NOT a ContentBlock. It describes
+ * the response itself (how much to trust it), not a discrete content unit.
+ * Rendered as conversation chrome by the ConfidenceCard component.
+ *
+ * Provenance: Brief 068, Insight-127/128/129.
+ */
+export interface ConfidenceCheck {
+  label: string;    // "Henderson project history"
+  detail: string;   // "2 similar quotes found"
+  category: string; // "knowledge" | "files" | "code" | "web" | "processes"
+}
+
+export interface ConfidenceUncertainty {
+  label: string;    // "Q4 copper pricing unavailable"
+  detail: string;   // "Used Q3 estimates — verify before sending"
+  severity: "minor" | "major";
+}
+
+export interface ConfidenceAssessment {
+  level: "high" | "medium" | "low";
+  summary: string;  // "Checked pricing, project history, margins"
+  checks: ConfidenceCheck[];
+  uncertainties: ConfidenceUncertainty[];
+}
+
+// ============================================================
 // Discriminated union
 // ============================================================
 

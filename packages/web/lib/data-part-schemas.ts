@@ -1,13 +1,14 @@
 /**
  * Ditto — Data Part Schemas (AI SDK v6 dataPartSchemas)
  *
- * Zod schemas for Ditto's 4 custom data part types.
+ * Zod schemas for Ditto's 5 custom data part types.
  * Shared between route handler (emission) and useChat (reception).
  * Eliminates `as never` casts on custom data parts.
  *
- * AC8: dataPartSchemas with Zod validation for all 4 custom data parts.
+ * AC8: dataPartSchemas with Zod validation for all custom data parts.
  *
  * Provenance: Brief 058, AI SDK v6 dataPartSchemas pattern.
+ * Brief 068: Added data-confidence for structured confidence assessment.
  */
 
 import { z } from "zod";
@@ -42,6 +43,25 @@ export const credentialRequestSchema = z.object({
 });
 
 /**
+ * Confidence assessment data part — structured confidence metadata (Brief 068).
+ * Emitted as `data-confidence`. Response-level metadata, NOT a ContentBlock.
+ */
+export const confidenceSchema = z.object({
+  level: z.enum(["high", "medium", "low"]),
+  summary: z.string(),
+  checks: z.array(z.object({
+    label: z.string(),
+    detail: z.string(),
+    category: z.string(),
+  })),
+  uncertainties: z.array(z.object({
+    label: z.string(),
+    detail: z.string(),
+    severity: z.enum(["minor", "major"]),
+  })),
+});
+
+/**
  * Structured data part — legacy structured data emission.
  * Emitted as `data-structured`.
  */
@@ -58,6 +78,7 @@ export const dataPartSchemas = {
   "content-block": contentBlockSchema,
   "status": statusSchema,
   "credential-request": credentialRequestSchema,
+  "confidence": confidenceSchema,
   "structured": structuredDataSchema,
 } as const;
 
@@ -67,4 +88,5 @@ export const dataPartSchemas = {
 export type ContentBlockData = z.infer<typeof contentBlockSchema>;
 export type StatusData = z.infer<typeof statusSchema>;
 export type CredentialRequestData = z.infer<typeof credentialRequestSchema>;
+export type ConfidenceData = z.infer<typeof confidenceSchema>;
 export type StructuredData = z.infer<typeof structuredDataSchema>;

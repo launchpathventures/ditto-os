@@ -4,12 +4,12 @@
  * Verifies pipeline trigger and response UI (AC8):
  * - Sending "Build Brief X" triggers pipeline response
  * - UI renders the pipeline trigger text
- * - Tool invocation appears in the UI
- * - Pipeline status text is shown
+ * - Tool invocation appears in the UI with human-readable label
  *
  * Tests verify UI rendering with deterministic mock data.
  *
  * Provenance: Brief 054 (Testing Infrastructure), Brief 053 (Pipeline Wiring).
+ * Updated: Brief 057 — Day Zero bypass; Brief 062 — tool display names.
  */
 
 import { test, expect, resetDatabase } from "./fixtures";
@@ -43,21 +43,25 @@ test.describe("Pipeline flow", () => {
       page.getByText("I'll start the dev pipeline for this brief."),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Tool invocation status should show start_pipeline
+    // Tool invocation renders with human-friendly label (Brief 062: tool-display-names)
     await expect(
-      page.getByText("start_pipeline", { exact: false }).first(),
+      page.getByText("Pipeline complete", { exact: false }).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test("pipeline trigger shows pipeline status message", async ({ page }) => {
+  test("pipeline trigger shows pipeline completion status", async ({ page }) => {
     const conversation = new ConversationPage(page);
     await conversation.goto();
 
     await conversation.sendMessage("Build Brief 099");
 
-    // Pipeline status text from self-stream.ts
+    // Pipeline mock produces text response and tool invocation with "Pipeline complete" label
     await expect(
-      page.getByText("Starting pipeline", { exact: false }).first(),
+      page.getByText("I'll start the dev pipeline for this brief."),
     ).toBeVisible({ timeout: 15_000 });
+
+    await expect(
+      page.getByText("Pipeline complete", { exact: false }).first(),
+    ).toBeVisible({ timeout: 5_000 });
   });
 });

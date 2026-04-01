@@ -31,7 +31,9 @@ export {
   PromptInputProvider,
   PromptInputTextarea,
   PromptInputSubmit,
-  PromptInputActions,
+  PromptInputActionMenu,
+  PromptInputFooter,
+  PromptInputTools,
 } from "./prompt-input";
 export { Suggestions } from "./suggestion";
 export { Conversation } from "./conversation";
@@ -68,6 +70,9 @@ export { getToolDisplayLabel } from "./tool-display-names";
 export type { ToolDisplayLabel } from "./tool-display-names";
 export { Task, TaskTrigger, TaskContent, TaskItemFile } from "./task";
 export { CodeBlock } from "./code-block";
+
+// Trust Signals (Brief 068)
+export { ConfidenceCard } from "./confidence-card";
 
 // Hooks
 export { useControllableState } from "./use-controllable-state";

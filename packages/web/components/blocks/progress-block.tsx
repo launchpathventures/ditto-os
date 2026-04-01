@@ -10,7 +10,7 @@ const STATUS_BAR_COLOR: Record<string, string> = {
 };
 
 const STATUS_BADGE_VARIANT: Record<string, string> = {
-  running: "bg-info/10 text-info",
+  running: "bg-positive/10 text-positive",
   paused: "bg-caution/10 text-caution",
   complete: "bg-positive/10 text-positive",
 };

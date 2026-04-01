@@ -30,6 +30,8 @@ import { mockCreateStreamingCompletion } from "./llm-mock";
 export type StreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }
+  | { type: "tool-use-start"; toolName: string; toolCallId: string }
+  | { type: "tool-use-end"; toolCallId: string; summary?: string }
   | { type: "content-complete"; content: LlmContentBlock[]; costCents: number; tokensUsed: number };
 
 // ============================================================
@@ -290,6 +292,7 @@ async function* streamClaudeCli(request: LlmCompletionRequest): AsyncGenerator<S
     "-p",
     "--verbose",
     "--output-format", "stream-json",
+    "--include-partial-messages",
     "--model", model,
     "--no-session-persistence",
     "--dangerously-skip-permissions",
@@ -347,6 +350,53 @@ async function* streamCodexCli(request: LlmCompletionRequest): AsyncGenerator<St
 }
 
 // ============================================================
+// CLI tool input summary extraction
+// ============================================================
+
+/** Strip the project root prefix from absolute file paths. */
+function stripProjectRoot(filePath: string): string {
+  // Match common patterns: /Users/.../missoula/..., /home/.../missoula/...
+  const match = filePath.match(/\/(?:Users|home)\/[^/]+\/.*?\/missoula\/(.+)/);
+  if (match) return match[1];
+  // Fallback: if path starts with /, take last 3 segments
+  if (filePath.startsWith("/")) {
+    const parts = filePath.split("/").filter(Boolean);
+    return parts.length > 3 ? parts.slice(-3).join("/") : parts.join("/");
+  }
+  return filePath;
+}
+
+/** Extract a human-readable summary from a CLI tool's JSON input. */
+function extractToolSummary(toolName: string, inputJson: string): string | undefined {
+  try {
+    const input = JSON.parse(inputJson) as Record<string, unknown>;
+    switch (toolName) {
+      case "Read": return typeof input.file_path === "string" ? stripProjectRoot(input.file_path) : undefined;
+      case "Edit": return typeof input.file_path === "string" ? stripProjectRoot(input.file_path) : undefined;
+      case "Write": return typeof input.file_path === "string" ? stripProjectRoot(input.file_path) : undefined;
+      case "MultiEdit": return typeof input.file_path === "string" ? stripProjectRoot(input.file_path) : undefined;
+      case "Grep": {
+        const pattern = input.pattern as string | undefined;
+        const path = typeof input.path === "string" ? stripProjectRoot(input.path) : undefined;
+        if (!pattern) return undefined;
+        return path ? `'${pattern}' in ${path}` : `'${pattern}'`;
+      }
+      case "Glob": return input.pattern as string | undefined;
+      case "Bash": return input.command as string | undefined;
+      case "WebSearch": return input.query as string | undefined;
+      case "WebFetch": return input.url as string | undefined;
+      case "Agent": {
+        const desc = (input.description ?? input.prompt) as string | undefined;
+        return desc && desc.length > 50 ? desc.slice(0, 47) + "..." : desc;
+      }
+      default: return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+// ============================================================
 // Shared CLI subprocess streaming
 // ============================================================
 
@@ -360,6 +410,10 @@ async function* spawnCliStream(
 ): AsyncGenerator<StreamEvent> {
   const content: LlmContentBlock[] = [];
   let fullText = "";
+  let receivedStreamDeltas = false;
+  let activeToolId: string | null = null;
+  let activeToolName: string | null = null;
+  let activeToolInput = "";
 
   // Use a promise + callback approach to yield from a child process
   const lines: string[] = [];
@@ -424,8 +478,48 @@ async function* spawnCliStream(
       try {
         const parsed = JSON.parse(line);
 
-        // Claude CLI format (v2): { type: "assistant", message: { content: [{ type: "text", text: "..." }] } }
-        if (parsed.type === "assistant" && parsed.message?.content) {
+        // Claude CLI stream_event (partial messages via --include-partial-messages)
+        // Format: { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "..." } } }
+        if (parsed.type === "stream_event" && parsed.event) {
+          const evt = parsed.event;
+          if (evt.type === "content_block_delta") {
+            if (evt.delta?.type === "text_delta" && evt.delta.text) {
+              fullText += evt.delta.text;
+              receivedStreamDeltas = true;
+              yield { type: "text-delta", text: evt.delta.text };
+            } else if (evt.delta?.type === "thinking_delta" && evt.delta.thinking) {
+              receivedStreamDeltas = true;
+              yield { type: "thinking-delta", text: evt.delta.thinking };
+            }
+            // signature_delta: ignore (not useful for UI)
+            if (evt.delta?.type === "input_json_delta" && evt.delta.partial_json) {
+              activeToolInput += evt.delta.partial_json;
+            }
+          }
+
+          // Claude Code internal tool calls — surface for activity visibility
+          if (evt.type === "content_block_start" && evt.content_block?.type === "tool_use") {
+            const toolId = evt.content_block.id ?? `cli-tool-${Date.now()}`;
+            const toolName = evt.content_block.name ?? "tool";
+            activeToolId = toolId;
+            activeToolName = toolName;
+            activeToolInput = "";
+            yield { type: "tool-use-start", toolName: toolName, toolCallId: toolId };
+          }
+          if (evt.type === "content_block_stop" && activeToolId) {
+            const completedToolId = activeToolId;
+            const completedToolName = activeToolName ?? "tool";
+            activeToolId = null;
+            activeToolName = null;
+            const summary = extractToolSummary(completedToolName, activeToolInput);
+            activeToolInput = "";
+            yield { type: "tool-use-end", toolCallId: completedToolId, summary };
+          }
+        }
+
+        // Claude CLI complete message (fallback when no partial messages / older CLI)
+        // Only yield from assistant message if we didn't get streaming deltas
+        if (parsed.type === "assistant" && parsed.message?.content && !receivedStreamDeltas) {
           for (const block of parsed.message.content) {
             if (block.type === "text" && block.text) {
               const text = block.text;

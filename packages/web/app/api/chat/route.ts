@@ -210,6 +210,16 @@ export async function POST(req: Request) {
               break;
             }
 
+            case "confidence": {
+              // Brief 068: Confidence assessment metadata
+              writer.write({
+                type: "data-confidence",
+                id: `conf-${partSeq++}`,
+                data: event.assessment,
+              });
+              break;
+            }
+
             case "structured-data": {
               // AC8: Custom data part — type-safe via dataPartSchemas
               writer.write({

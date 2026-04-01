@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 17 tools (5 original + 1 Brief 052 + 7 Brief 040 + 3 Brief 043 + 1 Brief 044)", async () => {
+  it("has 19 tools (5 original + 1 Brief 052 + 7 Brief 040 + 3 Brief 043 + 1 Brief 044 + 1 Brief 068)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(18);
+    expect(selfTools).toHaveLength(19);
 
     const names = selfTools.map((t) => t.name);
     // Original 5
@@ -440,6 +440,8 @@ describe("selfTools definitions", () => {
     expect(names).toContain("suggest_next");
     // Brief 044 — Onboarding Experience
     expect(names).toContain("adapt_process");
+    // Brief 068 — Confidence Assessment
+    expect(names).toContain("assess_confidence");
   });
 
   it("all tools have valid schemas", async () => {
@@ -450,5 +452,78 @@ describe("selfTools definitions", () => {
       expect(tool.input_schema.type).toBe("object");
       expect(tool.input_schema.properties).toBeDefined();
     }
+  });
+});
+
+// ============================================================
+// Brief 069: Tool output structures support block mapping
+// ============================================================
+
+describe("tool return structures for block mapping (Brief 069)", () => {
+  it("get_process_detail returns JSON with trust object for RecordBlock + MetricBlock", async () => {
+    await testDb.insert(schema.processes).values({
+      id: "block-test-proc",
+      name: "Block Test",
+      slug: "block-test",
+      version: 1,
+      status: "active",
+      description: "Test",
+      trustTier: "supervised",
+      definition: { steps: [{ id: "s1", name: "Step", executor: "ai-agent" }] },
+    });
+
+    const result = await handleGetProcessDetail({ processSlug: "block-test" });
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    // Fields required by RecordBlock mapping
+    expect(parsed.name).toBe("Block Test");
+    expect(parsed.slug).toBe("block-test");
+    expect(parsed.status).toBe("active");
+    expect(parsed.trustTier).toBe("supervised");
+    // Trust object required by MetricBlock mapping
+    expect(parsed.trust).toBeDefined();
+    expect(typeof parsed.trust.approvalRate).toBe("number");
+    expect(parsed.trust.trend).toBeDefined();
+    expect(parsed.steps).toBeDefined();
+    expect(parsed.recentRuns).toBeDefined();
+  });
+
+  it("adjust_trust proposal returns JSON with trust evidence for RecordBlock", async () => {
+    await testDb.insert(schema.processes).values({
+      id: "trust-block-proc",
+      name: "Trust Block",
+      slug: "trust-block",
+      version: 1,
+      status: "active",
+      description: "Test",
+      trustTier: "supervised",
+      definition: {},
+    });
+
+    const result = await handleAdjustTrust({
+      processSlug: "trust-block",
+      newTier: "spot_checked",
+      reason: "Test",
+      confirmed: false,
+    });
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    // Fields required by RecordBlock + ChecklistBlock + StatusCardBlock mapping
+    expect(parsed.action).toBe("proposal");
+    expect(parsed.processName).toBeDefined();
+    expect(parsed.currentTier).toBe("supervised");
+    expect(parsed.proposedTier).toBe("spot_checked");
+    expect(parsed.trust).toBeDefined();
+    expect(typeof parsed.trust.approvalRate).toBe("number");
+  });
+
+  it("quick_capture returns JSON with type for KnowledgeCitationBlock", async () => {
+    const result = await handleQuickCapture({ text: "Check the pricing" });
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    // Fields required by StatusCardBlock + KnowledgeCitationBlock mapping
+    expect(parsed.id).toBeDefined();
+    expect(parsed.type).toBeDefined();
+    expect(["task", "note", "goal", "insight", "question"]).toContain(parsed.type);
   });
 });

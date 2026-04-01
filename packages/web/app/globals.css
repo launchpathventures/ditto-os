@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* Streamdown — Tailwind content scanning for streaming markdown (Brief 058) */
 @source "../../../node_modules/streamdown/dist/*.js";
@@ -190,6 +191,32 @@ body {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: reasoning-shimmer 2s ease-in-out infinite;
+}
+
+/* Streaming cursor — vivid 2px blinking caret at end of streaming text (AC6, AC15) */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Block containers (div wrapping Streamdown): cursor at end of last block element */
+.streaming-cursor > :last-child::after,
+/* Text-only containers (span in reasoning, or bare text before first block forms): */
+.streaming-cursor:not(:has(> *))::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  background-color: var(--color-vivid);
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* Vivid dot breathing animation during streaming (AC7) */
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 /* Day Zero staggered entrance animation */

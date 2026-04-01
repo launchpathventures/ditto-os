@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-03-30
-**Current phase:** Phase 10 **complete**. Phase 11 (Chat UX & Experience) **in progress** — Briefs 062 + 063 approved, ready to build. 440 unit tests (26 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI.
+**Last updated:** 2026-04-01
+**Current phase:** Phase 10 **complete**. Phase 11 (Chat UX & Experience) **in progress** — Briefs 057-062, 064, 065, 068, 069 complete (AI Elements, streaming fix, conversation core feel, confidence card, rich block emission). Brief 063 ready (block renderer polish). Brief 070 drafted (activity progressive disclosure, supersedes 067). 478 unit tests (28 test files) + 14 e2e tests (4 spec files). Dev pipeline end-to-end through web UI.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -533,6 +533,10 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | AI SDK & Elements Adoption — full useChat API surface + adopted AI Elements components + streamdown markdown — **done (Brief 058)** | Brief 058, Insight-114 | AI Elements (adopt), streamdown (depend), use-stick-to-bottom (depend), Zod v4 dataPartSchemas |
 | AI Elements Deep Adoption — composable subcomponents, Radix primitives, 4 block renderer upgrades, 7 new AI Elements, Shiki syntax highlighting — **done (Brief 061)** | Brief 061, Insight-114, Insight-117 | AI Elements (adopt), Radix UI (depend), Shiki (depend) |
 | Conversation Experience Activation — conversation chrome (reasoning, tools, confirmations, citations, typing indicator) + message queueing — **approved, ready to build (Brief 062)** | Brief 062, Insight-119 | AI Elements composable subcomponents (Brief 061), Claude.ai queue pattern |
+| Real-Time Streaming Fix — Claude CLI `--include-partial-messages`, stream_event parsing (text_delta + thinking_delta), CLI internal tool visibility (tool-use-start/end), collapsible activity groups, user toggle autonomy — **done (Brief 064)** | Brief 064, Insight-120, Insight-124 | Claude CLI headless stream-json protocol (pattern), Conductor IDE tool visibility (pattern) |
+| Conversation Core Feel — floating prompt input, streaming cursor (vivid caret on text-delta), dot breathing, tool step compaction, reasoning content display — **done (Brief 065)** | Brief 065, Insight-110, Insight-124, Insight-125 | Claude.ai (pattern), ChatGPT (pattern), Cursor (pattern) |
+| Confidence & Trust Card — response-level confidence assessment, ConfidenceCard UI component, uncertainties-first display — **done (Brief 068)** | Brief 068, Insight-128, Insight-129 | Claude.ai (pattern), uncertainty-first display (original) |
+| Rich Block Emission — all 19 Self tools produce appropriate ContentBlocks (Record, Metric, Suggestion, Alert, Checklist, etc.), metadata-first block mapping pattern — **done (Brief 069)** | Brief 069, Insight-131, Insight-134 | Deterministic tool→block mapping (original), metadata-first pattern (original) |
 | Block Renderer Polish — Tier 2→Tier 1 visual quality for 7 block renderers — **approved, ready to build (Brief 063)** | Brief 063, P30 prototype | Tier 1 block patterns (existing), Lucide icons (depend) |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |

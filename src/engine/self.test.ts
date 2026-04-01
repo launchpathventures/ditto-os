@@ -295,8 +295,8 @@ describe("loadSessionTurns", () => {
 // ============================================================
 
 describe("selfTools", () => {
-  it("defines all delegation, consultation, planning, workspace, proactive, and onboarding tools", () => {
-    expect(selfTools).toHaveLength(18);
+  it("defines all delegation, consultation, planning, workspace, proactive, onboarding, and confidence tools", () => {
+    expect(selfTools).toHaveLength(19);
     const names = selfTools.map((t) => t.name);
     // Original 5
     expect(names).toContain("start_dev_role");
@@ -314,6 +314,8 @@ describe("selfTools", () => {
     expect(names).toContain("get_process_detail");
     expect(names).toContain("connect_service");
     expect(names).toContain("update_user_model");
+    // Brief 068 — Confidence Assessment
+    expect(names).toContain("assess_confidence");
   });
 
   it("start_dev_role accepts all 7 roles", () => {
@@ -434,8 +436,8 @@ describe("assembleSelfContext", () => {
 // ============================================================
 
 describe("consult_role tool definition", () => {
-  it("selfTools contains 17 tools including consult_role and plan_with_role", () => {
-    expect(selfTools).toHaveLength(18);
+  it("selfTools contains 19 tools including consult_role and plan_with_role", () => {
+    expect(selfTools).toHaveLength(19);
     const names = selfTools.map((t) => t.name);
     expect(names).toContain("consult_role");
     expect(names).toContain("plan_with_role");

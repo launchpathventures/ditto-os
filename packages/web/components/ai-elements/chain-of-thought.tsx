@@ -61,11 +61,23 @@ function ChainOfThought({
   );
 }
 
-function ChainOfThoughtHeader({ children, className }: { children: ReactNode; className?: string }) {
+function ChainOfThoughtHeader({
+  children,
+  variant = "standard",
+  className,
+}: {
+  children: ReactNode;
+  /** "standard" for standalone CoT (text-base font-semibold), "activity" for activity groups (text-sm text-text-muted) */
+  variant?: "standard" | "activity";
+  className?: string;
+}) {
   return (
     <Collapsible.Trigger
       className={cn(
-        "flex w-full items-center gap-2 text-base font-semibold text-text-primary",
+        "flex w-full items-center gap-2 min-h-[44px]",
+        variant === "standard"
+          ? "text-base font-semibold text-text-primary"
+          : "text-sm font-normal text-text-muted",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-vivid)] focus-visible:ring-offset-2 rounded",
         className,
       )}

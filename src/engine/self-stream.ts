@@ -35,7 +35,7 @@ import {
 } from "./self-context";
 import { selfTools, executeDelegation } from "./self-delegation";
 import { assembleSelfContext } from "./self";
-import type { ContentBlock } from "./content-blocks";
+import type { ContentBlock, ConfidenceAssessment } from "./content-blocks";
 import { registerBlockActions } from "./surface-actions";
 
 // ============================================================
@@ -50,6 +50,7 @@ export type SelfStreamEvent =
   | { type: "structured-data"; data: Record<string, unknown> }
   | { type: "content-block"; block: ContentBlock }
   | { type: "credential-request"; service: string; processSlug: string | null; fieldLabel: string; placeholder: string }
+  | { type: "confidence"; assessment: ConfidenceAssessment }
   | { type: "status"; message: string }
   | { type: "finish"; sessionId: string; delegationsExecuted: number; consultationsExecuted: number; costCents: number };
 
@@ -121,6 +122,15 @@ export async function* selfConverseStream(
   let totalCostCents = 0;
   let fullResponse = "";
 
+  // Brief 068: Track tool activity for confidence assessment
+  let toolsWereCalled = false;
+  let confidenceEmitted = false;
+  let toolErrors = 0;
+  let totalToolCalls = 0;
+  let knowledgeSearchReturnedZero = false;
+  let toolTimedOut = false;
+  const toolCategories = new Set<string>();
+
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     // Stream the LLM response
     let turnText = "";
@@ -139,6 +149,11 @@ export async function* selfConverseStream(
         yield { type: "text-delta", text: event.text };
       } else if (event.type === "thinking-delta") {
         yield { type: "thinking-delta", text: event.text };
+      } else if (event.type === "tool-use-start") {
+        // CLI internal tool calls — surface for activity visibility
+        yield { type: "tool-call-start", toolName: event.toolName, toolCallId: event.toolCallId };
+      } else if (event.type === "tool-use-end") {
+        yield { type: "tool-call-result", toolCallId: event.toolCallId, result: event.summary ?? "" };
       } else if (event.type === "content-complete") {
         turnContent = event.content;
         turnToolUses = extractToolUse(event.content);
@@ -179,6 +194,78 @@ export async function* selfConverseStream(
       };
 
       const result = await executeDelegation(toolUse.name, input);
+
+      // Brief 068: Track tool activity for heuristic floor
+      if (toolUse.name !== "assess_confidence") {
+        toolsWereCalled = true;
+        totalToolCalls++;
+        if (!result.success) toolErrors++;
+        if (result.output.includes("timed out")) toolTimedOut = true;
+        if (toolUse.name === "search_knowledge" && result.success) {
+          // Check for zero results
+          try {
+            const parsed = JSON.parse(result.output);
+            if (Array.isArray(parsed) && parsed.length === 0) knowledgeSearchReturnedZero = true;
+            if (typeof parsed === "object" && parsed !== null && "results" in parsed) {
+              const r = parsed as { results: unknown[] };
+              if (Array.isArray(r.results) && r.results.length === 0) knowledgeSearchReturnedZero = true;
+            }
+          } catch {
+            // Not JSON — check for empty indicators in text
+            if (result.output.includes("No results") || result.output.includes("no matching")) {
+              knowledgeSearchReturnedZero = true;
+            }
+          }
+        }
+        // Track categories for fallback synthesis
+        const toolCatMap: Record<string, string> = {
+          search_knowledge: "knowledge", get_briefing: "briefings", get_process_detail: "processes",
+          list_processes: "processes", generate_process: "processes", detect_risks: "signals",
+          suggest_next: "suggestions", create_work_item: "work", quick_capture: "captures",
+        };
+        toolCategories.add(toolCatMap[toolUse.name] ?? "activity");
+      }
+
+      // Brief 068: Handle assess_confidence result — emit confidence event with heuristic floor
+      if (toolUse.name === "assess_confidence" && result.success && result.metadata?.confidenceAssessment) {
+        const assessment = result.metadata.confidenceAssessment as ConfidenceAssessment;
+
+        // Apply heuristic floor overrides (Brief 068 AC16)
+        if (totalToolCalls > 0 && toolErrors === totalToolCalls) {
+          assessment.level = "low";
+          assessment.uncertainties.push({
+            label: "Multiple tool calls failed",
+            detail: "Response may not be reliable — tool results were unavailable",
+            severity: "major",
+          });
+        }
+        if (knowledgeSearchReturnedZero) {
+          const alreadyFlagged = assessment.uncertainties.some(
+            (u) => u.label.toLowerCase().includes("no matching knowledge") || u.label.toLowerCase().includes("knowledge"),
+          );
+          if (!alreadyFlagged) {
+            assessment.uncertainties.push({
+              label: "No matching knowledge found",
+              detail: "Response based on general knowledge only",
+              severity: "minor",
+            });
+          }
+        }
+        if (toolTimedOut) {
+          assessment.uncertainties.push({
+            label: "Tool call timed out",
+            detail: "Results may be incomplete",
+            severity: "minor",
+          });
+        }
+        // Downgrade level if heuristics added major uncertainties
+        if (assessment.level === "high" && assessment.uncertainties.some((u) => u.severity === "major")) {
+          assessment.level = "medium";
+        }
+
+        yield { type: "confidence", assessment };
+        confidenceEmitted = true;
+      }
 
       // Record decisions
       if (toolUse.name === "start_pipeline") {
@@ -267,6 +354,40 @@ export async function* selfConverseStream(
     fullResponse += turnText + "\n";
   }
 
+  // 5b. Brief 068: Synthesize default confidence if tools were called but assess_confidence was not
+  if (toolsWereCalled && !confidenceEmitted) {
+    const categories = [...toolCategories];
+    const summary = categories.length > 0
+      ? `Checked ${categories.join(", ")}`
+      : `Completed ${totalToolCalls} action${totalToolCalls !== 1 ? "s" : ""}`;
+    const uncertainties: ConfidenceAssessment["uncertainties"] = [{
+      label: "Confidence not explicitly assessed",
+      detail: "Self did not evaluate confidence for this response",
+      severity: "minor",
+    }];
+    if (toolErrors === totalToolCalls && totalToolCalls > 0) {
+      uncertainties.unshift({
+        label: "Multiple tool calls failed",
+        detail: "Response may not be reliable — tool results were unavailable",
+        severity: "major",
+      });
+    }
+    if (knowledgeSearchReturnedZero) {
+      uncertainties.push({
+        label: "No matching knowledge found",
+        detail: "Response based on general knowledge only",
+        severity: "minor",
+      });
+    }
+    const level: ConfidenceAssessment["level"] =
+      (toolErrors === totalToolCalls && totalToolCalls > 0) ? "low" : "medium";
+
+    yield {
+      type: "confidence",
+      assessment: { level, summary, checks: [], uncertainties },
+    };
+  }
+
   // 6. Record assistant turn
   await appendSessionTurn(context.sessionId, {
     role: "assistant",
@@ -301,6 +422,10 @@ import type {
   ArtifactBlock,
   TextBlock,
   ProgressBlock,
+  RecordBlock,
+  MetricBlock,
+  SuggestionBlock,
+  KnowledgeCitationBlock,
 } from "./content-blocks";
 import { getUserModel } from "./user-model";
 import type { DelegationResult } from "./self-delegation";
@@ -398,7 +523,7 @@ function parseCommandOutputBlocks(output: string): ContentBlock[] {
  * Convert a tool result into typed content blocks for surface rendering.
  * Each tool declares its output block type.
  */
-async function toolResultToContentBlocks(
+export async function toolResultToContentBlocks(
   toolName: string,
   input: Record<string, unknown>,
   result: DelegationResult,
@@ -407,27 +532,60 @@ async function toolResultToContentBlocks(
 
   switch (toolName) {
     case "get_process_detail": {
-      // Try to parse structured output
+      // Brief 069 AC1: Record (process fields + trust evidence) + Metric (trust score)
       try {
         const parsed = JSON.parse(result.output) as Record<string, unknown>;
-        const block: StatusCardBlock = {
-          type: "status_card",
-          entityType: "process_run",
-          entityId: (input.processSlug as string) ?? "",
-          title: (parsed.name as string) ?? "Process",
-          status: (parsed.status as string) ?? "active",
-          details: {},
-        };
-        // Extract key-value details
-        if (parsed.trust && typeof parsed.trust === "object") {
-          const trust = parsed.trust as Record<string, unknown>;
-          if (trust.tier) block.details["Trust tier"] = String(trust.tier);
+        const blocks: ContentBlock[] = [];
+
+        // RecordBlock: process entity with fields
+        const fields: RecordBlock["fields"] = [];
+        if (parsed.status) fields.push({ label: "Status", value: String(parsed.status) });
+        if (parsed.trustTier) fields.push({ label: "Trust tier", value: String(parsed.trustTier) });
+
+        const trust = parsed.trust as Record<string, unknown> | undefined;
+        if (trust) {
           if (typeof trust.approvalRate === "number")
-            block.details["Approval rate"] = `${Math.round(trust.approvalRate * 100)}%`;
-          if (trust.trend) block.details["Trend"] = String(trust.trend);
+            fields.push({ label: "Approval rate", value: `${Math.round(trust.approvalRate * 100)}%` });
+          if (typeof trust.consecutiveClean === "number")
+            fields.push({ label: "Consecutive clean", value: String(trust.consecutiveClean) });
+          if (trust.summary) fields.push({ label: "Trust summary", value: String(trust.summary) });
         }
-        if (parsed.stepsCount) block.details["Steps"] = String(parsed.stepsCount);
-        return [block];
+
+        const steps = parsed.steps as Array<unknown> | undefined;
+        if (steps) fields.push({ label: "Steps", value: String(steps.length) });
+
+        const recentRuns = parsed.recentRuns as Array<unknown> | undefined;
+        if (recentRuns) fields.push({ label: "Recent runs", value: String(recentRuns.length) });
+
+        const trustTier = parsed.trustTier as string | undefined;
+        const statusVariant = trustTier === "autonomous" ? "positive" as const
+          : trustTier === "critical" ? "negative" as const
+          : trustTier === "spot_checked" ? "info" as const
+          : "neutral" as const;
+
+        const record: RecordBlock = {
+          type: "record",
+          title: (parsed.name as string) ?? "Process",
+          subtitle: (parsed.slug as string) ?? undefined,
+          status: trustTier ? { label: String(trustTier).replace(/_/g, " "), variant: statusVariant } : undefined,
+          fields,
+        };
+        blocks.push(record);
+
+        // MetricBlock: trust score with trend
+        if (trust && typeof trust.approvalRate === "number") {
+          const metrics: MetricBlock["metrics"] = [{
+            value: `${Math.round(trust.approvalRate * 100)}%`,
+            label: "Trust score",
+            trend: trust.trend === "up" ? "up" : trust.trend === "down" ? "down" : "flat",
+          }];
+          if (typeof trust.runsInWindow === "number") {
+            metrics.push({ value: String(trust.runsInWindow), label: "Runs observed" });
+          }
+          blocks.push({ type: "metric", metrics } as MetricBlock);
+        }
+
+        return blocks;
       } catch {
         return [];
       }
@@ -436,7 +594,9 @@ async function toolResultToContentBlocks(
     case "approve_review":
     case "edit_review":
     case "reject_review": {
-      const block: StatusCardBlock = {
+      // Brief 069 AC8: StatusCard + conditional Alert for correction patterns
+      const blocks: ContentBlock[] = [];
+      const statusCard: StatusCardBlock = {
         type: "status_card",
         entityType: "process_run",
         entityId: (input.runId as string) ?? "",
@@ -448,14 +608,26 @@ async function toolResultToContentBlocks(
             : "rejected",
         details: {
           Action: toolName.replace("_review", ""),
-          Result: result.output.slice(0, 100),
         },
       };
-      return [block];
+      blocks.push(statusCard);
+
+      // Conditional Alert: only when output contains correction pattern or substantive rationale
+      const patternMatch = result.output.match(/Pattern detected: "([^"]+)" — (\d+) times/);
+      if (patternMatch) {
+        const alert: AlertBlock = {
+          type: "alert",
+          severity: "info",
+          title: "Correction pattern detected",
+          content: `"${patternMatch[1]}" has occurred ${patternMatch[2]} times. This may indicate the process needs adjustment.`,
+        };
+        blocks.push(alert);
+      }
+
+      return blocks;
     }
 
-    case "create_work_item":
-    case "quick_capture": {
+    case "create_work_item": {
       try {
         const parsed = JSON.parse(result.output) as Record<string, unknown>;
         const block: StatusCardBlock = {
@@ -473,11 +645,104 @@ async function toolResultToContentBlocks(
       }
     }
 
+    case "quick_capture": {
+      // Brief 069 AC9: StatusCard + KnowledgeCitation if classified
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const blocks: ContentBlock[] = [];
+
+        const statusCard: StatusCardBlock = {
+          type: "status_card",
+          entityType: "work_item",
+          entityId: (parsed.id as string) ?? "",
+          title: (parsed.message as string) ?? "Captured",
+          status: "captured",
+          details: {},
+        };
+        if (parsed.type) statusCard.details["Classified as"] = String(parsed.type);
+        blocks.push(statusCard);
+
+        // KnowledgeCitation if the capture was classified with a known type
+        if (parsed.type && parsed.type !== "note") {
+          const citation: KnowledgeCitationBlock = {
+            type: "knowledge_citation",
+            label: "Classification",
+            sources: [{ name: `Classified as ${parsed.type}`, type: "intake-classifier" }],
+          };
+          blocks.push(citation);
+        }
+
+        return blocks;
+      } catch {
+        return [];
+      }
+    }
+
     case "get_briefing": {
-      // Briefing is narrative text for the Self to weave.
-      // Also emit a knowledge synthesis card if the user model has entries
-      // — this gives the user visual confirmation of what Ditto knows.
+      // Brief 069 AC3: KnowledgeSynthesis (existing) + Checklist (focus items) + Metric (stats)
+      // Use structured metadata when available, fall back to text parsing
       const blocks: ContentBlock[] = [];
+      const meta = result.metadata as {
+        stats?: { completedSinceLastVisit: number; activeRuns: number; pendingReviews: number; pendingHumanInput: number; totalExceptions: number };
+        focus?: Array<{ priority: string; label: string; reason: string }>;
+      } | undefined;
+
+      // MetricBlock from stats
+      if (meta?.stats) {
+        const s = meta.stats;
+        const metrics: MetricBlock["metrics"] = [];
+        if (s.pendingReviews > 0) metrics.push({ value: String(s.pendingReviews), label: "Reviews pending" });
+        if (s.pendingHumanInput > 0) metrics.push({ value: String(s.pendingHumanInput), label: "Waiting for input" });
+        if (s.totalExceptions > 0) metrics.push({ value: String(s.totalExceptions), label: "Exceptions" });
+        if (s.completedSinceLastVisit > 0) metrics.push({ value: String(s.completedSinceLastVisit), label: "Completed" });
+        if (metrics.length > 0) {
+          blocks.push({ type: "metric", metrics } as MetricBlock);
+        }
+      } else {
+        // Fallback: parse stats from text
+        const statsMatch = result.output.match(
+          /Since your last visit: (\d+) completed, (\d+) running, (\d+) reviews pending, (\d+) waiting for your input, (\d+) exceptions/,
+        );
+        if (statsMatch) {
+          const metrics: MetricBlock["metrics"] = [];
+          const pending = parseInt(statsMatch[3], 10);
+          const waiting = parseInt(statsMatch[4], 10);
+          const exceptions = parseInt(statsMatch[5], 10);
+          if (pending > 0) metrics.push({ value: String(pending), label: "Reviews pending" });
+          if (waiting > 0) metrics.push({ value: String(waiting), label: "Waiting for input" });
+          if (exceptions > 0) metrics.push({ value: String(exceptions), label: "Exceptions" });
+          const completed = parseInt(statsMatch[1], 10);
+          if (completed > 0) metrics.push({ value: String(completed), label: "Completed" });
+          if (metrics.length > 0) {
+            blocks.push({ type: "metric", metrics } as MetricBlock);
+          }
+        }
+      }
+
+      // ChecklistBlock from focus items
+      if (meta?.focus && meta.focus.length > 0) {
+        const items: ChecklistBlock["items"] = meta.focus.map((f) => ({
+          label: `${f.label}: ${f.reason}`,
+          status: f.priority === "critical" ? "warning" as const : "pending" as const,
+        }));
+        blocks.push({ type: "checklist", title: "Focus", items } as ChecklistBlock);
+      } else {
+        // Fallback: parse FOCUS items from text
+        const focusLines = result.output.match(/^\s+\[(critical|high|normal)\]\s+(.+)$/gm);
+        if (focusLines && focusLines.length > 0) {
+          const items: ChecklistBlock["items"] = focusLines.map((line) => {
+            const match = line.match(/\[(critical|high|normal)\]\s+(.+)/);
+            if (!match) return { label: line.trim(), status: "pending" as const };
+            return {
+              label: match[2].trim(),
+              status: match[1] === "critical" ? "warning" as const : "pending" as const,
+            };
+          });
+          blocks.push({ type: "checklist", title: "Focus", items } as ChecklistBlock);
+        }
+      }
+
+      // Existing: KnowledgeSynthesis from user model
       try {
         const userId = (input.userId as string) ?? "default";
         const model = await getUserModel(userId);
@@ -536,27 +801,59 @@ async function toolResultToContentBlocks(
     }
 
     case "detect_risks": {
-      try {
-        const parsed = JSON.parse(result.output) as Record<string, unknown>;
-        const signals = parsed.signals as Array<Record<string, unknown>> | undefined;
-        if (signals && signals.length > 0) {
-          const block: DataBlock = {
-            type: "data",
-            format: "table",
-            title: "Operational Signals",
-            headers: ["Type", "Description", "Severity"],
-            data: signals.map((s) => ({
-              Type: String(s.type ?? ""),
-              Description: String(s.description ?? ""),
-              Severity: String(s.severity ?? ""),
-            })),
+      // Brief 069 AC2: Alert per risk (max 3) + Suggestion if >3 risks
+      // Use structured metadata when available, fall back to text parsing
+      const blocks: ContentBlock[] = [];
+      const meta = result.metadata as { risks?: Array<{ severity: string; type: string; entityLabel: string; detail: string }> } | undefined;
+      const risks = meta?.risks;
+
+      if (risks && risks.length > 0) {
+        const capped = risks.slice(0, 3);
+        for (const risk of capped) {
+          const alert: AlertBlock = {
+            type: "alert",
+            severity: risk.severity === "error" ? "error" : "warning",
+            title: risk.entityLabel,
+            content: risk.detail,
           };
-          return [block];
+          blocks.push(alert);
         }
-      } catch {
-        // Not parseable
+        if (risks.length > 3) {
+          const suggestion: SuggestionBlock = {
+            type: "suggestion",
+            content: `${risks.length - 3} additional signal(s) detected. Consider reviewing all operational signals.`,
+            reasoning: `Showing top 3 of ${risks.length} signals to avoid visual noise.`,
+          };
+          blocks.push(suggestion);
+        }
+      } else {
+        // Fallback: parse text output
+        const riskLines = result.output.match(/^\[(\w+)\]\s+(\w[\w_-]*?):\s+(.+?)\s+—\s+(.+)$/gm);
+        if (riskLines && riskLines.length > 0) {
+          const capped = riskLines.slice(0, 3);
+          for (const line of capped) {
+            const match = line.match(/^\[(\w+)\]\s+(\w[\w_-]*?):\s+(.+?)\s+—\s+(.+)$/);
+            if (match) {
+              const alert: AlertBlock = {
+                type: "alert",
+                severity: match[1].toLowerCase() === "error" ? "error" : "warning",
+                title: match[3],
+                content: match[4],
+              };
+              blocks.push(alert);
+            }
+          }
+          if (riskLines.length > 3) {
+            const suggestion: SuggestionBlock = {
+              type: "suggestion",
+              content: `${riskLines.length - 3} additional signal(s) detected. Consider reviewing all operational signals.`,
+              reasoning: `Showing top 3 of ${riskLines.length} signals to avoid visual noise.`,
+            };
+            blocks.push(suggestion);
+          }
+        }
       }
-      return [];
+      return blocks;
     }
 
     case "plan_with_role": {
@@ -686,6 +983,176 @@ async function toolResultToContentBlocks(
       };
       return [textBlock, ...commandBlocks];
     }
+
+    case "suggest_next": {
+      // Brief 069 AC4: SuggestionBlock per suggestion
+      // Use structured metadata when available, fall back to text parsing
+      const blocks: ContentBlock[] = [];
+      const meta = result.metadata as { suggestions?: Array<{ type: string; content: string }> } | undefined;
+      const ts = Date.now();
+
+      if (meta?.suggestions && meta.suggestions.length > 0) {
+        for (let i = 0; i < meta.suggestions.length; i++) {
+          const s = meta.suggestions[i];
+          const suggestion: SuggestionBlock = {
+            type: "suggestion",
+            content: s.content,
+            reasoning: s.type,
+            actions: [
+              { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary" },
+              { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary" },
+            ],
+          };
+          blocks.push(suggestion);
+        }
+      } else {
+        // Fallback: parse text output
+        const suggestionLines = result.output.match(/^(\w[\w ]*?):\s+(.+)$/gm);
+        if (suggestionLines) {
+          const content = suggestionLines.filter((l) => !l.startsWith("Suggestions ("));
+          const capped = content.slice(0, 2);
+          for (let i = 0; i < capped.length; i++) {
+            const match = capped[i].match(/^(\w[\w ]*?):\s+(.+)$/);
+            if (match) {
+              const suggestion: SuggestionBlock = {
+                type: "suggestion",
+                content: match[2].trim(),
+                reasoning: match[1].trim(),
+                actions: [
+                  { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary" },
+                  { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary" },
+                ],
+              };
+              blocks.push(suggestion);
+            }
+          }
+        }
+      }
+      return blocks;
+    }
+
+    case "adjust_trust": {
+      // Brief 069 AC5: Record + Checklist + StatusCard
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const blocks: ContentBlock[] = [];
+
+        if (parsed.action === "proposal") {
+          // Record: before/after trust tier with evidence fields
+          const fields: RecordBlock["fields"] = [];
+          if (parsed.currentTier) fields.push({ label: "Current tier", value: String(parsed.currentTier).replace(/_/g, " ") });
+          if (parsed.proposedTier) fields.push({ label: "Proposed tier", value: String(parsed.proposedTier).replace(/_/g, " ") });
+          if (parsed.reason) fields.push({ label: "Reason", value: String(parsed.reason) });
+
+          const trust = parsed.trust as Record<string, unknown> | undefined;
+          if (trust) {
+            if (typeof trust.approvalRate === "number")
+              fields.push({ label: "Approval rate", value: `${Math.round(trust.approvalRate * 100)}%` });
+            if (typeof trust.runsInWindow === "number")
+              fields.push({ label: "Runs observed", value: String(trust.runsInWindow) });
+            if (trust.trend) fields.push({ label: "Trend", value: String(trust.trend) });
+          }
+
+          const record: RecordBlock = {
+            type: "record",
+            title: (parsed.processName as string) ?? "Trust Adjustment",
+            subtitle: "Trust tier change proposal",
+            status: { label: "Pending confirmation", variant: "caution" },
+            fields,
+          };
+          blocks.push(record);
+
+          // Checklist: safety net criteria
+          const checklist: ChecklistBlock = {
+            type: "checklist",
+            title: "Safety Net",
+            items: [
+              { label: "Auto-pause on low confidence", status: "done" },
+              { label: "Revert on rejection", status: "done" },
+              { label: "Weekly digest of autonomous decisions", status: "done" },
+              { label: "Adjustable anytime from process detail", status: "done" },
+            ],
+          };
+          blocks.push(checklist);
+        }
+
+        // StatusCard: confirms the action (both proposal and applied)
+        const statusCard: StatusCardBlock = {
+          type: "status_card",
+          entityType: "process_run",
+          entityId: (input.processSlug as string) ?? "",
+          title: (parsed.processName as string) ?? "Trust Adjustment",
+          status: parsed.action === "applied" ? "applied" : "proposed",
+          details: {},
+        };
+        if (parsed.fromTier) statusCard.details["From"] = String(parsed.fromTier).replace(/_/g, " ");
+        if (parsed.toTier) statusCard.details["To"] = String(parsed.toTier).replace(/_/g, " ");
+        if (parsed.currentTier) statusCard.details["Current"] = String(parsed.currentTier).replace(/_/g, " ");
+        if (parsed.proposedTier) statusCard.details["Proposed"] = String(parsed.proposedTier).replace(/_/g, " ");
+        blocks.push(statusCard);
+
+        return blocks;
+      } catch {
+        return [];
+      }
+    }
+
+    case "adapt_process": {
+      // Brief 069 AC6: ProcessProposalBlock showing adapted steps
+      // Output is text, but input.adaptedDefinition has the steps
+      const blocks: ContentBlock[] = [];
+      const adaptedDef = input.adaptedDefinition as Record<string, unknown> | undefined;
+      if (adaptedDef && Array.isArray(adaptedDef.steps)) {
+        const steps = adaptedDef.steps as Array<Record<string, unknown>>;
+        const block: ProcessProposalBlock = {
+          type: "process_proposal",
+          name: "Adapted Process",
+          description: (input.reasoning as string) ?? undefined,
+          steps: steps.map((s) => ({
+            name: (s.name as string) ?? (s.id as string) ?? "Step",
+            description: s.description as string | undefined,
+            status: "pending" as const,
+          })),
+        };
+        blocks.push(block);
+      }
+      return blocks;
+    }
+
+    case "connect_service": {
+      // Brief 069 AC7: StatusCard showing connection status
+      try {
+        const parsed = JSON.parse(result.output) as Record<string, unknown>;
+        const action = parsed.action as string;
+        const block: StatusCardBlock = {
+          type: "status_card",
+          entityType: "work_item",
+          entityId: (parsed.service as string) ?? (input.service as string) ?? "",
+          title: action === "available_services"
+            ? "Available Services"
+            : (parsed.service as string) ?? "Service",
+          status: action === "verification"
+            ? (parsed.connected ? "connected" : "not connected")
+            : action === "setup_guide"
+              ? (parsed.isConnected ? "connected" : "setup required")
+              : "available",
+          details: {},
+        };
+        if (parsed.message) block.details["Info"] = String(parsed.message);
+        if (parsed.authType) block.details["Auth"] = String(parsed.authType);
+        return [block];
+      } catch {
+        return [];
+      }
+    }
+
+    case "consult_role":
+      // Brief 069 AC10: Consultant perspective is narrative only — no blocks
+      return [];
+
+    case "assess_confidence":
+      // Brief 069 AC11: Stays as metadata per Insight-129, no blocks
+      return [];
 
     default:
       return [];

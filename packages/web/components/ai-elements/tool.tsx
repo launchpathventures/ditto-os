@@ -17,6 +17,7 @@ import { BlockList } from "@/components/blocks/block-registry";
 import type { ContentBlock } from "@/lib/engine";
 import { CodeBlock } from "./code-block";
 import { getToolDisplayLabel } from "./tool-display-names";
+import { Shimmer } from "./shimmer";
 
 // --- Context ---
 
@@ -232,71 +233,112 @@ export function Tool({ toolCallId: _toolCallId, toolName, state, input, output, 
   // Human-readable label based on status
   const actionLabel = status === "running" ? displayLabel.running : displayLabel.complete;
 
-  // Extract result count hint from output if available
+  // Extract contextual hint from output (file path, search query, etc.)
   const resultHint = (() => {
     if (status !== "complete" || !output) return "";
     const obj = typeof output === "string" ? null : (output as Record<string, unknown>);
     if (!obj) return "";
+    // AC8 (065): Result summary with · separator
+    if (typeof obj.result === "string" && obj.result.length > 0) {
+      const summary = obj.result.length > 60 ? obj.result.slice(0, 57) + "..." : obj.result;
+      return ` · ${summary}`;
+    }
     // Common patterns: results array, items array, count field
     const arr = obj.results ?? obj.items ?? obj.data;
-    if (Array.isArray(arr)) return ` — ${arr.length} result${arr.length === 1 ? "" : "s"}`;
+    if (Array.isArray(arr)) return ` · ${arr.length} result${arr.length === 1 ? "" : "s"}`;
     return "";
   })();
 
-  const hasExpandableContent = !!(input && !isActive) || !!(output && !hasBlocks);
+  // Only expandable if there's meaningful input or output to show
+  const hasInput = input && !isActive && Object.keys(input).length > 0;
+  const hasOutput = output && !hasBlocks && (() => {
+    if (typeof output === "string") return output.length > 0;
+    const obj = output as Record<string, unknown>;
+    const result = obj?.result;
+    return typeof result === "string" && result.length > 0;
+  })();
+  const hasExpandableContent = !!hasInput || !!hasOutput;
 
-  // Error state — negative border accent, visible error
+  // AC10 (065): Error — compact single-line with ✕ icon
   if (status === "error") {
+    if (!hasExpandableContent) {
+      return (
+        <div className={cn("space-y-1", className)}>
+          <div className="flex items-center gap-2 text-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-negative flex-shrink-0">
+              <path d="m18 6-12 12" /><path d="m6 6 12 12" />
+            </svg>
+            <span className="text-text-muted">{actionLabel}</span>
+            {errorText && <span className="text-negative">· {errorText}</span>}
+          </div>
+        </div>
+      );
+    }
+    // AC11 (065): Expandable error with chevron
     return (
-      <div className={cn("my-1 border-l-2 border-negative pl-3 flex items-center gap-2 text-sm", className)}>
-        <span className="text-text-primary">{actionLabel}</span>
-        <StatusBadge status="error" />
-        {errorText && <span className="text-negative text-sm">{errorText}</span>}
-      </div>
+      <ToolRoot status={status} className={cn("space-y-1", className)}>
+        <Collapsible.Trigger className="flex items-center gap-2 text-sm w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-vivid)] focus-visible:ring-offset-2 rounded">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-negative flex-shrink-0">
+            <path d="m18 6-12 12" /><path d="m6 6 12 12" />
+          </svg>
+          <span className="text-text-muted flex-1 text-left">{actionLabel}{errorText ? ` · ${errorText}` : ""}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted flex-shrink-0 transition-transform duration-200 ease-in-out [[data-state=open]>&]:rotate-180">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </Collapsible.Trigger>
+        <ToolContent>
+          {hasInput && <ToolInput data={input!} />}
+          {hasOutput && (
+            <ToolOutput data={typeof output === "string" ? output : (output as Record<string, unknown>)} />
+          )}
+        </ToolContent>
+      </ToolRoot>
     );
   }
 
-  // Running state — pulse dots + label, no chevron
+  // AC9 (065): Running — compact single-line with spinning ↻ + shimmer
   if (status === "running") {
     return (
-      <div className={cn("my-1 flex items-center gap-2 text-sm", className)}>
-        <span className="flex gap-0.5" aria-hidden="true">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="w-1 h-1 rounded-full bg-info"
-              style={{ animation: `pulse-dot 1s ease-in-out ${i * 150}ms infinite` }}
-            />
-          ))}
-        </span>
-        <span className="text-text-secondary">{actionLabel}</span>
+      <div className={cn("space-y-1", className)}>
+        <div className="flex items-center gap-2 text-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted flex-shrink-0 animate-spin" style={{ animationDuration: "1000ms" }}>
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+          <Shimmer><span className="text-text-secondary">{actionLabel}</span></Shimmer>
+        </div>
       </div>
     );
   }
 
-  // Complete state — muted, checkmark, past-tense label
+  // AC8 (065): Complete — compact single-line: ✓ {past-tense label} · {result summary}
   if (!hasExpandableContent) {
     return (
-      <div className={cn("my-1 flex items-center gap-2 text-sm text-text-muted", className)}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-positive flex-shrink-0">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-        <span>{actionLabel}{resultHint}</span>
+      <div className={cn("space-y-1", className)}>
+        <div className="flex items-center gap-2 text-sm text-text-muted">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-positive flex-shrink-0">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+          <span>{actionLabel}{resultHint}</span>
+        </div>
       </div>
     );
   }
 
+  // AC11 (065): Complete with expandable I/O — chevron on right
   return (
-    <ToolRoot status={status} className={className}>
-      <ToolHeader>
+    <ToolRoot status={status} className={cn("space-y-1", className)}>
+      <Collapsible.Trigger className="flex items-center gap-2 text-sm w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-vivid)] focus-visible:ring-offset-2 rounded">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-positive flex-shrink-0">
           <path d="M20 6 9 17l-5-5" />
         </svg>
-        <span className="text-text-muted">{actionLabel}{resultHint}</span>
-      </ToolHeader>
+        <span className="text-text-muted flex-1 text-left">{actionLabel}{resultHint}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted flex-shrink-0 transition-transform duration-200 ease-in-out [[data-state=open]>&]:rotate-180">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </Collapsible.Trigger>
       <ToolContent>
-        {input && !isActive && <ToolInput data={input} />}
-        {output && !hasBlocks && (
+        {hasInput && <ToolInput data={input!} />}
+        {hasOutput && (
           <ToolOutput data={typeof output === "string" ? output : (output as Record<string, unknown>)} />
         )}
       </ToolContent>

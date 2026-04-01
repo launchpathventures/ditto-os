@@ -24,8 +24,9 @@ import { DefaultChatTransport } from "ai";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Conversation as ConversationContainer } from "@/components/ai-elements/conversation";
 import { Message } from "@/components/ai-elements/message";
-import { PromptInput } from "@/components/ai-elements/prompt-input";
+import { PromptInput } from "@/components/self/prompt-input";
 import { Suggestions } from "@/components/ai-elements/suggestion";
+import { DotParticles } from "@/app/setup/dot-particles";
 import { TypingIndicator } from "./typing-indicator";
 import { MaskedCredentialInput } from "./masked-input";
 import { isProcessSaved } from "@/lib/transition-map";
@@ -44,10 +45,12 @@ interface CredentialRequest {
   placeholder: string;
 }
 
+// AC8 (066): Static suggestion chip text for empty state
 const STARTER_SUGGESTIONS = [
-  "What can you help me with?",
-  "I have a task I need to organize",
-  "Show me how processes work",
+  "What needs my attention?",
+  "Start a new process",
+  "Show me my briefing",
+  "Review something",
 ];
 
 /** Queued message awaiting dispatch after stream completes */
@@ -194,12 +197,12 @@ export function Conversation({ userId = "default" }: ConversationProps) {
     setMessageQueue((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
-  // AC7: Suggestion chip click sends message
+  // AC10 (066): Suggestion chip click pre-fills input (not auto-send)
   const handleSuggestion = useCallback(
     (text: string) => {
-      sendMessage({ role: "user", parts: [{ type: "text", text }] });
+      setInput(text);
     },
-    [sendMessage],
+    [],
   );
 
   // Handle actions from content blocks (knowledge synthesis, process proposal, etc.)
@@ -262,21 +265,31 @@ export function Conversation({ userId = "default" }: ConversationProps) {
     <div className="flex flex-col h-full">
       {/* AC1: Message list with use-stick-to-bottom auto-scroll */}
       <ConversationContainer>
+        {/* AC8-12 (066): Empty state redesign — Insight-121 compliant */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">
-            <div className="w-3 h-3 rounded-full bg-accent mb-4" />
-            <h1 className="text-xl font-semibold text-text-primary mb-2">
-              Hi, I&apos;m Ditto
+            {/* AC11: Staggered fade-in — DotParticles at 0ms */}
+            <div className="animate-in fade-in-0 duration-300 mb-4">
+              <DotParticles size={48} />
+            </div>
+            {/* AC11: Heading at 100ms delay */}
+            <h1
+              className="text-xl font-semibold text-text-primary mb-2 animate-in fade-in-0 duration-300"
+              style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
+            >
+              What would you like to work on?
             </h1>
-            <p className="text-text-secondary text-center max-w-md mb-8">
-              I&apos;m here to help you get work done. Tell me what you&apos;re
-              working on, and I&apos;ll help you figure out the best way forward.
-            </p>
-            {/* AC7: Suggestion chips */}
-            <Suggestions
-              suggestions={STARTER_SUGGESTIONS}
-              onSelect={handleSuggestion}
-            />
+            {/* AC9, AC11: Suggestion grid at 200ms delay */}
+            <div
+              className="animate-in fade-in-0 duration-300 mt-8"
+              style={{ animationDelay: "200ms", animationFillMode: "backwards" }}
+            >
+              <Suggestions
+                suggestions={STARTER_SUGGESTIONS}
+                onSelect={handleSuggestion}
+                variant="grid"
+              />
+            </div>
           </div>
         )}
 
@@ -371,6 +384,7 @@ export function Conversation({ userId = "default" }: ConversationProps) {
         onStop={stop}
         isLoading={isLoading}
         isStreaming={isStreaming}
+        hasMessages={messages.length > 0}
       />
     </div>
   );

@@ -86,6 +86,10 @@ export async function handleGetBriefing(
       toolName: "get_briefing",
       success: true,
       output: sections.join("\n"),
+      metadata: {
+        stats: briefing.stats,
+        focus: briefing.focus,
+      },
     };
   } catch (err) {
     return {

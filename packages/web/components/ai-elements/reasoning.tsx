@@ -10,7 +10,7 @@
  * Provenance: vercel/ai-elements reasoning.tsx, adapted for Ditto design tokens.
  */
 
-import { createContext, useContext, useState, useRef, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useState, useRef, useEffect, useMemo, forwardRef, type ReactNode } from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import { Shimmer } from "./shimmer";
@@ -134,28 +134,31 @@ function ReasoningTrigger({ children, className }: { children?: ReactNode; class
   );
 }
 
-function ReasoningContent({ children, className }: { children?: ReactNode; className?: string }) {
-  return (
-    <Collapsible.Content
-      className={cn(
-        "overflow-hidden",
-        "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1",
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
-        "duration-200 ease-in-out",
-      )}
-    >
-      <div
+const ReasoningContent = forwardRef<HTMLDivElement, { children?: ReactNode; className?: string }>(
+  function ReasoningContent({ children, className }, ref) {
+    return (
+      <Collapsible.Content
         className={cn(
-          "mt-2 border-l-2 border-[var(--color-vivid-deep)] pl-[var(--spacing-4)]",
-          "text-sm font-mono text-text-secondary whitespace-pre-wrap max-h-[300px] overflow-y-auto",
-          className,
+          "overflow-hidden",
+          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+          "duration-200 ease-in-out",
         )}
       >
-        {children}
-      </div>
-    </Collapsible.Content>
-  );
-}
+        <div
+          ref={ref}
+          className={cn(
+            "mt-2 border-l-2 border-[var(--color-vivid-deep)] pl-[var(--spacing-4)]",
+            "text-sm font-mono text-text-secondary whitespace-pre-wrap max-h-[200px] overflow-y-auto",
+            className,
+          )}
+        >
+          {children}
+        </div>
+      </Collapsible.Content>
+    );
+  },
+);
 
 // --- Backward-Compatible Default Export ---
 
@@ -177,27 +180,43 @@ const AUTO_CLOSE_DELAY = 3000;
  */
 function extractSummary(text: string): string | undefined {
   if (!text.trim()) return undefined;
-  // Split on sentence-ending punctuation, filter empty
+  // AC14 (065): Extract last ~80 chars of reasoning for collapsed summary
   const sentences = text.split(/(?<=[.!?])\s+/).filter((s) => s.trim());
   const last = sentences[sentences.length - 1]?.trim();
   if (!last) return undefined;
-  if (last.length <= 60) return last;
-  return last.slice(0, 57) + "...";
+  if (last.length <= 80) return last;
+  return last.slice(0, 77) + "...";
 }
 
 export function Reasoning({ text, isStreaming, className }: ReasoningProps) {
   const [open, setOpen] = useState(!!isStreaming);
   const [hasAutoClosed, setHasAutoClosed] = useState(false);
+  const userClosedRef = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const summary = useMemo(() => extractSummary(text), [text]);
 
-  // Auto-open when streaming starts
+  // Handle user toggle — respect manual close during streaming
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && isStreaming) {
+      userClosedRef.current = true;
+    }
+    setOpen(newOpen);
+  };
+
+  // Auto-open when streaming starts (unless user manually closed)
   useEffect(() => {
-    if (isStreaming && !open) {
+    if (isStreaming && !open && !userClosedRef.current) {
       setOpen(true);
     }
   }, [isStreaming, open]);
+
+  // Reset user-closed tracking when streaming ends
+  useEffect(() => {
+    if (!isStreaming) {
+      userClosedRef.current = false;
+    }
+  }, [isStreaming]);
 
   // Auto-close after streaming ends
   useEffect(() => {
@@ -220,14 +239,17 @@ export function Reasoning({ text, isStreaming, className }: ReasoningProps) {
   return (
     <ReasoningRoot
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       isThinking={!!isStreaming}
       summary={summary}
       className={className}
     >
       <ReasoningTrigger />
-      <ReasoningContent>
-        <div ref={contentRef}>{text}</div>
+      <ReasoningContent ref={contentRef}>
+        {/* AC15 (065): Streaming cursor on reasoning text while thinking */}
+        <span className={isStreaming ? "streaming-cursor" : undefined}>
+          {text}
+        </span>
       </ReasoningContent>
     </ReasoningRoot>
   );
