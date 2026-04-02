@@ -64,6 +64,7 @@
 
 - **Brief 062 — Conversation Experience Activation (2026-03-31, approved, ready to build)** — Activates conversation chrome using Brief 061's composable subcomponents. 7 conversation chrome changes + message queueing. 15 AC. See `docs/briefs/062-conversation-experience-activation.md`.
 - **Brief 070 — Activity Progressive Disclosure (2026-04-01, draft)** — Three-level display for activity traces. 12 AC. Supersedes Brief 067.
+- **Brief 075 — Proactive Operating Layer (2026-04-02, draft)** — Parent brief designing harness support for EA-class agent workflows: schedule triggers, proactive monitor definitions, integration executor (MVP), bidirectional shared artifacts, structured personalization capture. 5 sub-briefs (076-080). Motivated by clawchief pattern analysis (Insight-141). Reviewed: APPROVE WITH NOTES — P1 addressed (heartbeat naming → proactive monitor). See `docs/briefs/075-proactive-operating-layer.md`.
 - **Brief 049 — Automaintainer Meta-Process (2026-03-28, draft, parked)** — Phase 11+ work.
 
 ## Recently Completed
