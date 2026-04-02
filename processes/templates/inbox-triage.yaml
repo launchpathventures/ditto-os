@@ -1,0 +1,82 @@
+# Ditto — Template Process: Inbox Triage
+#
+# Searches recent emails, classifies their urgency, and produces
+# a summary of important messages needing attention.
+# This is a template — users customise the trigger (e.g. schedule)
+# and the search query to match their workflow.
+#
+# Provenance: Brief 078 (Google Workspace integration activation)
+
+name: Inbox Triage
+id: inbox-triage
+version: 1
+status: active
+template: true
+
+description: >
+  Search recent emails, classify urgency, and summarize the important
+  ones. Start with this template and customise the search query and
+  schedule to fit your workflow.
+
+trigger:
+  type: manual
+  description: >
+    Template trigger — replace with a schedule (e.g. every morning at 8am)
+    once you've tuned the query and urgency rules to your needs.
+
+inputs:
+  - name: query
+    type: text
+    source: user
+    required: false
+    default: "is:unread newer_than:1d"
+    description: Gmail search query for which messages to triage
+
+steps:
+  - id: search-recent
+    name: Search Recent Emails
+    executor: integration
+    description: >
+      Fetch recent messages matching the query from Gmail.
+    config:
+      service: google-workspace
+      command: 'gws gmail messages list --query "{query}" --format json'
+    inputs:
+      - query
+    outputs:
+      - messages
+
+  - id: classify-urgency
+    name: Classify Urgency
+    executor: ai-agent
+    description: >
+      Review each message and classify urgency as high, medium, or low
+      based on sender importance, subject keywords, and time sensitivity.
+      Filter to only high and medium urgency items.
+    config:
+      model_hint: fast
+    tools:
+      - google-workspace.read_message
+    inputs:
+      - messages
+    outputs:
+      - classified-messages
+
+  - id: summarize
+    name: Summarize Important Messages
+    executor: ai-agent
+    description: >
+      Produce a concise summary of the high and medium urgency messages.
+      For each, include: sender, subject, one-line summary, and
+      suggested action (reply, schedule meeting, delegate, etc.).
+    config:
+      model_hint: capable
+    inputs:
+      - classified-messages
+    outputs:
+      - triage-summary
+
+outputs:
+  - name: triage-summary
+    type: text
+    description: Summary of important emails needing attention, with suggested actions

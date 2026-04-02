@@ -1,0 +1,165 @@
+# Google Workspace Integration
+#
+# Provides access to Gmail, Google Calendar, and Google Sheets
+# via the gws CLI. CLI is the preferred protocol — cheapest
+# and most reliable for services with mature CLIs.
+#
+# Provenance: ADR-005 (CLI-first cost optimisation), Brief 078
+
+service: google-workspace
+description: Google Workspace — Gmail, Calendar, and Sheets
+interfaces:
+  cli:
+    command: gws
+    auth: cli_login    # Uses `gws auth login` or GOOGLE_APPLICATION_CREDENTIALS env var
+    env_vars:
+      - GOOGLE_APPLICATION_CREDENTIALS   # Optional — gws CLI falls back to interactive auth
+preferred: cli
+connection:
+  auth_type: cli_login
+  provider_name: "Google Workspace"
+  setup_url: https://console.cloud.google.com/apis/credentials
+  setup_instructions: "Run `gws auth login` to authenticate interactively, or set GOOGLE_APPLICATION_CREDENTIALS to a service account key file path."
+
+tools:
+  # ── Gmail ──────────────────────────────────────────────
+
+  - name: search_messages
+    description: Search Gmail messages by query. Returns JSON with message IDs, subjects, senders, and dates.
+    parameters:
+      query:
+        type: string
+        required: true
+        description: "Gmail search query (e.g. 'is:unread', 'from:boss@example.com')"
+    execute:
+      protocol: cli
+      command_template: 'gws gmail messages list --query "{query}" --format json'
+
+  - name: read_message
+    description: Read a specific Gmail message by ID. Returns JSON with full message content including headers, body, and attachments list.
+    parameters:
+      messageId:
+        type: string
+        required: true
+        description: "Gmail message ID"
+    execute:
+      protocol: cli
+      command_template: "gws gmail messages get {messageId} --format json"
+
+  - name: send_message
+    description: Send an email via Gmail.
+    parameters:
+      to:
+        type: string
+        required: true
+        description: "Recipient email address"
+      subject:
+        type: string
+        required: true
+        description: "Email subject line"
+      body:
+        type: string
+        required: true
+        description: "Email body text"
+    execute:
+      protocol: cli
+      command_template: 'gws gmail messages send --to "{to}" --subject "{subject}" --body "{body}"'
+
+  # ── Calendar ───────────────────────────────────────────
+
+  - name: list_events
+    description: List calendar events within a time range. Returns JSON with event summaries, start/end times, and attendees.
+    parameters:
+      calendar:
+        type: string
+        required: true
+        description: "Calendar ID or 'primary'"
+      timeMin:
+        type: string
+        required: true
+        description: "Start of time range (RFC3339, e.g. '2024-01-01T00:00:00Z')"
+      timeMax:
+        type: string
+        required: true
+        description: "End of time range (RFC3339, e.g. '2024-01-02T00:00:00Z')"
+    execute:
+      protocol: cli
+      command_template: 'gws calendar events list --calendar "{calendar}" --time-min "{timeMin}" --time-max "{timeMax}" --format json'
+
+  - name: create_event
+    description: Create a new calendar event.
+    parameters:
+      calendar:
+        type: string
+        required: true
+        description: "Calendar ID or 'primary'"
+      summary:
+        type: string
+        required: true
+        description: "Event title/summary"
+      start:
+        type: string
+        required: true
+        description: "Event start time (RFC3339)"
+      end:
+        type: string
+        required: true
+        description: "Event end time (RFC3339)"
+    execute:
+      protocol: cli
+      command_template: 'gws calendar events create --calendar "{calendar}" --summary "{summary}" --start "{start}" --end "{end}"'
+
+  - name: check_availability
+    description: Check free/busy availability for a calendar within a time range.
+    parameters:
+      calendar:
+        type: string
+        required: true
+        description: "Calendar ID or 'primary'"
+      timeMin:
+        type: string
+        required: true
+        description: "Start of time range (RFC3339)"
+      timeMax:
+        type: string
+        required: true
+        description: "End of time range (RFC3339)"
+    execute:
+      protocol: cli
+      command_template: 'gws calendar freebusy --calendar "{calendar}" --time-min "{timeMin}" --time-max "{timeMax}"'
+
+  # ── Sheets ─────────────────────────────────────────────
+
+  - name: read_range
+    description: Read values from a Google Sheets range. Returns JSON with cell values.
+    parameters:
+      spreadsheetId:
+        type: string
+        required: true
+        description: "Google Sheets spreadsheet ID"
+      range:
+        type: string
+        required: true
+        description: "A1 notation range (e.g. 'Sheet1!A1:D10')"
+    execute:
+      protocol: cli
+      command_template: 'gws sheets values get --spreadsheet "{spreadsheetId}" --range "{range}" --format json'
+
+  - name: write_range
+    description: Write values to a Google Sheets range.
+    parameters:
+      spreadsheetId:
+        type: string
+        required: true
+        description: "Google Sheets spreadsheet ID"
+      range:
+        type: string
+        required: true
+        description: "A1 notation range (e.g. 'Sheet1!A1:D10')"
+      values:
+        type: string
+        required: true
+        description: "Values to write (JSON array of arrays)"
+    execute:
+      protocol: cli
+      command_template: 'gws sheets values update --spreadsheet "{spreadsheetId}" --range "{range}" --values "{values}"'
