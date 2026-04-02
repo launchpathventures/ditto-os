@@ -835,6 +835,34 @@ export const interactionEvents = sqliteTable("interaction_events", {
  * Soft-deleted when file removed (status → "deleted").
  * Provenance: brief-index.ts file parsing (Brief 055), Brief 056.
  */
+// ============================================================
+// Schedules — cron-based process triggers (Brief 076)
+// ============================================================
+
+/**
+ * Schedule definitions — cron-based triggers for automatic process runs.
+ * Provenance: Brief 076, node-cron for scheduling.
+ */
+export const schedules = sqliteTable("schedules", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processId: text("process_id")
+    .references(() => processes.id)
+    .notNull(),
+  cronExpression: text("cron_expression").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+  nextRunAt: integer("next_run_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Briefs — lifecycle sync from files to DB (Brief 056)
+// ============================================================
+
 export const briefs = sqliteTable("briefs", {
   number: integer("number").primaryKey(),
   name: text("name").notNull(),

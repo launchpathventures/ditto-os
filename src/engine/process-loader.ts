@@ -12,6 +12,7 @@ import { db, schema } from "../db";
 import type { ProcessStatus, TrustTier, AgentCategory } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { getIntegration } from "./integration-registry";
+import cron from "node-cron";
 
 // ============================================================
 // Types
@@ -515,6 +516,9 @@ export async function syncProcessesToDb(
       await ensureSystemAgentRecord(def);
     }
   }
+
+  // Sync schedule triggers (Brief 076)
+  await syncSchedules(definitions);
 }
 
 /**
@@ -550,5 +554,105 @@ async function ensureSystemAgentRecord(def: ProcessDefinition): Promise<void> {
       systemRole,
     });
     console.log(`  System agent created: ${def.name}`);
+  }
+}
+
+/**
+ * Validate a cron expression string.
+ * Returns true if valid, false otherwise.
+ */
+export function validateCronExpression(expression: string): boolean {
+  return cron.validate(expression);
+}
+
+/**
+ * Sync schedule triggers from process definitions to the schedules table.
+ * - Creates schedule entries for processes with trigger.type === "schedule"
+ * - Updates cronExpression if changed
+ * - Removes schedule entries for processes that no longer have schedule triggers
+ *
+ * Provenance: Brief 076
+ */
+async function syncSchedules(definitions: ProcessDefinition[]): Promise<void> {
+  // Collect process slugs that have schedule triggers
+  const scheduledSlugs = new Set<string>();
+
+  for (const def of definitions) {
+    if (def.trigger.type === "schedule") {
+      if (!def.trigger.cron) {
+        console.error(`  Schedule error: process "${def.name}" has trigger.type=schedule but no trigger.cron`);
+        throw new Error(`Process "${def.name}" has schedule trigger but no cron expression`);
+      }
+
+      if (!validateCronExpression(def.trigger.cron)) {
+        console.error(`  Schedule error: process "${def.name}" has invalid cron expression "${def.trigger.cron}"`);
+        throw new Error(`Process "${def.name}" has invalid cron expression: ${def.trigger.cron}`);
+      }
+
+      scheduledSlugs.add(def.id);
+
+      // Find the process record
+      const [proc] = await db
+        .select({ id: schema.processes.id })
+        .from(schema.processes)
+        .where(eq(schema.processes.slug, def.id))
+        .limit(1);
+
+      if (!proc) continue;
+
+      // Upsert schedule
+      const [existingSchedule] = await db
+        .select()
+        .from(schema.schedules)
+        .where(eq(schema.schedules.processId, proc.id))
+        .limit(1);
+
+      if (existingSchedule) {
+        if (existingSchedule.cronExpression !== def.trigger.cron) {
+          await db
+            .update(schema.schedules)
+            .set({ cronExpression: def.trigger.cron })
+            .where(eq(schema.schedules.id, existingSchedule.id));
+          console.log(`  Schedule updated: ${def.name} (${def.trigger.cron})`);
+        }
+      } else {
+        await db.insert(schema.schedules).values({
+          processId: proc.id,
+          cronExpression: def.trigger.cron,
+          enabled: true,
+        });
+        console.log(`  Schedule created: ${def.name} (${def.trigger.cron})`);
+      }
+    }
+  }
+
+  // Remove schedules for processes that no longer have schedule triggers
+  // Get all processes from definitions
+  const allDefinedSlugs = new Set(definitions.map((d) => d.id));
+
+  const allSchedules = await db
+    .select({
+      id: schema.schedules.id,
+      processId: schema.schedules.processId,
+    })
+    .from(schema.schedules);
+
+  for (const schedule of allSchedules) {
+    // Find the process slug for this schedule
+    const [proc] = await db
+      .select({ slug: schema.processes.slug })
+      .from(schema.processes)
+      .where(eq(schema.processes.id, schedule.processId))
+      .limit(1);
+
+    if (!proc) continue;
+
+    // If this process is in our definitions but no longer has a schedule trigger, remove the schedule
+    if (allDefinedSlugs.has(proc.slug) && !scheduledSlugs.has(proc.slug)) {
+      await db
+        .delete(schema.schedules)
+        .where(eq(schema.schedules.id, schedule.id));
+      console.log(`  Schedule removed: ${proc.slug} (no longer has schedule trigger)`);
+    }
   }
 }
