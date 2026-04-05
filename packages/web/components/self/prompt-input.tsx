@@ -11,6 +11,7 @@
  */
 
 import { type FormEvent, type ChangeEvent, useCallback } from "react";
+import { SquareIcon, ArrowUpIcon } from "lucide-react";
 import {
   PromptInput as AIPromptInput,
   PromptInputTextarea,
@@ -37,6 +38,7 @@ interface DittoPromptInputProps {
   isStreaming?: boolean;
   placeholder?: string;
   hasMessages?: boolean;
+  queueCount?: number;
 }
 
 export function DittoPromptInput({
@@ -48,6 +50,7 @@ export function DittoPromptInput({
   isStreaming = false,
   placeholder,
   hasMessages = false,
+  queueCount = 0,
 }: DittoPromptInputProps) {
   const status: ChatStatus = isStreaming
     ? "streaming"
@@ -56,9 +59,10 @@ export function DittoPromptInput({
       : "ready";
 
   // AC5: Contextual placeholder based on state
+  // AC8 (062): "Add to conversation..." during any active response (submitted or streaming)
   const activePlaceholder =
     placeholder ??
-    (isStreaming
+    (isLoading
       ? "Add to conversation..."
       : hasMessages
         ? "Message Ditto..."
@@ -133,30 +137,79 @@ export function DittoPromptInput({
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
           </PromptInputTools>
-          {/* Dots → Send crossfade: dots are Ditto's presence, they become the action */}
-          <div className="relative size-8 flex items-center justify-center">
-            {/* DotParticles: visible when idle, fades out when send appears */}
-            <div
-              className={cn(
-                "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
-                showSubmit ? "opacity-0 pointer-events-none" : "opacity-100",
-              )}
-            >
-              <DotParticles size={24} />
-            </div>
-            {/* Send/Stop button: fades in when text is entered or generating */}
-            <PromptInputSubmit
-              status={status}
-              onStop={onStop}
-              data-testid="send-button"
-              className={cn(
-                "absolute inset-0 transition-all duration-200 ease-out",
-                "bg-vivid hover:bg-vivid/90 text-white",
-                showSubmit
-                  ? "opacity-100 scale-100"
-                  : "opacity-0 scale-75 pointer-events-none",
-              )}
-            />
+          <div className="flex items-center gap-1.5">
+            {/* AC062: Queue count badge */}
+            {queueCount > 0 && (
+              <span
+                className="text-xs text-text-muted tabular-nums"
+                data-testid="queue-count"
+                aria-label={`${queueCount} message${queueCount === 1 ? "" : "s"} queued`}
+              >
+                {queueCount} queued
+              </span>
+            )}
+
+            {/* AC062: Stop + Send side by side during streaming */}
+            {isGenerating ? (
+              <div className="flex items-center gap-1.5">
+                {/* Stop button */}
+                {onStop && (
+                  <button
+                    type="button"
+                    onClick={onStop}
+                    data-testid="stop-button"
+                    className={cn(
+                      "size-8 flex items-center justify-center rounded-full transition-all duration-200 ease-out",
+                      "border border-border text-text-secondary hover:text-text-primary hover:border-border-strong",
+                    )}
+                    aria-label="Stop"
+                  >
+                    <SquareIcon className="size-3.5" />
+                  </button>
+                )}
+                {/* Send (queue) button — visible when text entered during streaming */}
+                <button
+                  type="submit"
+                  data-testid="send-button"
+                  disabled={!hasText}
+                  className={cn(
+                    "size-8 flex items-center justify-center rounded-full transition-all duration-200 ease-out",
+                    "bg-vivid hover:bg-vivid/90 text-white",
+                    hasText
+                      ? "opacity-100 scale-100"
+                      : "opacity-0 scale-75 pointer-events-none",
+                  )}
+                  aria-label="Send"
+                >
+                  <ArrowUpIcon className="size-4" />
+                </button>
+              </div>
+            ) : (
+              /* Dots → Send crossfade: dots are Ditto's presence, they become the action */
+              <div className="relative size-8 flex items-center justify-center">
+                {/* DotParticles: visible when idle, fades out when send appears */}
+                <div
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
+                    showSubmit ? "opacity-0 pointer-events-none" : "opacity-100",
+                  )}
+                >
+                  <DotParticles size={24} />
+                </div>
+                {/* Send button: fades in when text is entered */}
+                <PromptInputSubmit
+                  status={status}
+                  data-testid="send-button"
+                  className={cn(
+                    "absolute inset-0 transition-all duration-200 ease-out",
+                    "bg-vivid hover:bg-vivid/90 text-white",
+                    showSubmit
+                      ? "opacity-100 scale-100"
+                      : "opacity-0 scale-75 pointer-events-none",
+                  )}
+                />
+              </div>
+            )}
           </div>
         </PromptInputFooter>
       </AIPromptInput>

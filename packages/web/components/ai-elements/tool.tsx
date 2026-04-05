@@ -296,14 +296,20 @@ export function Tool({ toolCallId: _toolCallId, toolName, state, input, output, 
     );
   }
 
-  // AC9 (065): Running — compact single-line with spinning ↻ + shimmer
+  // AC9 (065): Running — compact single-line with pulse dots + shimmer
   if (status === "running") {
     return (
       <div className={cn("space-y-1", className)}>
         <div className="flex items-center gap-2 text-sm">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted flex-shrink-0 animate-spin" style={{ animationDuration: "1000ms" }}>
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
+          <span className="flex gap-[2px] flex-shrink-0" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="w-[3px] h-[3px] rounded-full bg-text-muted"
+                style={{ animation: `pulse-dot 1s ease-in-out ${i * 150}ms infinite` }}
+              />
+            ))}
+          </span>
           <Shimmer><span className="text-text-secondary">{actionLabel}</span></Shimmer>
         </div>
       </div>

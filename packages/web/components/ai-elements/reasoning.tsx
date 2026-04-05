@@ -149,7 +149,7 @@ const ReasoningContent = forwardRef<HTMLDivElement, { children?: ReactNode; clas
           ref={ref}
           className={cn(
             "mt-2 border-l-2 border-[var(--color-vivid-deep)] pl-[var(--spacing-4)]",
-            "text-sm font-mono text-text-secondary whitespace-pre-wrap max-h-[200px] overflow-y-auto",
+            "text-sm font-mono text-text-secondary whitespace-pre-wrap max-h-[300px] overflow-y-auto",
             className,
           )}
         >
@@ -180,12 +180,12 @@ const AUTO_CLOSE_DELAY = 3000;
  */
 function extractSummary(text: string): string | undefined {
   if (!text.trim()) return undefined;
-  // AC14 (065): Extract last ~80 chars of reasoning for collapsed summary
+  // AC2 (062): Extract last ~60 chars of reasoning for collapsed summary
   const sentences = text.split(/(?<=[.!?])\s+/).filter((s) => s.trim());
   const last = sentences[sentences.length - 1]?.trim();
   if (!last) return undefined;
-  if (last.length <= 80) return last;
-  return last.slice(0, 77) + "...";
+  if (last.length <= 60) return last;
+  return last.slice(0, 57) + "...";
 }
 
 export function Reasoning({ text, isStreaming, className }: ReasoningProps) {
