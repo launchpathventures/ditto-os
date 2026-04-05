@@ -110,6 +110,48 @@ async function parseLlamaParse(filePath: string, apiKey: string): Promise<string
 // Local parsers (TypeScript-native)
 // ============================================================
 
+/** Block-level elements that should produce newlines when extracting text from HTML. */
+const BLOCK_TAGS = new Set([
+  "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+  "li", "tr", "br", "blockquote", "pre", "section", "article",
+  "header", "footer", "dt", "dd", "figcaption",
+]);
+
+/**
+ * Extract text from cheerio DOM preserving structural whitespace.
+ * Inserts newlines around block elements so downstream chunking works.
+ */
+function extractStructuredText($: ReturnType<typeof import("cheerio").load>): string {
+  const lines: string[] = [];
+
+  function walk(nodes: ReturnType<typeof $.root>["0"]["children"]) {
+    if (!nodes) return;
+    for (const node of nodes) {
+      if (node.type === "text") {
+        const text = (node as unknown as { data: string }).data;
+        if (text.trim()) lines.push(text.trim());
+      } else if (node.type === "tag") {
+        const el = node as unknown as { tagName: string; children: typeof nodes };
+        const tag = el.tagName.toLowerCase();
+        // Convert headings to markdown headings for chunker compatibility
+        if (tag.match(/^h[1-6]$/)) {
+          const level = parseInt(tag[1], 10);
+          const heading = $(node).text().trim();
+          if (heading) lines.push(`${"#".repeat(level)} ${heading}`);
+        } else if (BLOCK_TAGS.has(tag)) {
+          walk(el.children);
+          lines.push(""); // blank line after block
+        } else {
+          walk(el.children);
+        }
+      }
+    }
+  }
+
+  walk($("body").length ? $("body")[0].children as never : $.root()[0].children as never);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 async function parseLocal(filePath: string): Promise<string> {
   const ext = path.extname(filePath).toLowerCase();
 
@@ -138,7 +180,20 @@ async function parseLocal(filePath: string): Promise<string> {
       const $ = cheerio.load(html);
       // Remove scripts and styles
       $("script, style").remove();
-      return $.text();
+      // Extract text with structural whitespace ($.text() fuses words across elements)
+      return extractStructuredText($);
+    }
+
+    case ".xlsx": {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(fs.readFileSync(filePath));
+      const lines: string[] = [];
+      for (const name of workbook.SheetNames) {
+        lines.push(`## ${name}`);
+        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
+        lines.push(csv);
+      }
+      return lines.join("\n\n");
     }
 
     case ".txt":
@@ -232,7 +287,7 @@ const SUPPORTED_EXTENSIONS = new Set([
 ]);
 
 const LOCAL_SUPPORTED = new Set([
-  ".pdf", ".docx", ".doc", ".html", ".htm", ".txt", ".md", ".csv",
+  ".pdf", ".docx", ".doc", ".html", ".htm", ".txt", ".md", ".csv", ".xlsx",
 ]);
 
 function isSupported(filePath: string, local: boolean): boolean {

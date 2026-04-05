@@ -32,7 +32,7 @@ export async function getNeighboringContext(
 
   // Find position of target chunk in the sorted array
   const targetPos = allChunks.findIndex((c) => c.id === chunkId);
-  if (targetPos === -1) return { chunks: allChunks.slice(0, windowSize * 2 + 1), targetIndex: 0 };
+  if (targetPos === -1) return { chunks: [], targetIndex: -1 };
 
   // Extract window around target
   const start = Math.max(0, targetPos - windowSize);

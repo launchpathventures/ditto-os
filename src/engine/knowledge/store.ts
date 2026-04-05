@@ -12,7 +12,8 @@
  * Provenance: Brief 079, LanceDB JS SDK.
  */
 
-import lancedb from "@lancedb/lancedb";
+import lancedb, { rerankers } from "@lancedb/lancedb";
+import { Index } from "@lancedb/lancedb";
 import path from "path";
 import { DATA_DIR } from "../../paths";
 
@@ -155,13 +156,16 @@ export class KnowledgeStore {
       vector: vectors[i],
     }));
 
-    // Create or append to table
+    // Create or append to table, ensuring FTS index exists for hybrid search
     const tableNames = await this.dbConnection.tableNames();
     if (tableNames.includes(TABLE_NAME)) {
       const table = await this.dbConnection.openTable(TABLE_NAME);
       await table.add(records);
+      // Recreate FTS index to include new data
+      await table.createIndex("text", { config: Index.fts(), replace: true });
     } else {
-      await this.dbConnection.createTable(TABLE_NAME, records);
+      const table = await this.dbConnection.createTable(TABLE_NAME, records);
+      await table.createIndex("text", { config: Index.fts() });
     }
   }
 
@@ -176,9 +180,12 @@ export class KnowledgeStore {
     // Embed query
     const [queryVector] = await embedTexts([query]);
 
-    // Vector search
+    // Hybrid search: vector + BM25 full-text with RRF fusion
+    const rrf = await rerankers.RRFReranker.create();
     const results = await table
       .vectorSearch(queryVector)
+      .fullTextSearch(query)
+      .rerank(rrf)
       .limit(topK)
       .toArray();
 
