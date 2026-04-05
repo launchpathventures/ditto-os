@@ -16,6 +16,7 @@ import lancedb, { rerankers } from "@lancedb/lancedb";
 import { Index } from "@lancedb/lancedb";
 import path from "path";
 import { DATA_DIR } from "../../paths";
+import { getCredential } from "../credential-vault";
 
 // ============================================================
 // Types
@@ -61,13 +62,89 @@ export interface SearchResult {
 // Embedding
 // ============================================================
 
-async function embedTexts(texts: string[]): Promise<number[][]> {
-  const provider = process.env.LLM_PROVIDER ?? "ollama";
+/**
+ * Resolve the embedding provider and API key.
+ * Priority: explicit EMBEDDING_PROVIDER env > inferred from LLM_PROVIDER.
+ * Returns null when no embedding provider is available (BM25-only mode).
+ */
+async function resolveEmbeddingProvider(): Promise<{
+  provider: "voyage" | "openai" | "ollama";
+  apiKey?: string;
+} | null> {
+  const explicit = process.env.EMBEDDING_PROVIDER;
+  if (explicit) {
+    if (explicit === "voyage") {
+      const cred = await getCredential("__system__", "voyage");
+      const key = cred?.value ?? process.env.VOYAGE_API_KEY;
+      return key ? { provider: "voyage", apiKey: key } : null;
+    }
+    if (explicit === "openai") {
+      const key = process.env.OPENAI_API_KEY;
+      return key ? { provider: "openai", apiKey: key } : null;
+    }
+    if (explicit === "ollama") return { provider: "ollama" };
+    return null;
+  }
+
+  // Infer from LLM_PROVIDER
+  const llmProvider = process.env.LLM_PROVIDER ?? "ollama";
+
+  if (llmProvider === "openai") {
+    const key = process.env.OPENAI_API_KEY;
+    return key ? { provider: "openai", apiKey: key } : null;
+  }
+
+  if (llmProvider === "anthropic") {
+    // Anthropic has no embedding API — try Voyage AI first, then Ollama
+    const cred = await getCredential("__system__", "voyage");
+    const voyageKey = cred?.value ?? process.env.VOYAGE_API_KEY;
+    if (voyageKey) return { provider: "voyage", apiKey: voyageKey };
+
+    // Try Ollama as local fallback
+    try {
+      const res = await fetch(`${process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"}/api/tags`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.ok) return { provider: "ollama" };
+    } catch {
+      // Ollama not running — fall through to null (BM25-only)
+    }
+    return null;
+  }
+
+  // Ollama as LLM provider
+  return { provider: "ollama" };
+}
+
+/**
+ * Embed texts using the resolved provider.
+ * Returns null when no embedding provider is available (BM25-only mode).
+ */
+async function embedTexts(texts: string[]): Promise<number[][] | null> {
+  const resolved = await resolveEmbeddingProvider();
+  if (!resolved) return null;
+
+  const { provider, apiKey } = resolved;
+
+  if (provider === "voyage") {
+    const res = await fetch("https://api.voyageai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.EMBEDDING_MODEL ?? "voyage-3-lite",
+        input: texts,
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Voyage AI embedding failed: ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
+    return data.data.map((d) => d.embedding);
+  }
 
   if (provider === "openai") {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY required for embeddings");
-
     const res = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
@@ -75,19 +152,17 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "text-embedding-3-small",
+        model: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
         input: texts,
       }),
     });
 
     if (!res.ok) throw new Error(`OpenAI embedding failed: ${res.status}`);
-    const data = (await res.json()) as {
-      data: Array<{ embedding: number[] }>;
-    };
+    const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
     return data.data.map((d) => d.embedding);
   }
 
-  // Ollama (default, also fallback for Anthropic)
+  // Ollama
   const ollamaBase = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
   const model = process.env.EMBEDDING_MODEL ?? "nomic-embed-text";
 
@@ -147,21 +222,21 @@ export class KnowledgeStore {
   async addChunks(chunks: ChunkRecord[]): Promise<void> {
     if (chunks.length === 0) return;
 
-    // Embed all chunk texts
+    // Embed all chunk texts (null = no embedding provider, BM25-only)
     const texts = chunks.map((c) => c.text);
     const vectors = await embedTexts(texts);
 
     const records: StoredChunk[] = chunks.map((chunk, i) => ({
       ...chunk,
-      vector: vectors[i],
+      // Zero vector placeholder when no embedding provider available
+      vector: vectors ? vectors[i] : [],
     }));
 
-    // Create or append to table, ensuring FTS index exists for hybrid search
+    // Create or append to table, ensuring FTS index exists for hybrid/BM25 search
     const tableNames = await this.dbConnection.tableNames();
     if (tableNames.includes(TABLE_NAME)) {
       const table = await this.dbConnection.openTable(TABLE_NAME);
       await table.add(records);
-      // Recreate FTS index to include new data
       await table.createIndex("text", { config: Index.fts(), replace: true });
     } else {
       const table = await this.dbConnection.createTable(TABLE_NAME, records);
@@ -177,17 +252,27 @@ export class KnowledgeStore {
 
     const table = await this.dbConnection.openTable(TABLE_NAME);
 
-    // Embed query
-    const [queryVector] = await embedTexts([query]);
+    // Try embedding the query — null means no provider, use BM25-only
+    const vectors = await embedTexts([query]);
 
-    // Hybrid search: vector + BM25 full-text with RRF fusion
-    const rrf = await rerankers.RRFReranker.create();
-    const results = await table
-      .vectorSearch(queryVector)
-      .fullTextSearch(query)
-      .rerank(rrf)
-      .limit(topK)
-      .toArray();
+    let results;
+    if (vectors) {
+      // Hybrid search: vector + BM25 full-text with RRF fusion
+      const rrf = await rerankers.RRFReranker.create();
+      results = await table
+        .vectorSearch(vectors[0])
+        .fullTextSearch(query)
+        .rerank(rrf)
+        .limit(topK)
+        .toArray();
+    } else {
+      // BM25-only: no embedding provider available
+      results = await table
+        .query()
+        .fullTextSearch(query)
+        .limit(topK)
+        .toArray();
+    }
 
     return results.map((r) => ({
       id: r.id as string,
