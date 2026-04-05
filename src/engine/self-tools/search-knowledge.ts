@@ -5,12 +5,15 @@
  * with source citations. Used by Self in conversation and
  * available to process steps via tool resolver.
  *
+ * Uses dynamic imports to avoid pulling LanceDB native binary
+ * into the Next.js webpack build (the import chain from
+ * self-delegation → search-knowledge → store → @lancedb/lancedb
+ * would otherwise fail at build time).
+ *
  * Provenance: Brief 079, existing self-tool pattern.
  */
 
 import type { DelegationResult } from "../self-delegation";
-import { searchKnowledge, formatResultsForPrompt } from "../knowledge/search";
-import { extractCitations, buildCitationBlock, formatVerificationSummary } from "../knowledge/cite";
 import type { ContentBlock } from "../content-blocks";
 
 interface SearchKnowledgeInput {
@@ -32,6 +35,10 @@ export async function handleSearchKnowledge(
   }
 
   try {
+    // Dynamic imports — keeps LanceDB native binary out of webpack bundle
+    const { searchKnowledge, formatResultsForPrompt } = await import("../knowledge/search");
+    const { buildCitationBlock } = await import("../knowledge/cite");
+
     const results = await searchKnowledge(query.trim(), topK);
 
     if (results.length === 0) {

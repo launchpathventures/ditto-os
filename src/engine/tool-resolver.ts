@@ -19,7 +19,8 @@ import type {
 import { getIntegration } from "./integration-registry";
 import { executeCli } from "./integration-handlers/cli";
 import { executeRest } from "./integration-handlers/rest";
-import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
+// Dynamic import to avoid pulling LanceDB native binary into webpack bundle
+// import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
 export interface ResolvedTools {
   /** LLM-native tool definitions for the LLM to call */
@@ -63,6 +64,7 @@ const builtInTools: Record<string, BuiltInTool> = {
       },
     },
     execute: async (input: Record<string, unknown>): Promise<string> => {
+      const { searchKnowledge, formatResultsForPrompt } = await import("./knowledge/search");
       const query = input.query as string;
       const topK = (input.topK as number) ?? 5;
       const results = await searchKnowledge(query, topK);
