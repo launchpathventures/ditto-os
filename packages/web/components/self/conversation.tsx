@@ -205,9 +205,36 @@ export function Conversation({ userId = "default" }: ConversationProps) {
     [],
   );
 
-  // Handle actions from content blocks (knowledge synthesis, process proposal, etc.)
+  // Handle actions from content blocks (knowledge synthesis, process proposal, suggestions, etc.)
   const handleBlockAction = useCallback(
-    (actionId: string, payload?: Record<string, unknown>) => {
+    async (actionId: string, payload?: Record<string, unknown>) => {
+      // Suggestion actions — Accept or Dismiss
+      if (actionId.startsWith("suggest-accept-")) {
+        const content = (payload?.content as string) ?? "";
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: content ? `I'd like to set that up — ${content}` : "I'd like to set that up." }],
+        });
+        return;
+      }
+      if (actionId.startsWith("suggest-dismiss-")) {
+        // Record dismissal via API (30-day cooldown), then acknowledge in conversation
+        try {
+          await fetch("/api/actions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ actionId, payload }),
+          });
+        } catch {
+          // Best-effort — dismissal still acknowledged in conversation
+        }
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: "Not right now, thanks." }],
+        });
+        return;
+      }
+
       const actionMessages: Record<string, string> = {
         "knowledge-confirm": "That looks right.",
         "knowledge-correct": payload?.corrections

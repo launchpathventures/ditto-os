@@ -46,6 +46,7 @@ import { debtCommand } from "./cli/commands/debt";
 import { credentialCommand } from "./cli/commands/credential";
 import { triggerCommand } from "./cli/commands/trigger";
 import { generateIntegrationCommand } from "./cli/commands/generate-integration";
+import { scheduleCommand } from "./cli/commands/schedule";
 
 const main = defineCommand({
   meta: {
@@ -69,6 +70,7 @@ const main = defineCommand({
     credential: credentialCommand,
     trigger: triggerCommand,
     "generate-integration": generateIntegrationCommand,
+    schedule: scheduleCommand,
   },
 });
 

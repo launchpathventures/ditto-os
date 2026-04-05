@@ -59,6 +59,7 @@ These are the functions the architecture already describes, now formalized as sy
 | **onboarding-guide** | Walks new outcome owners through first process setup. Conversational. Helps users who "know what good looks like" but haven't codified it. Knows template library | Phase 11 (PM triage: may move earlier) | Not started |
 | **process-discoverer** | Connects to org data sources, identifies recurring process patterns, surfaces candidates | Phase 11 (requires Phase 6 integrations) | Not started |
 | **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 | Not started |
+| **coverage-agent** | Proactively identifies process coverage gaps. Reasons from user model + Process Model Library + Standards Library + industry patterns + connected data to suggest what the user should have in place but doesn't. The outward-looking complement to improvement-scanner (which looks inward at existing processes). Max 1-2 suggestions per cycle with stage-aware timing. Runs on scheduled heartbeat (daily default). Dismissed suggestions tracked in memory. (Insight-142) | Phase 11 | Not started |
 
 **Key principle:** Not all system agents are built at once. The architecture accommodates them now; the roadmap sequences when they're built. Four are done (trust-evaluator Phase 3, intake-classifier + router + orchestrator Phase 4-5).
 

@@ -279,6 +279,29 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
         return;
       }
 
+      // Suggestion actions — Accept or Dismiss
+      if (actionId.startsWith("suggest-accept-")) {
+        const content = (payload?.content as string) ?? "";
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: content ? `I'd like to set that up — ${content}` : "I'd like to set that up." }],
+        });
+        return;
+      }
+      if (actionId.startsWith("suggest-dismiss-")) {
+        // Record dismissal via API (30-day cooldown)
+        fetch("/api/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionId, payload }),
+        }).catch(() => {/* best-effort */});
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: "Not right now, thanks." }],
+        });
+        return;
+      }
+
       // Standard action messages to Self
       const actionMessages: Record<string, string> = {
         "knowledge-confirm": "That looks right.",
@@ -483,7 +506,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
 
         {/* Right panel — contextual intelligence + tool-driven overrides */}
         {!isCompactLayout && (
-          <RightPanel context={panelContext} panelOverride={panelOverride} />
+          <RightPanel context={panelContext} panelOverride={panelOverride} onAction={handleBlockAction} />
         )}
       </div>
 

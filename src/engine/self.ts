@@ -45,8 +45,8 @@ import { assembleBriefing } from "./briefing-assembler";
 // Constants
 // ============================================================
 
-/** Token budget for always-loaded Self context (~6K tokens) */
-const SELF_CONTEXT_TOKEN_BUDGET = 6000;
+/** Token budget for always-loaded Self context (~7K tokens) */
+const SELF_CONTEXT_TOKEN_BUDGET = 7000;
 const CHARS_PER_TOKEN = 4;
 
 /** Maximum tool_use turns in a single conversation cycle (prevents runaway loops) */

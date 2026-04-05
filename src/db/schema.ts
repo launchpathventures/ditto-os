@@ -835,6 +835,60 @@ export const interactionEvents = sqliteTable("interaction_events", {
  * Soft-deleted when file removed (status → "deleted").
  * Provenance: brief-index.ts file parsing (Brief 055), Brief 056.
  */
+// ============================================================
+// Schedules — cron-based process triggers (Brief 076)
+// ============================================================
+
+/**
+ * Schedule definitions — cron-based triggers for automatic process runs.
+ * Provenance: Brief 076, node-cron for scheduling.
+ */
+export const schedules = sqliteTable("schedules", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processId: text("process_id")
+    .references(() => processes.id)
+    .notNull(),
+  cronExpression: text("cron_expression").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+  nextRunAt: integer("next_run_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Suggestion Dismissals — proactive guidance feedback loop
+// ============================================================
+
+/**
+ * Dismissed suggestions — prevents repeating dismissed suggestions for 30 days.
+ * The coverage-agent and suggest_next tool check this table before surfacing.
+ * Provenance: Insight-142, cognitive/self.md proactive guidance spec.
+ */
+export const suggestionDismissals = sqliteTable("suggestion_dismissals", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  suggestionType: text("suggestion_type").notNull(), // Coverage, Trust, Understanding, Improvement, Timing
+  contentHash: text("content_hash").notNull(), // SHA-256 hash of suggestion content
+  content: text("content").notNull(), // Original suggestion text (for debugging)
+  dismissedAt: integer("dismissed_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" })
+    .notNull(),
+}, (table) => [
+  index("suggestion_dismissals_user_expires").on(table.userId, table.expiresAt),
+]);
+
+// ============================================================
+// Briefs — lifecycle sync from files to DB (Brief 056)
+// ============================================================
+
 export const briefs = sqliteTable("briefs", {
   number: integer("number").primaryKey(),
   name: text("name").notNull(),

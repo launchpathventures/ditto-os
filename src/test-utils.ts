@@ -313,6 +313,29 @@ function createTables(sqlite: Database.Database): void {
     CREATE INDEX IF NOT EXISTS interaction_events_user_timestamp
       ON interaction_events(user_id, timestamp);
 
+    CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY,
+      process_id TEXT NOT NULL REFERENCES processes(id),
+      cron_expression TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at INTEGER,
+      next_run_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS suggestion_dismissals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      suggestion_type TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      content TEXT NOT NULL,
+      dismissed_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS suggestion_dismissals_user_expires
+      ON suggestion_dismissals(user_id, expires_at);
+
     CREATE TABLE IF NOT EXISTS briefs (
       number INTEGER PRIMARY KEY,
       name TEXT NOT NULL,

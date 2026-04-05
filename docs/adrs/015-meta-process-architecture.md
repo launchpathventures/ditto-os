@@ -41,13 +41,13 @@ Simultaneously, the creator's experience building Ditto has surfaced a critical 
 
 ## Decision
 
-### 1. Four meta processes within the Cognitive Framework
+### 1. Five meta processes within the Cognitive Framework
 
 Meta processes are the processes through which the platform operates, creates, and evolves. They are not system agents (those are implementations). They are not domain processes (those handle user work). They are the platform's backbone — the fundamental capabilities that make everything else possible.
 
-The **Cognitive Framework** is not a fifth meta process — it is the **environment** within which all four meta processes operate. It shapes how all thinking happens, but it is not itself a sequential process with inputs and outputs. It is the soup everything swims in.
+The **Cognitive Framework** is not a sixth meta process — it is the **environment** within which all five meta processes operate. It shapes how all thinking happens, but it is not itself a sequential process with inputs and outputs. It is the soup everything swims in.
 
-**The four meta processes:**
+**The five meta processes:**
 
 | Meta Process | Purpose | Existing Building Blocks |
 |---|---|---|
@@ -55,6 +55,9 @@ The **Cognitive Framework** is not a fifth meta process — it is the **environm
 | **Build** | Create all processes, agents, and skills — including meta processes and itself | process-analyst, onboarding-guide (ADR-008 Phase 11); dev pipeline (Brief 016c) |
 | **Process Execution** | Orchestrate roles/agents through defined processes to deliver outcomes | orchestrator, heartbeat, harness pipeline (existing); trust gate (Phase 2) |
 | **Feedback & Evolution** | Observe, research, learn, and propose improvements to everything | improvement-scanner (ADR-008 Phase 9); trust-evaluator (Phase 3); L5 Learning Layer |
+| **Proactive Guidance** | Anticipate what the user needs before they ask. Identify coverage gaps, discover processes from org data, guide adoption. The outward-looking complement to Feedback & Evolution (which looks inward). | coverage-agent, process-discoverer, onboarding-guide (ADR-008); suggest_next tool; Process Model Library (Insight-099); Standards Library (ADR-019). See Insight-142. |
+
+**Why Proactive Guidance is a meta process, not a feature of Feedback & Evolution:** Feedback & Evolution asks "how can we make what exists better?" Proactive Guidance asks "what doesn't exist yet that should?" They share a learning-loop relationship (both consume standards, both feed the Self) but their reasoning direction is fundamentally different — inward vs outward. Proactive Guidance also spans three distinct agent capabilities (coverage gap detection, data-driven discovery, guided adoption) that together form a coherent process: discover → reason → suggest → guide adoption. This is the mechanism that makes Ditto feel like an EA — a system that knows you, thinks for you, and guides you toward what you need next.
 
 **The Cognitive Framework (environment):**
 
@@ -85,20 +88,20 @@ The four meta processes are not peers. They have a structural hierarchy, operati
 │  │ depth to     │    │              │    │              │     │
 │  │ complexity.  │    │              │    │              │     │
 │  └──────────────┘    └──────────────┘    └──────────────┘     │
-│                              ▲                                  │
-│                              │                                  │
-│                    ┌──────────────────┐                         │
-│                    │ FEEDBACK &       │                         │
-│                    │ EVOLUTION        │                         │
-│                    │                  │                         │
-│                    │ Learns. Researches│                        │
-│                    │ externally.       │                        │
-│                    │ Primary consumer: │                        │
-│                    │ Build process.    │                        │
-│                    │ Can evolve the    │                        │
-│                    │ Cognitive         │                        │
-│                    │ Framework itself. │                        │
-│                    └──────────────────┘                         │
+│          ▲                   ▲                                  │
+│          │                   │                                  │
+│  ┌───────────────┐ ┌──────────────────┐                        │
+│  │ PROACTIVE     │ │ FEEDBACK &       │                        │
+│  │ GUIDANCE      │ │ EVOLUTION        │                        │
+│  │               │ │                  │                        │
+│  │ Anticipates.  │ │ Learns. Researches│                       │
+│  │ "What should  │ │ externally.       │                       │
+│  │ exist that    │ │ Primary consumer: │                       │
+│  │ doesn't?"    │ │ Build process.    │                       │
+│  │ Feeds Goal   │ │ Can evolve the    │                       │
+│  │ Framing with │ │ Cognitive         │                       │
+│  │ suggestions. │ │ Framework itself. │                       │
+│  └───────────────┘ └──────────────────┘                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

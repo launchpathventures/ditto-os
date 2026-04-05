@@ -621,4 +621,23 @@ describe("metadata-based block emission (FLAG 3 fix)", () => {
     expect(suggestion.reasoning).toBe("Coverage");
     expect(suggestion.actions).toBeDefined();
   });
+
+  it("suggest_next actions include payload with type and content for dismiss/accept", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "suggest_next",
+      {},
+      ok("Suggestions (1):\nCoverage: ...", {
+        suggestions: [
+          { type: "Coverage", content: "Set up invoicing." },
+        ],
+      }),
+    );
+
+    const suggestion = blocks[0] as SuggestionBlock;
+    const acceptAction = suggestion.actions!.find((a) => a.label === "Accept");
+    const dismissAction = suggestion.actions!.find((a) => a.label === "Dismiss");
+
+    expect(acceptAction?.payload).toEqual({ suggestionType: "Coverage", content: "Set up invoicing." });
+    expect(dismissAction?.payload).toEqual({ suggestionType: "Coverage", content: "Set up invoicing." });
+  });
 });

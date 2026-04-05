@@ -89,7 +89,7 @@ Every work item carries **goal ancestry** — the chain of parent goals that exp
 
 Ditto's core orchestration capabilities are not hardcoded infrastructure — they are **meta-processes** with system agents going through the same harness pipeline as user processes. They start supervised. They earn trust. They get corrected. They improve.
 
-Eleven system agents drive the framework (see ADR-008 + ADR-010):
+Twelve system agents drive the framework (see ADR-008 + ADR-010):
 
 | Agent | Purpose | Earns trust in |
 |-------|---------|---------------|
@@ -99,10 +99,11 @@ Eleven system agents drive the framework (see ADR-008 + ADR-010):
 | **trust-evaluator** | Calculates trust scores, recommends changes | Evaluation accuracy |
 | **knowledge-extractor** | Extracts structured solution knowledge from corrections | Extraction quality |
 | **brief-synthesizer** | Produces the Daily Brief | Prioritisation quality |
-| **improvement-scanner** | Detects patterns, proposes improvements | Suggestion quality |
+| **improvement-scanner** | Detects patterns, proposes improvements to existing processes (inward) | Suggestion quality |
+| **coverage-agent** | Proactively identifies what the user should have in place but doesn't (outward). Reasons from user model + Process Model Library + industry patterns + connected data. Feeds Self with max 1-2 suggestions per cycle. (Insight-142) | Suggestion acceptance rate |
 | **process-analyst** | Helps formalise processes via conversation | Process definition quality |
 | **onboarding-guide** | Walks new users through first setup | Onboarding effectiveness |
-| **process-discoverer** | Discovers processes from org data | Discovery accuracy |
+| **process-discoverer** | Discovers processes from org data (inward hunting) | Discovery accuracy |
 | **governance-monitor** | Watches for trust gaming, compliance gaps | Detection accuracy |
 
 The system that governs user work is itself governed by the same system. This is what makes Ditto a living system, not a platform.
@@ -622,16 +623,17 @@ Trust tiers determine oversight **rate** (how often). The attention model determ
 
 ### Cross-Cutting: Meta Process Architecture (ADR-015)
 
-The ten system agents (ADR-008) are implementations of four higher-order **meta processes** — the fundamental processes through which the platform operates, creates, evolves, and reasons. ADR-015 organizes them into a coherent structural model:
+The twelve system agents (ADR-008) are implementations of five higher-order **meta processes** — the fundamental processes through which the platform operates, creates, evolves, anticipates, and reasons. ADR-015 organizes them into a coherent structural model:
 
 | Meta Process | What it does | System agents involved |
 |-------------|-------------|----------------------|
 | **Goal Framing** | Consultative conversation: listen → assess clarity → ask → reflect → hand off | intake-classifier, router, orchestrator |
 | **Build** | Creates all processes, agents, skills. Self-referential (builds itself). Research-driven. Generative core. | ai-agent (dev roles via `createCompletion()`, Ditto's own tools) |
 | **Process Execution** | Runs governed processes through the harness with trust, memory, feedback | trust-evaluator, governance-monitor |
-| **Feedback & Evolution** | Correction → pattern → structural insight → improvement proposal | improvement-scanner, process-analyst |
+| **Feedback & Evolution** | Correction → pattern → structural insight → improvement proposal (inward-looking) | improvement-scanner, process-analyst |
+| **Proactive Guidance** | Anticipate what the user needs before they ask. Discover gaps, hunt for new processes, guide adoption (outward-looking). Three hunting mechanisms: inward (from user data), outward (from world knowledge), cross-instance (from community corrections). Feeds Goal Framing with suggestions. (Insight-142) | coverage-agent, process-discoverer, onboarding-guide |
 
-A fifth element — the **Cognitive Framework** — is pervasive, not a meta process. It governs how the system approaches problems, prioritizes, makes trade-offs, exercises metacognition, and maintains space for intuition. It is the environment within which all meta processes operate.
+A sixth element — the **Cognitive Framework** — is pervasive, not a meta process. It governs how the system approaches problems, prioritizes, makes trade-offs, exercises metacognition, and maintains space for intuition. It is the environment within which all meta processes operate.
 
 **The system runs ON itself.** Meta processes go through the same harness pipeline as user processes — earning trust, accumulating memory, receiving feedback. The dev pipeline (building Ditto itself) is the first validation target. See ADR-015.
 
