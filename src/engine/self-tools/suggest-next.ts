@@ -34,6 +34,7 @@ import { eq } from "drizzle-orm";
 import { getUserModel, getWorkingPatterns } from "../user-model";
 import { matchIndustry, findCoverageGaps } from "../industry-patterns";
 import { computeTrustState } from "../trust";
+import { getActiveDismissalHashes, hashContent } from "../suggestion-dismissals";
 import type { DelegationResult } from "../self-delegation";
 
 interface SuggestNextInput {
@@ -184,8 +185,18 @@ export async function handleSuggestNext(
       }
     }
 
+    // Filter out recently dismissed suggestions (30-day cooldown)
+    const dismissedHashes = await getActiveDismissalHashes(userId);
+    const filtered = structuredSuggestions.filter(
+      (s) => !dismissedHashes.has(hashContent(s.content)),
+    );
+    const filteredText = suggestions.filter((_s, i) =>
+      structuredSuggestions[i] ? !dismissedHashes.has(hashContent(structuredSuggestions[i].content)) : true,
+    );
+
     // Cap at 2
-    const capped = suggestions.slice(0, 2);
+    const capped = filteredText.slice(0, 2);
+    const cappedStructured = filtered.slice(0, 2);
 
     if (capped.length === 0) {
       return {
@@ -199,7 +210,7 @@ export async function handleSuggestNext(
       toolName: "suggest_next",
       success: true,
       output: `Suggestions (${capped.length}):\n${capped.join("\n")}`,
-      metadata: { suggestions: structuredSuggestions.slice(0, 2) },
+      metadata: { suggestions: cappedStructured },
     };
   } catch (err) {
     return {

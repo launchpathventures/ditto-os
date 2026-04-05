@@ -1045,8 +1045,8 @@ export async function toolResultToContentBlocks(
             content: s.content,
             reasoning: s.type,
             actions: [
-              { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary" },
-              { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary" },
+              { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary", payload: { suggestionType: s.type, content: s.content } },
+              { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary", payload: { suggestionType: s.type, content: s.content } },
             ],
           };
           blocks.push(suggestion);
@@ -1060,13 +1060,15 @@ export async function toolResultToContentBlocks(
           for (let i = 0; i < capped.length; i++) {
             const match = capped[i].match(/^(\w[\w ]*?):\s+(.+)$/);
             if (match) {
+              const parsedType = match[1].trim();
+              const parsedContent = match[2].trim();
               const suggestion: SuggestionBlock = {
                 type: "suggestion",
-                content: match[2].trim(),
-                reasoning: match[1].trim(),
+                content: parsedContent,
+                reasoning: parsedType,
                 actions: [
-                  { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary" },
-                  { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary" },
+                  { id: `suggest-accept-${i}-${ts}`, label: "Accept", style: "primary", payload: { suggestionType: parsedType, content: parsedContent } },
+                  { id: `suggest-dismiss-${i}-${ts}`, label: "Dismiss", style: "secondary", payload: { suggestionType: parsedType, content: parsedContent } },
                 ],
               };
               blocks.push(suggestion);

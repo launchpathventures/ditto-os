@@ -41,12 +41,14 @@ interface RightPanelProps {
   context?: PanelContext;
   panelOverride?: PanelContext | null;
   defaultCollapsed?: boolean;
+  onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
 export function RightPanel({
   context = { type: "feed" },
   panelOverride,
   defaultCollapsed = false,
+  onAction,
 }: RightPanelProps) {
   // Tool-driven override takes priority over centre-view-reactive context
   const activeContext = panelOverride ?? context;
@@ -120,10 +122,10 @@ export function RightPanel({
             <ArtifactViewerPanel runId={activeContext.runId} processId={activeContext.processId} />
           )}
           {activeContext.type === "briefing" && (
-            <BriefingContext data={activeContext.data} />
+            <BriefingContext data={activeContext.data} onAction={onAction} />
           )}
           {activeContext.type === "blocks" && (
-            <BlocksContext blocks={activeContext.blocks} title={activeContext.title} />
+            <BlocksContext blocks={activeContext.blocks} title={activeContext.title} onAction={onAction} />
           )}
           {activeContext.type === "empty" && <DefaultContext />}
         </div>
@@ -276,11 +278,19 @@ function ProcessRunContext({ runId, processSlug }: { runId: string; processSlug:
 }
 
 /** Blocks context — renders ContentBlock[] from the Self's composition logic */
-function BlocksContext({ blocks, title }: { blocks: ContentBlock[]; title?: string }) {
+function BlocksContext({
+  blocks,
+  title,
+  onAction,
+}: {
+  blocks: ContentBlock[];
+  title?: string;
+  onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
+}) {
   return (
     <>
       {title && <SectionHeading>{title}</SectionHeading>}
-      <BlockList blocks={blocks} />
+      <BlockList blocks={blocks} onAction={onAction} />
     </>
   );
 }
@@ -300,7 +310,13 @@ function DefaultContext() {
 }
 
 /** Briefing context — renders proactive engine briefing data (Brief 043) */
-function BriefingContext({ data }: { data: Record<string, unknown> }) {
+function BriefingContext({
+  data,
+  onAction,
+}: {
+  data: Record<string, unknown>;
+  onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
+}) {
   const focus = data.focus as string | undefined;
   const attention = data.attention as string[] | undefined;
   const upcoming = data.upcoming as string[] | undefined;
@@ -356,7 +372,7 @@ function BriefingContext({ data }: { data: Record<string, unknown> }) {
           <SectionTitle>Suggestions</SectionTitle>
           <div className="space-y-2 mt-2">
             {suggestions.map((item, i) => (
-              <SuggestionItem key={i} text={item} />
+              <SuggestionItem key={i} text={item} onAction={onAction} index={i} />
             ))}
           </div>
         </div>
@@ -410,8 +426,18 @@ function CheckItem({ passed, label }: { passed: boolean; label: string }) {
   );
 }
 
-/** Suggestion block: bg-vivid-subtle, rounded-lg, 12px 16px padding */
-function SuggestionItem({ text }: { text: string }) {
+/** Suggestion block: bg-vivid-subtle, rounded-lg, with optional Accept/Dismiss buttons */
+function SuggestionItem({
+  text,
+  onAction,
+  index,
+}: {
+  text: string;
+  onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
+  index?: number;
+}) {
+  const ts = Date.now();
+  const idx = index ?? 0;
   return (
     <div
       className="bg-vivid-subtle rounded-lg"
@@ -426,6 +452,22 @@ function SuggestionItem({ text }: { text: string }) {
       <p className="text-text-secondary" style={{ fontSize: 13, lineHeight: "1.5" }}>
         {text}
       </p>
+      {onAction && (
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => onAction(`suggest-accept-${idx}-${ts}`, { suggestionType: "Briefing", content: text })}
+            className="text-xs font-medium px-3 py-1 rounded-full bg-vivid text-white hover:bg-vivid/90 transition-colors"
+          >
+            Accept
+          </button>
+          <button
+            onClick={() => onAction(`suggest-dismiss-${idx}-${ts}`, { suggestionType: "Briefing", content: text })}
+            className="text-xs font-medium px-3 py-1 rounded-full text-text-secondary hover:bg-surface-secondary transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }

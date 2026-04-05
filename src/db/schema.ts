@@ -860,6 +860,32 @@ export const schedules = sqliteTable("schedules", {
 });
 
 // ============================================================
+// Suggestion Dismissals — proactive guidance feedback loop
+// ============================================================
+
+/**
+ * Dismissed suggestions — prevents repeating dismissed suggestions for 30 days.
+ * The coverage-agent and suggest_next tool check this table before surfacing.
+ * Provenance: Insight-142, cognitive/self.md proactive guidance spec.
+ */
+export const suggestionDismissals = sqliteTable("suggestion_dismissals", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  suggestionType: text("suggestion_type").notNull(), // Coverage, Trust, Understanding, Improvement, Timing
+  contentHash: text("content_hash").notNull(), // SHA-256 hash of suggestion content
+  content: text("content").notNull(), // Original suggestion text (for debugging)
+  dismissedAt: integer("dismissed_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" })
+    .notNull(),
+}, (table) => [
+  index("suggestion_dismissals_user_expires").on(table.userId, table.expiresAt),
+]);
+
+// ============================================================
 // Briefs — lifecycle sync from files to DB (Brief 056)
 // ============================================================
 

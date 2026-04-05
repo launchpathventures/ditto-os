@@ -16,6 +16,7 @@
 import type { ContentBlock, FormSubmitAction } from "./content-blocks";
 import { approveRun, editRun, rejectRun } from "./review-actions";
 import { executeDelegation } from "./self-delegation";
+import { recordDismissal } from "./suggestion-dismissals";
 
 // ============================================================
 // Action Registry (session-scoped, in-memory)
@@ -149,12 +150,43 @@ export async function handleSurfaceAction(
     };
   }
 
-  // Parse action namespace
+  // Parse action namespace — suggestion actions use "suggest-accept-N-TS" / "suggest-dismiss-N-TS" format
+  const isSuggestionAction = actionId.startsWith("suggest-accept-") || actionId.startsWith("suggest-dismiss-");
   const parts = actionId.split(".");
-  const namespace = parts[0];
+  const namespace = isSuggestionAction ? "suggest" : parts[0];
 
   try {
     switch (namespace) {
+      case "suggest": {
+        const isDismiss = actionId.startsWith("suggest-dismiss-");
+        if (isDismiss && payload?.content && payload?.suggestionType) {
+          await recordDismissal(
+            userId,
+            payload.suggestionType as string,
+            payload.content as string,
+          );
+          return {
+            success: true,
+            message: "Suggestion dismissed — won't suggest again for 30 days.",
+            blocks: [{
+              type: "status_card",
+              entityType: "work_item",
+              entityId: actionId,
+              title: "Suggestion dismissed",
+              status: "dismissed",
+              details: { Type: payload.suggestionType as string },
+            }],
+          };
+        }
+
+        // Accept — just acknowledge, Self handles the rest via conversation
+        return {
+          success: true,
+          message: "Suggestion accepted.",
+          blocks: [],
+        };
+      }
+
       case "review": {
         const action = parts[1]; // approve, edit, reject
         const runId = parts.slice(2).join(".");

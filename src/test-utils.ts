@@ -323,6 +323,19 @@ function createTables(sqlite: Database.Database): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
+    CREATE TABLE IF NOT EXISTS suggestion_dismissals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      suggestion_type TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      content TEXT NOT NULL,
+      dismissed_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS suggestion_dismissals_user_expires
+      ON suggestion_dismissals(user_id, expires_at);
+
     CREATE TABLE IF NOT EXISTS briefs (
       number INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
