@@ -17,7 +17,10 @@ test.beforeAll(async () => {
 
 test.describe("Workspace layout", () => {
   test("page loads with chat input (data-testid)", async ({ page }) => {
+    // Bypass Day Zero welcome screen — set localStorage before navigation
     await page.goto("/");
+    await page.evaluate(() => localStorage.setItem("ditto-day-zero-seen", "true"));
+    await page.reload();
     await page.waitForLoadState("networkidle");
 
     // Chat input should be accessible via data-testid
@@ -36,6 +39,8 @@ test.describe("Workspace layout", () => {
 
   test("chat input accepts and clears text on submit", async ({ page }) => {
     await page.goto("/");
+    await page.evaluate(() => localStorage.setItem("ditto-day-zero-seen", "true"));
+    await page.reload();
     await page.waitForLoadState("networkidle");
 
     const input = page.getByTestId("chat-input");
@@ -49,6 +54,8 @@ test.describe("Workspace layout", () => {
 
   test("send button is disabled when input is empty", async ({ page }) => {
     await page.goto("/");
+    await page.evaluate(() => localStorage.setItem("ditto-day-zero-seen", "true"));
+    await page.reload();
     await page.waitForLoadState("networkidle");
 
     const sendButton = page.getByTestId("send-button");
