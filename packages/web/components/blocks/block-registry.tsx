@@ -53,7 +53,7 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
     case "input_request":
       return <InputRequestBlockComponent block={block} onAction={onAction} />;
     case "knowledge_citation":
-      return <KnowledgeCitationBlockComponent block={block} />;
+      return <KnowledgeCitationBlockComponent block={block} onAction={onAction} />;
     case "progress":
       return <ProgressBlockComponent block={block} />;
     case "data":

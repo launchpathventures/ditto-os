@@ -43,6 +43,7 @@ import { handleDetectRisks } from "./self-tools/detect-risks";
 import { handleSuggestNext } from "./self-tools/suggest-next";
 import { handleAdaptProcess } from "./self-tools/adapt-process";
 import { handleAssessConfidence } from "./self-tools/assess-confidence";
+import { handleSearchKnowledge } from "./self-tools/search-knowledge";
 import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
 import { setSessionTrust } from "./session-trust";
 import { loadProcessFile } from "./process-loader";
@@ -534,6 +535,28 @@ export const selfTools: LlmToolDefinition[] = [
       required: ["level", "summary", "checks", "uncertainties"],
     },
   },
+
+  // Brief 079 — Knowledge Base Search
+  // ============================================================
+  {
+    name: "search_knowledge",
+    description:
+      "Search the ingested knowledge base for relevant documents. Returns chunks with source citations (file, page, section, line range). Use when the human asks about content from ingested documents, or when you need factual grounding from the knowledge base.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query — natural language question or keywords",
+        },
+        topK: {
+          type: "number",
+          description: "Number of results to return (default: 5)",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // ============================================================
@@ -712,6 +735,13 @@ export async function executeDelegation(
         };
       }
     }
+
+    // Brief 079 — Knowledge Base Search
+    case "search_knowledge":
+      return await handleSearchKnowledge({
+        query: toolInput.query as string,
+        topK: toolInput.topK as number | undefined,
+      });
 
     default:
       return {

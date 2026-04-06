@@ -155,11 +155,54 @@ function InlineCitationQuote({ children, className }: { children: ReactNode; cla
   );
 }
 
+/**
+ * InlineCitationExpandedView — Full chunk text with verbatim quote highlighted.
+ * Layer 1: click-to-expand citation verification.
+ */
+function InlineCitationExpandedView({
+  fullText,
+  verbatimQuote,
+  className,
+}: {
+  fullText: string;
+  verbatimQuote?: string;
+  className?: string;
+}) {
+  // Highlight the verbatim quote within the full text
+  if (verbatimQuote) {
+    const lowerFull = fullText.toLowerCase();
+    const lowerQuote = verbatimQuote.toLowerCase();
+    const idx = lowerFull.indexOf(lowerQuote);
+
+    if (idx !== -1) {
+      const before = fullText.slice(0, idx);
+      const match = fullText.slice(idx, idx + verbatimQuote.length);
+      const after = fullText.slice(idx + verbatimQuote.length);
+
+      return (
+        <div className={cn("mt-2 max-h-[300px] overflow-y-auto text-sm text-text-secondary leading-relaxed", className)}>
+          {before}
+          <mark className="bg-vivid/15 text-text-primary rounded px-0.5">{match}</mark>
+          {after}
+        </div>
+      );
+    }
+  }
+
+  // Fallback: show full text without highlighting
+  return (
+    <div className={cn("mt-2 max-h-[300px] overflow-y-auto text-sm text-text-secondary leading-relaxed", className)}>
+      {fullText}
+    </div>
+  );
+}
+
 export {
   InlineCitation,
   InlineCitationCard,
   InlineCitationCarousel,
   InlineCitationSource,
   InlineCitationQuote,
+  InlineCitationExpandedView,
   SourceTypeIcon,
 };

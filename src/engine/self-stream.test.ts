@@ -641,3 +641,54 @@ describe("metadata-based block emission (FLAG 3 fix)", () => {
     expect(dismissAction?.payload).toEqual({ suggestionType: "Coverage", content: "Set up invoicing." });
   });
 });
+
+// ============================================================
+// Brief 079 — search_knowledge block emission
+// ============================================================
+
+describe("search_knowledge block emission (Brief 079)", () => {
+  it("emits KnowledgeCitationBlock from metadata.contentBlocks", async () => {
+    const { toolResultToContentBlocks } = await import("./self-stream");
+
+    const citationBlock: KnowledgeCitationBlock = {
+      type: "knowledge_citation",
+      label: "Document Sources",
+      sources: [
+        { name: "pricing.pdf", type: "document", excerpt: "15mm copper pipe: $4.20/m", page: 12, section: "Plumbing", lineRange: [340, 355] as [number, number], matchConfidence: 0.95 },
+      ],
+    };
+
+    const result: DelegationResult = {
+      toolName: "search_knowledge",
+      success: true,
+      output: "SOURCES FROM KNOWLEDGE BASE: ...",
+      metadata: {
+        resultCount: 1,
+        contentBlocks: [citationBlock],
+      },
+    };
+
+    const blocks = await toolResultToContentBlocks("search_knowledge", { query: "copper pipe pricing" }, result);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("knowledge_citation");
+    const kb = blocks[0] as KnowledgeCitationBlock;
+    expect(kb.sources).toHaveLength(1);
+    expect(kb.sources[0].name).toBe("pricing.pdf");
+    expect(kb.sources[0].page).toBe(12);
+    expect(kb.sources[0].matchConfidence).toBe(0.95);
+  });
+
+  it("returns empty blocks when no metadata contentBlocks", async () => {
+    const { toolResultToContentBlocks } = await import("./self-stream");
+
+    const result: DelegationResult = {
+      toolName: "search_knowledge",
+      success: true,
+      output: "No documents found in the knowledge base matching your query.",
+    };
+
+    const blocks = await toolResultToContentBlocks("search_knowledge", { query: "test" }, result);
+    expect(blocks).toHaveLength(0);
+  });
+});

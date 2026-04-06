@@ -22,7 +22,10 @@
  *   pnpm cli debt              # List all deferred debt
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
+// Load .env then .env.local (local overrides, matches Next.js convention)
+dotenv.config();
+dotenv.config({ path: ".env.local", override: true });
 import { initLlm } from "./engine/llm";
 import { defineCommand, runMain } from "citty";
 
@@ -48,6 +51,7 @@ import { triggerCommand } from "./cli/commands/trigger";
 import { generateIntegrationCommand } from "./cli/commands/generate-integration";
 import { scheduleCommand } from "./cli/commands/schedule";
 import { networkCommand } from "./cli/commands/network";
+import { knowledgeCommand } from "./cli/commands/knowledge";
 
 const main = defineCommand({
   meta: {
@@ -73,6 +77,7 @@ const main = defineCommand({
     "generate-integration": generateIntegrationCommand,
     schedule: scheduleCommand,
     network: networkCommand,
+    knowledge: knowledgeCommand,
   },
 });
 

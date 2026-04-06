@@ -75,11 +75,28 @@ export interface InputRequestBlock {
   fields: InputFieldDef[];
 }
 
-/** KnowledgeCitationBlock — Provenance strip */
+/** KnowledgeCitationBlock — Provenance strip
+ *  Two use cases: memory provenance (original) and document citations (Brief 079).
+ *  When document citation fields are present, renders with file/page/section detail.
+ */
 export interface KnowledgeCitationBlock {
   type: "knowledge_citation";
   label: string;
-  sources: { name: string; type: string; excerpt?: string }[];
+  sources: Array<{
+    name: string;
+    type: string;
+    excerpt?: string;
+    // Document citation fields (Brief 079) — optional, present for knowledge base citations
+    page?: number;
+    section?: string;
+    lineRange?: [number, number];
+    verbatimQuote?: string;
+    matchConfidence?: number; // 0-1
+    // Citation verification fields — progressive disclosure (Layer 1-3)
+    chunkId?: string; // enables neighbor fetch (Layer 2)
+    fullText?: string; // complete chunk text, not truncated (Layer 1)
+    documentHash?: string; // enables document viewer (Layer 3)
+  }>;
 }
 
 /** ProgressBlock — Execution progress */
@@ -448,8 +465,20 @@ export function renderBlockToText(block: ContentBlock): string {
         ),
       ].join("\n");
 
-    case "knowledge_citation":
+    case "knowledge_citation": {
+      // Document citations (Brief 079) — show page/section/confidence detail
+      if (block.sources.some((s) => s.page != null)) {
+        const lines = block.sources.map((s) => {
+          const loc = [s.page != null ? `p${s.page}` : "", s.section ?? ""].filter(Boolean).join(", ");
+          const conf = s.matchConfidence != null ? ` (${Math.round(s.matchConfidence * 100)}%)` : "";
+          const quote = s.verbatimQuote ? `\n    "${s.verbatimQuote}"` : "";
+          return `  ${s.name} [${loc}]${conf}${quote}`;
+        });
+        return [`${block.label}:`, ...lines].join("\n");
+      }
+      // Memory provenance (original)
       return `${block.label}: ${block.sources.map((s) => s.name).join(", ")}`;
+    }
 
     case "progress": {
       const pct = block.totalSteps > 0

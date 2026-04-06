@@ -19,6 +19,8 @@ import type {
 import { getIntegration } from "./integration-registry";
 import { executeCli } from "./integration-handlers/cli";
 import { executeRest } from "./integration-handlers/rest";
+// Dynamic import to avoid pulling LanceDB native binary into webpack bundle
+// import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
 export interface ResolvedTools {
   /** LLM-native tool definitions for the LLM to call */
@@ -29,6 +31,47 @@ export interface ResolvedTools {
     input: Record<string, unknown>,
   ) => Promise<string>;
 }
+
+// ============================================================
+// Built-in engine tools (Brief 079)
+// Resolved via `knowledge.search` etc in process YAML.
+// ============================================================
+
+interface BuiltInTool {
+  definition: LlmToolDefinition;
+  execute: (input: Record<string, unknown>) => Promise<string>;
+}
+
+const builtInTools: Record<string, BuiltInTool> = {
+  "knowledge.search": {
+    definition: {
+      name: "knowledge_search",
+      description:
+        "Search the knowledge base for relevant documents. Returns chunks with source citations (file, page, section, line range).",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query — natural language question or keywords",
+          },
+          topK: {
+            type: "number",
+            description: "Number of results to return (default: 5)",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    execute: async (input: Record<string, unknown>): Promise<string> => {
+      const { searchKnowledge, formatResultsForPrompt } = await import("./knowledge/search");
+      const query = input.query as string;
+      const topK = (input.topK as number) ?? 5;
+      const results = await searchKnowledge(query, topK);
+      return formatResultsForPrompt(results);
+    },
+  },
+};
 
 /**
  * Interpolate template strings with parameter values.
@@ -191,7 +234,18 @@ export function resolveTools(
   // Map from qualified name (service.action) to { service, tool, executeConfig }
   const toolMap = new Map<string, { service: string; tool: IntegrationTool }>();
 
+  // Track built-in tools for dispatch
+  const builtInMap = new Map<string, BuiltInTool>();
+
   for (const qualifiedName of toolNames) {
+    // Check built-in engine tools first (e.g., knowledge.search)
+    const builtIn = builtInTools[qualifiedName];
+    if (builtIn) {
+      tools.push(builtIn.definition);
+      builtInMap.set(builtIn.definition.name, builtIn);
+      continue;
+    }
+
     const dotIndex = qualifiedName.indexOf(".");
     if (dotIndex === -1) {
       console.warn(`  Tool '${qualifiedName}' missing service prefix (expected service.tool_name)`);
@@ -222,6 +276,12 @@ export function resolveTools(
     name: string,
     input: Record<string, unknown>,
   ): Promise<string> => {
+    // Check built-in tools first
+    const builtIn = builtInMap.get(name);
+    if (builtIn) {
+      return builtIn.execute(input);
+    }
+
     const entry = toolMap.get(name);
     if (!entry) {
       return `Error: tool '${name}' not resolved (authorisation rejected)`;

@@ -1286,3 +1286,42 @@ export const funnelEvents = sqliteTable("funnel_events", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+// ============================================================
+// Knowledge Base — Document tracking (Brief 079)
+// ============================================================
+
+export const documentSourceValues = ["llamaparse", "local"] as const;
+export type DocumentSource = (typeof documentSourceValues)[number];
+
+/** Tracks ingested documents for change detection and provenance */
+export const documents = sqliteTable("documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  filePath: text("file_path").notNull(),
+  fileName: text("file_name").notNull(),
+  format: text("format").notNull(), // pdf, docx, html, etc.
+  contentHash: text("content_hash").notNull(),
+  chunkCount: integer("chunk_count").notNull().default(0),
+  source: text("source").notNull().$type<DocumentSource>().default("local"),
+  lastIndexed: integer("last_indexed", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** Stores full parsed markdown for document viewer (Layer 3, Brief 079) */
+export const documentContent = sqliteTable("document_content", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  documentHash: text("document_hash").notNull().unique(),
+  parsedMarkdown: text("parsed_markdown").notNull(),
+  pageCount: integer("page_count").notNull().default(1),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

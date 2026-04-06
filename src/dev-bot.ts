@@ -20,7 +20,9 @@
  *   - Direct engine import: same pattern as src/cli/commands/start.ts
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
+dotenv.config({ path: ".env.local", override: true });
 import { initLlm } from "./engine/llm.js";
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { runClaude, loadRoleContract } from "./dev-pipeline.js";

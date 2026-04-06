@@ -22,6 +22,7 @@ import { useState, useCallback } from "react";
 import { useProcessDetail } from "@/lib/process-query";
 import { ProcessBuilderPanel } from "./process-builder-panel";
 import { ArtifactViewerPanel } from "./artifact-viewer-panel";
+import { DocumentViewerPanel } from "./document-viewer-panel";
 import type { ContentBlock } from "@/lib/engine";
 import { BlockList } from "../blocks/block-registry";
 import { DotParticles } from "@/app/setup/dot-particles";
@@ -35,6 +36,7 @@ export type PanelContext =
   | { type: "artifact-review"; runId: string; processId: string }
   | { type: "briefing"; data: Record<string, unknown> }
   | { type: "blocks"; blocks: ContentBlock[]; title?: string }
+  | { type: "document-viewer"; documentHash: string; highlightChunkId?: string; page?: number }
   | { type: "empty" };
 
 interface RightPanelProps {
@@ -126,6 +128,13 @@ export function RightPanel({
           )}
           {activeContext.type === "blocks" && (
             <BlocksContext blocks={activeContext.blocks} title={activeContext.title} onAction={onAction} />
+          )}
+          {activeContext.type === "document-viewer" && (
+            <DocumentViewerPanel
+              documentHash={activeContext.documentHash}
+              highlightChunkId={activeContext.highlightChunkId}
+              page={activeContext.page}
+            />
           )}
           {activeContext.type === "empty" && <DefaultContext />}
         </div>

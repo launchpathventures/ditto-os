@@ -213,6 +213,17 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
         return;
       }
 
+      // Brief 079 Layer 3: Open document viewer in right panel
+      if (actionId === "open-document-viewer") {
+        setPanelOverride({
+          type: "document-viewer",
+          documentHash: payload?.documentHash as string,
+          highlightChunkId: payload?.chunkId as string,
+          page: payload?.page as number | undefined,
+        });
+        return;
+      }
+
       // Open artifact from ArtifactBlock "Open" button (Brief 050)
       if (actionId.startsWith("open-artifact-")) {
         const artifactId = actionId.replace("open-artifact-", "");

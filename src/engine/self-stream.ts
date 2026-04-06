@@ -1235,6 +1235,16 @@ export async function toolResultToContentBlocks(
       // Brief 069 AC11: Stays as metadata per Insight-129, no blocks
       return [];
 
+    case "search_knowledge": {
+      // Brief 079: Knowledge citation block from search results
+      // Extract contentBlocks from metadata (built by search-knowledge self-tool)
+      const meta = result.metadata as { contentBlocks?: ContentBlock[]; resultCount?: number } | undefined;
+      if (meta?.contentBlocks && meta.contentBlocks.length > 0) {
+        return meta.contentBlocks;
+      }
+      return [];
+    }
+
     default:
       return [];
   }
