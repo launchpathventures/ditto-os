@@ -105,9 +105,13 @@ export function DittoConversation() {
     return () => timers.forEach(clearTimeout);
   }, [showIntro]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — scroll the messages container, not the page
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages, loading]);
 
   // Focus input when state changes
@@ -258,127 +262,52 @@ export function DittoConversation() {
         </div>
       </nav>
 
-      {/* Conversation area */}
-      <main className="flex flex-1 flex-col px-4 md:px-10">
-        <div className="mx-auto w-full max-w-[640px] flex-1 py-8 md:flex md:items-center md:py-0">
-          <div className="w-full space-y-5">
-            {/* Intro phase — staggered messages */}
-            {showIntro && (
-              <div className="space-y-5 md:space-y-6">
-                {introCount >= 1 && (
-                  <p className="animate-fade-in text-3xl font-bold tracking-tight text-text-primary md:text-5xl md:leading-[1.1]">
-                    {INTRO_MESSAGES[0].text}
-                  </p>
-                )}
-                {introCount >= 2 && (
-                  <p className="animate-fade-in text-2xl font-semibold tracking-tight text-text-primary md:text-4xl md:leading-[1.15]">
-                    {INTRO_MESSAGES[1].text}
-                  </p>
-                )}
-              </div>
-            )}
+      {/* Conversation area — flex column, messages scroll, input anchored on mobile */}
+      <main className="flex flex-1 flex-col overflow-hidden px-4 md:px-10">
+        <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col overflow-hidden py-8 md:justify-center md:py-0">
+          {/* Intro phase — staggered messages */}
+          {showIntro && (
+            <div className="space-y-5 md:space-y-6">
+              {introCount >= 1 && (
+                <p className="animate-fade-in text-3xl font-bold tracking-tight text-text-primary md:text-5xl md:leading-[1.1]">
+                  {INTRO_MESSAGES[0].text}
+                </p>
+              )}
+              {introCount >= 2 && (
+                <p className="animate-fade-in text-2xl font-semibold tracking-tight text-text-primary md:text-4xl md:leading-[1.15]">
+                  {INTRO_MESSAGES[1].text}
+                </p>
+              )}
+            </div>
+          )}
 
-            {/* Conversation — all messages in one stream */}
-            {!showIntro && (
-              <>
-                <div className="space-y-4">
-                  {messages.map((msg, i) => (
-                    <ChatMessage
-                      key={i}
-                      role={msg.role}
-                      text={msg.text}
-                      animate={i >= messages.length - 2}
-                      variant={
-                        msg.role === "alex" && i === 0
-                          ? "hero-primary"
-                          : msg.role === "alex" && i === 1
-                            ? "hero-secondary"
-                            : "body"
-                      }
-                    />
-                  ))}
-                  {loading && <TypingIndicator />}
-                  <div ref={messagesEndRef} />
-                </div>
+          {/* Conversation — messages scroll, input stays anchored */}
+          {!showIntro && (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* Scrollable messages area */}
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 space-y-4 overflow-y-auto pb-4"
+              >
+                {messages.map((msg, i) => (
+                  <ChatMessage
+                    key={i}
+                    role={msg.role}
+                    text={msg.text}
+                    animate={i >= messages.length - 2}
+                    variant={
+                      msg.role === "alex" && i === 0
+                        ? "hero-primary"
+                        : msg.role === "alex" && i === 1
+                          ? "hero-secondary"
+                          : "body"
+                    }
+                  />
+                ))}
+                {loading && <TypingIndicator />}
+                <div ref={messagesEndRef} />
 
-                {/* Input — type adapts to LLM signals */}
-                {showInput && !loading && (
-                  <div className="space-y-3 animate-fade-in sticky bottom-4 bg-white pb-2 pt-3 md:static md:bottom-auto md:pb-0 md:pt-0">
-                    <form onSubmit={handleSubmit} className="flex gap-2">
-                      <input
-                        ref={inputRef}
-                        type={inputType}
-                        placeholder={inputPlaceholder}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
-                      />
-                      <button
-                        type="submit"
-                        disabled={!input.trim()}
-                        aria-label="Send message"
-                        className="inline-flex items-center rounded-2xl bg-vivid px-4 py-3 text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
-                      >
-                        <ArrowRight size={18} />
-                      </button>
-                    </form>
-                    {showInitialPills && (
-                      <QuickReplyPills
-                        pills={FRONT_DOOR_PILLS}
-                        onSelect={(pill) => sendMessage(pill)}
-                        disabled={loading}
-                      />
-                    )}
-                    {showSuggestions && (
-                      <QuickReplyPills
-                        pills={suggestions}
-                        onSelect={(pill) => { setSuggestions([]); sendMessage(pill); }}
-                        disabled={loading}
-                      />
-                    )}
-                    {requestEmail && (
-                      <p className="text-xs text-text-muted">
-                        Or keep chatting — just type a question instead.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Error fallback — direct email capture */}
-                {errorFallback && (
-                  <form onSubmit={handleErrorEmailSubmit} className="space-y-3 animate-fade-in">
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        required
-                        placeholder="you@company.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        autoFocus
-                        className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
-                      />
-                      <button
-                        type="submit"
-                        aria-label="Submit email"
-                        className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover"
-                      >
-                        Go <ArrowRight size={16} />
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Your name (optional)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-border bg-white px-5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
-                    />
-                    {errorMsg && (
-                      <p className="text-sm text-negative">{errorMsg}</p>
-                    )}
-                  </form>
-                )}
-
-                {/* Timeline — shown after email is captured */}
+                {/* Timeline — shown after email is captured (scrolls with messages) */}
                 {emailCaptured && (
                   <div className="mt-6 animate-fade-in rounded-xl border border-border bg-white p-6">
                     <p className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted">
@@ -403,9 +332,86 @@ export function DittoConversation() {
                     </p>
                   </div>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+
+              {/* Input — anchored at bottom, never scrolls away */}
+              {showInput && !loading && (
+                <div className="shrink-0 space-y-3 animate-fade-in bg-white pb-4 pt-3">
+                  <form onSubmit={handleSubmit} className="flex gap-2">
+                    <input
+                      ref={inputRef}
+                      type={inputType}
+                      placeholder={inputPlaceholder}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim()}
+                      aria-label="Send message"
+                      className="inline-flex items-center rounded-2xl bg-vivid px-4 py-3 text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </form>
+                  {showInitialPills && (
+                    <QuickReplyPills
+                      pills={FRONT_DOOR_PILLS}
+                      onSelect={(pill) => sendMessage(pill)}
+                      disabled={loading}
+                    />
+                  )}
+                  {showSuggestions && (
+                    <QuickReplyPills
+                      pills={suggestions}
+                      onSelect={(pill) => { setSuggestions([]); sendMessage(pill); }}
+                      disabled={loading}
+                    />
+                  )}
+                  {requestEmail && (
+                    <p className="text-xs text-text-muted">
+                      Or keep chatting — just type a question instead.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Error fallback — direct email capture */}
+              {errorFallback && (
+                <form onSubmit={handleErrorEmailSubmit} className="shrink-0 space-y-3 animate-fade-in bg-white pb-4 pt-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      required
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoFocus
+                      className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    />
+                    <button
+                      type="submit"
+                      aria-label="Submit email"
+                      className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover"
+                    >
+                      Go <ArrowRight size={16} />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Your name (optional)"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-2xl border-2 border-border bg-white px-5 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                  />
+                  {errorMsg && (
+                    <p className="text-sm text-negative">{errorMsg}</p>
+                  )}
+                </form>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Below the fold — value cards + trust row */}
