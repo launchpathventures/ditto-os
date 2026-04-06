@@ -1,0 +1,144 @@
+# Ditto — Template Process: Social Publishing
+#
+# Schedule and post across X, LinkedIn. Track engagement.
+# Optimize timing and format. Gear 1 — hard hustle.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# User Agent Gear 1 (digital acquisition)
+
+name: Social Publishing
+id: social-publishing
+version: 1
+status: active
+template: true
+
+operator: user-agent
+gear: digital-acquisition
+
+description: >
+  Manage the user's social media presence. Schedule content from
+  content-creation, post at optimal times, monitor engagement,
+  and report performance. Handles X and LinkedIn initially.
+  Gear 1 — broadcast is fine, volume is appropriate. Still subject
+  to brand quality checks.
+
+trigger:
+  type: schedule
+  description: >
+    Runs on the content calendar schedule. Also triggered when
+    content-creation produces approved content ready for publishing.
+
+inputs:
+  - name: content
+    type: json
+    source: self
+    required: true
+    description: >
+      Approved content to publish: text, format, platform(s),
+      hashtags, media attachments.
+  - name: publishConfig
+    type: json
+    source: self
+    required: false
+    description: >
+      Publishing preferences: optimal times by platform, posting
+      frequency caps, cross-posting rules.
+
+steps:
+  - id: adapt-for-platform
+    name: Adapt for Platform
+    executor: ai-agent
+    description: >
+      Adapt the content for each target platform:
+      - LinkedIn: professional tone, 150-300 words, relevant hashtags
+      - X: concise, punchy, thread if longer, 280 char limit per post
+      Cross-posting is fine but should feel native to each platform,
+      not a copy-paste.
+    config:
+      model_hint: fast
+    inputs:
+      - content
+    outputs:
+      - platform-versions
+
+  - id: quality-check
+    name: Brand Quality Check
+    executor: ai-agent
+    description: >
+      Check each platform version:
+      - On-brand? (matches user's voice and positioning)
+      - Truthful? (no misleading claims or exaggerations)
+      - Professional? (nothing that could embarrass the user)
+      - Platform-appropriate? (format, length, tone)
+      Block anything that fails. This is broadcast but it's still
+      the user's brand.
+    config:
+      model_hint: fast
+    inputs:
+      - platform-versions
+    outputs:
+      - approved-versions
+
+  - id: schedule-posts
+    name: Schedule Posts
+    executor: integration
+    description: >
+      Schedule approved posts at optimal times. Use historical
+      engagement data to pick timing. Respect frequency caps
+      (don't over-post).
+    config:
+      service: social-publishing
+    inputs:
+      - approved-versions
+      - publishConfig
+    outputs:
+      - schedule-result
+
+  - id: monitor-engagement
+    name: Monitor Engagement
+    executor: ai-agent
+    description: >
+      After posting, monitor engagement for 48 hours:
+      - Likes, comments, shares, impressions
+      - Notable replies (especially from prospects or network contacts)
+      - Negative reactions or concerns
+      Flag notable engagement for the user. Route prospect engagement
+      to the pipeline (someone in the ICP engaging = warm lead).
+    config:
+      model_hint: fast
+    inputs:
+      - schedule-result
+    outputs:
+      - engagement-report
+
+outputs:
+  - name: engagement-report
+    type: json
+    description: >
+      Post-publish engagement report: metrics by platform, notable
+      interactions, prospect engagement signals.
+
+quality_criteria:
+  - "Content feels native to each platform"
+  - "Posting frequency within configured caps"
+  - "Prospect engagement flagged and routed to pipeline"
+  - "No misleading or off-brand content published"
+
+feedback:
+  metrics:
+    - engagement_rate_by_platform
+    - follower_growth
+    - prospect_engagement_rate
+  capture:
+    - user_edits_before_publish
+    - posts_user_deleted_after_publish
+    - engagement_data
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "15 posts with no deletions or major edits" }
+    - { from: spot_checked, to: autonomous, after: "40 posts with consistent quality" }
+  downgrade_triggers:
+    - "User deletes a published post"
+    - "Negative public reaction to a post"

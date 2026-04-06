@@ -1,0 +1,104 @@
+# AgentMail Integration
+#
+# Purpose-built email infrastructure for AI agents.
+# Primary email adapter for the Network Agent (Brief 079).
+# Provides programmatic inbox creation, native reply handling with
+# extracted text (reply without quoted history), thread management,
+# and webhooks for inbound messages.
+#
+# Provenance: Brief 079/081, agentmail npm package (depend level, MIT)
+
+service: agentmail
+description: AgentMail — email infrastructure for AI agents
+interfaces:
+  sdk:
+    package: agentmail
+    auth: api_key
+    env_vars:
+      - AGENTMAIL_API_KEY
+preferred: sdk
+connection:
+  auth_type: api_key
+  provider_name: "AgentMail"
+  setup_url: https://console.agentmail.to
+  setup_instructions: "Sign up at agentmail.to, create an API key in the console, and set AGENTMAIL_API_KEY in your environment."
+
+# Tools are accessed via the SDK directly, not through the integration
+# tool resolver. The AgentMailAdapter in src/engine/channel.ts wraps
+# the SDK methods. Listed here for documentation/registry completeness.
+tools:
+  - name: create_inbox
+    description: Create a new email inbox for a persona (e.g. alex@ditto.network)
+    parameters:
+      username:
+        type: string
+        required: false
+        description: "Username portion of the email address. Randomly generated if omitted."
+      domain:
+        type: string
+        required: false
+        description: "Domain for the email address. Defaults to agentmail.to."
+      displayName:
+        type: string
+        required: false
+        description: "Display name (e.g. 'Alex from Ditto')"
+    execute:
+      protocol: sdk
+      method: "client.inboxes.create({ username, domain, displayName })"
+
+  - name: send_message
+    description: Send an email from an inbox
+    parameters:
+      inboxId:
+        type: string
+        required: true
+        description: "The inbox to send from"
+      to:
+        type: string
+        required: true
+        description: "Recipient email address"
+      subject:
+        type: string
+        required: true
+        description: "Email subject"
+      text:
+        type: string
+        required: true
+        description: "Email body text"
+    execute:
+      protocol: sdk
+      method: "client.inboxes.messages.send(inboxId, { to: [to], subject, text })"
+
+  - name: list_messages
+    description: List messages in an inbox
+    parameters:
+      inboxId:
+        type: string
+        required: true
+        description: "The inbox to list messages from"
+      limit:
+        type: integer
+        required: false
+        description: "Maximum number of messages to return"
+    execute:
+      protocol: sdk
+      method: "client.inboxes.messages.list(inboxId, { limit })"
+
+  - name: reply_to_message
+    description: Reply to a message (preserves threading)
+    parameters:
+      inboxId:
+        type: string
+        required: true
+        description: "The inbox containing the message"
+      messageId:
+        type: string
+        required: true
+        description: "The message to reply to"
+      text:
+        type: string
+        required: true
+        description: "Reply body text"
+    execute:
+      protocol: sdk
+      method: "client.inboxes.messages.reply(inboxId, messageId, { text })"

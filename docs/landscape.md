@@ -248,12 +248,12 @@
 **LiteLLM Router** — github.com/BerriAI/litellm
 - Active 2023-2026 | Python
 - Unified LLM interface (100+ providers via `litellm.completion(model="provider/model")`). Router with operational routing strategies: cost-based (cheapest healthy deployment), latency-based (fastest cached response time), round-robin, semantic auto-routing. Redis-backed stats for production. Cooldown system for failing deployments.
-- **Ditto relevance:** LOW-MEDIUM — operational routing patterns (fallback, cooldown) are useful references. But Ditto already has its own multi-provider `llm.ts` (Brief 032) and routes at the process level, not the infra level. LiteLLM optimizes for operational metrics, not output quality.
+- **Ditto relevance:** LOW — operational routing patterns (fallback, cooldown) informed ADR-026 design. Ditto now has purpose-based multi-provider routing (Brief 096, Insight-157) that routes by task purpose, not operational metrics. Preference-list fallback across providers implemented.
 - **Limitation:** Python-only. Operational routing only (cost, latency) — no quality-based learning. Infrastructure layer, not an agent framework.
 
 **Vercel AI SDK (model routing)** — github.com/vercel/ai
 - Provider registry (`provider:model` string format), `customProvider` for user-defined aliases mapping capability hints to concrete models, per-call model selection, OpenTelemetry telemetry with `ai.response.model` (actual model used).
-- **Ditto relevance:** MEDIUM — provider registry and alias patterns are well-designed. Ditto's `llm.ts` already implements a simpler version. `customProvider` alias pattern is the closest existing implementation to Ditto's model hint concept. See `docs/research/llm-model-routing-patterns.md` for full analysis.
+- **Ditto relevance:** MEDIUM — provider registry and `customProvider` alias pattern informed the original `model_hint` design (Brief 033) and the upgraded purpose-based routing (ADR-026). Ditto's implementation now goes beyond Vercel's: multi-provider simultaneous loading + purpose-based routing (not just aliases within one provider).
 
 ### CLI
 | Option | Stars | Fit | Notes |
@@ -431,6 +431,78 @@ No existing framework implements these — they are Ditto's unique value:
 9. **Cognitive mode on process steps** — process definitions declare what kind of human thinking review demands (analytical vs creative). Review framing, feedback capture, and learning adapt accordingly. No surveyed AI platform adapts review UX to cognitive mode (ADR-013).
 10. **Tacit knowledge capture** — enriched feedback vocabulary (tagged rejection, gut rejection) captures pre-articulate expertise. System detects patterns in vague signals and surfaces hypotheses. No surveyed agent platform captures pre-articulate knowledge (ADR-013).
 11. **Insight escalation ladder** — learning layer escalates from concrete corrections → patterns → structural insights → strategic proposals. Four abstraction levels, each requiring different human cognitive engagement. No surveyed platform models abstraction levels in learning (ADR-013).
+
+---
+
+## AI SDR / BDR and Network Introduction Platforms (2026-04-05)
+
+New category added for Brief 079 (Network Agent MVP). Full report: `docs/research/ai-sdr-and-network-introduction-platforms.md`.
+
+### AI SDR/BDR Tools
+
+**11x (Alice)** — 11x.ai
+- Hierarchical multi-agent architecture. ~2M leads, ~3M messages, ~21K replies (~2% reply rate). Ghostwriting model. $50M Series B, $350M valuation. High churn. Credibility issues (fake customer logos).
+- **Ditto relevance:** LOW — volume-first, single-tenant, no trust model. Multi-agent sub-specialization pattern worth studying.
+
+**Artisan (Ava)** — artisan.co (YC)
+- 10-min conversational onboarding → knowledge base. 270M+ contact DB. Ghostwriting in user's voice. Built-in deliverability. $25M Series A, ~$5M ARR.
+- **Ditto relevance:** MEDIUM — conversational intake pattern directly applicable to Ditto onboarding. Deliverability infrastructure as reference. Volume model does not fit.
+
+**Clay** — clay.com
+- Data orchestration, not outreach. 150+ data providers. Waterfall enrichment (80%+ match rates). Claygent (GPT-4) for autonomous web research. 100K+ users, 10x YoY growth.
+- **Ditto relevance:** MEDIUM-HIGH — waterfall enrichment pattern and Claygent research pattern both adoptable for person enrichment. Not a competitor (different category).
+
+**Relevance AI** — relevanceai.com (Australian)
+- Agent builder platform. Custom BDR workflows. Autonomous research direction. Event-triggered agents.
+- **Ditto relevance:** LOW — technical platform for sales teams, not end-user product. Agent builder pattern noted.
+
+### Network Introduction Platforms
+
+**Lunchclub** — lunchclub.com
+- AI superconnector for 1:1 video meetings. Post-meeting feedback → match quality. Club points as trust currency. Invite-only quality gate.
+- **Ditto relevance:** MEDIUM — outcome-based learning (not profile matching) is key pattern. Points/reputation system informative. No AI intermediary character.
+
+**Commsor** — commsor.com
+- Go-to-Network (GTN) platform. Surfaces existing connections for warm intros. Data from Slack, LinkedIn, CRM. Warm intros: 3% no-show, 3-5x conversion.
+- **Ditto relevance:** MEDIUM — relationship surfacing and warm intro metrics as benchmarks. Enterprise GTM tool, not SMB. No AI intermediary.
+
+### Email Infrastructure for AI Agents
+
+**AgentMail** — agentmail.to
+- Purpose-built email infrastructure for AI agents. Programmatic inbox creation via API. Native reply handling with `extractedText` (reply content without quoted history). Thread management. Webhooks for inbound messages (`message.received`, `message.bounced`). Custom domains with DNS verification. WebSocket support for real-time. Usage-based pricing with free tier. $6M seed funding. MIT-licensed Node.js and Python SDKs.
+- **Ditto relevance:** HIGH — primary email adapter for Network Agent. Key advantages over Gmail API: per-agent inbox creation (`alex@ditto.network`), extracted reply text for agent processing, native threading, and inbound webhooks. `depend` level (npm install). Gmail retained as fallback for workspace email (inbox triage). See `integrations/agentmail.yaml`.
+
+### Market Signal
+
+AI SDR market in correction: 50-70% churn within 3 months. Hybrid (AI+human) model: 2.3x more revenue than AI-only. Warm intros: 3-5x conversion vs cold. Ditto's low-volume, relationship-first, trust-progressive model is validated by market data.
+
+### Ditto-Original (No Existing Solution)
+
+- Named AI intermediary with compounding reputation (Insight-144)
+- Cross-instance person memory / network intelligence (Insight-146)
+- Mode-shifted alignment (Self / Selling / Connecting)
+- Refusals as trust-building feature
+- Relationship-first outreach for SMB owners
+
+### Hub-and-Spoke Deployment (2026-04-06)
+
+New category for Insight-152 (Network Service is centralized). Full report: `docs/research/centralized-network-service-deployment.md`.
+
+**Temporal** — temporal.io
+- Central orchestration + distributed workers. Workers poll task queues. Central server owns workflow state and history.
+- **Ditto relevance:** HIGH (pattern) — the hub-and-spoke model maps directly to Network Service (hub) + Workspaces (workers).
+
+**Inngest** — inngest.com
+- Central event bus + distributed function execution. Apps register webhook endpoints; Inngest calls them on events.
+- **Ditto relevance:** HIGH (pattern) — Network fires events, Workspaces receive via webhook/SSE.
+
+**Turso** — turso.tech
+- Hosted SQLite (libSQL) with embedded replicas. Local reads, remote writes, periodic background sync.
+- **Ditto relevance:** HIGH (future depend) — per-user Turso databases as long-term Network ↔ Workspace sync. Free tier: 100 databases, 5GB. Drizzle-compatible.
+
+**Composio** — composio.dev
+- Centralized credential/tool proxy for AI agents. `composio.create(user_id)` for multi-tenant session isolation.
+- **Ditto relevance:** MEDIUM (pattern) — user-scoped session pattern applicable to Network API design.
 
 ---
 

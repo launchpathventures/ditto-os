@@ -80,3 +80,25 @@ outputs:
   - name: triage-summary
     type: text
     description: Summary of important emails needing attention, with suggested actions
+
+quality_criteria:
+  - "High-urgency emails never missed"
+  - "Classification matches actual urgency when reviewed"
+  - "Summary is actionable — each item has a suggested next step"
+
+feedback:
+  metrics:
+    - classification_accuracy
+    - missed_urgent_rate
+  capture:
+    - user_reclassifications
+    - missed_emails_flagged_by_user
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 triage cycles with no missed urgents" }
+    - { from: spot_checked, to: autonomous, after: "30 cycles with consistent accuracy" }
+  downgrade_triggers:
+    - "User flags a missed urgent email"
+    - "Classification accuracy drops below 80%"

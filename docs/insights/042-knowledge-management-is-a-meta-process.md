@@ -39,3 +39,5 @@ This is the same insight as Insight-032 (dev process is the first workspace) app
 - Research freshness tracking via learning layer
 - Insight lifecycle audits as process steps
 - Context tiering via engine
+
+**See also:** Insight-156 (compiled knowledge layer) — proposes the specific mechanism: a compiled knowledge document layer between raw sources and memory entries, with ingest/query/lint operations as system processes. Validates this insight with the Karpathy LLM Wiki pattern.

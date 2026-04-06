@@ -1,7 +1,7 @@
 # ADR-003: Memory Architecture
 
 **Date:** 2026-03-19
-**Status:** accepted (Phase 2b scope implemented; `self` scope added Brief 029; `solution` type + `metadata` column added Brief 060; Phase 3 LLM reconciliation and Phase 7 vector search pending)
+**Status:** accepted (Phase 2b scope implemented; `self` scope added Brief 029; `solution` type + `metadata` column added Brief 060; `person` scope added Brief 080; `shared` flag for house-level vs user-level person memory added ADR-025; Phase 3 LLM reconciliation and Phase 7 vector search pending)
 
 ## Context
 
@@ -35,8 +35,8 @@ ADR-001 (SQLite) constrains storage to SQLite + Drizzle for dogfood.
 ```
 memories
 ├── id: text (UUID)
-├── scopeType: text ("agent" | "process" | "self")
-├── scopeId: text (references agents.id, processes.id, or user identifier)
+├── scopeType: text ("agent" | "process" | "self" | "person")
+├── scopeId: text (references agents.id, processes.id, user identifier, or people.id)
 ├── type: text ("correction" | "preference" | "context" | "skill" | "user_model" | "solution")
 ├── content: text (the memory itself — natural language)
 ├── metadata: text (JSON, nullable — structured fields for solution memories: category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds)
@@ -52,7 +52,7 @@ memories
 
 **Why these fields:**
 
-- **scopeType + scopeId**: Three memory scopes. Agent-scoped memories travel with the agent. Process-scoped memories stay with the process even when agents are swapped. Self-scoped memories (ADR-016, Brief 029) belong to the Conversational Self — user preferences, communication style, cross-session continuity. `scopeId` is the user identifier for self-scoped memories. Provenance: Mem0's scope filtering (`mem0/memory/main.py`), extended for the Self.
+- **scopeType + scopeId**: Four memory scopes. Agent-scoped memories travel with the agent. Process-scoped memories stay with the process even when agents are swapped. Self-scoped memories (ADR-016, Brief 029) belong to the Conversational Self — user preferences, communication style, cross-session continuity. `scopeId` is the user identifier for self-scoped memories. Person-scoped memories (Brief 079/080) store knowledge about a person in Ditto's relationship graph — contact context, interaction patterns, preferences. `scopeId` references `people.id`. Person memory isolation is via join path: `memories.scopeId` → `people.id` → `people.userId` (no `userId` column on the memories table). Person memories carry a `shared` flag (ADR-025, default `false`): when `true`, the memory is house-level institutional knowledge ("Priya prefers email") visible to all users across the centralized Ditto Network; when `false`, it is private to the creating user. Provenance: Mem0's scope filtering (`mem0/memory/main.py`), extended for the Self and person scopes.
 
 - **type**: Six memory types grounded in the human mental model:
   - `correction` — "Don't use formal tone" (learned from being corrected)

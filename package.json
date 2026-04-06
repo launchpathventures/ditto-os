@@ -32,6 +32,8 @@
     "@anthropic-ai/sdk": "^0.79.0",
     "@apidevtools/swagger-parser": "^12.1.0",
     "@clack/prompts": "^1.1.0",
+    "@google/generative-ai": "^0.24.1",
+    "agentmail": "^0.4.17",
     "better-sqlite3": "^11.9.1",
     "citty": "^0.2.1",
     "diff": "^8.0.3",

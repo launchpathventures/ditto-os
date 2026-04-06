@@ -2,7 +2,7 @@
  * Memory Assembly Handler
  *
  * Assembles agent context from memories before step execution.
- * Loads agent-scoped + process-scoped memories, sorts, budgets, renders.
+ * Loads agent-scoped + process-scoped + person-scoped memories, sorts, budgets, renders.
  *
  * Also assembles intra-run context: outputs from completed steps in the same
  * process run. This is ephemeral per-run state — NOT durable memory. It replaces
@@ -131,10 +131,51 @@ export const memoryAssemblyHandler: HarnessHandler = {
         desc(schema.memories.confidence)
       );
 
+    // Load person-scoped memories if a personId is provided in step config or run inputs
+    const personId =
+      (context.stepDefinition.config?.person_id as string) ??
+      (context.processRun.inputs as Record<string, unknown>)?.personId as string | undefined;
+
+    let personMemories: Array<{
+      type: string;
+      content: string;
+      confidence: number;
+      reinforcementCount: number;
+    }> = [];
+
+    if (personId) {
+      personMemories = await db
+        .select({
+          type: schema.memories.type,
+          content: schema.memories.content,
+          confidence: schema.memories.confidence,
+          reinforcementCount: schema.memories.reinforcementCount,
+        })
+        .from(schema.memories)
+        .where(
+          and(
+            eq(schema.memories.scopeType, "person"),
+            eq(schema.memories.scopeId, personId),
+            eq(schema.memories.active, true),
+          ),
+        )
+        .orderBy(
+          desc(schema.memories.reinforcementCount),
+          desc(schema.memories.confidence),
+        );
+    }
+
     // Dedup across scopes — if same content exists in both, keep only the agent-scoped version
     const agentContents = new Set(agentMemories.map((m) => m.content));
     const dedupedProcessMemories = processMemories.filter(
       (m) => !agentContents.has(m.content)
+    );
+    const allPriorContents = new Set([
+      ...agentContents,
+      ...dedupedProcessMemories.map((m) => m.content),
+    ]);
+    const dedupedPersonMemories = personMemories.filter(
+      (m) => !allPriorContents.has(m.content),
     );
 
     // Render durable memories within budget
@@ -164,6 +205,23 @@ export const memoryAssemblyHandler: HarnessHandler = {
       totalChars += header.length + 1;
       const lines: string[] = [header];
       for (const mem of dedupedProcessMemories) {
+        const line = renderMemory(mem);
+        if (totalChars + line.length + 1 > charBudget) break;
+        lines.push(line);
+        totalChars += line.length + 1;
+        injectedCount++;
+      }
+      if (lines.length > 1) {
+        sections.push(lines.join("\n"));
+      }
+    }
+
+    // --- Person memory (Brief 079/080) ---
+    if (dedupedPersonMemories.length > 0) {
+      const header = "## Person Memory";
+      totalChars += header.length + 1;
+      const lines: string[] = [header];
+      for (const mem of dedupedPersonMemories) {
         const line = renderMemory(mem);
         if (totalChars + line.length + 1 > charBudget) break;
         lines.push(line);

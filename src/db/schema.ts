@@ -400,7 +400,7 @@ export const feedback = sqliteTable("feedback", {
 });
 
 /** Memory scope type values */
-export const memoryScopeTypeValues = ["agent", "process", "self"] as const;
+export const memoryScopeTypeValues = ["agent", "process", "self", "person"] as const;
 export type MemoryScopeType = (typeof memoryScopeTypeValues)[number];
 
 /** Memory type values */
@@ -420,8 +420,10 @@ export type MemorySource = (typeof memorySourceValues)[number];
 
 /**
  * Memories — learned patterns that persist across runs.
- * Three-scope model: agent-scoped (travels with agent) + process-scoped (stays with process) + self-scoped (spans all, per user).
- * Provenance: ADR-003, ADR-016 (self scope), Mem0 scope filtering, memU reinforcement counting.
+ * Four-scope model: agent-scoped (travels with agent) + process-scoped (stays with process)
+ * + self-scoped (spans all, per user) + person-scoped (knowledge about a person in the network).
+ * Person-scoped isolation via join: memories.scopeId → people.id → people.userId.
+ * Provenance: ADR-003, ADR-016 (self scope), Brief 079/080 (person scope), Mem0 scope filtering, memU reinforcement counting.
  */
 export const memories = sqliteTable("memories", {
   id: text("id")
@@ -448,6 +450,12 @@ export const memories = sqliteTable("memories", {
   confidence: real("confidence").notNull().default(0.3),
 
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+
+  // House-level vs user-level for person-scoped memories (ADR-025)
+  // When true: institutional knowledge visible across all users ("Priya prefers email")
+  // When false (default): private to the creating user
+  // Only meaningful for scopeType "person"; ignored for other scopes
+  shared: integer("shared", { mode: "boolean" }).notNull().default(false),
 
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
@@ -860,6 +868,332 @@ export const schedules = sqliteTable("schedules", {
 });
 
 // ============================================================
+// Network Agent — People and Interactions (Brief 079/080)
+// ============================================================
+
+/** Visibility values for people in the relationship graph */
+export const personVisibilityValues = ["internal", "connection"] as const;
+export type PersonVisibility = (typeof personVisibilityValues)[number];
+
+/** Journey layer values (three-layer model, Insight-151) */
+export const journeyLayerValues = ["participant", "active", "workspace"] as const;
+export type JourneyLayer = (typeof journeyLayerValues)[number];
+
+/** Person trust level — Ditto's earned reputation with this person (Insight-149) */
+export const personTrustLevelValues = ["cold", "familiar", "trusted"] as const;
+export type PersonTrustLevel = (typeof personTrustLevelValues)[number];
+
+/** Persona assignment values */
+export const personaValues = ["alex", "mira"] as const;
+export type PersonaId = (typeof personaValues)[number];
+
+/** Person source values */
+export const personSourceValues = ["manual", "enrichment", "reply", "introduction"] as const;
+export type PersonSource = (typeof personSourceValues)[number];
+
+/**
+ * People — everyone Ditto knows about in the relationship graph.
+ * Two audiences: internal (Ditto's working graph, invisible to user) and
+ * connection (user's visible relationships, promoted on two-way interaction).
+ * Provenance: Brief 079/080, Insight-146 (cross-instance memory), Insight-149 (trust tiers on recipients).
+ */
+export const people = sqliteTable("people", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  organization: text("organization"),
+  role: text("role"),
+  source: text("source").notNull().$type<PersonSource>().default("manual"),
+  journeyLayer: text("journey_layer").notNull().$type<JourneyLayer>().default("participant"),
+  visibility: text("visibility").notNull().$type<PersonVisibility>().default("internal"),
+  personaAssignment: text("persona_assignment").$type<PersonaId>(),
+  trustLevel: text("trust_level").notNull().$type<PersonTrustLevel>().default("cold"),
+  optedOut: integer("opted_out", { mode: "boolean" }).notNull().default(false),
+  lastInteractionAt: integer("last_interaction_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("people_user_id").on(table.userId),
+  index("people_user_visibility").on(table.userId, table.visibility),
+  index("people_email").on(table.email),
+]);
+
+/** Interaction type values */
+export const interactionTypeValues = [
+  "outreach_sent",
+  "reply_received",
+  "reply_sent",
+  "introduction_made",
+  "introduction_received",
+  "meeting_booked",
+  "follow_up",
+  "nurture",
+  "opt_out",
+] as const;
+export type InteractionType = (typeof interactionTypeValues)[number];
+
+/** Interaction channel values */
+export const interactionChannelValues = ["email", "voice", "sms"] as const;
+export type InteractionChannel = (typeof interactionChannelValues)[number];
+
+/** Interaction mode values */
+export const interactionModeValues = ["selling", "connecting", "nurture"] as const;
+export type InteractionMode = (typeof interactionModeValues)[number];
+
+/** Interaction outcome values */
+export const interactionOutcomeValues = ["positive", "neutral", "negative", "no_response"] as const;
+export type InteractionOutcome = (typeof interactionOutcomeValues)[number];
+
+/**
+ * Interactions — every touchpoint between Ditto and a person.
+ * Records outreach, replies, introductions, meetings, follow-ups, nurture.
+ * Provenance: Brief 079/080, Insight-147 (recipient experience is growth engine).
+ */
+export const interactions = sqliteTable("interactions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  personId: text("person_id")
+    .references(() => people.id)
+    .notNull(),
+  userId: text("user_id").notNull(),
+  type: text("type").notNull().$type<InteractionType>(),
+  channel: text("channel").notNull().$type<InteractionChannel>().default("email"),
+  mode: text("mode").notNull().$type<InteractionMode>(),
+  subject: text("subject"),
+  summary: text("summary"),
+  outcome: text("outcome").$type<InteractionOutcome>(),
+  processRunId: text("process_run_id").references(() => processRuns.id),
+  metadata: text("metadata", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("interactions_person_id").on(table.personId),
+  index("interactions_user_id").on(table.userId),
+]);
+
+// ============================================================
+// Network Users — people working WITH Ditto (Layer 2+)
+// ============================================================
+
+/** Network user status values */
+export const networkUserStatusValues = ["active", "workspace", "churned"] as const;
+export type NetworkUserStatus = (typeof networkUserStatusValues)[number];
+
+/**
+ * Network users — people who are actively working with Ditto (Layer 2+).
+ * Distinct from the `people` table (everyone Alex knows).
+ * A network user starts when someone begins working with Alex via intake.
+ * When they provision a workspace, status changes to "workspace" and
+ * workspaceId links to their instance.
+ *
+ * The user model (what Alex knows about them) is stored as memories
+ * with scopeType "self" and scopeId = networkUser.id — same memory
+ * system, different deployment home (Network vs Workspace).
+ *
+ * Provenance: Brief 079, Insight-152 (Network Service is centralized).
+ */
+export const networkUsers = sqliteTable("network_users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  businessContext: text("business_context"),
+  personaAssignment: text("persona_assignment").$type<PersonaId>(),
+  status: text("status").notNull().$type<NetworkUserStatus>().default("active"),
+  /** Links to workspace instance when provisioned (URL or instance ID) */
+  workspaceId: text("workspace_id"),
+  /** The person record for this user in the people graph (they're also a person Alex knows) */
+  personId: text("person_id").references(() => people.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_users_email").on(table.email),
+]);
+
+// ============================================================
+// Network Tokens — API authentication for workspace connections
+// ============================================================
+
+/**
+ * Network tokens — Bearer tokens for workspace → Network API authentication.
+ * Tokens are stored hashed (SHA-256) for security. Validation uses
+ * timing-safe comparison. Revoked tokens have a non-null revokedAt.
+ *
+ * Provenance: Brief 088, ADR-025 (Network API auth).
+ */
+export const networkTokens = sqliteTable("network_tokens", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+}, (table) => [
+  index("network_tokens_user_id").on(table.userId),
+  index("network_tokens_hash").on(table.tokenHash),
+]);
+
+// ============================================================
+// Managed Workspaces — fleet registry for provisioned workspaces
+// ============================================================
+
+export const workspaceStatusValues = [
+  "provisioning",
+  "healthy",
+  "degraded",
+  "deprovisioned",
+] as const;
+export type WorkspaceStatus = (typeof workspaceStatusValues)[number];
+
+export const healthStatusValues = [
+  "ok",
+  "liveness_failed",
+  "readiness_failed",
+] as const;
+export type HealthStatus = (typeof healthStatusValues)[number];
+
+/**
+ * Managed workspaces — fleet registry for provisioned Fly.io workspaces.
+ * One workspace per user. Tracks lifecycle from provisioning to deprovisioning.
+ *
+ * Provenance: Brief 090, ADR-025 (centralized Network Service), Temporal namespace registry pattern.
+ */
+export const managedWorkspaces = sqliteTable("managed_workspaces", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull().unique(),
+  machineId: text("machine_id").notNull(),
+  volumeId: text("volume_id").notNull(),
+  workspaceUrl: text("workspace_url").notNull(),
+  region: text("region").notNull().default("syd"),
+  imageRef: text("image_ref").notNull(),
+  currentVersion: text("current_version"),
+  status: text("status").notNull().$type<WorkspaceStatus>().default("provisioning"),
+  lastHealthCheckAt: integer("last_health_check_at", { mode: "timestamp_ms" }),
+  lastHealthStatus: text("last_health_status").$type<HealthStatus>(),
+  errorLog: text("error_log"),
+  tokenId: text("token_id").notNull(),
+  deprovisionedAt: integer("deprovisioned_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Fleet Upgrades — rolling upgrade history and per-workspace results (Brief 091)
+// ============================================================
+
+export const upgradeStatusValues = [
+  "in_progress",
+  "completed",
+  "partial",
+  "failed",
+  "circuit_breaker_tripped",
+  "rolled_back",
+] as const;
+export type UpgradeStatus = (typeof upgradeStatusValues)[number];
+
+export const canaryResultValues = ["passed", "failed"] as const;
+export type CanaryResult = (typeof canaryResultValues)[number];
+
+export const upgradeTriggeredByValues = ["cli", "api", "ci"] as const;
+export type UpgradeTriggeredBy = (typeof upgradeTriggeredByValues)[number];
+
+/**
+ * Upgrade history — audit trail for every fleet upgrade attempt.
+ * Each attempt records canary result, circuit breaker state, and per-workspace outcomes.
+ *
+ * Provenance: Brief 091, Fly.io release history pattern, Google SRE canary deployment.
+ */
+export const upgradeHistory = sqliteTable("upgrade_history", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  imageRef: text("image_ref").notNull(),
+  previousImageRef: text("previous_image_ref"),
+  status: text("status").notNull().$type<UpgradeStatus>().default("in_progress"),
+  totalWorkspaces: integer("total_workspaces").notNull(),
+  upgradedCount: integer("upgraded_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  skippedCount: integer("skipped_count").notNull().default(0),
+  canaryWorkspaceId: text("canary_workspace_id"),
+  canaryResult: text("canary_result").$type<CanaryResult>(),
+  circuitBreakerAt: integer("circuit_breaker_at", { mode: "timestamp_ms" }),
+  errorSummary: text("error_summary"),
+  triggeredBy: text("triggered_by").notNull().$type<UpgradeTriggeredBy>(),
+  startedAt: integer("started_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+});
+
+export const workspaceUpgradeResultValues = [
+  "upgraded",
+  "failed",
+  "rolled_back",
+  "skipped",
+] as const;
+export type WorkspaceUpgradeResult = (typeof workspaceUpgradeResultValues)[number];
+
+export const upgradeHealthCheckResultValues = [
+  "ok",
+  "liveness_failed",
+  "readiness_failed",
+  "timeout",
+] as const;
+export type UpgradeHealthCheckResult = (typeof upgradeHealthCheckResultValues)[number];
+
+/**
+ * Per-workspace results for each upgrade attempt.
+ * Records previous image (for rollback), health check result, duration.
+ *
+ * Provenance: Brief 091, saga compensating actions pattern.
+ */
+export const upgradeWorkspaceResults = sqliteTable("upgrade_workspace_results", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  upgradeId: text("upgrade_id")
+    .references(() => upgradeHistory.id)
+    .notNull(),
+  workspaceId: text("workspace_id")
+    .references(() => managedWorkspaces.id)
+    .notNull(),
+  previousImageRef: text("previous_image_ref").notNull(),
+  result: text("result").notNull().$type<WorkspaceUpgradeResult>(),
+  healthCheckResult: text("health_check_result").$type<UpgradeHealthCheckResult>(),
+  errorLog: text("error_log"),
+  durationMs: integer("duration_ms"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
 // Suggestion Dismissals — proactive guidance feedback loop
 // ============================================================
 
@@ -898,6 +1232,57 @@ export const briefs = sqliteTable("briefs", {
   filePath: text("file_path"),
   lastModified: integer("last_modified", { mode: "timestamp_ms" }),
   syncedAt: integer("synced_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Front Door Chat Sessions (Brief 093)
+// ============================================================
+
+export const chatSessions = sqliteTable("chat_sessions", {
+  id: text("id").primaryKey().$defaultFn(() => randomUUID()),
+  sessionId: text("session_id").notNull().unique(),
+  messages: text("messages", { mode: "json" }).notNull().$type<Array<{ role: string; content: string }>>(),
+  context: text("context").notNull(), // "front-door" | "referred"
+  ipHash: text("ip_hash").notNull(),
+  requestEmailFlagged: integer("request_email_flagged", { mode: "boolean" }).notNull().default(false),
+  messageCount: integer("message_count").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+});
+
+export const verifyAttempts = sqliteTable("verify_attempts", {
+  id: text("id").primaryKey().$defaultFn(() => randomUUID()),
+  ipHash: text("ip_hash").notNull(),
+  email: text("email").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const verificationEmails = sqliteTable("verification_emails", {
+  id: text("id").primaryKey().$defaultFn(() => randomUUID()),
+  recipientEmail: text("recipient_email").notNull(),
+  sentAt: integer("sent_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const funnelEvents = sqliteTable("funnel_events", {
+  id: text("id").primaryKey().$defaultFn(() => randomUUID()),
+  sessionId: text("session_id").notNull(),
+  event: text("event").notNull(),
+  surface: text("surface").notNull(), // "front-door" | "verify" | "referred"
+  metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
 });

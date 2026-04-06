@@ -14,6 +14,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { GoogleGenerativeAI, type GenerateContentResult, type Content, type Part, type FunctionDeclaration } from "@google/generative-ai";
 import { mockCreateCompletion } from "./llm-mock";
 
 // ============================================================
@@ -65,6 +66,7 @@ export interface LlmToolDefinition {
 
 export interface LlmCompletionRequest {
   model?: string;
+  purpose?: import("./model-routing").ModelPurpose;
   system: string;
   messages: LlmMessage[];
   tools?: LlmToolDefinition[];
@@ -102,6 +104,9 @@ const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> =
   "gpt-4o": { inputPerM: 2.5, outputPerM: 10 },
   "gpt-4o-mini": { inputPerM: 0.15, outputPerM: 0.6 },
   "o3-mini": { inputPerM: 1.1, outputPerM: 4.4 },
+  // Google
+  "gemini-2.5-pro": { inputPerM: 1.25, outputPerM: 10 },
+  "gemini-2.5-flash": { inputPerM: 0.15, outputPerM: 0.6 },
 };
 
 export function calculateCostCents(model: string, inputTokens: number, outputTokens: number): number {
@@ -434,17 +439,134 @@ class OllamaProvider extends OpenAIProvider {
 }
 
 // ============================================================
+// Google Provider (Brief 096)
+// ============================================================
+
+class GoogleProvider implements LlmProvider {
+  name = "google";
+  private client: GoogleGenerativeAI;
+
+  constructor() {
+    this.client = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
+  }
+
+  validateConfig(): void {
+    if (!process.env.GOOGLE_AI_API_KEY) {
+      throw new Error(
+        "GOOGLE_AI_API_KEY not set. Required for Google provider.\n" +
+        "Get your key at https://aistudio.google.com/apikey",
+      );
+    }
+  }
+
+  async createCompletion(request: LlmCompletionRequest): Promise<LlmCompletionResponse> {
+    const model = request.model || configuredModel || "gemini-2.5-pro";
+    const genModel = this.client.getGenerativeModel({
+      model,
+      systemInstruction: request.system,
+    });
+
+    // Convert Ditto messages to Google format
+    const contents: Content[] = [];
+    for (const msg of request.messages) {
+      const role = msg.role === "assistant" ? "model" : "user";
+      if (typeof msg.content === "string") {
+        contents.push({ role, parts: [{ text: msg.content }] });
+        continue;
+      }
+      const parts: Part[] = [];
+      for (const block of msg.content) {
+        if (block.type === "text") {
+          parts.push({ text: (block as LlmTextBlock).text });
+        } else if (block.type === "tool_use") {
+          const tu = block as LlmToolUseBlock;
+          parts.push({ functionCall: { name: tu.name, args: tu.input as Record<string, string> } });
+        } else if (block.type === "tool_result") {
+          const tr = block as LlmToolResultBlock;
+          // Google expects function name, not call ID. Extract name from the tool_use_id
+          // which we format as "google-{name}-{timestamp}" or fall back to the raw ID.
+          const fnName = tr.tool_use_id.startsWith("google-")
+            ? tr.tool_use_id.replace(/^google-/, "").replace(/-\d+$/, "")
+            : tr.tool_use_id;
+          parts.push({ functionResponse: { name: fnName, response: { result: tr.content } } });
+        }
+      }
+      if (parts.length > 0) contents.push({ role, parts });
+    }
+
+    // Build tools — all declarations in a single wrapper (Google SDK requirement)
+    const googleTools = request.tools && request.tools.length > 0
+      ? [{
+          functionDeclarations: request.tools.map((t): FunctionDeclaration => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema as FunctionDeclaration["parameters"],
+          })),
+        }]
+      : undefined;
+
+    const result: GenerateContentResult = await genModel.generateContent({
+      contents,
+      ...(googleTools ? { tools: googleTools } : {}),
+      generationConfig: { maxOutputTokens: request.maxTokens || 8192 },
+    });
+
+    const response = result.response;
+    const contentBlocks: LlmContentBlock[] = [];
+    let toolCallCounter = 0;
+
+    for (const candidate of response.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        if (part.text) {
+          contentBlocks.push({ type: "text", text: part.text });
+        }
+        if (part.functionCall) {
+          // ID format: google-{name}-{timestamp}-{counter} for uniqueness and name extraction
+          contentBlocks.push({
+            type: "tool_use",
+            id: `google-${part.functionCall.name}-${Date.now()}-${toolCallCounter++}`,
+            name: part.functionCall.name,
+            input: (part.functionCall.args || {}) as Record<string, unknown>,
+          });
+        }
+      }
+    }
+
+    const inputTokens = response.usageMetadata?.promptTokenCount || 0;
+    const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
+
+    let stopReason: string | null = "end_turn";
+    if (contentBlocks.some((b) => b.type === "tool_use")) {
+      stopReason = "tool_use";
+    }
+
+    return {
+      content: contentBlocks.length > 0 ? contentBlocks : [{ type: "text", text: "" }],
+      tokensUsed: inputTokens + outputTokens,
+      costCents: calculateCostCents(model, inputTokens, outputTokens),
+      stopReason,
+      model,
+    };
+  }
+}
+
+// ============================================================
 // Provider registry + initialization
 // ============================================================
 
-const providers: Record<string, () => LlmProvider> = {
+const providerFactories: Record<string, () => LlmProvider> = {
   anthropic: () => new AnthropicProvider(),
   openai: () => new OpenAIProvider(),
   ollama: () => new OllamaProvider(),
+  google: () => new GoogleProvider(),
 };
 
+/** Active provider for backward compat (single-provider mode or primary) */
 let activeProvider: LlmProvider | null = null;
 let configuredModel: string | null = null;
+
+/** All loaded providers — keyed by provider name (Brief 096: multi-provider) */
+const loadedProviders = new Map<string, LlmProvider>();
 
 /**
  * Check if mock LLM mode is active (MOCK_LLM=true).
@@ -455,9 +577,22 @@ export function isMockLlmMode(): boolean {
 }
 
 /**
- * Initialize the LLM provider. Must be called during app startup.
- * When MOCK_LLM=true, short-circuits — no API keys or provider config needed.
- * Throws with a clear setup message if not configured (in non-mock mode).
+ * Get all loaded providers. Used by model-routing.ts for purpose resolution.
+ */
+export function getLoadedProviders(): Map<string, LlmProvider> {
+  return loadedProviders;
+}
+
+/**
+ * Initialize LLM providers. Must be called during app startup.
+ *
+ * Multi-provider mode (ADR-026, Brief 096):
+ * - Loads ALL providers that have API keys configured
+ * - At least one provider must be configured (or MOCK_LLM=true)
+ *
+ * Backward compat:
+ * - LLM_PROVIDER + LLM_MODEL still work (single-provider override, primary provider)
+ * - LLM_PROVIDER=ollama forces single-provider mode (Ollama can't do purpose routing)
  */
 export function initLlm(): void {
   // Mock mode: skip all provider setup (Brief 054 — e2e testing)
@@ -466,34 +601,80 @@ export function initLlm(): void {
     return;
   }
 
-  const providerName = process.env.LLM_PROVIDER;
-  const model = process.env.LLM_MODEL;
+  // Backward compat: explicit LLM_PROVIDER forces single-provider mode
+  const explicitProvider = process.env.LLM_PROVIDER;
+  const explicitModel = process.env.LLM_MODEL;
 
-  if (!providerName) {
-    throw new Error(
-      "LLM_PROVIDER not set. Configure your LLM provider:\n" +
-      "  LLM_PROVIDER=anthropic LLM_MODEL=claude-sonnet-4-6 ANTHROPIC_API_KEY=sk-...\n" +
-      "  LLM_PROVIDER=openai LLM_MODEL=gpt-4o OPENAI_API_KEY=sk-...\n" +
-      "  LLM_PROVIDER=ollama LLM_MODEL=llama3.3 OLLAMA_URL=http://localhost:11434",
-    );
+  if (explicitProvider === "ollama") {
+    // Ollama: single-provider override (user-dependent models, no purpose routing)
+    if (!explicitModel) {
+      throw new Error("LLM_MODEL not set. Required when LLM_PROVIDER=ollama.");
+    }
+    const provider = providerFactories.ollama();
+    provider.validateConfig();
+    activeProvider = provider;
+    configuredModel = explicitModel;
+    loadedProviders.set("ollama", provider);
+    return;
   }
 
-  if (!model) {
-    throw new Error(
-      "LLM_MODEL not set. Specify which model to use (e.g., claude-sonnet-4-6, gpt-4o, llama3.3)",
-    );
+  // Multi-provider: load all providers with configured API keys
+  const keyToProvider: Array<{ key: string; name: string }> = [
+    { key: "ANTHROPIC_API_KEY", name: "anthropic" },
+    { key: "OPENAI_API_KEY", name: "openai" },
+    { key: "GOOGLE_AI_API_KEY", name: "google" },
+  ];
+
+  for (const { key, name } of keyToProvider) {
+    if (process.env[key]) {
+      try {
+        const provider = providerFactories[name]();
+        provider.validateConfig();
+        loadedProviders.set(name, provider);
+      } catch (err) {
+        console.warn(`[llm] Failed to load ${name} provider:`, (err as Error).message);
+      }
+    }
   }
 
-  const factory = providers[providerName];
-  if (!factory) {
-    throw new Error(
-      `Unknown LLM_PROVIDER: ${providerName}. Supported: ${Object.keys(providers).join(", ")}`,
-    );
+  // If explicit LLM_PROVIDER is set (not ollama), use it as primary
+  if (explicitProvider && explicitProvider !== "ollama") {
+    const primary = loadedProviders.get(explicitProvider);
+    if (primary) {
+      activeProvider = primary;
+      configuredModel = explicitModel || null;
+    }
   }
 
-  activeProvider = factory();
-  activeProvider.validateConfig();
-  configuredModel = model;
+  // Set primary to first loaded provider if not explicitly set
+  if (!activeProvider && loadedProviders.size > 0) {
+    const firstName = Array.from(loadedProviders.keys())[0];
+    activeProvider = loadedProviders.get(firstName)!;
+  }
+
+  // Set configured model from explicit or derive from provider
+  if (!configuredModel && explicitModel) {
+    configuredModel = explicitModel;
+  }
+  if (!configuredModel && activeProvider) {
+    // Default model per provider
+    const defaults: Record<string, string> = {
+      anthropic: "claude-sonnet-4-6",
+      openai: "gpt-4o",
+      google: "gemini-2.5-pro",
+    };
+    configuredModel = defaults[activeProvider.name] || "claude-sonnet-4-6";
+  }
+
+  if (loadedProviders.size === 0) {
+    throw new Error(
+      "No LLM providers configured. Set at least one API key:\n" +
+      "  ANTHROPIC_API_KEY=sk-ant-...  (Anthropic Claude)\n" +
+      "  OPENAI_API_KEY=sk-...         (OpenAI GPT)\n" +
+      "  GOOGLE_AI_API_KEY=...         (Google Gemini)\n" +
+      "Or set MOCK_LLM=true for development without API keys.",
+    );
+  }
 }
 
 /**
@@ -524,7 +705,12 @@ export function getProviderName(): string {
 /**
  * Create an LLM completion. All Ditto code that needs LLM inference
  * calls this function instead of instantiating SDK clients directly.
- * When MOCK_LLM=true, delegates to mock (Brief 054).
+ *
+ * Purpose routing (ADR-026, Brief 096):
+ * - If `purpose` is set: route to the best provider+model for that purpose
+ * - If `model` is explicitly set: use that model directly (override)
+ * - If neither: fall back to `analysis` purpose (reasonable default)
+ * - MOCK_LLM=true bypasses all routing
  */
 export async function createCompletion(
   request: LlmCompletionRequest,
@@ -532,6 +718,28 @@ export async function createCompletion(
   if (isMockLlmMode()) {
     return mockCreateCompletion(request);
   }
+
+  // Explicit model override — backward compat, use activeProvider
+  if (request.model) {
+    if (!activeProvider) {
+      throw new Error("LLM not initialized. Call initLlm() during startup.");
+    }
+    return activeProvider.createCompletion(request);
+  }
+
+  // Purpose routing — find the best provider+model
+  if (request.purpose) {
+    const { resolveProviderForPurpose } = await import("./model-routing.js");
+    const purpose = request.purpose || "analysis";
+    const { provider: providerName, model } = resolveProviderForPurpose(purpose);
+    const provider = loadedProviders.get(providerName);
+
+    if (provider) {
+      return provider.createCompletion({ ...request, model });
+    }
+  }
+
+  // Fallback to activeProvider (backward compat for single-provider setups)
   if (!activeProvider) {
     throw new Error("LLM not initialized. Call initLlm() during startup.");
   }
@@ -568,6 +776,10 @@ export function extractToolUse(content: LlmContentBlock[]): LlmToolUseBlock[] {
 export function _setProviderForTest(provider: LlmProvider | null, model?: string): void {
   activeProvider = provider;
   configuredModel = model || null;
+  loadedProviders.clear();
+  if (provider) {
+    loadedProviders.set(provider.name, provider);
+  }
 }
 
 /**

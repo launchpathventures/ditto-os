@@ -1,0 +1,127 @@
+# Ditto — Template Process: Connecting Introduction
+#
+# Alex/Mira make introductions between two people. Always Critical trust —
+# every introduction is user-approved, never auto-upgrades.
+#
+# Provenance: Brief 079/083, Insight-150 (Critical tier on introductions),
+# Insight-153 (three-layer persona architecture)
+
+name: Connecting Introduction
+id: connecting-introduction
+version: 2
+status: active
+template: true
+
+operator: alex-or-mira
+
+description: >
+  Alex or Mira drafts and sends an introduction between two people.
+  The intro frames mutual value for both parties — this is a connection,
+  not a pitch. Always runs at Critical trust tier — the user approves
+  every introduction because they're personal and high-stakes. Uses the
+  senior advisor's voice, not the User Agent's brand.
+
+trigger:
+  type: manual
+  description: >
+    Triggered after user selects candidates from connecting-research.
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The person being introduced to the user
+  - name: context
+    type: json
+    source: self
+    required: true
+    description: >
+      Introduction context — why the user wants this connection,
+      what the recipient would get out of it, mutual value framing.
+
+steps:
+  - id: draft-introduction
+    name: Draft Introduction Email
+    executor: ai-agent
+    description: >
+      Draft an introduction email from Alex or Mira as intermediary.
+      Frame it as mutual value — both parties are being offered something,
+      not sold to. Use the senior advisor's voice. Include context for
+      both parties. This is the board-member introduction — warm, curated,
+      reputation-building.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - personId
+      - context
+    outputs:
+      - intro-draft
+
+  - id: quality-gate
+    name: Pre-Send Quality Gate
+    executor: rules
+    description: >
+      Check the introduction draft:
+      - Recipient not opted out
+      - Mutual value is framed (not one-sided)
+      - Both parties are named and contextualised
+      - Tone is appropriate for an introduction (not a sales pitch)
+    inputs:
+      - intro-draft
+    outputs:
+      - approved-draft
+
+  - id: send-introduction
+    name: Send Introduction
+    executor: integration
+    description: >
+      Send the introduction email. Record as introduction_made interaction.
+    config:
+      service: google-workspace
+    tools:
+      - google-workspace.send_message
+    inputs:
+      - approved-draft
+    outputs:
+      - send-result
+
+  - id: follow-up
+    name: Schedule Follow-Up
+    executor: ai-agent
+    description: >
+      After 1-2 weeks, check in with both parties: "Did you connect?
+      How did it go?" Record outcomes for match quality learning.
+    config:
+      model_hint: fast
+    inputs:
+      - send-result
+    outputs:
+      - follow-up-result
+
+outputs:
+  - name: follow-up-result
+    type: json
+    description: >
+      Introduction outcome — did they connect, how did it go,
+      match quality signals for future introductions.
+
+quality_criteria:
+  - "Introduction frames mutual value for both parties"
+  - "Both parties were individually asked/informed"
+  - "Follow-up happens within 2 weeks"
+
+feedback:
+  metrics:
+    - connection_rate
+    - follow_up_response_rate
+    - match_quality_score
+  capture:
+    - user_edits_to_intro_draft
+    - recipient_follow_up_response
+
+trust:
+  initial_tier: critical
+  upgrade_path: []
+  downgrade_triggers: []

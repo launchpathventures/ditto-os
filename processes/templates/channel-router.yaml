@@ -1,0 +1,112 @@
+# Ditto — Template Process: Channel Router
+#
+# Determines the best channel to reach someone based on their
+# responsiveness history and the type of communication.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture)
+
+name: Channel Router
+id: channel-router
+version: 1
+status: active
+template: true
+
+description: >
+  Given a person and a message intent, determine the optimal channel.
+  Uses historical response data, person preferences, and channel
+  suitability. Outputs a ranked list of channels with reasoning.
+  Used by all agents before outreach.
+
+trigger:
+  type: manual
+  description: >
+    Called as a sub-process by any outreach process that needs to
+    decide how to reach someone.
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: Who to reach
+  - name: intent
+    type: text
+    source: self
+    required: true
+    description: >
+      What kind of message: "introduction", "sales_outreach",
+      "nurture", "follow_up", "meeting_request"
+  - name: operator
+    type: text
+    source: self
+    required: true
+    description: >
+      Who is sending: "alex", "mira", "user-agent".
+      Constrains available channels.
+
+steps:
+  - id: gather-channel-history
+    name: Gather Channel History
+    executor: ai-agent
+    description: >
+      Pull this person's interaction history by channel:
+      - Email: response rate, average response time
+      - LinkedIn: connection status, message response rate
+      - X/Twitter: engagement level, DM accessibility
+      - Other channels as available
+      Also check: known preferences (person said "email me"),
+      company patterns (B2B = LinkedIn, creators = X).
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    inputs:
+      - personId
+      - intent
+    outputs:
+      - channel-history
+
+  - id: rank-channels
+    name: Rank Channels
+    executor: ai-agent
+    description: >
+      Rank available channels by likely effectiveness:
+      1. Person's historically best-response channel
+      2. Channel matching the intent (introductions = email, nurture = varies)
+      3. Channel matching the operator (Alex/Mira = email for intros)
+      4. Fallback: email (universal, professional, async)
+      Return ranked list with confidence and reasoning for each.
+    config:
+      model_hint: fast
+    inputs:
+      - channel-history
+      - intent
+      - operator
+    outputs:
+      - channel-ranking
+
+outputs:
+  - name: channel-ranking
+    type: json
+    description: >
+      Ranked list of channels: [{ channel, confidence, reasoning }].
+      First entry is the recommended channel.
+
+quality_criteria:
+  - "Ranking reflects actual response data when available"
+  - "Default to email when no data exists"
+  - "Alex/Mira introductions always via email"
+
+feedback:
+  metrics:
+    - channel_recommendation_accuracy
+    - response_rate_by_recommended_channel
+  capture:
+    - user_channel_overrides
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "20 routings with >70% response on recommended channel" }
+    - { from: spot_checked, to: autonomous, after: "50 routings with >70% response" }
+  downgrade_triggers:
+    - "Recommended channel gets <30% response rate over 10 routings"

@@ -1,0 +1,157 @@
+# Ditto — Template Process: Selling Outreach
+#
+# User Agent acts as BDR — researches prospects, drafts personalised
+# outreach, gets approval through trust tiers, sends, and monitors replies.
+# Gear 2 (direct outreach) — network-conscious, personalised, quality > volume.
+#
+# Provenance: Brief 079/083, Insight-145 (relationship-first),
+# Insight-150 (posture), Insight-153 (three-layer persona architecture)
+
+name: Selling Outreach
+id: selling-outreach
+version: 2
+status: active
+template: true
+
+operator: user-agent
+gear: direct-outreach
+
+description: >
+  Run a sales outreach campaign under the user's brand. The User Agent
+  (not Alex/Mira) researches prospects, drafts personalised emails,
+  gets approval, sends, and manages replies. Gear 2 — network-conscious:
+  every message is personalised, quality over volume, house values enforced.
+  Can consult Alex/Mira via outreach-quality-review for senior guidance.
+  Uses shared quality-gate and person-research sub-processes.
+
+trigger:
+  type: manual
+  description: >
+    Triggered by Self after the user creates a sales plan via create_sales_plan.
+
+inputs:
+  - name: plan
+    type: json
+    source: self
+    required: true
+    description: >
+      Sales plan created by Self — contains ICP definition, messaging guidelines,
+      channels, cadence, qualification criteria, and success metrics.
+  - name: personId
+    type: text
+    source: self
+    required: false
+    description: >
+      Optional: specific person to target. If omitted, the research step
+      finds prospects matching the plan's ICP.
+
+steps:
+  - id: research-prospects
+    name: Research Prospects
+    executor: ai-agent
+    description: >
+      Find prospects matching the ICP defined in the plan. Use web research,
+      enrichment, and the relationship graph. For each prospect, provide:
+      name, role, company, why they're a fit, and a confidence score.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - plan
+    outputs:
+      - prospects
+
+  - id: draft-outreach
+    name: Draft Outreach Email
+    executor: ai-agent
+    description: >
+      Draft a personalised outreach email for each approved prospect.
+      Use the User Agent's voice (the user's brand, not Alex/Mira).
+      Reference something specific about the recipient. Keep it short,
+      direct, and genuine. Include opt-out footer.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - prospects
+      - plan
+    outputs:
+      - drafts
+
+  - id: quality-gate
+    name: Pre-Send Quality Gate
+    executor: rules
+    description: >
+      Check each draft against house values before sending:
+      - Recipient not opted out
+      - Draft is personalised (not generic)
+      - Recipient trust level allows outreach
+      - No spam signals
+      Reject drafts that violate any check. This step cannot be bypassed.
+    inputs:
+      - drafts
+    outputs:
+      - approved-drafts
+
+  - id: send-outreach
+    name: Send Outreach
+    executor: integration
+    description: >
+      Send approved drafts via the email channel adapter.
+      Record each send as an interaction on the person record.
+    config:
+      service: google-workspace
+    tools:
+      - google-workspace.send_message
+    inputs:
+      - approved-drafts
+    outputs:
+      - send-results
+
+  - id: monitor-replies
+    name: Monitor Replies
+    executor: ai-agent
+    description: >
+      Check for replies to sent outreach. Classify each reply:
+      interested, not interested, opt-out, question, or meeting request.
+      Handle opt-outs immediately. Draft responses for interested replies.
+    config:
+      model_hint: capable
+    tools:
+      - google-workspace.search_messages
+      - google-workspace.read_message
+    inputs:
+      - send-results
+    outputs:
+      - reply-summary
+
+outputs:
+  - name: reply-summary
+    type: json
+    description: >
+      Summary of outreach results: sent count, reply count, meetings booked,
+      opt-outs, and next actions.
+
+quality_criteria:
+  - "Every email is personalised — references something specific about the recipient"
+  - "No email sent to opted-out recipients"
+  - "Reply rate tracked and reported"
+
+feedback:
+  metrics:
+    - reply_rate
+    - meeting_conversion
+    - opt_out_rate
+  capture:
+    - user_edits_to_drafts
+    - user_approvals_and_rejections
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 approved drafts with <20% edit rate" }
+    - { from: spot_checked, to: autonomous, after: "30 approved drafts with <10% edit rate" }
+  downgrade_triggers:
+    - "User rejects 2+ drafts in a row"
+    - "Opt-out rate exceeds 5%"
+    - "User manually downgrades"

@@ -1,0 +1,143 @@
+# Ditto — Template Process: Warm Path Finder
+#
+# Given a target person, find the shortest warm path through the
+# network. The board-member's rolodex in action.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# Insight-144 (named AI intermediary is novel)
+
+name: Warm Path Finder
+id: warm-path-finder
+version: 1
+status: active
+template: true
+
+operator: alex-or-mira
+
+description: >
+  The user wants to reach someone specific. Instead of cold outreach,
+  Alex/Mira search the network for warm paths — people who know people
+  who know the target. Returns the shortest warm chain with introduction
+  confidence at each link. The board-member superpower: "I know someone
+  who knows them."
+
+trigger:
+  type: manual
+  description: >
+    Triggered when the user asks: "Do we know anyone at [company]?",
+    "Can you get me to [person]?", "Who can introduce me to [target]?"
+
+inputs:
+  - name: targetQuery
+    type: json
+    source: self
+    required: true
+    description: >
+      Who to reach: name, company, role, or description.
+      At least one identifier required.
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user seeking the connection
+
+steps:
+  - id: research-target
+    name: Research Target
+    executor: ai-agent
+    description: >
+      Run person-research on the target to build a profile.
+      Identify: who they are, what they care about, what a good
+      introduction angle would be.
+    config:
+      model_hint: capable
+    tools:
+      - web-search
+    inputs:
+      - targetQuery
+    outputs:
+      - target-profile
+
+  - id: search-network-graph
+    name: Search Network Graph
+    executor: ai-agent
+    description: >
+      Search the relationship graph for paths to the target:
+      - Direct: user or Alex/Mira already know the target
+      - One hop: someone in the network knows the target
+      - Two hops: someone knows someone who knows the target
+      For each path, assess:
+      - Relationship strength at each link (warm, cool, cold)
+      - Introduction likelihood (would the intermediary make this intro?)
+      - Path quality (shorter + warmer = better)
+      Return max 3 paths, ranked by quality.
+    config:
+      model_hint: capable
+    inputs:
+      - target-profile
+      - userId
+    outputs:
+      - paths
+
+  - id: recommend-approach
+    name: Recommend Approach
+    executor: ai-agent
+    description: >
+      For the best path, draft a recommended approach:
+      - If direct: suggest reaching out directly
+      - If one hop: suggest asking the intermediary for an introduction
+      - If two hops: suggest a chain of introductions
+      - If no warm path: suggest cold outreach via User Agent or
+        recommend building the relationship over time
+      Include: who to ask, how to frame the ask, what's in it for
+      the intermediary, and estimated time to connection.
+    config:
+      model_hint: capable
+    inputs:
+      - paths
+      - target-profile
+    outputs:
+      - recommendation
+
+  - id: present-to-user
+    name: Present Paths to User
+    executor: human
+    description: >
+      Present the warm paths and recommendation to the user.
+      The user decides: pursue a path, try cold outreach, or defer.
+      If pursuing a path, this feeds into connecting-introduction.
+    inputs:
+      - paths
+      - recommendation
+    outputs:
+      - user-decision
+
+outputs:
+  - name: user-decision
+    type: json
+    description: >
+      User's decision: which path to pursue (if any), or cold outreach,
+      or defer. Feeds into connecting-introduction or selling-outreach.
+
+quality_criteria:
+  - "Paths reflect actual relationships, not assumptions"
+  - "Relationship strength honestly assessed"
+  - "Cold outreach recommended when no warm path exists — no false paths"
+  - "Max 3 paths presented"
+
+feedback:
+  metrics:
+    - path_success_rate
+    - intermediary_willingness
+    - connection_achieved
+  capture:
+    - path_chosen_by_user
+    - introduction_outcome
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 path findings with >60% accuracy" }
+  downgrade_triggers:
+    - "Path based on a relationship that doesn't exist"
+    - "Intermediary refuses because relationship was overstated"

@@ -1,25 +1,127 @@
 /**
  * Ditto — Model Routing Intelligence
  *
- * Resolves model hints (fast, capable, default) to provider-specific models.
- * Generates model recommendations from accumulated step run data.
+ * Purpose-based routing (ADR-026, Insight-157): routes LLM calls to the
+ * best available provider+model based on the task's purpose class.
+ * Also maintains backward-compatible hint resolution.
  *
  * Provenance:
  * - Capability-hint aliases: Vercel AI SDK customProvider (alias-to-model mapping)
  * - Actual-model tracking: Vercel AI SDK OpenTelemetry (ai.response.model)
  * - Learned routing economics: RouteLLM (85% cost reduction at 95% quality)
+ * - Purpose-based routing: RouteLLM (UC Berkeley), ADR-026
  * - Process-level learned routing: Original to Ditto
  *
- * Brief 033. Depends on Brief 032 (multi-provider llm.ts).
+ * Brief 033 + Brief 096.
  */
 
-import { getConfiguredModel, getProviderName } from "./llm.js";
+import { getConfiguredModel, getProviderName, getLoadedProviders } from "./llm.js";
 import { sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schemaTypes from "../db/schema";
 
 // ============================================================
-// Model hint resolution
+// Purpose-based routing (ADR-026, Insight-157)
+// ============================================================
+
+/**
+ * Purpose classes — model quality matches user proximity.
+ * See Insight-157 for the layer-purpose mapping.
+ */
+export const MODEL_PURPOSES = [
+  "conversation",    // L6: User-facing dialogue (Self, front door, briefings)
+  "writing",         // L6: Outreach, introductions, content the user's reputation depends on
+  "analysis",        // L2/L3: Research, review, metacognitive check — accuracy > voice
+  "classification",  // L2: Routing, categorisation, intent detection — fast and cheap
+  "extraction",      // L5: Structured data extraction from text — fast and cheap
+] as const;
+
+export type ModelPurpose = (typeof MODEL_PURPOSES)[number];
+
+/** Provider + model preference for a given purpose */
+export interface ProviderModelPreference {
+  provider: string;
+  model: string;
+}
+
+/**
+ * Purpose → provider+model routing table.
+ * Ordered by preference — first available provider wins.
+ * Conversation/writing get the best models. Classification/extraction get the cheapest.
+ */
+export const PURPOSE_ROUTING: Record<ModelPurpose, ProviderModelPreference[]> = {
+  conversation: [
+    { provider: "anthropic", model: "claude-sonnet-4-6" },
+    { provider: "openai", model: "gpt-4o" },
+    { provider: "google", model: "gemini-2.5-pro" },
+  ],
+  writing: [
+    { provider: "anthropic", model: "claude-sonnet-4-6" },
+    { provider: "openai", model: "gpt-4o" },
+    { provider: "google", model: "gemini-2.5-pro" },
+  ],
+  analysis: [
+    { provider: "anthropic", model: "claude-sonnet-4-6" },
+    { provider: "openai", model: "gpt-4o" },
+    { provider: "google", model: "gemini-2.5-pro" },
+  ],
+  classification: [
+    { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+    { provider: "openai", model: "gpt-4o-mini" },
+    { provider: "google", model: "gemini-2.5-flash" },
+  ],
+  extraction: [
+    { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+    { provider: "openai", model: "gpt-4o-mini" },
+    { provider: "google", model: "gemini-2.5-flash" },
+  ],
+};
+
+/**
+ * Resolve the best available provider+model for a given purpose.
+ * Walks the preference list and returns the first provider that is loaded.
+ * Falls back to the deployment default if no preference matches.
+ */
+export function resolveProviderForPurpose(purpose: ModelPurpose): { provider: string; model: string } {
+  const loadedProviders = getLoadedProviders();
+  const preferences = PURPOSE_ROUTING[purpose];
+
+  for (const pref of preferences) {
+    if (loadedProviders.has(pref.provider)) {
+      return pref;
+    }
+  }
+
+  // Fallback: use whatever provider is loaded with its default model
+  const firstLoaded = Array.from(loadedProviders.keys())[0];
+  if (firstLoaded) {
+    return { provider: firstLoaded, model: getConfiguredModel() };
+  }
+
+  // No providers loaded — return default (will fail at createCompletion)
+  return { provider: "anthropic", model: getConfiguredModel() };
+}
+
+/**
+ * Map old model hints to purposes for backward compatibility.
+ */
+const HINT_TO_PURPOSE: Record<string, ModelPurpose> = {
+  fast: "classification",
+  capable: "analysis",
+  default: "analysis",
+};
+
+/**
+ * Resolve a model hint to a purpose, then to a provider+model.
+ * Backward compatible bridge for process YAML model_hint.
+ */
+export function resolveHintToPurpose(hint: string | undefined): ModelPurpose {
+  if (!hint) return "analysis";
+  return HINT_TO_PURPOSE[hint] ?? "analysis";
+}
+
+// ============================================================
+// Model hint resolution (backward compat — Brief 033)
 // ============================================================
 
 /** Valid model hint values for process step config */
@@ -92,6 +194,9 @@ const MODEL_COST_TIER: Record<string, number> = {
   "gpt-4o-mini": 1,
   "gpt-4o": 5,
   "o3-mini": 2,
+  // Google
+  "gemini-2.5-flash": 1,
+  "gemini-2.5-pro": 3,
 };
 
 /**

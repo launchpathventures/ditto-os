@@ -187,6 +187,7 @@ function createTables(sqlite: Database.Database): void {
       last_reinforced_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       confidence REAL NOT NULL DEFAULT 0.3,
       active INTEGER NOT NULL DEFAULT 1,
+      shared INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
@@ -323,6 +324,93 @@ function createTables(sqlite: Database.Database): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
+    CREATE TABLE IF NOT EXISTS people (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      organization TEXT,
+      role TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      journey_layer TEXT NOT NULL DEFAULT 'participant',
+      visibility TEXT NOT NULL DEFAULT 'internal',
+      persona_assignment TEXT,
+      trust_level TEXT NOT NULL DEFAULT 'cold',
+      opted_out INTEGER NOT NULL DEFAULT 0,
+      last_interaction_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS people_user_id ON people(user_id);
+    CREATE INDEX IF NOT EXISTS people_user_visibility ON people(user_id, visibility);
+    CREATE INDEX IF NOT EXISTS people_email ON people(email);
+
+    CREATE TABLE IF NOT EXISTS interactions (
+      id TEXT PRIMARY KEY,
+      person_id TEXT NOT NULL REFERENCES people(id),
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'email',
+      mode TEXT NOT NULL,
+      subject TEXT,
+      summary TEXT,
+      outcome TEXT,
+      process_run_id TEXT REFERENCES process_runs(id),
+      metadata TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS interactions_person_id ON interactions(person_id);
+    CREATE INDEX IF NOT EXISTS interactions_user_id ON interactions(user_id);
+
+    CREATE TABLE IF NOT EXISTS network_users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      business_context TEXT,
+      persona_assignment TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      workspace_id TEXT,
+      person_id TEXT REFERENCES people(id),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS network_users_email ON network_users(email);
+
+    CREATE TABLE IF NOT EXISTS network_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      revoked_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS network_tokens_user_id ON network_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS network_tokens_hash ON network_tokens(token_hash);
+
+    CREATE TABLE IF NOT EXISTS managed_workspaces (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      machine_id TEXT NOT NULL,
+      volume_id TEXT NOT NULL,
+      workspace_url TEXT NOT NULL,
+      region TEXT NOT NULL DEFAULT 'syd',
+      image_ref TEXT NOT NULL,
+      current_version TEXT,
+      status TEXT NOT NULL DEFAULT 'provisioning',
+      last_health_check_at INTEGER,
+      last_health_status TEXT,
+      error_log TEXT,
+      token_id TEXT NOT NULL,
+      deprovisioned_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
     CREATE TABLE IF NOT EXISTS suggestion_dismissals (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -345,6 +433,71 @@ function createTables(sqlite: Database.Database): void {
       file_path TEXT,
       last_modified INTEGER,
       synced_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS upgrade_history (
+      id TEXT PRIMARY KEY,
+      image_ref TEXT NOT NULL,
+      previous_image_ref TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress',
+      total_workspaces INTEGER NOT NULL,
+      upgraded_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      skipped_count INTEGER NOT NULL DEFAULT 0,
+      canary_workspace_id TEXT,
+      canary_result TEXT,
+      circuit_breaker_at INTEGER,
+      error_summary TEXT,
+      triggered_by TEXT NOT NULL,
+      started_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      completed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS upgrade_workspace_results (
+      id TEXT PRIMARY KEY,
+      upgrade_id TEXT NOT NULL REFERENCES upgrade_history(id),
+      workspace_id TEXT NOT NULL REFERENCES managed_workspaces(id),
+      previous_image_ref TEXT NOT NULL,
+      result TEXT NOT NULL,
+      health_check_result TEXT,
+      error_log TEXT,
+      duration_ms INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS verify_attempts (
+      id TEXT PRIMARY KEY,
+      ip_hash TEXT NOT NULL,
+      email TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS verification_emails (
+      id TEXT PRIMARY KEY,
+      recipient_email TEXT NOT NULL,
+      sent_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL UNIQUE,
+      messages TEXT NOT NULL DEFAULT '[]',
+      context TEXT NOT NULL,
+      ip_hash TEXT NOT NULL,
+      request_email_flagged INTEGER NOT NULL DEFAULT 0,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS funnel_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      event TEXT NOT NULL,
+      surface TEXT NOT NULL,
+      metadata TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
   `);
 }

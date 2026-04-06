@@ -1,0 +1,140 @@
+# Ditto — Template Process: Pipeline Tracking
+#
+# Where is each prospect in the funnel? What's the next action?
+# Weekly pipeline briefing to the user.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture)
+
+name: Pipeline Tracking
+id: pipeline-tracking
+version: 1
+status: active
+template: true
+
+operator: user-agent
+
+description: >
+  Maintains a living view of the sales pipeline. Tracks every prospect's
+  stage, next action, and health. Produces a weekly pipeline briefing
+  for Ditto (chief of staff) to include in the user's brief.
+  Not a CRM replacement — a lightweight, always-current pipeline view
+  powered by actual interaction data.
+
+trigger:
+  type: schedule
+  description: >
+    Runs weekly (default: Monday morning). Also triggered on-demand:
+    "How's the pipeline looking?"
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user whose pipeline to track
+  - name: plan
+    type: json
+    source: self
+    required: false
+    description: Active sales plan(s) for context
+
+steps:
+  - id: gather-pipeline-data
+    name: Gather Pipeline Data
+    executor: ai-agent
+    description: >
+      Pull current state of all active prospects:
+      - Outreach sent (from selling-outreach)
+      - Replies received and classification
+      - Objections raised and responses
+      - Follow-up sequence status
+      - Meetings booked and outcomes
+      - Introduction referrals from Alex/Mira
+      For each prospect, determine current stage:
+      researched → contacted → replied → engaged → meeting → proposal → won/lost
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+      - plan
+    outputs:
+      - pipeline-data
+
+  - id: analyze-pipeline
+    name: Analyze Pipeline Health
+    executor: ai-agent
+    description: >
+      Analyze the pipeline and produce insights:
+      - Total prospects by stage (funnel visualization data)
+      - Conversion rates between stages
+      - Stale prospects (no activity in 2+ weeks)
+      - Hot prospects (high engagement, should act fast)
+      - Win/loss trends (what's working, what's not)
+      - Recommended actions (who to follow up with, who to deprioritize)
+      Keep it actionable — max 5 recommended actions.
+    config:
+      model_hint: capable
+    inputs:
+      - pipeline-data
+    outputs:
+      - pipeline-analysis
+
+  - id: produce-briefing
+    name: Produce Pipeline Briefing
+    executor: ai-agent
+    description: >
+      Produce a scannable pipeline briefing:
+      - Pipeline summary (X prospects, Y stage, Z won this period)
+      - Top 3 hot prospects (name, stage, recommended next action)
+      - Stale alerts (prospects going cold)
+      - Performance metrics (reply rate, meeting conversion, time-to-close)
+      - One strategic observation ("Your SaaS prospects convert 3x
+        better than retail — consider narrowing ICP")
+      Format for inclusion in the daily/weekly brief via Ditto.
+    config:
+      model_hint: capable
+    inputs:
+      - pipeline-analysis
+    outputs:
+      - pipeline-briefing
+
+  - id: deliver-to-self
+    name: Deliver to Chief of Staff
+    executor: rules
+    description: >
+      Feed the pipeline briefing to Ditto for the user's next briefing.
+      If hot prospects need urgent action, flag for immediate delivery.
+    inputs:
+      - pipeline-briefing
+    outputs:
+      - delivery-result
+
+outputs:
+  - name: pipeline-briefing
+    type: json
+    description: >
+      Pipeline briefing: summary, hot prospects, stale alerts,
+      metrics, strategic observation.
+
+quality_criteria:
+  - "Pipeline stages reflect actual interaction data"
+  - "Max 5 recommended actions — actionable, not overwhelming"
+  - "Stale prospects flagged within one cycle"
+  - "Strategic observation is specific, not generic"
+
+feedback:
+  metrics:
+    - pipeline_accuracy
+    - recommendation_action_rate
+  capture:
+    - user_corrections_to_stage
+    - recommendations_acted_on
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "8 briefings with no stage corrections" }
+    - { from: spot_checked, to: autonomous, after: "20 briefings with consistent quality" }
+  downgrade_triggers:
+    - "Pipeline stage significantly wrong for a prospect"
+    - "Missed a hot prospect that user had to flag manually"

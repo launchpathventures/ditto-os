@@ -1,0 +1,136 @@
+# Ditto — Template Process: Person Research
+#
+# Deep research on a person before any outreach or introduction.
+# Used by Alex/Mira before connecting, by User Agent before selling,
+# and by Ditto before briefings. The shared intelligence layer.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture)
+
+name: Person Research
+id: person-research
+version: 1
+status: active
+template: true
+
+description: >
+  Deep-dive research on a specific person. Assembles everything knowable:
+  public profile, recent activity, mutual connections, conversation history,
+  interaction sentiment, and relevance to the user's goals. This is the
+  intelligence step that precedes any meaningful outreach or introduction.
+  Used by all agents — Alex/Mira before connecting, User Agent before
+  selling, Ditto before briefings.
+
+trigger:
+  type: manual
+  description: >
+    Called as a sub-process by connecting-research, selling-outreach,
+    meeting-prep, or any process that needs to understand a person
+    before acting.
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: false
+    description: >
+      Existing person ID from the relationship graph. If provided,
+      starts with known context.
+  - name: personQuery
+    type: json
+    source: self
+    required: true
+    description: >
+      Who to research — name, email, company, role, or any identifiers.
+      At least one identifier required.
+  - name: researchDepth
+    type: text
+    source: self
+    required: false
+    description: >
+      "quick" (basic profile, 1 min), "standard" (profile + recent activity,
+      3 min), or "deep" (full research + mutual connections + news, 5+ min).
+      Default: standard.
+
+steps:
+  - id: check-existing-context
+    name: Check Existing Context
+    executor: ai-agent
+    description: >
+      Search the relationship graph and memory for any existing information
+      about this person. Pull conversation history, past interactions,
+      notes, preferences, opt-out status. If the person is known, this
+      provides the foundation. If unknown, this confirms we're starting fresh.
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    inputs:
+      - personId
+      - personQuery
+    outputs:
+      - existing-context
+
+  - id: public-research
+    name: Public Profile Research
+    executor: ai-agent
+    description: >
+      Research the person's public presence. LinkedIn profile, company
+      website, recent posts, talks, articles, job changes, funding rounds.
+      Do NOT fabricate information — only report what's verifiable.
+      Note the source for each data point.
+    config:
+      model_hint: capable
+    tools:
+      - web-search
+    inputs:
+      - personQuery
+      - existing-context
+    outputs:
+      - public-profile
+
+  - id: synthesize-profile
+    name: Synthesize Person Profile
+    executor: ai-agent
+    description: >
+      Combine existing context and public research into a unified profile:
+      - Who they are (role, company, background)
+      - What they care about (recent activity, topics, challenges)
+      - Relationship status (new contact, warm, cold, opted out)
+      - Mutual connections (who in the network knows them)
+      - Relevance (why they matter to the user's current goals)
+      - Recommended approach (how to engage, what to avoid)
+    config:
+      model_hint: capable
+    inputs:
+      - existing-context
+      - public-profile
+    outputs:
+      - person-profile
+
+outputs:
+  - name: person-profile
+    type: json
+    description: >
+      Synthesized person profile: identity, interests, relationship status,
+      mutual connections, relevance score, recommended approach.
+
+quality_criteria:
+  - "No fabricated information — every claim traceable to a source"
+  - "Opt-out status checked and respected"
+  - "Profile includes recommended approach, not just facts"
+
+feedback:
+  metrics:
+    - profile_usefulness_rating
+    - information_accuracy
+  capture:
+    - corrections_to_profile
+    - missing_information_flagged
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "15 profiles with no accuracy corrections" }
+    - { from: spot_checked, to: autonomous, after: "40 profiles with no corrections" }
+  downgrade_triggers:
+    - "User corrects factual information in a profile"
+    - "Profile misses a known relationship"

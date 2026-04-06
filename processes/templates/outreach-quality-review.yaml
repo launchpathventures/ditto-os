@@ -1,0 +1,134 @@
+# Ditto — Template Process: Outreach Quality Review
+#
+# User Agent consults Alex/Mira before sending — "is this good enough?"
+# The internal quality sounding board.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# House Value 2 ("Reputation is the product")
+
+name: Outreach Quality Review
+id: outreach-quality-review
+version: 1
+status: active
+template: true
+
+operator: user-agent
+
+description: >
+  Before sending outreach, the User Agent can consult Alex/Mira for a
+  quality review. Alex/Mira assess: is this good enough to send? Does
+  it represent the user's brand well? Is the timing right? Is there
+  network intelligence that should inform the approach? This is the
+  internal quality sounding board — the senior advisor reviewing the
+  junior's work.
+
+trigger:
+  type: manual
+  description: >
+    Called by selling-outreach or follow-up-sequences when:
+    - Trust tier is supervised (all drafts reviewed)
+    - Trust tier is spot-checked (random sample)
+    - The User Agent self-assesses low confidence
+    - User explicitly requests Alex/Mira review
+
+inputs:
+  - name: draft
+    type: json
+    source: self
+    required: true
+    description: The outreach draft to review
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The recipient
+  - name: plan
+    type: json
+    source: self
+    required: false
+    description: Sales plan context
+
+steps:
+  - id: assess-recipient-context
+    name: Assess Recipient Context
+    executor: ai-agent
+    description: >
+      Alex/Mira reviews what's known about the recipient:
+      - Have we (Alex/Mira) interacted with this person before?
+      - What's their relationship status in the network?
+      - Any sensitivities or preferences we should know about?
+      - Is the timing appropriate? (recent events, company news)
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - personId
+      - draft
+    outputs:
+      - recipient-context
+
+  - id: review-quality
+    name: Review Outreach Quality
+    executor: ai-agent
+    description: >
+      Alex/Mira reviews the draft against quality standards:
+      - Is it genuinely personalised?
+      - Does it represent the user's brand well?
+      - Would I (Alex/Mira) be comfortable if this person knew it came
+        through our network? (The reputation check)
+      - Is the value proposition clear and honest?
+      - Is the tone appropriate for this person?
+      - Any factual claims that need verification?
+      Return: approved, needs-revision (with specific feedback),
+      or do-not-send (with reasoning).
+    config:
+      model_hint: capable
+    inputs:
+      - draft
+      - recipient-context
+      - plan
+    outputs:
+      - review-result
+
+  - id: return-verdict
+    name: Return Verdict
+    executor: rules
+    description: >
+      Return the review result to the calling process:
+      - approved: send as-is
+      - needs-revision: specific feedback for the User Agent to revise
+      - do-not-send: reasoning why this should not be sent
+    inputs:
+      - review-result
+    outputs:
+      - verdict
+
+outputs:
+  - name: verdict
+    type: json
+    description: >
+      Review verdict: { status: "approved"|"needs-revision"|"do-not-send",
+      feedback: string[], suggestions: string[] }.
+
+quality_criteria:
+  - "Review provides specific, actionable feedback (not vague)"
+  - "do-not-send includes clear reasoning"
+  - "Review considers network context, not just draft quality"
+
+feedback:
+  metrics:
+    - revision_rate
+    - do_not_send_rate
+    - post_review_reply_rate
+  capture:
+    - user_agreement_with_verdict
+    - draft_changes_after_review
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "15 reviews where user agrees with verdict" }
+    - { from: spot_checked, to: autonomous, after: "40 reviews with consistent alignment" }
+  downgrade_triggers:
+    - "User disagrees with 3+ verdicts in a row"
+    - "Approved draft gets negative recipient reaction"

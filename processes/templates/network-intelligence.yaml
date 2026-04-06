@@ -1,0 +1,130 @@
+# Ditto — Template Process: Network Intelligence
+#
+# Proactive scanning for network-relevant signals: job changes,
+# funding rounds, news, events. Surfaces opportunities the user
+# didn't ask for. Alex/Mira's always-on radar.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# Signature Move 4 ("The proactive opportunity")
+
+name: Network Intelligence
+id: network-intelligence
+version: 1
+status: active
+template: true
+
+operator: alex-or-mira
+
+description: >
+  Alex and Mira's intelligence radar. Proactively scans for signals
+  that matter to the user's network: job changes, funding rounds,
+  company news, relevant events, industry shifts. Surfaces max 3
+  opportunities per cycle — quality over noise. The "I wasn't looking
+  for this, but I came across someone perfect" capability.
+
+trigger:
+  type: schedule
+  description: >
+    Runs on schedule (default: twice weekly). Adjustable per user.
+    Can also be triggered manually: "Alex, what's happening in my network?"
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user whose network to monitor
+  - name: watchTopics
+    type: json
+    source: self
+    required: false
+    description: >
+      User-defined topics to watch: industries, companies, technologies,
+      keywords. Evolves over time as Alex/Mira learn what the user cares about.
+
+steps:
+  - id: scan-network-signals
+    name: Scan Network Signals
+    executor: ai-agent
+    description: >
+      Scan for signals across the user's network:
+      - Job changes (someone moved to a company the user should know about)
+      - Funding rounds (portfolio company raised, competitor funded)
+      - News mentions (someone in the network published, spoke, was quoted)
+      - Events (conferences, meetups relevant to the user's domain)
+      - Company changes (acquisitions, pivots, new products)
+      Use web search, LinkedIn activity, news feeds. Cross-reference
+      with the relationship graph.
+    config:
+      model_hint: capable
+    tools:
+      - web-search
+    inputs:
+      - userId
+      - watchTopics
+    outputs:
+      - raw-signals
+
+  - id: filter-and-rank
+    name: Filter and Rank Signals
+    executor: ai-agent
+    description: >
+      From raw signals, select max 3 that are genuinely actionable
+      and relevant. For each, provide:
+      - What happened
+      - Who it involves (link to person in network if known)
+      - Why the user should care
+      - Recommended action (introduce, reach out, note for later, share)
+      - Urgency (act now, this week, background awareness)
+      Discard noise — if nothing is worth surfacing, return empty.
+      Silence is a feature.
+    config:
+      model_hint: capable
+    inputs:
+      - raw-signals
+    outputs:
+      - intelligence-brief
+
+  - id: deliver-to-self
+    name: Deliver to Daily Brief
+    executor: rules
+    description: >
+      Feed the intelligence brief to Ditto (chief of staff) for
+      inclusion in the user's next briefing. If urgency is "act now",
+      surface immediately rather than waiting for the next brief.
+    inputs:
+      - intelligence-brief
+    outputs:
+      - delivery-result
+
+outputs:
+  - name: intelligence-brief
+    type: json
+    description: >
+      Max 3 intelligence items: { signal, person, relevance, action, urgency }.
+      Empty array if nothing worth surfacing.
+
+quality_criteria:
+  - "Max 3 signals per cycle — no noise"
+  - "Every signal includes a recommended action"
+  - "No fabricated signals — every claim traceable to a source"
+  - "Empty result is valid — silence is a feature"
+
+feedback:
+  metrics:
+    - signal_action_rate
+    - signal_relevance_rating
+    - false_signal_rate
+  capture:
+    - user_acted_on_signal
+    - user_dismissed_signal
+    - user_requested_topic_added
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "8 cycles where >50% signals acted on" }
+    - { from: spot_checked, to: autonomous, after: "20 cycles with consistent quality" }
+  downgrade_triggers:
+    - "3+ consecutive cycles where all signals dismissed"
+    - "User flags a fabricated signal"

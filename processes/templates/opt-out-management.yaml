@@ -1,0 +1,144 @@
+# Ditto — Template Process: Opt-Out Management
+#
+# Tracks and enforces opt-outs across all channels and agents.
+# One opt-out = permanent silence. Non-negotiable.
+#
+# Provenance: Brief 079, House Value 6 ("No spam, ever"),
+# Insight-153 (three-layer persona architecture)
+
+name: Opt-Out Management
+id: opt-out-management
+version: 1
+status: active
+template: true
+
+description: >
+  Central opt-out enforcement. When someone opts out — by reply, link,
+  or explicit request — they are permanently silenced across ALL agents
+  (Alex, Mira, every User Agent) and ALL channels (email, DM, social).
+  This process handles detection, recording, acknowledgment, and
+  propagation. It is the hardest line in the system.
+
+trigger:
+  type: event
+  description: >
+    Triggered by: opt-out link click, reply containing opt-out language
+    ("unsubscribe", "stop", "remove me", "don't contact"), or manual
+    flagging by any agent. Also runs as a scheduled scan to catch
+    missed opt-outs.
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: false
+    description: Known person ID, if available
+  - name: email
+    type: text
+    source: self
+    required: false
+    description: Email address of the person opting out
+  - name: source
+    type: text
+    source: self
+    required: true
+    description: >
+      How the opt-out was detected: "reply", "link_click", "manual",
+      "scan", "recipient_request"
+  - name: rawContent
+    type: text
+    source: self
+    required: false
+    description: >
+      The raw message content that triggered the opt-out detection,
+      for audit purposes.
+
+steps:
+  - id: detect-and-classify
+    name: Detect and Classify Opt-Out
+    executor: ai-agent
+    description: >
+      Classify the opt-out signal:
+      - Explicit opt-out: "unsubscribe", "stop emailing me", "remove me"
+      - Implicit opt-out: hostile tone, threats, spam complaints
+      - Ambiguous: "not interested right now", "maybe later"
+      Explicit and implicit = immediate opt-out. Ambiguous = flag for
+      human review but default to opt-out (err on the side of silence).
+    config:
+      model_hint: fast
+    inputs:
+      - rawContent
+      - source
+    outputs:
+      - classification
+
+  - id: record-opt-out
+    name: Record Opt-Out
+    executor: rules
+    description: >
+      Record the opt-out on the person record:
+      - Set opted_out = true
+      - Record timestamp, source, raw content
+      - Mark ALL pending outreach to this person as cancelled
+      - Propagate to ALL agents (Alex, Mira, every User Agent)
+      This is irreversible by agents. Only a human admin can reverse
+      an opt-out, and only with documented consent.
+    inputs:
+      - personId
+      - email
+      - classification
+    outputs:
+      - opt-out-record
+
+  - id: send-acknowledgment
+    name: Send Acknowledgment
+    executor: ai-agent
+    description: >
+      Send a brief, respectful acknowledgment:
+      "Got it — you won't hear from us again. If you ever want to
+      reconnect, just reply to this email."
+      One message. No follow-up. No "are you sure?" No retention attempt.
+    config:
+      model_hint: fast
+    inputs:
+      - opt-out-record
+    outputs:
+      - acknowledgment-result
+
+  - id: cancel-pending
+    name: Cancel Pending Outreach
+    executor: rules
+    description: >
+      Search all active processes (selling-outreach, network-nurture,
+      follow-up-sequences, connecting-introduction) for pending
+      messages to this person. Cancel them all immediately.
+    inputs:
+      - opt-out-record
+    outputs:
+      - cancellation-result
+
+outputs:
+  - name: opt-out-record
+    type: json
+    description: >
+      Opt-out record: personId, email, timestamp, source, classification,
+      cancelled outreach count.
+
+quality_criteria:
+  - "Opt-out recorded within 60 seconds of detection"
+  - "ALL pending outreach cancelled — zero messages sent after opt-out"
+  - "Acknowledgment is respectful, brief, and final"
+  - "No retention attempts, no 'are you sure?' messages"
+
+feedback:
+  metrics:
+    - detection_latency_seconds
+    - pending_cancellation_count
+    - false_positive_opt_outs
+  capture:
+    - admin_opt_out_reversals
+
+trust:
+  initial_tier: critical
+  upgrade_path: []
+  downgrade_triggers: []

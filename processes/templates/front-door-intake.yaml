@@ -1,0 +1,235 @@
+name: "Front Door Intake — Research & Outreach"
+id: front-door-intake
+version: 1
+status: active
+template: true
+
+description: >
+  Triggered when Alex has gathered enough from a front door conversation to
+  start working. This process does the real work: researches targets, drafts
+  introductions, gets user approval, and sends outreach on their behalf.
+
+  The front door conversation is the intake — this process is the execution.
+
+trigger:
+  type: user-event
+  description: Alex reaches ACTIVATE in a front door conversation
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The person record ID from intake
+  - name: email
+    type: text
+    source: self
+    required: true
+    description: Visitor's email address
+  - name: name
+    type: text
+    source: self
+    required: false
+    description: Visitor's name
+  - name: need
+    type: text
+    source: self
+    required: true
+    description: What the visitor needs (from conversation)
+  - name: targetType
+    type: text
+    source: self
+    required: true
+    description: Type of people/companies to find (e.g. "property managers in Christchurch")
+  - name: businessContext
+    type: text
+    source: self
+    required: false
+    description: Business name, website, differentiators, testimonials
+  - name: conversationSummary
+    type: text
+    source: self
+    required: true
+    description: Full conversation context from front door chat
+
+steps:
+  - id: research-targets
+    name: "Research targets"
+    executor: ai-agent
+    description: >
+      Search the web for specific people/companies matching what the visitor
+      needs. Build a shortlist of 5-10 targets with names, companies,
+      and why they're a good fit.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    tools:
+      - web-search
+    inputs:
+      - targetType
+      - businessContext
+    outputs:
+      - target-shortlist
+
+  - id: draft-intros
+    name: "Draft introductions"
+    executor: ai-agent
+    description: >
+      Draft personalised introduction messages for each target.
+      Reference the visitor's business, strengths, and what makes
+      the introduction relevant. Each intro should feel individually
+      crafted, not templated.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - target-shortlist
+      - businessContext
+      - conversationSummary
+    outputs:
+      - draft-messages
+
+  - id: user-approval
+    name: "Get user approval"
+    executor: human
+    description: >
+      Send the target shortlist and draft intros to the user for review.
+      They approve, edit, or reject each one before anything goes out.
+    instructions: "Review the targets and draft messages. Approve the ones you want sent."
+    inputs:
+      - target-shortlist
+      - draft-messages
+    input_fields:
+      - name: approved_targets
+        type: text
+        label: "Approved targets (comma-separated IDs)"
+        required: true
+      - name: feedback
+        type: text
+        label: "Any changes or feedback?"
+        required: false
+    outputs:
+      - approved-list
+
+  - id: send-outreach
+    name: "Send outreach on behalf of user"
+    executor: ai-agent
+    description: >
+      Send the approved introductions via email on behalf of the user.
+      Track each send as an interaction. Record each contact as a person
+      in the network with initial trust level "cold".
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    tools:
+      - send-email
+      - record-interaction
+      - create-person
+    inputs:
+      - approved-list
+      - draft-messages
+    outputs:
+      - outreach-results
+    depends_on:
+      - user-approval
+
+  - id: schedule-follow-ups
+    name: "Schedule follow-up sequences"
+    executor: rules
+    description: >
+      For each outreach sent, schedule a follow-up sequence if no reply
+      is received within 5 days. Triggers follow-up-sequences process
+      for each contact.
+    inputs:
+      - outreach-results
+    outputs:
+      - follow-up-schedule
+    depends_on:
+      - send-outreach
+
+  - id: update-user
+    name: "Brief the user on what was done"
+    executor: ai-agent
+    description: >
+      Send the user an email summary: who was contacted, what was said,
+      what to expect next. Include the follow-up schedule. This is the
+      first of ongoing pipeline updates.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    tools:
+      - send-email
+    inputs:
+      - outreach-results
+      - follow-up-schedule
+    outputs:
+      - user-briefing
+    depends_on:
+      - schedule-follow-ups
+
+outputs:
+  - name: outreach-results
+    type: json
+    description: Summary of outreach sent — who was contacted, message used, status
+  - name: follow-up-schedule
+    type: json
+    description: Scheduled follow-ups for non-responders
+
+# Process chaining — what happens after this process completes
+chain:
+  # For each outreach with no reply after 5 days:
+  - trigger: no-reply-timeout
+    delay: 5d
+    process: follow-up-sequences
+    inputs:
+      originalOutreach: "{outreach-results}"
+      personId: "{target.personId}"
+      plan: "{conversationSummary}"
+
+  # For each positive reply:
+  - trigger: positive-reply
+    process: connecting-introduction
+    inputs:
+      personId: "{target.personId}"
+      userId: "{personId}"
+      context: "{outreach-results}"
+
+  # Weekly pipeline briefing:
+  - trigger: schedule
+    interval: 7d
+    process: pipeline-tracking
+    inputs:
+      userId: "{personId}"
+
+  # Ongoing nurture for all contacts:
+  - trigger: schedule
+    interval: 14d
+    process: network-nurture
+    inputs:
+      userId: "{personId}"
+
+quality_criteria:
+  - "Targets are real, verifiable companies/people"
+  - "Introductions are personalised, not templated"
+  - "User approved everything before it was sent"
+  - "No outreach sent without explicit approval"
+  - "User received a clear briefing on what was done and what's next"
+
+feedback:
+  metrics:
+    - response_rate
+    - positive_response_rate
+    - user_satisfaction
+  capture:
+    - target_quality
+    - intro_quality
+    - follow_up_effectiveness
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "5 runs with no corrections to intros" }
+    - { from: spot_checked, to: autonomous, after: "20 runs with >50% positive response rate" }
+  downgrade_triggers:
+    - "User rejects more than 50% of draft intros"
+    - "Outreach gets reported as spam"

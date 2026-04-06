@@ -89,7 +89,7 @@ Every work item carries **goal ancestry** — the chain of parent goals that exp
 
 Ditto's core orchestration capabilities are not hardcoded infrastructure — they are **meta-processes** with system agents going through the same harness pipeline as user processes. They start supervised. They earn trust. They get corrected. They improve.
 
-Twelve system agents drive the framework (see ADR-008 + ADR-010):
+Thirteen system agents drive the framework (see ADR-008 + ADR-010 + Brief 079):
 
 | Agent | Purpose | Earns trust in |
 |-------|---------|---------------|
@@ -105,8 +105,21 @@ Twelve system agents drive the framework (see ADR-008 + ADR-010):
 | **onboarding-guide** | Walks new users through first setup | Onboarding effectiveness |
 | **process-discoverer** | Discovers processes from org data (inward hunting) | Discovery accuracy |
 | **governance-monitor** | Watches for trust gaming, compliance gaps | Detection accuracy |
+| **network-agent** | External relationship management — outreach, introductions, and nurture on behalf of users. Operates through personas (Alex/Mira). Mode-shifted posture: Selling (BDR) vs Connecting (researcher/advisor). (Brief 079) | Outreach quality, introduction match quality, reply rate |
 
 The system that governs user work is itself governed by the same system. This is what makes Ditto a living system, not a platform.
+
+### The Network Is the Front Door (ADR-025, Insight-151)
+
+The Ditto journey doesn't start with installing software. It starts with a conversation — someone gets an email from Alex, visits the website, or gets introduced. Three layers of relationship:
+
+| Layer | Who they are | Infrastructure needed | Where they live |
+|-------|-------------|----------------------|----------------|
+| **Network participant** | Someone Alex knows. Got an email or introduction. | None | Centralized Ditto Network only |
+| **Active user** | Working with Alex on sales/connections via email. | None | Centralized Ditto Network only |
+| **Workspace user** | Full Ditto product: chief of staff, processes, trust tiers. | Workspace (managed cloud or self-hosted) | Workspace + connected to Network |
+
+The Ditto Network is a centralized, always-on service that serves all three layers. It owns the shared relationship graph, Alex and Mira's email inboxes, the nurture scheduler, and the web front door. Workspaces are per-user (Track A or Track B per ADR-018) and connect to the Network via API (ADR-005 integration pattern). See ADR-025 for the full deployment architecture.
 
 ### Structure Is the Product
 
@@ -321,16 +334,19 @@ Each layer has a distinct responsibility. The Conversational Self is the membran
 
 **Agent harness assembly** happens in a single function (inspired by Open SWE's `get_agent()` pattern): resolve agent identity → load agent memory + process memory → determine authorised tools → check budget → inject into adapter → execute. This function is the seam where all context converges before the runtime fires.
 
-**Memory model**: Three durable scopes plus ephemeral run context, merged at invocation:
+**Memory model**: Four durable scopes plus ephemeral run context, merged at invocation:
 
 | Scope | What it stores | Persists across | Example |
 |-------|---------------|----------------|---------|
 | **Agent-scoped** | Cross-cutting knowledge that travels with the agent | All process assignments | "This agent prefers explicit error handling over try/catch" |
 | **Process-scoped** | Learning specific to a process | All runs of that process | "Invoice descriptions are edited 60% of the time — mostly tone" |
 | **Self-scoped** (ADR-016) | User knowledge spanning all processes and agents | All conversations, all processes | "This user prefers terse responses; their business is in construction" |
+| **Person-scoped** (Brief 079/080) | Knowledge about a person in Ditto's network | All interactions with that person | "Priya Sharma: logistics consultant, Melbourne. Prefers email. Last interaction positive." |
 | **Intra-run context** (Brief 027) | Prior step outputs within the current run | Current run only (ephemeral) | Output from step 1 available to step 2 within same process run |
 
-Durable scopes stored in the `memory` table with `scope_type` (`agent`, `process`, or `self`) and `scope_id`. Memory types: `correction`, `preference`, `context`, `skill`, `user_model`, and `solution` (Brief 060). Solution memories carry structured `metadata` (JSON): category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds. Intra-run context assembled from `stepRuns` within the active process run (separate 1500-token budget). Solution knowledge has its own 1000-token budget (Brief 060) — it doesn't compete with corrections/preferences. The harness merges relevant memories into the agent's context at invocation time, applying progressive disclosure (most relevant first, within context budget).
+Durable scopes stored in the `memories` table with `scope_type` (`agent`, `process`, `self`, or `person`) and `scope_id`. Memory types: `correction`, `preference`, `context`, `skill`, `user_model`, and `solution` (Brief 060). Solution memories carry structured `metadata` (JSON): category, tags, rootCause, prevention, failedApproaches, severity, sourceRunId, relatedMemoryIds. Person-scoped memories carry an additional `shared` flag (ADR-025): when `true`, the memory is institutional knowledge visible across all users ("Priya prefers email"); when `false`, it is private to the creating user. Intra-run context assembled from `stepRuns` within the active process run (separate 1500-token budget). Solution knowledge has its own 1000-token budget (Brief 060) — it doesn't compete with corrections/preferences. The harness merges relevant memories into the agent's context at invocation time, applying progressive disclosure (most relevant first, within context budget).
+
+**Deployment topology** (ADR-025): The memory model spans two deployment units. Self-scoped and agent-scoped memories live on the Workspace. Person-scoped memories live on the Ditto Network (centralized). Process-scoped memories live wherever the process executes (Network for outreach/nurture, Workspace for user processes). The harness assembly loads memories from the local database and — when operating on the Network — from the shared person graph.
 
 **Org structure**: Agents have roles, reporting lines, permissions. They serve processes — the human's mental model is "my invoice process" not "Agent #7."
 
@@ -1005,8 +1021,23 @@ Trust:    Start supervised → earn spot-checked
 | API | Next.js API routes (start) → separate service (scale) | Start simple, split later |
 | Database | SQLite + Drizzle ORM (dogfood) → PostgreSQL (scale) | Zero-setup for dogfood. See ADR-001. |
 | Background jobs | Node.js worker / cron (start) → proper queue (scale) | Start simple |
-| Agent runtime | Multi-provider LLM via `llm.ts` (Anthropic, OpenAI, Ollama), scripts, CLI subprocess (optional) | Adapter pattern, no vendor lock-in (Brief 032) |
+| Agent runtime | Multi-provider LLM via `llm.ts` (Anthropic, OpenAI, Google, Ollama), scripts, CLI subprocess (optional) | Purpose-based routing (ADR-026, Insight-157) |
 | Auth | API keys for agents, session auth for humans | Paperclip pattern |
+
+### Model Routing by Purpose (ADR-026, Insight-157)
+
+Model quality matches user proximity to the output. Ditto manages all provider keys internally — users never configure LLM providers.
+
+| Layer | Purpose class | Model tier | Examples |
+|-------|--------------|-----------|----------|
+| L6 Human — Front door, Self, briefings | `conversation` | Best conversational | Sonnet, GPT-4o, Gemini Pro |
+| L6 Human — Outreach, introductions | `writing` | Best writing | Sonnet, GPT-4o, Gemini Pro |
+| L3 Harness — Metacognitive check, review | `analysis` | Capable | Sonnet, GPT-4o, Gemini Pro |
+| L2 Agent — Research, enrichment | `analysis` | Capable | Sonnet, GPT-4o, Gemini Pro |
+| L2 Agent — Classification, routing | `classification` | Fast/cheap | Haiku, 4o-mini, Gemini Flash |
+| L5 Learning — Feedback, memory extraction | `extraction` | Fast/cheap | Haiku, 4o-mini, Gemini Flash |
+
+All configured providers are loaded simultaneously. `createCompletion({ purpose: "..." })` routes to the first available provider in the preference list for that purpose. Explicit `model:` override bypasses routing. See `src/engine/model-routing.ts` for the routing table.
 | Real-time | WebSocket for dashboard updates | Status, progress, alerts |
 | Mobile | Responsive web (start) → PWA → native (scale) | Progressive enhancement |
 

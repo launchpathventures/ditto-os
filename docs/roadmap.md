@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-04-01
-**Current phase:** Phase 10 **complete**. Phases 11-13 **in progress** — Universal Work Loop activation (parent Brief 071) sub-briefs shipping. Briefs 057-069, 072, 073, 074 complete. Brief 063 verified complete. Brief 070 drafted (activity progressive disclosure). Brief 062 approved (conversation experience). 490 unit tests (28 test files) + 14 e2e tests (4 spec files). Interactive ContentBlocks (072), orchestrator auto-wiring (074), composition intent activation (073) all shipped.
+**Last updated:** 2026-04-06
+**Current phase:** Phase 10 **complete**. Phase 14 **in progress** (Network Agent — engine code complete, deployment briefs 086-089 approved, build order 086→088→089). Phase 15 **in progress** (Managed Workspace Infrastructure — Brief 090 provisioning complete, Brief 091 fleet upgrades complete). Phases 11-13 **future**. Universal Work Loop activation (parent Brief 071) sub-briefs shipping. Briefs 057-069, 072-074, 076, 078, 080-085, 090-091 complete. 745 unit tests (44 test files) + 14 e2e tests (4 spec files). Three-layer persona architecture (Insight-153) complete. 20 process templates. Front door conversational experience live.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -603,6 +603,85 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Agent authentication enforcement | architecture.md (Governance) | Schema fields from Phase 1 |
 | Permission scoping per process/environment | architecture.md (Governance) | Original |
 | Full audit trail with compliance reporting | architecture.md (Governance) | Paperclip activity-log pattern |
+
+### Phase 14: Network Agent
+
+**Re-entry condition:** Phase 10 complete, Proactive Operating Layer designed
+**Status:** Engine code complete (Briefs 080-085). Process templates complete. Character bible + persona architecture complete. Front door + intake flow complete. **Web acquisition funnel complete (Briefs 093-095):** conversational front door, verify page, referred page, post-submission engagement. **Multi-provider purpose routing complete (Brief 096, ADR-026):** Anthropic + OpenAI + Google simultaneous loading, purpose-based model selection. Deployment briefs (086-089) designed and approved.
+
+| Capability | Status | Source doc | Build from | Deliverable |
+|-----------|--------|-----------|------------|-------------|
+| **People & Relationships (Brief 080)** | | | | |
+| `people` + `interactions` tables | done | Brief 079/080 | Original | `src/db/schema.ts` |
+| Fourth memory scope (`person`) | done | Brief 080, ADR-003 | Mem0 scope pattern | `src/engine/harness-handlers/memory-assembly.ts` |
+| Visibility promotion (person→agent→process) | done | Brief 080 | Original | `src/engine/people.ts` |
+| **Channel Adapters (Brief 081)** | | | | |
+| `ChannelAdapter` interface | done | Brief 081 | Original | `src/engine/channel.ts` |
+| AgentMail adapter (primary) | done | Brief 081 | agentmail npm (depend) | `src/engine/channel.ts` |
+| Gmail adapter (fallback) | done | Brief 081 | Google Workspace CLI | `src/engine/channel.ts` |
+| Opt-out signal detection | done | Brief 081 | Original | `src/engine/channel.ts` |
+| **Persona System (Brief 082)** | | | | |
+| Alex + Mira persona configs | done | Brief 082 | Original | `src/engine/persona.ts` |
+| Character bible as prompt artifact | done | Brief 082 | Original | `src/engine/persona.ts` |
+| **Network Process Templates (Brief 083 + session)** | | | | |
+| 4 core templates (selling-outreach, connecting-research, connecting-introduction, network-nurture) | done | Brief 083 | Original | `processes/templates/` |
+| 15 additional templates (shared, Alex/Mira, User Agent Gear 1+2) | done | Insight-153 | Original | `processes/templates/` |
+| Self tools (create_sales_plan, create_connection_plan, network_status) | done | Brief 083 | Original | `src/engine/self-tools/network-tools.ts` |
+| **Nurture Scheduling (Brief 084)** | | | | |
+| Schedule wiring + template validation | done | Brief 084, Brief 076 | Schedule trigger engine | `src/engine/network-nurture.test.ts` |
+| **Intake + Verification (Brief 085)** | | | | |
+| `verifyOutreach()` anti-phishing | done | Brief 085 | Original | API route `/api/network/verify` |
+| `startIntake()` with participant recognition | done | Brief 085 | Original | API route `/api/network/intake` |
+| **Three-Layer Persona Architecture (Insight-153)** | | | | |
+| Character bible rewrite (three-layer model) | done | Insight-153 | Original | `docs/ditto-character.md` |
+| Front door conversational experience (Alex speaks first) | done | Insight-153, Brief 085 | formless.ai pattern | `packages/web/app/welcome/ditto-conversation.tsx` |
+| **Web Acquisition Funnel (Briefs 093-095)** | | | | |
+| Conversational front door chat API | done | Brief 093, ADR-026 | Formless.ai pattern | `src/engine/network-chat.ts`, `/api/v1/network/chat` |
+| Conversational home page (replaces monologue) | done | Brief 094 | Formless.ai, Drift pills | `packages/web/app/welcome/ditto-conversation.tsx` |
+| Anti-enumeration verify page | done | Brief 095 | Magic Link pattern | `packages/web/app/verify/page.tsx` |
+| Recipient-to-user referred page | done | Brief 095 | Referral landing pattern | `packages/web/app/welcome/referred/page.tsx` |
+| **Multi-Provider Purpose Routing (Brief 096)** | | | | |
+| Google Gemini provider | done | Brief 096, ADR-026 | `@google/generative-ai` (depend) | `src/engine/llm.ts` |
+| Purpose-based routing (conversation/writing/analysis/classification/extraction) | done | Brief 096, ADR-026, Insight-157 | RouteLLM (pattern) | `src/engine/model-routing.ts` |
+| Multi-provider simultaneous loading | done | Brief 096, Insight-158 | Vercel AI SDK (pattern) | `src/engine/llm.ts` |
+| **Network Service Deployment (Briefs 086-089)** | | | | |
+| Brief 086: Network Service deployment (Fly.io) | not started | ADR-025, Brief 086 | Fly.io patterns | — |
+| Brief 088: Network API + Auth | not started | ADR-025, Brief 088 | Standard REST API | — |
+| Brief 089: Workspace Seed + SSE Bridge | not started | ADR-025, Brief 089 | Turso/SSE patterns | — |
+
+---
+
+### Phase 15: Managed Workspace Infrastructure
+
+**Re-entry condition:** Phase 14 Network Service deployment briefs (086-089) complete
+**Status:** Brief 090 (Workspace Provisioning) complete. Brief 091 (Fleet Upgrades) complete. Phase 15 **complete**.
+
+| Capability | Status | Source doc | Build from | Deliverable |
+|-----------|--------|-----------|------------|-------------|
+| **Automated Workspace Provisioning (Brief 090)** | | | | |
+| `managedWorkspaces` table + admin auth | done | Brief 090, ADR-025 | Temporal namespace registry | `src/db/schema.ts` |
+| One-command provisioning via Fly Machines API | done | Brief 090 | Fly.io Machines API | `src/engine/workspace-provisioner.ts` |
+| Deep health checks (liveness + readiness) | done | Brief 090 | Kubernetes probe pattern | `packages/web/app/api/healthz/route.ts` |
+| Provisioning rollback on failure | done | Brief 090 | Saga/compensating actions | `src/engine/workspace-provisioner.ts` |
+| Admin CLI (provision, deprovision, fleet) | done | Brief 090 | — | `src/cli/commands/network.ts` |
+| Admin API (provision, deprovision, fleet) | done | Brief 090 | — | `packages/web/app/api/v1/network/admin/` |
+| Idempotent + stale recovery | done | Brief 090 | — | `src/engine/workspace-provisioner.ts` |
+| Rate limiting (10 req/min per token) | done | Brief 090 | — | `src/engine/workspace-provisioner.ts` |
+| 14 tests, all passing | done | Brief 090 | — | `src/engine/workspace-provisioner.test.ts` |
+| **Fleet-Wide Workspace Upgrades (Brief 091)** | | | | |
+| `upgradeHistory` + `upgradeWorkspaceResults` tables | done | Brief 091 | Fly.io release history | `src/db/schema.ts` |
+| Canary-first rolling upgrade | done | Brief 091 | Google SRE canary deployment | `src/engine/workspace-upgrader.ts` |
+| Circuit breaker (configurable threshold) | done | Brief 091 | Nygard "Release It!" | `src/engine/workspace-upgrader.ts` |
+| Per-workspace rollback on failure | done | Brief 091 | Saga/compensating actions | `src/engine/workspace-upgrader.ts` |
+| Fleet rollback (reverts all including canary) | done | Brief 091 | Saga/compensating actions | `src/engine/workspace-upgrader.ts` |
+| Webhook alerting with retry | done | Brief 091 | PagerDuty/OpsGenie pattern | `src/engine/workspace-alerts.ts` |
+| Admin API (upgrade, rollback, upgrades, status polling) | done | Brief 091 | — | `packages/web/app/api/v1/network/admin/` |
+| Admin CLI (upgrade, rollback, upgrades) | done | Brief 091 | — | `src/cli/commands/network.ts` |
+| `/healthz?deep=true` version field | done | Brief 091 | — | `packages/web/app/api/healthz/route.ts` |
+| Idempotent resume | done | Brief 091 | — | `src/engine/workspace-upgrader.ts` |
+| 24 tests, all passing | done | Brief 091 | — | `src/engine/workspace-upgrader.test.ts` |
+
+---
 
 ### Phase 13: Multi-Domain & Scale
 

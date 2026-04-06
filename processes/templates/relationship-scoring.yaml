@@ -1,0 +1,132 @@
+# Ditto — Template Process: Relationship Scoring
+#
+# Tracks interaction quality, response rates, and sentiment across
+# all relationships. Powers the nurture loop, connecting decisions,
+# and outreach timing.
+#
+# Provenance: Brief 079/084, Insight-149 (trust tiers on recipients),
+# Insight-153 (three-layer persona architecture)
+
+name: Relationship Scoring
+id: relationship-scoring
+version: 1
+status: active
+template: true
+
+description: >
+  Continuous relationship health assessment. Tracks every interaction
+  across all agents and channels. Computes relationship scores that
+  power: nurture candidate selection, outreach timing, introduction
+  confidence, and engagement trend reporting. Runs on schedule and
+  on interaction events.
+
+trigger:
+  type: schedule
+  description: >
+    Runs daily. Also triggered on-demand after significant interactions
+    (introduction follow-up, reply received, opt-out).
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user whose relationship graph to score
+
+steps:
+  - id: gather-interactions
+    name: Gather Recent Interactions
+    executor: ai-agent
+    description: >
+      Pull all interactions from the last scoring period (since last run):
+      - Emails sent and received (by Alex, Mira, User Agent)
+      - Introduction outcomes
+      - Nurture touchpoint responses
+      - Meeting outcomes
+      - Social interactions (likes, comments, DMs)
+      For each interaction, extract: person, channel, direction (inbound/
+      outbound), sentiment (positive/neutral/negative), response time.
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+    outputs:
+      - interaction-log
+
+  - id: compute-scores
+    name: Compute Relationship Scores
+    executor: ai-agent
+    description: >
+      For each person in the interaction log, compute:
+      - Warmth score (0-100): based on recency, frequency, sentiment
+      - Engagement trend: warming, stable, cooling, cold, disengaged
+      - Response rate: % of outreach that gets a reply
+      - Best channel: which channel gets the best response
+      - Recommended action: nurture, connect, pause, or leave alone
+      - Days since last contact
+      - Interaction count (lifetime)
+    config:
+      model_hint: capable
+    inputs:
+      - interaction-log
+    outputs:
+      - relationship-scores
+
+  - id: detect-signals
+    name: Detect Relationship Signals
+    executor: ai-agent
+    description: >
+      Flag notable changes:
+      - Relationships going cold (no interaction in 30+ days, was warm)
+      - Relationships warming up (increased response rate, longer replies)
+      - Disengagement signals (shorter replies, longer response times)
+      - Re-engagement opportunities (someone who went cold is active again)
+      - Opt-out risk (declining sentiment trend)
+      Surface max 5 signals per run — quality over volume.
+    config:
+      model_hint: capable
+    inputs:
+      - relationship-scores
+    outputs:
+      - signals
+
+  - id: update-graph
+    name: Update Relationship Graph
+    executor: rules
+    description: >
+      Write updated scores and signals to the relationship graph.
+      Feed signals to the nurture process (cold relationships) and
+      to Self for the daily brief (notable changes).
+    inputs:
+      - relationship-scores
+      - signals
+    outputs:
+      - update-result
+
+outputs:
+  - name: update-result
+    type: json
+    description: >
+      Scoring run result: people scored, signals detected, graph updates applied.
+
+quality_criteria:
+  - "Scores reflect actual interaction data, not assumptions"
+  - "Cold relationships flagged within one scoring cycle"
+  - "Max 5 signals per run — no noise"
+
+feedback:
+  metrics:
+    - signal_accuracy
+    - nurture_candidate_quality
+  capture:
+    - user_disagreements_with_signals
+    - missed_signals_flagged_by_user
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 cycles with no signal corrections" }
+    - { from: spot_checked, to: autonomous, after: "30 cycles with no corrections" }
+  downgrade_triggers:
+    - "User corrects a relationship score significantly"
+    - "Missed a disengagement signal that led to an opt-out"

@@ -1,0 +1,107 @@
+# Ditto — Template Process: Connecting Research
+#
+# Alex/Mira act as researcher/advisor — find candidates matching the
+# user's request, present them with context, and wait for the user
+# to decide which introductions to make.
+#
+# Provenance: Brief 079/083, Insight-150 (posture: researcher/advisor),
+# Insight-153 (three-layer persona architecture)
+
+name: Connecting Research
+id: connecting-research
+version: 2
+status: active
+template: true
+
+operator: alex-or-mira
+
+description: >
+  Research and find people matching the user's connection request. Alex
+  or Mira acts as researcher and advisor — finds candidates, presents
+  them with context and mutual value reasoning. The user decides who
+  to introduce. Uses shared person-research sub-process for deep profiles.
+  Alex/Mira never pitch — this is about finding the right people to connect.
+
+trigger:
+  type: manual
+  description: >
+    Triggered by Self after the user requests connections via create_connection_plan.
+
+inputs:
+  - name: plan
+    type: json
+    source: self
+    required: true
+    description: >
+      Connection plan created by Self — contains who to find, why,
+      where to look, and any constraints.
+
+steps:
+  - id: clarify-need
+    name: Clarify the Need
+    executor: ai-agent
+    description: >
+      Review the connection plan. If anything is ambiguous, formulate
+      clarifying questions. If the request is clear, proceed directly
+      to research.
+    config:
+      model_hint: fast
+    inputs:
+      - plan
+    outputs:
+      - refined-criteria
+
+  - id: research-candidates
+    name: Research Candidates
+    executor: ai-agent
+    description: >
+      Find 3-7 candidates matching the refined criteria. For each, provide:
+      name, role, organization, why they're a good match, what they'd get
+      out of the connection (mutual value), and a confidence score.
+      Check the relationship graph for existing connections.
+    config:
+      model_hint: capable
+    inputs:
+      - refined-criteria
+    outputs:
+      - candidates
+
+  - id: present-candidates
+    name: Present Candidates to User
+    executor: human
+    description: >
+      Present the candidate list to the user with context and reasoning.
+      The user reviews and selects which candidates they want introduced to.
+      This is a human step — the process pauses here until the user decides.
+    inputs:
+      - candidates
+    outputs:
+      - selected-candidates
+
+outputs:
+  - name: selected-candidates
+    type: json
+    description: >
+      User-selected candidates for introduction. Feeds into the
+      connecting-introduction process template.
+
+quality_criteria:
+  - "Candidates are relevant to the user's stated need"
+  - "Mutual value is articulated for each candidate"
+  - "3-7 candidates presented (not too few, not overwhelming)"
+
+feedback:
+  metrics:
+    - candidate_acceptance_rate
+    - introduction_success_rate
+  capture:
+    - which_candidates_selected
+    - which_candidates_rejected_and_why
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "15 searches where >60% candidates selected by user" }
+  downgrade_triggers:
+    - "User finds no relevant candidates in 3 consecutive searches"
+    - "Candidate quality rated low by user"

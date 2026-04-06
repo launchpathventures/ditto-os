@@ -1,0 +1,40 @@
+# Ditto — systemd Service Unit (VPS Deployment)
+#
+# Install: sudo cp ditto.service /etc/systemd/system/
+# Enable:  sudo systemctl enable ditto
+# Start:   sudo systemctl start ditto
+# Logs:    journalctl -u ditto -f
+#
+# Provenance: Brief 086, ADR-018 Track B1 (VPS + systemd).
+
+[Unit]
+Description=Ditto Network Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ditto
+Group=ditto
+WorkingDirectory=/opt/ditto
+ExecStart=/usr/bin/node packages/web/.next/standalone/packages/web/server.js
+Restart=always
+RestartSec=5
+
+# Environment
+EnvironmentFile=/opt/ditto/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ditto/data
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

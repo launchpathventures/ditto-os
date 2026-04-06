@@ -1,0 +1,192 @@
+# Ditto — Template Process: Objection Handling
+#
+# When a prospect pushes back, draft a thoughtful response.
+# Not a canned rebuttal — a genuine answer to their concern.
+#
+# Provenance: Brief 079/083, Insight-153 (three-layer persona architecture)
+
+name: Objection Handling
+id: objection-handling
+version: 1
+status: active
+template: true
+
+operator: user-agent
+
+description: >
+  When a prospect replies with an objection ("too expensive", "not now",
+  "already have a solution", "what makes you different?"), the User Agent
+  drafts a thoughtful, non-pushy response. Not a canned rebuttal — a
+  genuine engagement with their concern. Can consult Alex/Mira for
+  strategic advice on the response approach.
+
+trigger:
+  type: event
+  description: >
+    Triggered when selling-outreach reply-handling classifies a reply
+    as "objection" or "question". Also triggered manually when the user
+    asks their agent to handle a specific pushback.
+
+inputs:
+  - name: originalOutreach
+    type: json
+    source: self
+    required: true
+    description: The outreach message that prompted the objection
+  - name: objection
+    type: json
+    source: self
+    required: true
+    description: >
+      The prospect's reply: content, classification (price, timing,
+      competition, relevance, authority), sentiment.
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The prospect who objected
+  - name: plan
+    type: json
+    source: self
+    required: false
+    description: The sales plan, for context on positioning and messaging
+
+steps:
+  - id: analyze-objection
+    name: Analyze Objection
+    executor: ai-agent
+    description: >
+      Understand the real objection behind the words:
+      - Surface objection: what they said
+      - Likely real concern: what they probably mean
+      - Classification: price, timing, competition, relevance, authority,
+        or genuine not-interested
+      If genuine not-interested, recommend graceful exit (not a counter).
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - objection
+      - originalOutreach
+    outputs:
+      - objection-analysis
+    route_to:
+      - condition: "objection-analysis.classification === 'not_interested'"
+        goto: graceful-exit
+    default_next: draft-response
+
+  - id: draft-response
+    name: Draft Response
+    executor: ai-agent
+    description: >
+      Draft a response that:
+      - Acknowledges their concern genuinely (not dismissively)
+      - Addresses the real objection, not just the surface one
+      - Provides new information or a reframe (not a repeat of the pitch)
+      - Ends with a low-pressure next step or an easy out
+      - Stays in the User Agent's voice and brand
+      Never: argue, pressure, use urgency tactics, or dismiss their concern.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - objection-analysis
+      - originalOutreach
+      - plan
+    outputs:
+      - response-draft
+
+  - id: quality-gate
+    name: Quality Gate
+    executor: rules
+    description: >
+      Run the response through the shared quality gate.
+      Additional checks for objection responses:
+      - No pressure language
+      - No dismissive tone
+      - Provides genuine new value
+    inputs:
+      - response-draft
+    outputs:
+      - approved-draft
+    route_to:
+      - condition: "approved-draft.passed === false"
+        goto: draft-response
+    default_next: send-response
+
+  - id: send-response
+    name: Send Response
+    executor: integration
+    description: >
+      Send the approved response as a reply (preserving the thread).
+      Record as objection-response interaction.
+    config:
+      service: agentmail
+    tools:
+      - agentmail.reply_to_message
+    inputs:
+      - approved-draft
+    outputs:
+      - send-result
+
+  - id: graceful-exit
+    name: Graceful Exit
+    executor: ai-agent
+    description: >
+      Prospect is genuinely not interested. Draft a brief, warm exit:
+      "Completely understand. Thanks for letting me know. If anything
+      changes, I'm here." One message. No follow-up. No retention loop.
+      Respect the no. The relationship stays intact for the future.
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    inputs:
+      - objection-analysis
+    outputs:
+      - exit-draft
+
+  - id: send-exit
+    name: Send Graceful Exit
+    executor: integration
+    description: >
+      Send the graceful exit message as a reply (preserving the thread).
+      Record as graceful-exit interaction. End all follow-up sequences
+      for this prospect.
+    config:
+      service: agentmail
+    tools:
+      - agentmail.reply_to_message
+    inputs:
+      - exit-draft
+    outputs:
+      - send-result
+
+outputs:
+  - name: send-result
+    type: json
+    description: >
+      Response sent or graceful exit completed. Includes: which approach
+      was taken, prospect sentiment assessment, recommended next action.
+
+quality_criteria:
+  - "Objection acknowledged genuinely, not dismissed"
+  - "Response adds new value, not a pitch repeat"
+  - "Graceful exit when prospect is genuinely not interested"
+  - "No pressure tactics, urgency language, or guilt"
+
+feedback:
+  metrics:
+    - objection_resolution_rate
+    - prospect_reply_after_objection_handling
+    - escalation_to_meeting_rate
+  capture:
+    - user_edits_to_response
+    - prospect_reaction_to_response
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 objection responses with <20% edit rate" }
+  downgrade_triggers:
+    - "User rewrites entire response"
+    - "Prospect reports spam after objection response"

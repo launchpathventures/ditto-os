@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { isConfigured, loadConfig, applyConfigToEnv } from "@/lib/config";
 import { EntryPoint } from "./entry-point";
+import WelcomePage from "./welcome/page";
 
 /**
  * Ditto Entry Point
  *
  * State-based routing:
- * - No config → redirect to /setup
+ * - No config → Welcome marketing page (front door)
  * - Configured → EntryPoint (Day Zero check, then workspace)
  *
  * Brief 057: Workspace always shown for all users. Day Zero welcome
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export default function Home() {
   if (!isConfigured()) {
-    redirect("/setup");
+    return <WelcomePage />;
   }
 
   // Apply config to env so engine picks it up

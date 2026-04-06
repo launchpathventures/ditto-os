@@ -1,0 +1,192 @@
+# Ditto — Template Process: Quality Gate
+#
+# Reusable pre-send quality check for all outbound communication.
+# Enforces house values across all agents. Cannot be bypassed.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# House Values (ditto-character.md)
+
+name: Quality Gate
+id: quality-gate
+version: 1
+status: active
+template: true
+
+description: >
+  Universal pre-send quality check for all outbound communication —
+  emails, DMs, LinkedIn messages, social posts. Enforces house values
+  and channel-appropriate standards. Every outbound message from any
+  agent (Alex, Mira, User Agent) passes through this gate. Cannot be
+  bypassed by user instruction or trust tier escalation.
+
+trigger:
+  type: manual
+  description: >
+    Called as a sub-process by any process that sends outbound
+    communication: selling-outreach, connecting-introduction,
+    network-nurture, follow-up-sequences, social-publishing, etc.
+
+inputs:
+  - name: draft
+    type: json
+    source: self
+    required: true
+    description: >
+      The outbound message to check. Includes: content, recipient,
+      channel (email/dm/linkedin/x/post), sender identity (which agent),
+      and context (what process triggered this).
+  - name: channel
+    type: text
+    source: self
+    required: true
+    description: >
+      Channel type: "email", "linkedin_dm", "x_dm", "x_post",
+      "linkedin_post", "sms". Determines which checks apply.
+  - name: operator
+    type: text
+    source: self
+    required: true
+    description: >
+      Who is sending: "alex", "mira", "user-agent". Determines
+      posture checks — Alex/Mira can't pitch, User Agent can't
+      make introductions.
+
+steps:
+  - id: opt-out-check
+    name: Opt-Out Check
+    executor: rules
+    description: >
+      Check if the recipient has opted out of communication.
+      A single opt-out = permanent silence across ALL agents and channels.
+      This check is absolute — no override possible.
+    inputs:
+      - draft
+    outputs:
+      - opt-out-result
+    route_to:
+      - condition: "opt-out-result.opted_out === true"
+        goto: blocked
+    default_next: posture-check
+
+  - id: posture-check
+    name: Posture Verification
+    executor: rules
+    description: >
+      Verify the message matches the operator's allowed posture:
+      - Alex/Mira: connecting and nurturing ONLY. No product pitches,
+        no sales language, no CTAs to buy. Introductions and value-add only.
+      - User Agent (direct outreach): personalised, relevant, network-conscious.
+        No mass blast language, no deceptive subject lines.
+      - User Agent (digital acquisition): broadcast is fine, but must be
+        on-brand and truthful. No misleading claims.
+    inputs:
+      - draft
+      - channel
+      - operator
+    outputs:
+      - posture-result
+    route_to:
+      - condition: "posture-result.violation === true"
+        goto: blocked
+    default_next: personalisation-check
+
+  - id: personalisation-check
+    name: Personalisation Check
+    executor: ai-agent
+    description: >
+      For direct outreach channels (email, DM): verify the message is
+      genuinely personalised — references something specific about the
+      recipient, not a template with [brackets] or generic filler.
+      For broadcast channels (posts, ads): skip this check.
+    config:
+      model_hint: fast
+    inputs:
+      - draft
+      - channel
+    outputs:
+      - personalisation-result
+    route_to:
+      - condition: "channel in ['x_post', 'linkedin_post'] or personalisation-result.pass === true"
+        goto: frequency-check
+      - condition: "personalisation-result.pass === false"
+        goto: blocked
+    default_next: frequency-check
+
+  - id: frequency-check
+    name: Contact Frequency Check
+    executor: rules
+    description: >
+      Check when this recipient was last contacted and by whom.
+      Enforce minimum intervals:
+      - Nurture: 2+ weeks since last contact
+      - Sales outreach: 5+ days since last contact
+      - Introduction: no frequency limit (always manual)
+      - Follow-up: per cadence definition
+      Prevents over-contacting even if multiple agents target the same person.
+    inputs:
+      - draft
+    outputs:
+      - frequency-result
+    route_to:
+      - condition: "frequency-result.too_soon === true"
+        goto: blocked
+    default_next: approved
+
+  - id: approved
+    name: Approved
+    executor: rules
+    description: >
+      Message passed all checks. Return approved status with any
+      advisory notes (e.g., "last contacted 3 weeks ago — good timing").
+    inputs:
+      - draft
+      - opt-out-result
+      - posture-result
+      - personalisation-result
+      - frequency-result
+    outputs:
+      - gate-result
+
+  - id: blocked
+    name: Blocked
+    executor: rules
+    description: >
+      Message failed one or more checks. Return blocked status with
+      specific reason(s) and suggested fix. The sending process must
+      handle this — either redraft or skip this recipient.
+    inputs:
+      - draft
+      - opt-out-result
+      - posture-result
+      - personalisation-result
+      - frequency-result
+    outputs:
+      - gate-result
+
+outputs:
+  - name: gate-result
+    type: json
+    description: >
+      Result: { passed: boolean, reasons: string[], advisory: string[] }.
+      If blocked, reasons explain why. If passed, advisory may suggest
+      improvements without blocking.
+
+quality_criteria:
+  - "Opted-out recipients are NEVER approved — zero tolerance"
+  - "Alex/Mira never approved for sales language"
+  - "Direct outreach always personalised — no template messages approved"
+  - "Contact frequency limits enforced across all agents"
+
+feedback:
+  metrics:
+    - block_rate
+    - false_positive_rate
+    - opt_out_catch_rate
+  capture:
+    - user_overrides_of_blocks
+    - false_positives_flagged
+
+trust:
+  initial_tier: critical
+  upgrade_path: []
+  downgrade_triggers: []

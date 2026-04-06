@@ -1,0 +1,146 @@
+# Ditto — Template Process: Meeting Prep
+#
+# Before a booked call: research the person, prep talking points,
+# surface relevant context from history.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture)
+
+name: Meeting Prep
+id: meeting-prep
+version: 1
+status: active
+template: true
+
+operator: user-agent
+
+description: >
+  When a meeting is booked (via selling-outreach or manual entry),
+  the User Agent prepares a briefing for the user: who they're meeting,
+  what they care about, conversation history, suggested talking points,
+  and potential objections. Delivered before the meeting, not at the
+  last minute.
+
+trigger:
+  type: event
+  description: >
+    Triggered when a meeting is booked (from selling-outreach, calendar
+    event, or manual request). Should run at least 2 hours before the
+    meeting to give the user prep time.
+
+inputs:
+  - name: meetingDetails
+    type: json
+    source: self
+    required: true
+    description: >
+      Meeting info: who, when, where (call link), topic, how it was booked.
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The person the user is meeting
+  - name: plan
+    type: json
+    source: self
+    required: false
+    description: Sales plan context, if this meeting is sales-related
+
+steps:
+  - id: person-deep-dive
+    name: Person Deep Dive
+    executor: ai-agent
+    description: >
+      Run a deep person-research on the meeting participant.
+      Pull: full profile, recent activity, mutual connections,
+      every past interaction (emails, intros, nurture touchpoints).
+      Depth: deep.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - personId
+    outputs:
+      - person-profile
+
+  - id: conversation-history
+    name: Assemble Conversation History
+    executor: ai-agent
+    description: >
+      Pull the full conversation thread between the user (via any agent)
+      and this person. Summarize: what was discussed, what was promised,
+      what's pending, what they care about.
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    inputs:
+      - personId
+      - meetingDetails
+    outputs:
+      - conversation-summary
+
+  - id: prep-briefing
+    name: Prepare Meeting Briefing
+    executor: ai-agent
+    description: >
+      Synthesize a meeting prep briefing:
+      - Who they are (1 paragraph — role, company, why they matter)
+      - Relationship history (how you met, key interactions)
+      - What they care about (based on profile + conversation history)
+      - Suggested talking points (3-5, specific to this meeting)
+      - Potential objections or concerns (based on industry/role)
+      - Questions to ask (2-3 that show you've done homework)
+      - Goal for the meeting (based on the sales plan or context)
+      Keep it scannable — this is read 10 minutes before the call.
+    config:
+      model_hint: capable
+    inputs:
+      - person-profile
+      - conversation-summary
+      - meetingDetails
+      - plan
+    outputs:
+      - meeting-briefing
+
+  - id: deliver-briefing
+    name: Deliver Briefing
+    executor: rules
+    description: >
+      Deliver the briefing to the user via their preferred channel.
+      Default: workspace notification + email. Timing: 2 hours before
+      the meeting, with a reminder 15 minutes before.
+    inputs:
+      - meeting-briefing
+      - meetingDetails
+    outputs:
+      - delivery-result
+
+outputs:
+  - name: meeting-briefing
+    type: json
+    description: >
+      Structured meeting briefing: person summary, relationship history,
+      talking points, potential objections, questions, meeting goal.
+
+quality_criteria:
+  - "Briefing is scannable — no walls of text"
+  - "Talking points are specific to this meeting, not generic"
+  - "Delivered at least 2 hours before the meeting"
+  - "Conversation history is accurate and complete"
+
+feedback:
+  metrics:
+    - briefing_viewed_before_meeting
+    - user_satisfaction_rating
+    - meeting_outcome
+  capture:
+    - user_edits_to_briefing
+    - post_meeting_notes
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 briefings with no corrections" }
+    - { from: spot_checked, to: autonomous, after: "25 briefings with consistent quality" }
+  downgrade_triggers:
+    - "User corrects factual information in briefing"
+    - "Briefing delivered late (less than 30 min before meeting)"

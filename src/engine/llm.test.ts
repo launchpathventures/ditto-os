@@ -34,55 +34,45 @@ describe("initLlm", () => {
     _setProviderForTest(null);
   });
 
-  it("throws when LLM_PROVIDER is not set (AC5, AC6)", () => {
+  it("throws when no providers are configured (Brief 096 AC3)", () => {
     delete process.env.LLM_PROVIDER;
     delete process.env.LLM_MODEL;
-    expect(() => initLlm()).toThrow("LLM_PROVIDER not set");
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
+    expect(() => initLlm()).toThrow("No LLM providers configured");
   });
 
-  it("error message includes setup instructions for all 3 providers (AC6)", () => {
+  it("error message lists all provider options (Brief 096 AC3)", () => {
     delete process.env.LLM_PROVIDER;
     delete process.env.LLM_MODEL;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
     try {
       initLlm();
     } catch (e) {
       const msg = (e as Error).message;
-      expect(msg).toContain("anthropic");
-      expect(msg).toContain("openai");
-      expect(msg).toContain("ollama");
+      expect(msg).toContain("ANTHROPIC_API_KEY");
+      expect(msg).toContain("OPENAI_API_KEY");
+      expect(msg).toContain("GOOGLE_AI_API_KEY");
+      expect(msg).toContain("MOCK_LLM");
     }
   });
 
-  it("throws when LLM_MODEL is not set (AC4, AC7)", () => {
-    process.env.LLM_PROVIDER = "anthropic";
+  it("works with only Anthropic key set (Brief 096 AC2)", () => {
+    delete process.env.LLM_PROVIDER;
+    delete process.env.LLM_MODEL;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    expect(() => initLlm()).not.toThrow();
+  });
+
+  it("Ollama requires LLM_MODEL (Brief 096 AC13)", () => {
+    process.env.LLM_PROVIDER = "ollama";
     delete process.env.LLM_MODEL;
     expect(() => initLlm()).toThrow("LLM_MODEL not set");
-  });
-
-  it("throws for unknown provider", () => {
-    process.env.LLM_PROVIDER = "unknown";
-    process.env.LLM_MODEL = "some-model";
-    expect(() => initLlm()).toThrow("Unknown LLM_PROVIDER: unknown");
-    // Error should list supported providers
-    try {
-      initLlm();
-    } catch (e) {
-      expect((e as Error).message).toContain("anthropic, openai, ollama");
-    }
-  });
-
-  it("throws when Anthropic API key is missing (AC8)", () => {
-    process.env.LLM_PROVIDER = "anthropic";
-    process.env.LLM_MODEL = "claude-sonnet-4-6";
-    delete process.env.ANTHROPIC_API_KEY;
-    expect(() => initLlm()).toThrow("ANTHROPIC_API_KEY not set");
-  });
-
-  it("throws when OpenAI API key is missing (AC8)", () => {
-    process.env.LLM_PROVIDER = "openai";
-    process.env.LLM_MODEL = "gpt-4o";
-    delete process.env.OPENAI_API_KEY;
-    expect(() => initLlm()).toThrow("OPENAI_API_KEY not set");
   });
 
   it("does not throw for Ollama without API key", () => {

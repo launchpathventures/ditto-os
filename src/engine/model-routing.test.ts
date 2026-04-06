@@ -11,6 +11,9 @@ import {
   resolveModel,
   generateModelRecommendations,
   VALID_HINTS,
+  resolveProviderForPurpose,
+  resolveHintToPurpose,
+  MODEL_PURPOSES,
   type ModelRecommendation,
 } from "./model-routing";
 import { _setProviderForTest } from "./llm";
@@ -442,5 +445,73 @@ describe("generateModelRecommendations", () => {
 
     const recommendations = await generateModelRecommendations(testDb);
     expect(recommendations).toEqual([]);
+  });
+});
+
+// ============================================================
+// Purpose-based routing (Brief 096, ADR-026)
+// ============================================================
+
+describe("resolveProviderForPurpose", () => {
+  afterEach(() => {
+    _setProviderForTest(null);
+  });
+
+  it("returns anthropic + sonnet for conversation when anthropic is loaded", () => {
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    const result = resolveProviderForPurpose("conversation");
+    expect(result.provider).toBe("anthropic");
+    expect(result.model).toBe("claude-sonnet-4-6");
+  });
+
+  it("returns anthropic + haiku for classification when anthropic is loaded", () => {
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    const result = resolveProviderForPurpose("classification");
+    expect(result.provider).toBe("anthropic");
+    expect(result.model).toBe("claude-haiku-4-5-20251001");
+  });
+
+  it("falls back to first loaded provider when preference provider is not loaded", () => {
+    // Load openai as the only provider
+    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), validateConfig: () => {} }, "gpt-4o");
+    const result = resolveProviderForPurpose("conversation");
+    // Anthropic is first in the preference list but not loaded, so falls through to OpenAI
+    expect(result.provider).toBe("openai");
+    expect(result.model).toBe("gpt-4o");
+  });
+
+  it("returns fast model for extraction purpose", () => {
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    const result = resolveProviderForPurpose("extraction");
+    expect(result.provider).toBe("anthropic");
+    expect(result.model).toBe("claude-haiku-4-5-20251001");
+  });
+});
+
+describe("resolveHintToPurpose", () => {
+  it("maps 'fast' to 'classification'", () => {
+    expect(resolveHintToPurpose("fast")).toBe("classification");
+  });
+
+  it("maps 'capable' to 'analysis'", () => {
+    expect(resolveHintToPurpose("capable")).toBe("analysis");
+  });
+
+  it("maps 'default' to 'analysis'", () => {
+    expect(resolveHintToPurpose("default")).toBe("analysis");
+  });
+
+  it("maps undefined to 'analysis'", () => {
+    expect(resolveHintToPurpose(undefined)).toBe("analysis");
+  });
+
+  it("maps unknown hint to 'analysis' (graceful fallback)", () => {
+    expect(resolveHintToPurpose("unknown")).toBe("analysis");
+  });
+});
+
+describe("MODEL_PURPOSES", () => {
+  it("exports all five purpose classes", () => {
+    expect(MODEL_PURPOSES).toEqual(["conversation", "writing", "analysis", "classification", "extraction"]);
   });
 });

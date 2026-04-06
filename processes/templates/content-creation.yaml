@@ -1,0 +1,134 @@
+# Ditto — Template Process: Content Creation
+#
+# Blog posts, thought leadership, social content. Written in the
+# user's voice, about the user's domain. Gear 1 — hard hustle.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# User Agent Gear 1 (digital acquisition)
+
+name: Content Creation
+id: content-creation
+version: 1
+status: active
+template: true
+
+operator: user-agent
+gear: digital-acquisition
+
+description: >
+  User Agent creates content on behalf of the user's brand: blog posts,
+  LinkedIn articles, thought leadership pieces, email newsletter drafts.
+  Written in the user's voice and domain expertise. Can draw on Alex/Mira's
+  network intelligence for topic ideas. Gear 1 — broadcast content, not
+  person-to-person outreach.
+
+trigger:
+  type: manual
+  description: >
+    Triggered by user request ("write a post about X"), content calendar
+    schedule, or proactively when the agent identifies a content opportunity
+    (trending topic in the user's domain, recent win to showcase).
+
+inputs:
+  - name: contentBrief
+    type: json
+    source: self
+    required: true
+    description: >
+      What to create: topic, format (blog/linkedin/newsletter/thread),
+      target audience, key message, tone, length, and any reference
+      material or data to include.
+  - name: brandVoice
+    type: json
+    source: self
+    required: false
+    description: >
+      User's brand voice guidelines: tone, vocabulary, POV, examples
+      of good content. Learned over time from user edits and feedback.
+
+steps:
+  - id: research-topic
+    name: Research Topic
+    executor: ai-agent
+    description: >
+      Research the topic to ensure accuracy and freshness:
+      - What's already been written (avoid rehashing)
+      - Recent data, stats, or developments
+      - The user's unique angle (what they know that others don't)
+      - Relevant examples from the user's experience or network
+    config:
+      model_hint: capable
+    tools:
+      - web-search
+    inputs:
+      - contentBrief
+    outputs:
+      - research
+
+  - id: draft-content
+    name: Draft Content
+    executor: ai-agent
+    description: >
+      Write the content piece:
+      - In the user's voice (not generic AI voice)
+      - With a strong hook (first line earns the second)
+      - Substantive (not filler — real insights, real examples)
+      - Appropriate length for format (LinkedIn: 150-300 words,
+        blog: 800-1500 words, thread: 5-8 posts)
+      - Includes a natural CTA where appropriate
+      Avoid: corporate jargon, AI-sounding language, clickbait,
+      unsupported claims.
+    config:
+      model_hint: capable
+    inputs:
+      - contentBrief
+      - research
+      - brandVoice
+    outputs:
+      - content-draft
+
+  - id: review-and-refine
+    name: Review and Refine
+    executor: human
+    description: >
+      Present the draft to the user for review. The user edits,
+      approves, or requests revisions. User edits are captured
+      for voice learning — each edit teaches the agent how the
+      user really writes.
+    inputs:
+      - content-draft
+    outputs:
+      - approved-content
+
+outputs:
+  - name: approved-content
+    type: json
+    description: >
+      Final content piece ready for publishing. Includes: content,
+      format, suggested publish time, hashtags/tags if applicable.
+
+quality_criteria:
+  - "Content is in the user's voice, not generic AI"
+  - "Every claim is verifiable"
+  - "Hook is strong — first line earns the second"
+  - "Appropriate length for format"
+  - "No AI-sounding filler phrases"
+
+feedback:
+  metrics:
+    - user_edit_rate
+    - engagement_rate_after_publish
+    - content_approval_rate
+  capture:
+    - user_edits_to_draft
+    - user_voice_corrections
+    - engagement_data_post_publish
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "10 pieces with <15% edit rate" }
+    - { from: spot_checked, to: autonomous, after: "30 pieces with <10% edit rate" }
+  downgrade_triggers:
+    - "User rewrites entire piece"
+    - "Content factual error reported"

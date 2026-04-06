@@ -3,7 +3,7 @@
 > **Renumbered:** Originally ADR-006. Renumbered to resolve naming conflict with ADR-006 (Process Discovery from Organizational Data).
 
 **Date:** 2026-03-19
-**Status:** accepted
+**Status:** accepted (amended by ADR-025: Centralized Ditto Network Service — adds a third deployment element for the shared relationship graph and Network Agent)
 
 ## Context
 
@@ -49,7 +49,8 @@ Ditto's engine currently runs on the developer's laptop as a Node.js process wit
 Ditto provides a managed cloud service where users create an account and get a running instance with zero infrastructure. This is the primary onboarding path for Rob, Lisa, Jordan, and Nadia.
 
 - Each user/team gets an isolated instance (per-tenant database, per-tenant engine process or container)
-- PostgreSQL per tenant (managed — Supabase, Neon, or similar)
+- **Early managed workspaces use SQLite on Fly Volumes**, matching the dogfood stack (Brief 090). PostgreSQL per tenant (Turso embedded replicas or per-tenant Neon) is a future migration tracked separately — not a prerequisite for managed cloud launch.
+- PostgreSQL per tenant at scale (managed — Supabase, Neon, or similar)
 - Web dashboard + API served from the cloud
 - Push notifications, mobile access, cross-device state — all work natively because the engine is cloud-hosted with a stable URL
 - BYOK (Bring Your Own Key) for LLM API access — users provide their Anthropic API key. Ditto never stores or proxies LLM API calls through its own accounts.

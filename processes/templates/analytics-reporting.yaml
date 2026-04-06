@@ -1,0 +1,169 @@
+# Ditto — Template Process: Analytics & Reporting
+#
+# Track acquisition metrics across all channels. What's working,
+# what's not, where to invest more. Weekly report.
+#
+# Provenance: Brief 079, Insight-153 (three-layer persona architecture),
+# User Agent Gear 1 + Gear 2 (unified reporting)
+
+name: Analytics & Reporting
+id: analytics-reporting
+version: 1
+status: active
+template: true
+
+operator: user-agent
+
+description: >
+  Unified reporting across all User Agent activities — both Gear 1
+  (digital acquisition) and Gear 2 (direct outreach). Tracks what's
+  working, what's not, and recommends where to invest more effort.
+  Feeds into Ditto's weekly briefing. Not a dashboard — a strategic
+  analysis that tells the user what to do differently.
+
+trigger:
+  type: schedule
+  description: >
+    Runs weekly (default: Friday afternoon). Also on-demand:
+    "How's my marketing performing?"
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user to report on
+  - name: reportPeriod
+    type: text
+    source: self
+    required: false
+    description: >
+      Period to report on. Default: last 7 days. Options: "7d", "30d", "quarter".
+
+steps:
+  - id: gather-gear1-metrics
+    name: Gather Digital Acquisition Metrics
+    executor: ai-agent
+    description: >
+      Pull Gear 1 (digital acquisition) metrics:
+      - Content published: count, platforms, engagement rates
+      - Social metrics: impressions, followers, engagement trend
+      - Website/landing page: visits, conversions (if tracking available)
+      - Ad performance: spend, impressions, clicks, cost-per-click
+        (if ad campaigns active)
+      - Lead magnet: downloads, email captures (if active)
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+      - reportPeriod
+    outputs:
+      - gear1-metrics
+
+  - id: gather-gear2-metrics
+    name: Gather Direct Outreach Metrics
+    executor: ai-agent
+    description: >
+      Pull Gear 2 (direct outreach) metrics:
+      - Outreach sent: count, channels, response rates
+      - Follow-up sequences: active, completed, reply rates by touch
+      - Objections: count, types, resolution rates
+      - Meetings: booked, held, outcomes
+      - Pipeline: prospects by stage, movement, velocity
+      - Opt-outs: count, rate, reasons
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+      - reportPeriod
+    outputs:
+      - gear2-metrics
+
+  - id: gather-network-metrics
+    name: Gather Network Metrics
+    executor: ai-agent
+    description: >
+      Pull Alex/Mira network metrics (for context):
+      - Introductions made: count, outcomes
+      - Network growth: new connections, relationship health
+      - Intelligence signals: acted on vs dismissed
+      - Referral pipeline: prospects that came through introductions
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+      - reportPeriod
+    outputs:
+      - network-metrics
+
+  - id: analyze-and-recommend
+    name: Analyze and Recommend
+    executor: ai-agent
+    description: >
+      Synthesize all metrics into a strategic analysis:
+      - What's working (top performing channel, content type, ICP segment)
+      - What's not working (underperforming efforts, wasted spend)
+      - Trends (improving, declining, flat — and why)
+      - 3 specific recommendations: what to do more of, what to stop,
+        what to try next
+      - One strategic insight ("Your introductions convert 4x better
+        than cold outreach — consider shifting more effort to network")
+      Keep it strategic, not just numbers. The user needs to know
+      what to DO, not just what happened.
+    config:
+      model_hint: capable
+    inputs:
+      - gear1-metrics
+      - gear2-metrics
+      - network-metrics
+    outputs:
+      - analysis
+
+  - id: produce-report
+    name: Produce Weekly Report
+    executor: ai-agent
+    description: >
+      Format the analysis as a scannable report:
+      - Headline metric (the one number that matters most this week)
+      - Gear 1 summary (3 lines max)
+      - Gear 2 summary (3 lines max)
+      - Network summary (2 lines max)
+      - 3 recommendations (action-oriented, specific)
+      - Strategic insight (one sentence)
+      Feed to Ditto for inclusion in the weekly brief.
+    config:
+      model_hint: capable
+    inputs:
+      - analysis
+    outputs:
+      - weekly-report
+
+outputs:
+  - name: weekly-report
+    type: json
+    description: >
+      Weekly analytics report: headline metric, gear summaries,
+      recommendations, strategic insight.
+
+quality_criteria:
+  - "Metrics are accurate and traceable"
+  - "Recommendations are specific and actionable"
+  - "Strategic insight is non-obvious (not just 'keep doing what works')"
+  - "Report is scannable — no walls of numbers"
+
+feedback:
+  metrics:
+    - recommendation_action_rate
+    - report_viewed_rate
+  capture:
+    - user_questions_about_report
+    - recommendations_acted_on
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "8 reports with no metric corrections" }
+    - { from: spot_checked, to: autonomous, after: "20 reports with consistent quality" }
+  downgrade_triggers:
+    - "User corrects a metric significantly"
+    - "Recommendation contradicts actual data"

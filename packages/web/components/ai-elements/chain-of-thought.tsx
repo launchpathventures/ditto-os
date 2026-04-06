@@ -14,6 +14,9 @@ import * as Collapsible from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import { useControllableState } from "./use-controllable-state";
 
+/** Disclosure level: 1 = collapsed, 2 = expanded, 3 = engine view (full detail) */
+export type DisclosureLevel = 1 | 2 | 3;
+
 // --- Context ---
 
 interface ChainOfThoughtContextValue {
@@ -35,6 +38,7 @@ interface ChainOfThoughtProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  disclosureLevel?: DisclosureLevel;
   children: ReactNode;
   className?: string;
 }
@@ -43,6 +47,7 @@ function ChainOfThought({
   open: openProp,
   defaultOpen = false,
   onOpenChange: onOpenChangeProp,
+  disclosureLevel: _disclosureLevel,
   children,
   className,
 }: ChainOfThoughtProps) {

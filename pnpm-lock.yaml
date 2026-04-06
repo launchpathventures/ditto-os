@@ -17,6 +17,12 @@ importers:
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.1.0
+      '@google/generative-ai':
+        specifier: ^0.24.1
+        version: 0.24.1
+      agentmail:
+        specifier: ^0.4.17
+        version: 0.4.17
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
@@ -954,6 +960,10 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@google/generative-ai@0.24.1':
+    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+    engines: {node: '>=18.0.0'}
 
   '@grammyjs/types@3.25.0':
     resolution: {integrity: sha512-iN9i5p+8ZOu9OMxWNcguojQfz4K/PDyMPOnL7PPCON+SoA/F8OKMH3uR7CVUkYfdNe0GCz8QOzAWrnqusQYFOg==}
@@ -2249,6 +2259,10 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agentmail@0.4.17:
+    resolution: {integrity: sha512-WAXMiZuRcv5yTpeZP7lci2jhskWBKuB0XVXsXUie5n/Qvkkd9KkFRZF1ROW5UIrW8WHEoLP4kDGRmtvsjQCEqA==}
+    engines: {node: '>=18.0.0'}
 
   ai@6.0.138:
     resolution: {integrity: sha512-49OfPe0f5uxJ6jUdA5BBXjIinP6+ZdYfAtpF2aEH64GA5wPcxH2rf/TBUQQ0bbamBz/D+TLMV18xilZqOC+zaA==}
@@ -5708,6 +5722,8 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
+  '@google/generative-ai@0.24.1': {}
+
   '@grammyjs/types@3.25.0': {}
 
   '@hono/node-server@1.19.11(hono@4.12.9)':
@@ -6808,6 +6824,13 @@ snapshots:
   acorn@8.16.0: {}
 
   agent-base@7.1.4: {}
+
+  agentmail@0.4.17:
+    dependencies:
+      ws: 8.20.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   ai@6.0.138(zod@4.3.6):
     dependencies:

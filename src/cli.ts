@@ -47,6 +47,7 @@ import { credentialCommand } from "./cli/commands/credential";
 import { triggerCommand } from "./cli/commands/trigger";
 import { generateIntegrationCommand } from "./cli/commands/generate-integration";
 import { scheduleCommand } from "./cli/commands/schedule";
+import { networkCommand } from "./cli/commands/network";
 
 const main = defineCommand({
   meta: {
@@ -71,6 +72,7 @@ const main = defineCommand({
     trigger: triggerCommand,
     "generate-integration": generateIntegrationCommand,
     schedule: scheduleCommand,
+    network: networkCommand,
   },
 });
 

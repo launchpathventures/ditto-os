@@ -1,0 +1,124 @@
+# Ditto — Template Process: Network Nurture
+#
+# Alex/Mira's relationship nurture loop. Scans the relationship graph
+# for people who haven't been contacted recently, drafts value-add touchpoints.
+#
+# Provenance: Brief 079/084, Insight-149 (trust tiers on recipients),
+# Insight-151 (autonomous activity is the foundation),
+# Insight-153 (three-layer persona architecture)
+
+name: Network Nurture
+id: network-nurture
+version: 2
+status: active
+template: true
+
+operator: alex-or-mira
+
+description: >
+  Alex/Mira's proactive relationship nurture. Scans the relationship
+  graph for people who would benefit from a touchpoint — not because
+  we want something, but because staying in touch is what makes the
+  network valuable. Alex/Mira nurture in their own voice as senior
+  advisors — warm, no-agenda, value-add. Runs on schedule (weekly).
+  Uses shared quality-gate and relationship-scoring sub-processes.
+
+trigger:
+  type: schedule
+  description: >
+    Runs on a schedule via Brief 076 schedule triggers.
+    Default: weekly. Adjustable per user.
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: true
+    description: The user whose network to nurture
+
+steps:
+  - id: scan-graph
+    name: Scan Relationship Graph
+    executor: ai-agent
+    description: >
+      Review the user's relationship graph. Identify people who:
+      - Haven't been contacted in 2+ weeks
+      - Had a positive last interaction
+      - Are not opted out
+      - Would benefit from a value-add touchpoint
+      Select 1-3 candidates for nurture this cycle.
+    config:
+      model_hint: fast
+    inputs:
+      - userId
+    outputs:
+      - nurture-candidates
+
+  - id: draft-touchpoints
+    name: Draft Value-Add Touchpoints
+    executor: ai-agent
+    description: >
+      For each candidate, draft a brief touchpoint email. These are NOT
+      outreach or sales — they're genuine check-ins, relevant articles,
+      congratulations on achievements, or useful connections. The goal is
+      relationship maintenance, not conversion.
+    config:
+      model_hint: capable
+    inputs:
+      - nurture-candidates
+    outputs:
+      - touchpoint-drafts
+
+  - id: quality-gate
+    name: Pre-Send Quality Gate
+    executor: rules
+    description: >
+      Check each touchpoint:
+      - Recipient not opted out
+      - Last contact was 2+ weeks ago (don't over-nurture)
+      - Content is genuinely valuable (not filler)
+      - Tone matches nurture mode (warm, no-ask)
+    inputs:
+      - touchpoint-drafts
+    outputs:
+      - approved-touchpoints
+
+  - id: send-touchpoints
+    name: Send Touchpoints
+    executor: integration
+    description: >
+      Send approved touchpoints. Record as nurture interaction.
+    config:
+      service: google-workspace
+    tools:
+      - google-workspace.send_message
+    inputs:
+      - approved-touchpoints
+    outputs:
+      - send-results
+
+outputs:
+  - name: send-results
+    type: json
+    description: >
+      Nurture cycle results: who was contacted, what was sent.
+
+quality_criteria:
+  - "Touchpoints are genuinely valuable — not filler"
+  - "No contact more than once per 2 weeks via nurture"
+  - "Opted-out people are never contacted"
+
+feedback:
+  metrics:
+    - reply_rate
+    - opt_out_rate
+  capture:
+    - user_edits_to_touchpoints
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - { from: supervised, to: spot_checked, after: "5 approved cycles with no opt-outs" }
+  downgrade_triggers:
+    - "Any opt-out from a nurture touchpoint"
+    - "User rejects 2+ touchpoints in a cycle"
