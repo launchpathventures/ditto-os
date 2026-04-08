@@ -73,15 +73,15 @@ export async function getEngine() {
     import("../../../src/engine/surface-actions"),
   ]);
 
-  // Initialize LLM provider for API connections.
-  // CLI connections (claude-cli, codex-cli) skip this — they spawn subprocesses.
-  const connection = process.env.DITTO_CONNECTION;
-  if (connection !== "claude-cli" && connection !== "codex-cli") {
+  // Initialize LLM providers. Both streaming and non-streaming paths
+  // require initLlm() to have run (streaming uses getActiveProvider()).
+  // The catch block handles repeated calls — initLlm() will re-create
+  // providers if called again, but validateConfig() may throw.
+  if (!llm.isMockLlmMode()) {
     try {
       llm.initLlm();
     } catch {
-      // initLlm may have already been called, or env vars not set yet.
-      // The streaming adapter handles provider selection independently.
+      // Already initialized, or no API keys configured yet.
     }
   }
 

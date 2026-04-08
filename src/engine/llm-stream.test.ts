@@ -49,6 +49,10 @@ async function collectEvents(gen: AsyncGenerator<StreamEvent>): Promise<StreamEv
 describe("createStreamingCompletion routing", () => {
   const originalEnv = { ...process.env };
 
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   afterEach(() => {
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
@@ -73,9 +77,18 @@ describe("createStreamingCompletion routing", () => {
     expect(createStreamingCompletion).toBeDefined();
   });
 
-  it("throws for unknown provider when no DITTO_CONNECTION and no LLM_PROVIDER", async () => {
+  it("throws when initLlm() not called (no provider initialized)", async () => {
     delete process.env.DITTO_CONNECTION;
-    delete process.env.LLM_PROVIDER;
+    delete process.env.MOCK_LLM;
+
+    vi.doMock("./llm", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("./llm")>();
+      return {
+        ...actual,
+        isMockLlmMode: () => false,
+        getActiveProvider: () => { throw new Error("LLM not initialized. Call initLlm() during startup."); },
+      };
+    });
 
     const { createStreamingCompletion } = await import("./llm-stream");
     const gen = createStreamingCompletion({
@@ -83,7 +96,93 @@ describe("createStreamingCompletion routing", () => {
       messages: [{ role: "user", content: "hello" }],
     });
 
-    await expect(gen.next()).rejects.toThrow("No LLM connection configured");
+    await expect(gen.next()).rejects.toThrow("LLM not initialized");
+  });
+
+  // --- Provider-level mocked routing tests ---
+  // These mock getActiveProvider() to return a fake provider with a
+  // createStreamingCompletion method, verifying that llm-stream delegates
+  // to the provider interface rather than doing its own SDK calls.
+
+  function mockProviderWith(name: string, text: string) {
+    vi.doMock("./llm", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("./llm")>();
+      return {
+        ...actual,
+        isMockLlmMode: () => false,
+        getActiveProvider: () => ({
+          name,
+          createCompletion: async () => ({} as never),
+          createStreamingCompletion: async function* () {
+            yield { type: "text-delta" as const, text };
+            yield {
+              type: "content-complete" as const,
+              content: [{ type: "text" as const, text }],
+              costCents: 0,
+              tokensUsed: 15,
+            };
+          },
+          validateConfig: () => {},
+        }),
+      };
+    });
+  }
+
+  it("delegates to Anthropic provider's createStreamingCompletion", async () => {
+    delete process.env.DITTO_CONNECTION;
+    delete process.env.MOCK_LLM;
+
+    mockProviderWith("anthropic", "hello from anthropic");
+
+    const { createStreamingCompletion } = await import("./llm-stream");
+    const events = await collectEvents(createStreamingCompletion({
+      system: "test",
+      messages: [{ role: "user", content: "hi" }],
+    }));
+
+    const textDeltas = events.filter((e) => e.type === "text-delta");
+    expect(textDeltas).toHaveLength(1);
+    expect((textDeltas[0] as { text: string }).text).toBe("hello from anthropic");
+
+    const complete = events.find((e) => e.type === "content-complete");
+    expect(complete).toBeDefined();
+  });
+
+  it("delegates to OpenAI provider's createStreamingCompletion", async () => {
+    delete process.env.DITTO_CONNECTION;
+    delete process.env.MOCK_LLM;
+
+    mockProviderWith("openai", "hello from openai");
+
+    const { createStreamingCompletion } = await import("./llm-stream");
+    const events = await collectEvents(createStreamingCompletion({
+      system: "test",
+      messages: [{ role: "user", content: "hi" }],
+    }));
+
+    const textDeltas = events.filter((e) => e.type === "text-delta");
+    expect(textDeltas).toHaveLength(1);
+    expect((textDeltas[0] as { text: string }).text).toBe("hello from openai");
+  });
+
+  it("works when initLlm() auto-detected from API key (Railway scenario)", async () => {
+    // The exact production scenario: Railway has ANTHROPIC_API_KEY but no
+    // LLM_PROVIDER. initLlm() auto-detects and sets the active provider.
+    // createStreamingCompletion delegates to that provider.
+    delete process.env.DITTO_CONNECTION;
+    delete process.env.MOCK_LLM;
+
+    mockProviderWith("anthropic", "auto-detected anthropic");
+
+    const { createStreamingCompletion } = await import("./llm-stream");
+    const events = await collectEvents(createStreamingCompletion({
+      system: "test",
+      messages: [{ role: "user", content: "hi" }],
+    }));
+
+    const textDeltas = events.filter((e) => e.type === "text-delta");
+    expect(textDeltas).toHaveLength(1);
+    expect((textDeltas[0] as { text: string }).text).toBe("auto-detected anthropic");
   });
 });
 

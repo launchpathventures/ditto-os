@@ -90,6 +90,7 @@ export {
   type LlmCompletionRequest,
   type LlmCompletionResponse,
   type LlmProvider,
+  type StreamEvent,
   type ModelPurpose,
   MODEL_PURPOSES,
   extractText,

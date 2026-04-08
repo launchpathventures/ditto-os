@@ -70,10 +70,19 @@ export interface LlmCompletionResponse {
   model: string;
 }
 
+// Stream event types (shared by all providers + CLI adapters)
+export type StreamEvent =
+  | { type: "text-delta"; text: string }
+  | { type: "thinking-delta"; text: string }
+  | { type: "tool-use-start"; toolName: string; toolCallId: string }
+  | { type: "tool-use-end"; toolCallId: string; summary?: string }
+  | { type: "content-complete"; content: LlmContentBlock[]; costCents: number; tokensUsed: number };
+
 /** Provider interface — consumers can implement custom providers */
 export interface LlmProvider {
   name: string;
   createCompletion(request: LlmCompletionRequest): Promise<LlmCompletionResponse>;
+  createStreamingCompletion(request: LlmCompletionRequest): AsyncGenerator<StreamEvent>;
   validateConfig(): void;
 }
 

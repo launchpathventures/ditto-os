@@ -1,258 +1,28 @@
 /**
  * Ditto — LLM Streaming Adapter
  *
- * Thin streaming wrapper around the existing LLM providers.
- * Yields text deltas as they arrive from the provider's streaming API,
- * then yields the complete response metadata when done.
- *
- * Does NOT modify the existing createCompletion() — this is additive.
+ * Routes streaming requests to the appropriate provider or CLI adapter.
+ * API providers (Anthropic, OpenAI, Google) stream via the LlmProvider
+ * interface in llm.ts — shared clients, shared format translation, one
+ * source of truth. CLI adapters (claude-cli, codex-cli) spawn subprocesses.
  *
  * Provenance: Brief 039, Vercel AI SDK streamText pattern.
  */
 
 import { spawn } from "child_process";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
 import {
-  calculateCostCents,
   isMockLlmMode,
+  getActiveProvider,
   type LlmCompletionRequest,
   type LlmContentBlock,
   type LlmTextBlock,
   type LlmToolUseBlock,
+  type StreamEvent,
 } from "./llm";
 import { mockCreateStreamingCompletion } from "./llm-mock";
 
-// ============================================================
-// Stream event types
-// ============================================================
-
-export type StreamEvent =
-  | { type: "text-delta"; text: string }
-  | { type: "thinking-delta"; text: string }
-  | { type: "tool-use-start"; toolName: string; toolCallId: string }
-  | { type: "tool-use-end"; toolCallId: string; summary?: string }
-  | { type: "content-complete"; content: LlmContentBlock[]; costCents: number; tokensUsed: number };
-
-// ============================================================
-// Anthropic streaming
-// ============================================================
-
-async function* streamAnthropic(request: LlmCompletionRequest): AsyncGenerator<StreamEvent> {
-  const client = new Anthropic();
-  const model = request.model || process.env.LLM_MODEL!;
-
-  // Build Anthropic messages
-  const messages: Anthropic.Messages.MessageParam[] = request.messages.map((msg) => {
-    if (typeof msg.content === "string") {
-      return { role: msg.role, content: msg.content };
-    }
-    const blocks = msg.content as (LlmContentBlock | { type: "tool_result"; tool_use_id: string; content: string })[];
-    return {
-      role: msg.role,
-      content: blocks.map((block) => {
-        if (block.type === "thinking") {
-          const tb = block as { type: "thinking"; thinking: string; signature: string };
-          return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
-        }
-        if (block.type === "text") return { type: "text" as const, text: (block as LlmTextBlock).text };
-        if (block.type === "tool_use") {
-          const tu = block as LlmToolUseBlock;
-          return { type: "tool_use" as const, id: tu.id, name: tu.name, input: tu.input };
-        }
-        if (block.type === "tool_result") {
-          const tr = block as { type: "tool_result"; tool_use_id: string; content: string };
-          return { type: "tool_result" as const, tool_use_id: tr.tool_use_id, content: tr.content };
-        }
-        return block;
-      }),
-    } as Anthropic.Messages.MessageParam;
-  });
-
-  // Build tools
-  const tools = request.tools?.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: tool.input_schema as Anthropic.Messages.Tool.InputSchema,
-  }));
-
-  // Enable extended thinking for models that support it (claude-3-5+, claude-4+)
-  // Provenance: Anthropic Extended Thinking API (docs.anthropic.com/en/docs/build-with-claude/extended-thinking)
-  const supportsThinking = /claude-(3-5|3\.5|4|sonnet-4|opus-4|haiku-4)/.test(model);
-
-  const stream = client.messages.stream({
-    model,
-    max_tokens: supportsThinking ? 16384 : (request.maxTokens || 8192),
-    system: request.system,
-    messages,
-    ...(tools && tools.length > 0 ? { tools } : {}),
-    ...(supportsThinking ? { thinking: { type: "enabled", budget_tokens: 8192 } } : {}),
-  });
-
-  // Yield text and thinking deltas as they arrive
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "text_delta") {
-        yield { type: "text-delta", text: event.delta.text };
-      } else if (event.delta.type === "thinking_delta") {
-        yield { type: "thinking-delta", text: (event.delta as { type: string; thinking: string }).thinking };
-      }
-    }
-  }
-
-  // Yield complete response metadata
-  const finalMessage = await stream.finalMessage();
-  const content: LlmContentBlock[] = finalMessage.content.map((block) => {
-    if (block.type === "thinking") {
-      const tb = block as { type: "thinking"; thinking: string; signature: string };
-      return { type: "thinking" as const, thinking: tb.thinking, signature: tb.signature };
-    }
-    if (block.type === "text") return { type: "text" as const, text: block.text };
-    if (block.type === "tool_use") {
-      return {
-        type: "tool_use" as const,
-        id: block.id,
-        name: block.name,
-        input: block.input as Record<string, unknown>,
-      };
-    }
-    return { type: "text" as const, text: JSON.stringify(block) };
-  });
-
-  const inputTokens = finalMessage.usage.input_tokens;
-  const outputTokens = finalMessage.usage.output_tokens;
-  const actualModel = finalMessage.model;
-
-  yield {
-    type: "content-complete",
-    content,
-    costCents: calculateCostCents(actualModel, inputTokens, outputTokens),
-    tokensUsed: inputTokens + outputTokens,
-  };
-}
-
-// ============================================================
-// OpenAI streaming
-// ============================================================
-
-async function* streamOpenAI(
-  request: LlmCompletionRequest,
-  opts?: { baseURL?: string; apiKey?: string },
-): AsyncGenerator<StreamEvent> {
-  const client = new OpenAI({
-    ...(opts?.baseURL ? { baseURL: opts.baseURL } : {}),
-    ...(opts?.apiKey ? { apiKey: opts.apiKey } : {}),
-  });
-  const model = request.model || process.env.LLM_MODEL!;
-
-  // Build messages
-  const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: request.system },
-  ];
-  for (const msg of request.messages) {
-    if (typeof msg.content === "string") {
-      openaiMessages.push({ role: msg.role, content: msg.content });
-      continue;
-    }
-    const blocks = msg.content as (LlmContentBlock | { type: "tool_result"; tool_use_id: string; content: string })[];
-    if (blocks.length > 0 && blocks[0].type === "tool_result") {
-      for (const block of blocks) {
-        const tr = block as { type: "tool_result"; tool_use_id: string; content: string };
-        openaiMessages.push({ role: "tool", tool_call_id: tr.tool_use_id, content: tr.content });
-      }
-      continue;
-    }
-    if (msg.role === "assistant") {
-      const textParts = blocks.filter((b) => b.type === "text") as LlmTextBlock[];
-      const toolUseParts = blocks.filter((b) => b.type === "tool_use") as LlmToolUseBlock[];
-      const assistantMsg: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam = {
-        role: "assistant",
-        content: textParts.map((t) => t.text).join("") || null,
-      };
-      if (toolUseParts.length > 0) {
-        assistantMsg.tool_calls = toolUseParts.map((tu) => ({
-          id: tu.id,
-          type: "function" as const,
-          function: { name: tu.name, arguments: JSON.stringify(tu.input) },
-        })) as OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
-      }
-      openaiMessages.push(assistantMsg);
-      continue;
-    }
-    const text = blocks.filter((b) => b.type === "text").map((b) => (b as LlmTextBlock).text).join("");
-    openaiMessages.push({ role: "user", content: text || JSON.stringify(blocks) });
-  }
-
-  // Build tools
-  const tools = request.tools?.map((tool) => ({
-    type: "function" as const,
-    function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
-  }));
-
-  const stream = await client.chat.completions.create({
-    model,
-    messages: openaiMessages,
-    max_tokens: request.maxTokens || 8192,
-    stream: true,
-    ...(tools && tools.length > 0 ? { tools } : {}),
-  });
-
-  let fullText = "";
-  const toolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  let actualModel = model;
-
-  for await (const chunk of stream) {
-    const choice = chunk.choices[0];
-    if (!choice) continue;
-
-    if (choice.delta?.content) {
-      fullText += choice.delta.content;
-      yield { type: "text-delta", text: choice.delta.content };
-    }
-
-    // Accumulate tool calls
-    if (choice.delta?.tool_calls) {
-      for (const tc of choice.delta.tool_calls) {
-        const existing = toolCalls.get(tc.index) || { id: "", name: "", arguments: "" };
-        if (tc.id) existing.id = tc.id;
-        if (tc.function?.name) existing.name = tc.function.name;
-        if (tc.function?.arguments) existing.arguments += tc.function.arguments;
-        toolCalls.set(tc.index, existing);
-      }
-    }
-
-    if (chunk.usage) {
-      totalInputTokens = chunk.usage.prompt_tokens || 0;
-      totalOutputTokens = chunk.usage.completion_tokens || 0;
-    }
-    if (chunk.model) {
-      actualModel = chunk.model;
-    }
-  }
-
-  // Build complete content blocks
-  const content: LlmContentBlock[] = [];
-  if (fullText) {
-    content.push({ type: "text", text: fullText });
-  }
-  for (const [, tc] of toolCalls) {
-    content.push({
-      type: "tool_use",
-      id: tc.id,
-      name: tc.name,
-      input: JSON.parse(tc.arguments),
-    });
-  }
-
-  yield {
-    type: "content-complete",
-    content,
-    costCents: calculateCostCents(actualModel, totalInputTokens, totalOutputTokens),
-    tokensUsed: totalInputTokens + totalOutputTokens,
-  };
-}
+// Re-export StreamEvent so existing consumers don't need to update imports
+export type { StreamEvent } from "./llm";
 
 // ============================================================
 // Claude CLI streaming (subscription-based)
@@ -589,8 +359,8 @@ async function* spawnCliStream(
  * then yields complete response metadata.
  *
  * Supports both API providers and CLI subscription providers.
- * Uses DITTO_CONNECTION env var (set by config) to select the method,
- * falling back to LLM_PROVIDER for backwards compatibility.
+ * API providers delegate to the LlmProvider interface (shared clients,
+ * shared format translation). CLI adapters spawn subprocesses.
  */
 export async function* createStreamingCompletion(
   request: LlmCompletionRequest,
@@ -602,7 +372,6 @@ export async function* createStreamingCompletion(
   }
 
   const connection = process.env.DITTO_CONNECTION;
-  const provider = process.env.LLM_PROVIDER;
 
   // CLI subscription providers (first-class)
   if (connection === "claude-cli") {
@@ -614,18 +383,7 @@ export async function* createStreamingCompletion(
     return;
   }
 
-  // API providers
-  if (provider === "anthropic") {
-    yield* streamAnthropic(request);
-  } else if (provider === "openai") {
-    yield* streamOpenAI(request);
-  } else if (provider === "ollama") {
-    const baseURL = process.env.OLLAMA_URL || "http://localhost:11434";
-    yield* streamOpenAI(request, {
-      baseURL: `${baseURL.replace(/\/$/, "")}/v1`,
-      apiKey: "ollama",
-    });
-  } else {
-    throw new Error(`No LLM connection configured. Please complete setup at http://localhost:3000`);
-  }
+  // API providers — delegate to the initialized provider
+  const provider = getActiveProvider();
+  yield* provider.createStreamingCompletion(request);
 }

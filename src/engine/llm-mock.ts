@@ -18,7 +18,7 @@ import type {
   LlmCompletionResponse,
   LlmContentBlock,
 } from "./llm";
-import type { StreamEvent } from "./llm-stream";
+import type { StreamEvent } from "./llm";
 
 // ============================================================
 // Canned response fixtures

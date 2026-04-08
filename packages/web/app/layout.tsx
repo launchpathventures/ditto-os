@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Ditto",
   description: "AI that gets better every time you work with it",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 // Prevent iOS Safari zoom on input focus (font-size < 16px triggers it)
