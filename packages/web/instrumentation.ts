@@ -50,6 +50,17 @@ export async function register() {
       // Non-fatal — scheduler can be started manually via CLI
     }
 
+    try {
+      // Auto-start the pulse — Alex's continuous operation loop (Brief 098a)
+      // Scans for due delayed runs, unprocessed chains, and status composition
+      const { startPulse } = await import("../../src/engine/pulse");
+      startPulse();
+      console.log("[instrumentation] Pulse started.");
+    } catch (error) {
+      console.error("[instrumentation] Pulse start failed:", error);
+      // Non-fatal — pulse can be started manually
+    }
+
     // First-boot seed import (Brief 089)
     // If DITTO_NETWORK_URL is set and no self-scoped memories exist,
     // fetch and import the workspace seed from the Network Service.

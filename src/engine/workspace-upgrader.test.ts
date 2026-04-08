@@ -11,9 +11,9 @@
  * - Idempotent resume skips already-upgraded workspaces
  * - Deprovisioned workspaces excluded from upgrades
  *
- * All tests mock the Fly API — no real HTTP calls.
+ * All tests mock the Railway API — no real HTTP calls.
  *
- * Provenance: Brief 091 acceptance criteria.
+ * Provenance: Brief 091 acceptance criteria, Brief 100 (Railway migration).
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
@@ -24,7 +24,7 @@ import {
   createWorkspaceUpgrader,
   _resetUpgradeLock,
   UpgradeConflictError,
-  type FlyMachinesClient,
+  type RailwayServiceClient,
   type HealthChecker,
   type HealthCheckResult,
   type WorkspaceUpgraderDeps,
@@ -40,16 +40,16 @@ let db: TestDb;
 let alerts: AlertPayload[];
 let mockAlertSender: AlertSender;
 
-function createMockFlyClient(overrides?: Partial<FlyMachinesClient>): FlyMachinesClient {
+function createMockRailwayClient(overrides?: Partial<RailwayServiceClient>): RailwayServiceClient {
   return {
-    getMachine: async (id) => ({
+    getService: async (id) => ({
       id,
       config: { image: "old-image", env: { DITTO_NETWORK_URL: "https://network.test" } },
-      state: "started",
+      status: "active",
     }),
-    updateMachine: async () => {},
-    restartMachine: async () => {},
-    waitForMachineState: async () => {},
+    updateServiceImage: async () => {},
+    redeployService: async () => ({ deploymentId: "deploy_1" }),
+    getDeploymentStatus: async () => ({ status: "ACTIVE" }),
     ...overrides,
   };
 }
@@ -73,26 +73,28 @@ async function insertWorkspace(
     .insert(schema.managedWorkspaces)
     .values({
       userId: opts.userId,
-      machineId: opts.machineId ?? `machine-${opts.userId}`,
+      machineId: opts.machineId ?? `service-${opts.userId}`,
+      serviceId: opts.serviceId ?? `service-${opts.userId}`,
+      railwayEnvironmentId: opts.railwayEnvironmentId ?? "env_prod_1",
       volumeId: opts.volumeId ?? `volume-${opts.userId}`,
-      workspaceUrl: opts.workspaceUrl ?? `https://${opts.userId}.fly.dev`,
+      workspaceUrl: opts.workspaceUrl ?? `https://${opts.userId}.up.railway.app`,
       imageRef: opts.imageRef ?? "ditto:v0.1.0",
       status: opts.status ?? "healthy",
       tokenId: opts.tokenId ?? `token-${opts.userId}`,
-      region: opts.region ?? "syd",
+      region: opts.region ?? "railway",
     })
     .returning();
   return ws;
 }
 
 function createUpgrader(
-  flyClient?: FlyMachinesClient,
+  railwayClient?: RailwayServiceClient,
   healthChecker?: HealthChecker,
 ): ReturnType<typeof createWorkspaceUpgrader> {
   return createWorkspaceUpgrader({
     db: db as unknown as WorkspaceUpgraderDeps["db"],
     schema,
-    flyClient: flyClient ?? createMockFlyClient(),
+    railwayClient: railwayClient ?? createMockRailwayClient(),
     healthChecker: healthChecker ?? createMockHealthChecker(),
     alertSender: mockAlertSender,
   });
@@ -123,8 +125,8 @@ describe("canary phase", () => {
     const ws3 = await insertWorkspace(db, { userId: "user2" });
 
     const updateCalls: string[] = [];
-    const flyClient = createMockFlyClient({
-      updateMachine: async (id) => { updateCalls.push(id); },
+    const railwayClient = createMockRailwayClient({
+      updateServiceImage: async (id) => { updateCalls.push(id); },
     });
 
     // Canary (first workspace) fails health check
@@ -134,7 +136,7 @@ describe("canary phase", () => {
       return { ok: false, status: "readiness_failed", error: "DB migration failed" };
     });
 
-    const upgrader = createUpgrader(flyClient, healthChecker);
+    const upgrader = createUpgrader(railwayClient, healthChecker);
     const result = await upgrader.upgradeFleet({
       imageRef: "ditto:v0.2.0",
       triggeredBy: "cli",
@@ -147,11 +149,11 @@ describe("canary phase", () => {
     expect(result.failed).toBe(1);
     expect(result.remaining).toBe(2);
 
-    // Only the canary machine was touched (update + restart + rollback update + rollback restart)
-    // Other machines' IDs should NOT appear
-    expect(updateCalls).toContain(ws1.machineId);
-    expect(updateCalls).not.toContain(ws2.machineId);
-    expect(updateCalls).not.toContain(ws3.machineId);
+    // Only the canary service was touched (update + redeploy + rollback update + rollback redeploy)
+    // Other services' IDs should NOT appear
+    expect(updateCalls).toContain(ws1.serviceId);
+    expect(updateCalls).not.toContain(ws2.serviceId);
+    expect(updateCalls).not.toContain(ws3.serviceId);
 
     // Canary was rolled back — check upgrade history
     const [upgrade] = await db.select().from(schema.upgradeHistory);
@@ -309,10 +311,10 @@ describe("per-workspace rollback on failure", () => {
     await insertWorkspace(db, { userId: "founder", imageRef: "ditto:v0.1.0" });
     await insertWorkspace(db, { userId: "user1", imageRef: "ditto:v0.1.5" });
 
-    const rollbackCalls: Array<{ machineId: string; image: string }> = [];
-    const flyClient = createMockFlyClient({
-      updateMachine: async (id, config) => {
-        rollbackCalls.push({ machineId: id, image: config.image });
+    const rollbackCalls: Array<{ serviceId: string; image: string }> = [];
+    const railwayClient = createMockRailwayClient({
+      updateServiceImage: async (id, _env, image) => {
+        rollbackCalls.push({ serviceId: id, image });
       },
     });
 
@@ -323,7 +325,7 @@ describe("per-workspace rollback on failure", () => {
       error: "migration failed",
     }));
 
-    const upgrader = createUpgrader(flyClient, healthChecker);
+    const upgrader = createUpgrader(railwayClient, healthChecker);
     const result = await upgrader.upgradeFleet({
       imageRef: "ditto:v0.2.0",
       triggeredBy: "cli",
@@ -337,7 +339,7 @@ describe("per-workspace rollback on failure", () => {
     // The rollback call should use the ORIGINAL image, not a global one
     // First call: update to v0.2.0, second call: rollback to v0.1.0
     const founderRollback = rollbackCalls.find(
-      (c) => c.machineId === "machine-founder" && c.image === "ditto:v0.1.0",
+      (c) => c.serviceId === "service-founder" && c.image === "ditto:v0.1.0",
     );
     expect(founderRollback).toBeDefined();
   });
@@ -398,10 +400,10 @@ describe("rollbackFleet", () => {
     });
 
     // Track what images are set during rollback
-    const rollbackImages: Array<{ machineId: string; image: string }> = [];
-    const flyClient = createMockFlyClient({
-      updateMachine: async (id, config) => {
-        rollbackImages.push({ machineId: id, image: config.image });
+    const rollbackImages: Array<{ serviceId: string; image: string }> = [];
+    const railwayClient = createMockRailwayClient({
+      updateServiceImage: async (id, _env, image) => {
+        rollbackImages.push({ serviceId: id, image });
       },
     });
 
@@ -409,7 +411,7 @@ describe("rollbackFleet", () => {
     const rollbackUpgrader = createWorkspaceUpgrader({
       db: db as unknown as WorkspaceUpgraderDeps["db"],
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createMockHealthChecker(),
       alertSender: mockAlertSender,
     });
@@ -417,8 +419,8 @@ describe("rollbackFleet", () => {
     await rollbackUpgrader.rollbackFleet({ triggeredBy: "cli" });
 
     // Each workspace rolled back to its OWN previous version
-    const founderRollback = rollbackImages.find((r) => r.machineId === "machine-founder");
-    const user1Rollback = rollbackImages.find((r) => r.machineId === "machine-user1");
+    const founderRollback = rollbackImages.find((r) => r.serviceId === "service-founder");
+    const user1Rollback = rollbackImages.find((r) => r.serviceId === "service-user1");
     expect(founderRollback?.image).toBe("ditto:v0.1.0");
     expect(user1Rollback?.image).toBe("ditto:v0.1.5");
   });
@@ -445,7 +447,7 @@ describe("rollbackFleet", () => {
     const rollbackUpgrader = createWorkspaceUpgrader({
       db: db as unknown as WorkspaceUpgraderDeps["db"],
       schema,
-      flyClient: createMockFlyClient(),
+      railwayClient: createMockRailwayClient(),
       healthChecker,
       alertSender: mockAlertSender,
     });
@@ -590,20 +592,20 @@ describe("deprovisioned workspace exclusion", () => {
 // ============================================================
 
 describe("DITTO_NETWORK_URL verification", () => {
-  test("workspace without DITTO_NETWORK_URL is rejected before machine update", async () => {
+  test("workspace without DITTO_NETWORK_URL is rejected before service update", async () => {
     await insertWorkspace(db, { userId: "misconfigured" });
 
     const updateCalls: string[] = [];
-    const flyClient = createMockFlyClient({
-      getMachine: async (id) => ({
+    const railwayClient = createMockRailwayClient({
+      getService: async (id) => ({
         id,
         config: { image: "ditto:v0.1.0", env: {} }, // Missing DITTO_NETWORK_URL
-        state: "started",
+        status: "active",
       }),
-      updateMachine: async (id) => { updateCalls.push(id); },
+      updateServiceImage: async (id) => { updateCalls.push(id); },
     });
 
-    const upgrader = createUpgrader(flyClient);
+    const upgrader = createUpgrader(railwayClient);
     const result = await upgrader.upgradeFleet({
       imageRef: "ditto:v0.2.0",
       triggeredBy: "cli",
@@ -615,7 +617,7 @@ describe("DITTO_NETWORK_URL verification", () => {
     expect(result.failed).toBe(1);
     expect(result.upgraded).toBe(0);
 
-    // Machine should NOT have been updated — we bail before touching it
+    // Service should NOT have been updated — we bail before touching it
     expect(updateCalls).toHaveLength(0);
   });
 });

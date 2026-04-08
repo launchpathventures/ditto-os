@@ -43,9 +43,9 @@ These two gaps — unnamed system agents and unspecified template library — co
 
 The distinction is a `category` field on agent definitions: `system` | `domain`. System agents have a `systemRole` field identifying their platform function.
 
-### 2. Define thirteen system agent roles
+### 2. Define fourteen system agent roles
 
-These are the functions the architecture already describes, now formalized as system agents. ADR-010 added three meta-process agents (intake-classifier, router, orchestrator) to the original seven. Brief 079 added network-agent and coverage-agent:
+These are the functions the architecture already describes, now formalized as system agents. ADR-010 added three meta-process agents (intake-classifier, router, orchestrator) to the original seven. Brief 079 added network-agent and coverage-agent. Brief 104 added process-validator:
 
 | System role | Purpose | Phase | Status |
 |-------------|---------|-------|--------|
@@ -61,6 +61,7 @@ These are the functions the architecture already describes, now formalized as sy
 | **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 | Not started |
 | **coverage-agent** | Proactively identifies process coverage gaps. Reasons from user model + Process Model Library + Standards Library + industry patterns + connected data to suggest what the user should have in place but doesn't. The outward-looking complement to improvement-scanner (which looks inward at existing processes). Max 1-2 suggestions per cycle with stage-aware timing. Runs on scheduled heartbeat (daily default). Dismissed suggestions tracked in memory. (Insight-142) | Phase 11 | Not started |
 | **network-agent** | External relationship management — outreach, introductions, and nurture on behalf of users. Operates through personas (Alex/Mira). Mode-shifted posture: Selling (internal BDR) vs Connecting (researcher/advisor). Person-scoped memory. Trust tiers on outreach (supervised default), Critical tier on introductions. (Brief 079) | Phase 14 | In progress |
+| **process-validator** | Unified quality validator for the Process Model Library. Performs four checks: edge-case testing, compliance scanning, efficiency analysis, duplicate detection. Produces structured validation reports. Runs as part of the library-curation pipeline. (Brief 104) | Phase 11 | Done |
 
 **Key principle:** Not all system agents are built at once. The architecture accommodates them now; the roadmap sequences when they're built. Four are done (trust-evaluator Phase 3, intake-classifier + router + orchestrator Phase 4-5).
 

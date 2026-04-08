@@ -1,133 +1,202 @@
 /**
  * Ditto — Workspace Provisioner
  *
- * Provisions and deprovisions managed workspaces on Fly.io.
- * Uses the Fly Machines API for programmatic container lifecycle.
+ * Provisions and deprovisions managed workspaces on Railway.
+ * Uses the Railway GraphQL API for programmatic service lifecycle.
  * Full rollback on any failure — no orphaned infrastructure.
  *
- * The FlyClient interface is injected for testability. Production uses
- * the real Fly Machines API; tests use a mock implementation.
+ * The RailwayClient interface is injected for testability. Production uses
+ * the real Railway GraphQL API; tests use a mock implementation.
  *
- * Provenance: Brief 090, ADR-025 (centralized Network Service),
- * Fly.io Machines API patterns, saga/compensating transaction pattern.
+ * Provenance: Brief 090 (original provisioner), Brief 100 (Railway migration),
+ * ADR-025 (centralized Network Service), saga/compensating transaction pattern.
  */
 
 import { db as defaultDb, schema } from "../db";
 import { eq, and, ne } from "drizzle-orm";
 import { createToken, revokeToken } from "./network-api-auth";
+import { randomBytes, createHash } from "crypto";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 // ============================================================
-// Fly.io Machines API Client Interface
+// Railway GraphQL API Client Interface
 // ============================================================
 
-export interface FlyVolume {
+export interface RailwayService {
   id: string;
   name: string;
-  region: string;
-  size_gb: number;
-  state: string;
 }
 
-export interface FlyMachine {
+export interface RailwayVolume {
   id: string;
   name: string;
-  state: string;
-  region: string;
-  instance_id: string;
 }
 
-export interface FlyMachineConfig {
-  image: string;
-  env: Record<string, string>;
-  guest: { cpu_kind: string; cpus: number; memory_mb: number };
-  mounts: Array<{ volume: string; path: string }>;
-  services: Array<{
-    ports: Array<{ port: number; handlers: string[] }>;
-    protocol: string;
-    internal_port: number;
-  }>;
-  auto_destroy: boolean;
+export interface RailwayDomain {
+  id: string;
+  domain: string;
+}
+
+export interface RailwayDeployment {
+  id: string;
+  status: "BUILDING" | "DEPLOYING" | "ACTIVE" | "FAILED" | "CRASHED" | string;
 }
 
 /**
- * Abstract Fly.io API client. Injected for testability.
+ * Abstract Railway API client. Injected for testability.
  */
-export interface FlyClient {
-  createVolume(appName: string, name: string, region: string, sizeGb: number): Promise<FlyVolume>;
-  destroyVolume(appName: string, volumeId: string): Promise<void>;
-  createMachine(appName: string, name: string, config: FlyMachineConfig, region: string): Promise<FlyMachine>;
-  startMachine(appName: string, machineId: string): Promise<void>;
-  stopMachine(appName: string, machineId: string, signal?: string, timeoutSeconds?: number): Promise<void>;
-  destroyMachine(appName: string, machineId: string, force?: boolean): Promise<void>;
-  waitForMachine(appName: string, machineId: string, state: string, timeoutSeconds: number): Promise<void>;
+export interface RailwayClient {
+  createService(projectId: string, name: string): Promise<RailwayService>;
+  deleteService(serviceId: string): Promise<void>;
+  createVolume(serviceId: string, mountPath: string): Promise<RailwayVolume>;
+  deleteVolume(volumeId: string): Promise<void>;
+  upsertVariables(
+    serviceId: string,
+    environmentId: string,
+    variables: Record<string, string>,
+  ): Promise<void>;
+  deployService(serviceId: string, environmentId: string): Promise<RailwayDeployment>;
+  createDomain(serviceId: string, environmentId: string): Promise<RailwayDomain>;
+  getDeploymentStatus(deploymentId: string): Promise<RailwayDeployment>;
+  /** Get the default environment ID for a project */
+  getEnvironmentId(projectId: string): Promise<string>;
 }
 
 // ============================================================
-// Production Fly Client (real HTTP calls)
+// Production Railway Client (real GraphQL calls)
 // ============================================================
 
-export function createFlyClient(apiToken: string): FlyClient {
-  const baseUrl = "https://api.machines.dev/v1";
+export function createRailwayClient(apiToken: string, projectId: string): RailwayClient {
+  const endpoint = "https://backboard.railway.com/graphql/v2";
 
-  async function flyFetch(path: string, options: RequestInit = {}): Promise<Response> {
-    const response = await fetch(`${baseUrl}${path}`, {
-      ...options,
+  async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+    const response = await fetch(endpoint, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
-        ...options.headers,
       },
+      body: JSON.stringify({ query, variables }),
     });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Fly API error: ${response.status} ${response.statusText} — ${body}`);
+      throw new Error(`Railway API error: ${response.status} ${response.statusText} — ${body}`);
     }
 
-    return response;
+    const json = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
+    if (json.errors?.length) {
+      throw new Error(`Railway GraphQL error: ${json.errors.map((e) => e.message).join(", ")}`);
+    }
+
+    return json.data as T;
   }
 
   return {
-    async createVolume(appName, name, region, sizeGb) {
-      const res = await flyFetch(`/apps/${appName}/volumes`, {
-        method: "POST",
-        body: JSON.stringify({ name, region, size_gb: sizeGb }),
-      });
-      return res.json();
-    },
-
-    async destroyVolume(appName, volumeId) {
-      await flyFetch(`/apps/${appName}/volumes/${volumeId}`, { method: "DELETE" });
-    },
-
-    async createMachine(appName, name, config, region) {
-      const res = await flyFetch(`/apps/${appName}/machines`, {
-        method: "POST",
-        body: JSON.stringify({ name, config, region }),
-      });
-      return res.json();
-    },
-
-    async startMachine(appName, machineId) {
-      await flyFetch(`/apps/${appName}/machines/${machineId}/start`, { method: "POST" });
-    },
-
-    async stopMachine(appName, machineId, signal = "SIGTERM", timeoutSeconds = 30) {
-      await flyFetch(`/apps/${appName}/machines/${machineId}/stop`, {
-        method: "POST",
-        body: JSON.stringify({ signal, timeout: timeoutSeconds }),
-      });
-    },
-
-    async destroyMachine(appName, machineId, force = false) {
-      await flyFetch(`/apps/${appName}/machines/${machineId}?force=${force}`, { method: "DELETE" });
-    },
-
-    async waitForMachine(appName, machineId, state, timeoutSeconds) {
-      await flyFetch(
-        `/apps/${appName}/machines/${machineId}/wait?state=${state}&timeout=${timeoutSeconds}`,
+    async createService(_projectId, name) {
+      const data = await gql<{ serviceCreate: RailwayService }>(
+        `mutation($input: ServiceCreateInput!) {
+          serviceCreate(input: $input) { id name }
+        }`,
+        { input: { projectId, name } },
       );
+      return data.serviceCreate;
+    },
+
+    async deleteService(serviceId) {
+      await gql(
+        `mutation($id: String!) {
+          serviceDelete(id: $id)
+        }`,
+        { id: serviceId },
+      );
+    },
+
+    async createVolume(serviceId, mountPath) {
+      const data = await gql<{ volumeCreate: RailwayVolume }>(
+        `mutation($input: VolumeCreateInput!) {
+          volumeCreate(input: $input) { id name }
+        }`,
+        { input: { projectId, serviceId, mountPath } },
+      );
+      return data.volumeCreate;
+    },
+
+    async deleteVolume(volumeId) {
+      await gql(
+        `mutation($id: String!) {
+          volumeDelete(volumeId: $id)
+        }`,
+        { id: volumeId },
+      );
+    },
+
+    async upsertVariables(serviceId, environmentId, variables) {
+      await gql(
+        `mutation($input: VariableCollectionUpsertInput!) {
+          variableCollectionUpsert(input: $input)
+        }`,
+        {
+          input: {
+            projectId,
+            serviceId,
+            environmentId,
+            variables,
+            skipDeploys: true,
+          },
+        },
+      );
+    },
+
+    async deployService(serviceId, environmentId) {
+      const data = await gql<{ serviceInstanceDeploy: RailwayDeployment }>(
+        `mutation($serviceId: String!, $environmentId: String!) {
+          serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId) {
+            id status
+          }
+        }`,
+        { serviceId, environmentId },
+      );
+      return data.serviceInstanceDeploy;
+    },
+
+    async createDomain(serviceId, environmentId) {
+      const data = await gql<{ serviceDomainCreate: { domain: string; id: string } }>(
+        `mutation($serviceId: String!, $environmentId: String!) {
+          serviceDomainCreate(serviceId: $serviceId, environmentId: $environmentId) {
+            id domain
+          }
+        }`,
+        { serviceId, environmentId },
+      );
+      return data.serviceDomainCreate;
+    },
+
+    async getDeploymentStatus(deploymentId) {
+      const data = await gql<{ deployment: RailwayDeployment }>(
+        `query($id: String!) {
+          deployment(id: $id) { id status }
+        }`,
+        { id: deploymentId },
+      );
+      return data.deployment;
+    },
+
+    async getEnvironmentId(_projectId) {
+      const data = await gql<{
+        project: { environments: { edges: Array<{ node: { id: string; name: string } }> } };
+      }>(
+        `query($id: String!) {
+          project(id: $id) {
+            environments { edges { node { id name } } }
+          }
+        }`,
+        { id: projectId },
+      );
+      const envs = data.project.environments.edges;
+      const prod = envs.find((e) => e.node.name === "production") ?? envs[0];
+      if (!prod) throw new Error("No environments found in Railway project");
+      return prod.node.id;
     },
   };
 }
@@ -138,9 +207,8 @@ export function createFlyClient(apiToken: string): FlyClient {
 
 /** Base config shared by provisioning and deprovisioning */
 export interface ProvisionerConfigBase {
-  flyClient: FlyClient;
-  flyAppName: string;
-  flyRegion: string;
+  railwayClient: RailwayClient;
+  projectId: string;
   db?: typeof defaultDb;
   /** Progress callback — called at each step */
   onProgress?: (message: string) => void;
@@ -154,6 +222,8 @@ export interface ProvisionerConfig extends ProvisionerConfigBase {
   healthCheckTimeoutMs?: number;
   /** Health check poll interval in ms (default: 5000) */
   healthCheckIntervalMs?: number;
+  /** Deploy status poll interval in ms (default: 5000) */
+  deployPollIntervalMs?: number;
 }
 
 // ============================================================
@@ -185,18 +255,23 @@ export function checkRateLimit(tokenId: string): boolean {
 
 export interface ProvisionResult {
   workspaceUrl: string;
-  machineId: string;
+  serviceId: string;
   volumeId: string;
   tokenId: string;
   status: "created" | "existing";
+  /** @deprecated Use serviceId — kept for backward compat */
+  machineId: string;
 }
 
 /**
- * Provision a managed workspace for a user.
+ * Provision a managed workspace for a user on Railway.
  *
  * Idempotent: if a healthy workspace exists, returns its URL.
  * Stale recovery: if a degraded/stale provisioning record exists, cleans up first.
  * Full rollback on any step failure — no orphaned resources.
+ *
+ * Saga steps: create service → create volume → upsert env vars → deploy →
+ * create domain → poll deployment status → deep health check → record in DB.
  */
 export async function provisionWorkspace(
   userId: string,
@@ -215,6 +290,7 @@ export async function provisionWorkspace(
     if (existing.status === "healthy") {
       return {
         workspaceUrl: existing.workspaceUrl,
+        serviceId: existing.serviceId ?? existing.machineId,
         machineId: existing.machineId,
         volumeId: existing.volumeId,
         tokenId: existing.tokenId,
@@ -230,77 +306,82 @@ export async function provisionWorkspace(
 
   // Track created resources for rollback
   const created: {
+    serviceId?: string;
     volumeId?: string;
     tokenId?: string;
-    machineId?: string;
+    domainId?: string;
     dbRecordId?: string;
   } = {};
 
   const progress = config.onProgress ?? (() => {});
 
   try {
-    // Step 2: Create Fly Volume
+    // Step 2: Get environment ID
+    progress("Getting environment...");
+    const environmentId = await config.railwayClient.getEnvironmentId(config.projectId);
+    progress("Getting environment... done");
+
+    // Step 3: Create Railway Service
+    progress("Creating service...");
+    const serviceName = `ditto-ws-${userId.replace(/[^a-z0-9-]/gi, "-").slice(0, 30)}`;
+    const service = await config.railwayClient.createService(config.projectId, serviceName);
+    created.serviceId = service.id;
+    progress("Creating service... done");
+
+    // Step 4: Create Volume (mount at /data)
     progress("Creating volume...");
-    const volumeName = `ditto-data-${userId.replace(/[^a-z0-9-]/gi, "-").slice(0, 30)}`;
-    const volume = await config.flyClient.createVolume(
-      config.flyAppName,
-      volumeName,
-      config.flyRegion,
-      1,
-    );
+    const volume = await config.railwayClient.createVolume(service.id, "/data");
     created.volumeId = volume.id;
     progress("Creating volume... done");
 
-    // Step 3: Generate network token for user
+    // Step 5: Generate network token for user
     progress("Creating token...");
     const { token, id: tokenId } = await createToken(userId, { isAdmin: false });
     created.tokenId = tokenId;
     progress("Creating token... done");
 
-    // Step 4: Create Fly Machine
-    progress("Creating machine...");
-    const machineName = `ditto-ws-${userId.replace(/[^a-z0-9-]/gi, "-").slice(0, 30)}`;
-    const workspaceUrl = `https://${machineName}.fly.dev`;
+    // Step 6: Generate NETWORK_AUTH_SECRET for magic link auth
+    const authSecret = randomBytes(32).toString("hex");
+    const authSecretHash = createHash("sha256").update(authSecret).digest("hex");
 
-    const machineConfig: FlyMachineConfig = {
-      image: config.imageRef,
-      env: {
-        DITTO_NETWORK_URL: config.networkUrl,
-        DITTO_NETWORK_TOKEN: token,
-        DATABASE_PATH: "/app/data/ditto.db",
-      },
-      guest: {
-        cpu_kind: "shared",
-        cpus: 1,
-        memory_mb: 512,
-      },
-      mounts: [{ volume: volume.id, path: "/app/data" }],
-      services: [
-        {
-          ports: [
-            { port: 80, handlers: ["http"] },
-            { port: 443, handlers: ["tls", "http"] },
-          ],
-          protocol: "tcp",
-          internal_port: 3000,
-        },
-      ],
-      auto_destroy: false,
-    };
+    // Step 7: Upsert env vars (skipDeploys-equivalent: we deploy separately)
+    progress("Setting environment variables...");
+    await config.railwayClient.upsertVariables(service.id, environmentId, {
+      DITTO_NETWORK_URL: config.networkUrl,
+      DITTO_NETWORK_TOKEN: token,
+      DATABASE_PATH: "/app/data/ditto.db",
+      NETWORK_AUTH_SECRET: authSecret,
+    });
+    progress("Setting environment variables... done");
 
-    const machine = await config.flyClient.createMachine(
-      config.flyAppName,
-      machineName,
-      machineConfig,
-      config.flyRegion,
+    // Step 8: Deploy the service
+    progress("Deploying service...");
+    const deployment = await config.railwayClient.deployService(service.id, environmentId);
+    progress("Deploying service... done");
+
+    // Step 9: Create public domain
+    progress("Creating domain...");
+    const domain = await config.railwayClient.createDomain(service.id, environmentId);
+    created.domainId = domain.id;
+    const workspaceUrl = `https://${domain.domain}`;
+    progress("Creating domain... done");
+
+    // Step 10: Poll deployment status until ACTIVE
+    progress("Waiting for deployment...");
+    const deployed = await waitForDeployment(
+      config.railwayClient,
+      deployment.id,
+      config.healthCheckTimeoutMs ?? 120_000,
+      config.deployPollIntervalMs ?? 5_000,
     );
-    created.machineId = machine.id;
-    progress("Creating machine... done");
+    if (!deployed) {
+      const timeoutSec = Math.round((config.healthCheckTimeoutMs ?? 120_000) / 1000);
+      throw new Error(`Deployment failed or timed out after ${timeoutSec}s for workspace ${userId}`);
+    }
+    progress("Waiting for deployment... active");
 
-    // Step 5: Start machine and wait for deep health check
+    // Step 11: Deep health check — verify application-level health
     progress("Waiting for health check...");
-    await config.flyClient.startMachine(config.flyAppName, machine.id);
-
     const healthy = await waitForDeepHealth(
       workspaceUrl,
       config.healthCheckTimeoutMs ?? 120_000,
@@ -312,32 +393,31 @@ export async function provisionWorkspace(
     }
     progress("Waiting for health check... ok (seed imported, network reachable)");
 
-    // Verify DITTO_NETWORK_URL is present in machine config
-    if (!machineConfig.env.DITTO_NETWORK_URL) {
-      throw new Error("DITTO_NETWORK_URL not set in machine config — deep checks would degrade to shallow");
-    }
-
-    // Step 6: Record in managedWorkspaces table
+    // Step 12: Record in managedWorkspaces table
     const [record] = await database
       .insert(schema.managedWorkspaces)
       .values({
         userId,
-        machineId: machine.id,
+        machineId: service.id, // backward compat — store serviceId in dead column
+        serviceId: service.id,
+        railwayEnvironmentId: environmentId,
         volumeId: volume.id,
         workspaceUrl,
-        region: config.flyRegion,
+        region: "railway", // Railway manages regions per-project
         imageRef: config.imageRef,
         status: "healthy",
         lastHealthCheckAt: new Date(),
         lastHealthStatus: "ok",
         tokenId,
+        authSecretHash,
       })
       .returning({ id: schema.managedWorkspaces.id });
     created.dbRecordId = record.id;
 
     return {
       workspaceUrl,
-      machineId: machine.id,
+      serviceId: service.id,
+      machineId: service.id, // backward compat
       volumeId: volume.id,
       tokenId,
       status: "created",
@@ -360,6 +440,7 @@ export interface DeprovisionResult {
 
 /**
  * Deprovision a managed workspace. Destructive — deletes all workspace data.
+ * Railway cascades volume deletion when the service is deleted.
  */
 export async function deprovisionWorkspace(
   userId: string,
@@ -382,35 +463,18 @@ export async function deprovisionWorkspace(
   }
 
   const progress = config.onProgress ?? (() => {});
+  const serviceId = workspace.serviceId ?? workspace.machineId;
 
-  // Step 2: Stop Machine (graceful: SIGTERM, 30s timeout)
-  progress("Stopping machine...");
+  // Step 2: Delete Service (Railway cascades volume deletion)
+  progress("Deleting service...");
   try {
-    await config.flyClient.stopMachine(config.flyAppName, workspace.machineId, "SIGTERM", 30);
+    await config.railwayClient.deleteService(serviceId);
   } catch (error) {
-    console.warn(`[provisioner] Failed to stop machine ${workspace.machineId}:`, error);
+    console.warn(`[provisioner] Failed to delete service ${serviceId}:`, error);
   }
-  progress("Stopping machine... done");
+  progress("Deleting service... done");
 
-  // Step 3: Destroy Machine
-  progress("Destroying machine...");
-  try {
-    await config.flyClient.destroyMachine(config.flyAppName, workspace.machineId, true);
-  } catch (error) {
-    console.warn(`[provisioner] Failed to destroy machine ${workspace.machineId}:`, error);
-  }
-  progress("Destroying machine... done");
-
-  // Step 4: Destroy Volume
-  progress("Destroying volume...");
-  try {
-    await config.flyClient.destroyVolume(config.flyAppName, workspace.volumeId);
-  } catch (error) {
-    console.warn(`[provisioner] Failed to destroy volume ${workspace.volumeId}:`, error);
-  }
-  progress("Destroying volume... done");
-
-  // Step 5: Revoke network token
+  // Step 3: Revoke network token
   progress("Revoking token...");
   try {
     await revokeToken(workspace.tokenId);
@@ -419,7 +483,7 @@ export async function deprovisionWorkspace(
   }
   progress("Revoking token... done");
 
-  // Step 6: Update record
+  // Step 4: Update record
   await database
     .update(schema.managedWorkspaces)
     .set({
@@ -442,11 +506,14 @@ export interface FleetWorkspace {
   workspaceUrl: string;
   status: string;
   currentVersion: string | null;
+  serviceId: string | null;
   region: string;
   imageRef: string;
   lastHealthCheckAt: Date | null;
   lastHealthStatus: string | null;
   createdAt: Date;
+  /** @deprecated Use serviceId */
+  machineId: string;
 }
 
 /**
@@ -468,6 +535,8 @@ export async function getFleetStatus(
     workspaceUrl: w.workspaceUrl,
     status: w.status,
     currentVersion: w.currentVersion,
+    serviceId: w.serviceId,
+    machineId: w.machineId,
     region: w.region,
     imageRef: w.imageRef,
     lastHealthCheckAt: w.lastHealthCheckAt,
@@ -499,6 +568,8 @@ export async function getWorkspaceStatus(
     workspaceUrl: workspace.workspaceUrl,
     status: workspace.status,
     currentVersion: workspace.currentVersion,
+    serviceId: workspace.serviceId,
+    machineId: workspace.machineId,
     region: workspace.region,
     imageRef: workspace.imageRef,
     lastHealthCheckAt: workspace.lastHealthCheckAt,
@@ -510,6 +581,33 @@ export async function getWorkspaceStatus(
 // ============================================================
 // Internal Helpers
 // ============================================================
+
+/**
+ * Wait for Railway deployment to reach ACTIVE status.
+ * Polls getDeploymentStatus every intervalMs until timeout.
+ */
+async function waitForDeployment(
+  client: RailwayClient,
+  deploymentId: string,
+  timeoutMs: number,
+  intervalMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const deployment = await client.getDeploymentStatus(deploymentId);
+      if (deployment.status === "ACTIVE") return true;
+      if (deployment.status === "FAILED" || deployment.status === "CRASHED") return false;
+    } catch {
+      // Expected during early deploy — API may not have the deployment yet
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return false;
+}
 
 /**
  * Wait for deep health check to pass.
@@ -535,7 +633,7 @@ async function waitForDeepHealth(
         }
       }
     } catch {
-      // Expected during startup — machine not ready yet
+      // Expected during startup — service not ready yet
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -549,20 +647,14 @@ async function waitForDeepHealth(
  */
 async function cleanupResources(
   config: ProvisionerConfigBase,
-  workspace: { machineId: string; volumeId: string; tokenId: string; id: string },
+  workspace: { machineId: string; serviceId: string | null; volumeId: string; tokenId: string; id: string },
   database: typeof defaultDb,
 ): Promise<void> {
-  try {
-    await config.flyClient.stopMachine(config.flyAppName, workspace.machineId);
-  } catch { /* may already be stopped */ }
+  const serviceId = workspace.serviceId ?? workspace.machineId;
 
   try {
-    await config.flyClient.destroyMachine(config.flyAppName, workspace.machineId, true);
-  } catch { /* may already be destroyed */ }
-
-  try {
-    await config.flyClient.destroyVolume(config.flyAppName, workspace.volumeId);
-  } catch { /* may already be destroyed */ }
+    await config.railwayClient.deleteService(serviceId);
+  } catch { /* may already be deleted */ }
 
   try {
     await revokeToken(workspace.tokenId);
@@ -579,14 +671,15 @@ async function cleanupResources(
 async function rollback(
   config: ProvisionerConfigBase,
   created: {
+    serviceId?: string;
     volumeId?: string;
     tokenId?: string;
-    machineId?: string;
+    domainId?: string;
     dbRecordId?: string;
   },
   database: typeof defaultDb,
 ): Promise<void> {
-  // Reverse order: DB record → machine → token → volume
+  // Reverse order: DB record → service (cascades volume + domain) → token
   if (created.dbRecordId) {
     try {
       await database
@@ -597,15 +690,12 @@ async function rollback(
     }
   }
 
-  if (created.machineId) {
+  if (created.serviceId) {
     try {
-      await config.flyClient.stopMachine(config.flyAppName, created.machineId);
-    } catch { /* may not be running */ }
-
-    try {
-      await config.flyClient.destroyMachine(config.flyAppName, created.machineId, true);
+      // Deleting the service cascades volume and domain deletion on Railway
+      await config.railwayClient.deleteService(created.serviceId);
     } catch (e) {
-      console.error("[provisioner] Rollback: failed to destroy machine:", e);
+      console.error("[provisioner] Rollback: failed to delete service:", e);
     }
   }
 
@@ -614,14 +704,6 @@ async function rollback(
       await revokeToken(created.tokenId);
     } catch (e) {
       console.error("[provisioner] Rollback: failed to revoke token:", e);
-    }
-  }
-
-  if (created.volumeId) {
-    try {
-      await config.flyClient.destroyVolume(config.flyAppName, created.volumeId);
-    } catch (e) {
-      console.error("[provisioner] Rollback: failed to destroy volume:", e);
     }
   }
 }

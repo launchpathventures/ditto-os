@@ -95,10 +95,9 @@ feedback:
     - missed_emails_flagged_by_user
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "10 triage cycles with no missed urgents" }
-    - { from: spot_checked, to: autonomous, after: "30 cycles with consistent accuracy" }
+  # Context 1: Alex → User, direct communication (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User flags a missed urgent email"
     - "Classification accuracy drops below 80%"

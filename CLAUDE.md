@@ -98,6 +98,48 @@ The Documenter handles:
 
 **Rule: if `docs/state.md` changed during the session, the Documenter should run before the session ends.**
 
+## Engine Core (`@ditto/core`) — The Reusable Package
+
+The engine is extracted into `packages/core/` as the `@ditto/core` package. This is the reusable harness that other projects (ProcessOS, etc.) consume independently. **The engine is the product.**
+
+### What lives in `packages/core/`
+
+Engine primitives that answer "how does the harness work?" — not "what is Ditto?":
+
+- **Database schema** (`packages/core/src/db/`) — core tables: processes, runs, steps, memories, trust, feedback, work items, activities, schedules, credentials. All type unions (TrustTier, RunStatus, etc.).
+- **Harness pipeline** (`packages/core/src/harness/`) — HarnessPipeline, HarnessContext, HarnessHandler interface, StepDefinition, ProcessDefinition. Built-in handlers: routing, trust-gate, step-execution, harness-config.
+- **Trust system** (`packages/core/src/trust/`) — constants, structured diff, edit severity classification.
+- **LLM types** (`packages/core/src/llm/`) — provider-agnostic type contracts for messages, tools, completions, purpose-based routing.
+- **Cognitive framework** (`packages/core/src/cognitive/`) — configurable core.md loader with caching and section extraction.
+- **Content blocks** (`packages/core/src/content-blocks.ts`) — 22-type discriminated union + text fallback renderer.
+- **Engine interfaces** (`packages/core/src/interfaces.ts`) — EngineConfig, StepAdapter, SystemAgentHandler, MemoryProvider.
+
+### What stays in `src/engine/` (Ditto product layer)
+
+Product opinions that answer "what is Ditto?":
+
+- Conversational Self (self.ts, self-context.ts, self-delegation.ts)
+- System agents (intake classifier, orchestrator, router, etc.)
+- Self-tools (work items, briefings, process generation, etc.)
+- DB-coupled harness handlers (memory-assembly, feedback-recorder, metacognitive-check, review-pattern)
+- LLM provider implementations (Anthropic, OpenAI, Google SDK calls)
+- Adapters (Claude CLI, script)
+- Network agents, personas, user model
+- Process YAML files, process I/O, heartbeat, scheduler
+
+### Development rules
+
+1. **Engine-first**: When adding or modifying engine primitives (harness types, trust logic, process types, content blocks, cognitive loading, LLM types), change `packages/core/` first. The `src/engine/` files for those modules are thin re-exports from `@ditto/core`.
+2. **Re-export pattern**: 8 files in `src/engine/` re-export from `@ditto/core`: `events.ts`, `content-blocks.ts`, `cognitive-core.ts`, `trust-constants.ts`, `trust-diff.ts`, `harness.ts`, `harness-handlers/routing.ts`, `harness-handlers/harness-config.ts`. Never add implementation to these — they are pass-throughs.
+3. **Type alignment**: The types in `packages/core/` must exactly match what `src/engine/` consumers expect. If you change a type in core, run `pnpm run type-check` at root to verify the Ditto app still compiles.
+4. **No Ditto opinions in core**: Core must not import from `src/`. It must not reference Ditto-specific concepts (Self, personas, network, workspace). Core is a library; Ditto is an application.
+5. **DB injection**: Core defines schema but does NOT create database connections. The consuming application creates and passes the DB. Files in core must not import `{ db } from "../db"` — they receive the database via function parameters or DI.
+6. **Consumer test**: Ask yourself "could ProcessOS use this?" If yes → core. If no → src/engine.
+
+### Setup prompt for new consumers
+
+See `packages/core/SETUP_PROMPT.md` for a complete prompt that guides an AI agent through setting up a new project on `@ditto/core`.
+
 ## Conventions
 
 - pnpm for package management

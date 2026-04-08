@@ -13,6 +13,7 @@ Design the solution. Make structural decisions. Produce briefs, ADRs, and archit
 - MUST define acceptance criteria as boolean pass/fail checks
 - MUST specify non-goals explicitly
 - MUST consider all six architecture layers for impact
+- MUST consider the `@ditto/core` boundary: does this design change engine primitives or Ditto product code? If engine, the brief must specify that changes go to `packages/core/` first. See CLAUDE.md "Engine Core" section for what belongs where. Ask: "could ProcessOS use this?" — if yes, it's engine.
 - MUST check `docs/insights/` for relevant design principles
 - MUST check `docs/adrs/` for prior decisions that constrain or inform the design
 - MUST self-review before spawning Reviewer: Does the brief answer the research findings? Would a builder be able to implement this unambiguously? Are acceptance criteria boolean and testable?

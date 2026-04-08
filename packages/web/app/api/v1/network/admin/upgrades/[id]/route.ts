@@ -4,7 +4,7 @@
  * Returns the upgrade record with per-workspace results.
  * Use this to poll after POST /admin/upgrade returns the upgradeId.
  *
- * Provenance: Brief 091, AC16 (status polling).
+ * Provenance: Brief 091, Brief 100 (Railway migration).
  */
 
 import { NextResponse } from "next/server";
@@ -24,22 +24,22 @@ export async function GET(
     const { id } = await params;
 
     const { db, schema } = await import("../../../../../../../../../src/db");
-    const { createWorkspaceUpgrader, createFlyMachinesClient, createHealthChecker } = await import(
+    const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker } = await import(
       "../../../../../../../../../src/engine/workspace-upgrader"
     );
     const { createAlertSender } = await import(
       "../../../../../../../../../src/engine/workspace-alerts"
     );
 
-    const flyClient = createFlyMachinesClient({
-      apiToken: process.env.FLY_API_TOKEN || "",
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: process.env.RAILWAY_API_TOKEN || "",
+      projectId: process.env.RAILWAY_PROJECT_ID || "",
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),
     });

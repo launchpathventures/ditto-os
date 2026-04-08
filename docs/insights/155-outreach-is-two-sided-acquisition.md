@@ -3,7 +3,7 @@
 **Date:** 2026-04-06
 **Trigger:** Designing the verify page and referred path for the web acquisition funnel. Realised that every Alex email creates two conversion opportunities, not one.
 **Layers affected:** L6 Human (verify + referred pages), L3 Harness (email footer template), L5 Learning (verify conversion tracking)
-**Status:** active
+**Status:** implemented (Brief 109 — referral footer in every email, referred_click tracking)
 
 ## The Insight
 

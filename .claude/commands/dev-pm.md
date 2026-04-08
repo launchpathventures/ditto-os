@@ -19,6 +19,7 @@ Determine what to work on next and in what order. You triage, sequence, and surf
 - When the human approves a pending brief, move it to `docs/briefs/complete/` and update its status in `docs/state.md`.
 - MUST fix stale entries in `docs/state.md` and `docs/roadmap.md` when encountered during triage (Insight-043: these are PM-owned docs)
 - MUST flag ADR or architecture.md discrepancies discovered during triage in work recommendation output
+- MUST classify work as engine (→ `packages/core/`) or product (→ `src/engine/`) when recommending. Engine work benefits all consumers (ProcessOS, etc.) and should be prioritized when the change is reusable. Include "Engine scope: core / product / both" in work recommendations. See CLAUDE.md "Engine Core" section.
 
 ## Required Inputs
 

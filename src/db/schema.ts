@@ -270,6 +270,15 @@ export const processRuns = sqliteTable("process_runs", {
     .notNull()
     .default(0),
 
+  // Chain processing flag (Brief 098a) — prevents duplicate chain execution
+  chainsProcessed: integer("chains_processed", { mode: "boolean" })
+    .notNull()
+    .default(false),
+
+  // Trust tier override for chain-spawned runs (Brief 098a AC9)
+  // When set, heartbeat uses the more restrictive of this and the process's trust tier
+  trustTierOverride: text("trust_tier_override").$type<TrustTier>(),
+
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -772,7 +781,7 @@ export const activities = sqliteTable("activities", {
 // Sessions — Conversational Self persistence (ADR-016)
 // ============================================================
 
-export const sessionSurfaceValues = ["cli", "telegram", "web"] as const;
+export const sessionSurfaceValues = ["cli", "telegram", "web", "inbound"] as const;
 export type SessionSurface = (typeof sessionSurfaceValues)[number];
 
 export const sessionStatusValues = ["active", "suspended", "closed"] as const;
@@ -868,6 +877,34 @@ export const schedules = sqliteTable("schedules", {
 });
 
 // ============================================================
+// Delayed Runs — deferred process execution (Brief 098a)
+// ============================================================
+
+export const delayedRunStatusValues = ["pending", "executed", "cancelled"] as const;
+export type DelayedRunStatus = (typeof delayedRunStatusValues)[number];
+
+/** Delayed process runs — created by chain executor, executed by pulse */
+export const delayedRuns = sqliteTable("delayed_runs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processSlug: text("process_slug").notNull(),
+  inputs: text("inputs", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>()
+    .default({}),
+  executeAt: integer("execute_at", { mode: "timestamp_ms" }).notNull(),
+  status: text("status").notNull().$type<DelayedRunStatus>().default("pending"),
+  createdByRunId: text("created_by_run_id")
+    .references(() => processRuns.id),
+  // Parent trust tier — chain-spawned runs inherit the more restrictive tier (AC9)
+  parentTrustTier: text("parent_trust_tier").$type<TrustTier>(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
 // Network Agent — People and Interactions (Brief 079/080)
 // ============================================================
 
@@ -941,7 +978,7 @@ export const interactionTypeValues = [
 export type InteractionType = (typeof interactionTypeValues)[number];
 
 /** Interaction channel values */
-export const interactionChannelValues = ["email", "voice", "sms"] as const;
+export const interactionChannelValues = ["email", "voice", "sms", "workspace"] as const;
 export type InteractionChannel = (typeof interactionChannelValues)[number];
 
 /** Interaction mode values */
@@ -1016,6 +1053,12 @@ export const networkUsers = sqliteTable("network_users", {
   workspaceId: text("workspace_id"),
   /** The person record for this user in the people graph (they're also a person Alex knows) */
   personId: text("person_id").references(() => people.id),
+  /** When Alex suggested a workspace to this user. Set once, never cleared (one-time per lifecycle). Brief 099c AC4. */
+  workspaceSuggestedAt: integer("workspace_suggested_at", { mode: "timestamp_ms" }),
+  /** True when user has expressed desire for visibility into their work (e.g., "show me everything"). Set by Self on intent detection. Brief 099c AC1. */
+  wantsVisibility: integer("wants_visibility", { mode: "boolean" }).notNull().default(false),
+  /** When admin paused Alex for this user. Null = not paused. Brief 108 AC3. */
+  pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1024,6 +1067,33 @@ export const networkUsers = sqliteTable("network_users", {
     .$defaultFn(() => new Date()),
 }, (table) => [
   index("network_users_email").on(table.email),
+]);
+
+// ============================================================
+// Admin Feedback — admin-scoped guidance for Alex (Brief 108)
+// ============================================================
+
+/**
+ * Admin feedback — guidance from the Ditto admin team to Alex about specific users.
+ * Stored as admin-scoped memory that Alex loads in context for that user.
+ * Distinct from user feedback (Layer 5 feedback table) — this is operational guidance.
+ *
+ * Provenance: Brief 108, Insight-160 (admin reviews on downgrade).
+ */
+export const adminFeedback = sqliteTable("admin_feedback", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  feedback: text("feedback").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("admin_feedback_user_id").on(table.userId),
 ]);
 
 // ============================================================
@@ -1073,16 +1143,17 @@ export const healthStatusValues = [
 export type HealthStatus = (typeof healthStatusValues)[number];
 
 /**
- * Managed workspaces — fleet registry for provisioned Fly.io workspaces.
+ * Managed workspaces — fleet registry for provisioned Railway workspaces.
  * One workspace per user. Tracks lifecycle from provisioning to deprovisioning.
  *
- * Provenance: Brief 090, ADR-025 (centralized Network Service), Temporal namespace registry pattern.
+ * Provenance: Brief 090, Brief 100 (Railway migration), ADR-025 (centralized Network Service).
  */
 export const managedWorkspaces = sqliteTable("managed_workspaces", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => randomUUID()),
   userId: text("user_id").notNull().unique(),
+  /** @deprecated Dead column — kept for backward compat after Railway migration (Brief 100). */
   machineId: text("machine_id").notNull(),
   volumeId: text("volume_id").notNull(),
   workspaceUrl: text("workspace_url").notNull(),
@@ -1094,6 +1165,12 @@ export const managedWorkspaces = sqliteTable("managed_workspaces", {
   lastHealthStatus: text("last_health_status").$type<HealthStatus>(),
   errorLog: text("error_log"),
   tokenId: text("token_id").notNull(),
+  /** Railway service ID — primary identifier after migration from Fly.io (Brief 100). */
+  serviceId: text("service_id"),
+  /** Railway environment ID — needed for deploys and variable upserts. */
+  railwayEnvironmentId: text("railway_environment_id"),
+  /** SHA-256 hash of the NETWORK_AUTH_SECRET injected during provisioning (never the raw secret). */
+  authSecretHash: text("auth_secret_hash"),
   deprovisionedAt: integer("deprovisioned_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
@@ -1313,6 +1390,39 @@ export const documents = sqliteTable("documents", {
     .$defaultFn(() => new Date()),
 });
 
+// ============================================================
+// Review Pages (Brief 106 — Bespoke Signed Review Pages)
+// ============================================================
+
+export const reviewPageStatusValues = [
+  "active",
+  "completed",
+  "archived",
+  "expired",
+] as const;
+export type ReviewPageStatus = (typeof reviewPageStatusValues)[number];
+
+/** Ephemeral signed review pages for rich content between email and workspace (Brief 106, Insight-164) */
+export const reviewPages = sqliteTable("review_pages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id").notNull(),
+  personId: text("person_id").notNull(),
+  token: text("token").notNull().unique(),
+  title: text("title").notNull(),
+  contentBlocks: text("content_blocks", { mode: "json" }).notNull().$type<unknown[]>(),
+  chatMessages: text("chat_messages", { mode: "json" }).$type<unknown[]>(),
+  status: text("status").notNull().$type<ReviewPageStatus>().default("active"),
+  userName: text("user_name"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  firstAccessedAt: integer("first_accessed_at", { mode: "timestamp_ms" }),
+});
+
 /** Stores full parsed markdown for document viewer (Layer 3, Brief 079) */
 export const documentContent = sqliteTable("document_content", {
   id: text("id")
@@ -1321,6 +1431,153 @@ export const documentContent = sqliteTable("document_content", {
   documentHash: text("document_hash").notNull().unique(),
   parsedMarkdown: text("parsed_markdown").notNull(),
   pageCount: integer("page_count").notNull().default(1),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// Process Model Library (Brief 104)
+// ============================================================
+
+export const processModelStatusValues = [
+  "nominated",
+  "testing",
+  "standardised",
+  "review",
+  "published",
+  "archived",
+] as const;
+export type ProcessModelStatus = (typeof processModelStatusValues)[number];
+
+export const processModelComplexityValues = [
+  "simple",
+  "moderate",
+  "complex",
+] as const;
+export type ProcessModelComplexity =
+  (typeof processModelComplexityValues)[number];
+
+export const processModelSourceValues = [
+  "template",
+  "built",
+  "community",
+] as const;
+export type ProcessModelSource = (typeof processModelSourceValues)[number];
+
+/** Curated process models for the Process Model Library (Brief 104) */
+export const processModels = sqliteTable("process_models", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  industryTags: text("industry_tags", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+  functionTags: text("function_tags", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+  complexity: text("complexity")
+    .notNull()
+    .$type<ProcessModelComplexity>()
+    .default("moderate"),
+  version: integer("version").notNull().default(1),
+  status: text("status")
+    .notNull()
+    .$type<ProcessModelStatus>()
+    .default("nominated"),
+  source: text("source")
+    .notNull()
+    .$type<ProcessModelSource>()
+    .default("template"),
+  processDefinition: text("process_definition", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>(),
+  qualityCriteria: text("quality_criteria", { mode: "json" })
+    .$type<string[]>()
+    .default([]),
+  validationReport: text("validation_report", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
+  nominatedBy: text("nominated_by"),
+  approvedBy: text("approved_by"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  publishedAt: integer("published_at", { mode: "timestamp_ms" }),
+});
+
+// ============================================================
+// Budget Infrastructure — Per-Goal Spend Tracking (Brief 107)
+// ============================================================
+
+export const budgetStatusValues = [
+  "created",
+  "funded",
+  "active",
+  "exhausted",
+  "closed",
+] as const;
+export type BudgetStatus = (typeof budgetStatusValues)[number];
+
+export const budgetTransactionTypeValues = [
+  "load",
+  "spend",
+  "refund",
+] as const;
+export type BudgetTransactionType = (typeof budgetTransactionTypeValues)[number];
+
+/**
+ * Budgets — per-goal spend allocation.
+ * Created when user says "here's $X for this goal".
+ * One budget per goal (unique goalWorkItemId).
+ * All amounts in integer cents — no floating-point.
+ *
+ * Provenance: Brief 107, professional services engagement model.
+ */
+export const budgets = sqliteTable("budgets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  goalWorkItemId: text("goal_work_item_id")
+    .references(() => workItems.id)
+    .notNull()
+    .unique(),
+  userId: text("user_id").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  spentCents: integer("spent_cents").notNull().default(0),
+  status: text("status").notNull().$type<BudgetStatus>().default("created"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * Budget transactions — immutable ledger of all budget movements.
+ * load: funds added (Stripe payment), spend: funds used, refund: funds returned.
+ * Once created, never updated or deleted (audit trail).
+ *
+ * Provenance: Brief 107, simplified double-entry bookkeeping pattern.
+ */
+export const budgetTransactions = sqliteTable("budget_transactions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  budgetId: text("budget_id")
+    .references(() => budgets.id)
+    .notNull(),
+  type: text("type").notNull().$type<BudgetTransactionType>(),
+  amountCents: integer("amount_cents").notNull(),
+  description: text("description"),
+  subGoalId: text("sub_goal_id"),
+  stripePaymentId: text("stripe_payment_id"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

@@ -127,10 +127,9 @@ feedback:
     - missing_information_flagged
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "15 profiles with no accuracy corrections" }
-    - { from: spot_checked, to: autonomous, after: "40 profiles with no corrections" }
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User corrects factual information in a profile"
     - "Profile misses a known relationship"

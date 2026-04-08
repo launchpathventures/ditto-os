@@ -4,7 +4,7 @@
  * Returns all upgrade attempts with status, counts, and timestamps.
  * Query params: ?limit=20 (default)
  *
- * Provenance: Brief 091, AC18.
+ * Provenance: Brief 091, Brief 100 (Railway migration).
  */
 
 import { NextResponse } from "next/server";
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const limit = parseInt(url.searchParams.get("limit") || "20", 10);
 
     const { db, schema } = await import("../../../../../../../../src/db");
-    const { createWorkspaceUpgrader, createFlyMachinesClient, createHealthChecker } = await import(
+    const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker } = await import(
       "../../../../../../../../src/engine/workspace-upgrader"
     );
     const { createAlertSender } = await import(
@@ -30,15 +30,15 @@ export async function GET(request: Request) {
     );
 
     // Create a minimal upgrader just for history queries
-    const flyClient = createFlyMachinesClient({
-      apiToken: process.env.FLY_API_TOKEN || "",
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: process.env.RAILWAY_API_TOKEN || "",
+      projectId: process.env.RAILWAY_PROJECT_ID || "",
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),
     });

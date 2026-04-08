@@ -135,9 +135,9 @@ feedback:
     - introduction_outcome
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "10 path findings with >60% accuracy" }
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "Path based on a relationship that doesn't exist"
     - "Intermediary refuses because relationship was overstated"

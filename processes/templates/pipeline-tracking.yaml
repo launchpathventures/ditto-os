@@ -131,10 +131,9 @@ feedback:
     - recommendations_acted_on
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "8 briefings with no stage corrections" }
-    - { from: spot_checked, to: autonomous, after: "20 briefings with consistent quality" }
+  # Context 1: Alex → User, direct communication (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "Pipeline stage significantly wrong for a prospect"
     - "Missed a hot prospect that user had to flag manually"

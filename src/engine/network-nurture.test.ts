@@ -43,7 +43,7 @@ describe("network-nurture template", () => {
 
     expect(parsed.id).toBe("network-nurture");
     expect(parsed.trigger.type).toBe("schedule");
-    expect(parsed.trust.initial_tier).toBe("supervised");
+    expect(parsed.trust.initial_tier).toBe("autonomous"); // Insight-160: Alex is the professional
     expect(parsed.steps).toHaveLength(4);
     expect(parsed.steps[0].id).toBe("scan-graph");
     expect(parsed.steps[2].id).toBe("quality-gate");
@@ -139,11 +139,11 @@ describe("all four process templates", () => {
     });
   }
 
-  it("connecting-introduction runs at critical trust tier", () => {
+  it("connecting-introduction runs at autonomous trust tier (Insight-160: Alex is the professional)", () => {
     const templatePath = path.resolve(process.cwd(), "processes/templates/connecting-introduction.yaml");
     const content = fs.readFileSync(templatePath, "utf-8");
     const parsed = YAML.parse(content);
-    expect(parsed.trust.initial_tier).toBe("critical");
+    expect(parsed.trust.initial_tier).toBe("autonomous");
   });
 
   it("selling-outreach has trust upgrade path", () => {

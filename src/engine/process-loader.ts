@@ -149,6 +149,15 @@ export interface ProcessDefinition {
   // Process I/O (Brief 036): external source and output delivery
   source?: ProcessSourceConfig;
   output_delivery?: ProcessOutputDeliveryConfig;
+  /** Chain definitions — what processes to trigger after completion (Brief 098a) */
+  chain?: Array<{
+    trigger: string;
+    interval?: string;
+    delay?: string;
+    event?: string;
+    process: string;
+    inputs: Record<string, string>;
+  }>;
 }
 
 /**
@@ -515,6 +524,17 @@ export async function syncProcessesToDb(
     if (def.system) {
       await ensureSystemAgentRecord(def);
     }
+
+    // Brief 104: Register system agents referenced in step configs
+    for (const step of def.steps || []) {
+      if ("parallel" in step) continue; // Skip parallel groups
+      const config = (step as { config?: Record<string, unknown> }).config;
+      const systemAgent = config?.system_agent as string | undefined;
+      if (systemAgent) {
+        const stepDef = step as { name?: string; id: string };
+        await ensureReferencedSystemAgent(systemAgent, stepDef.name || stepDef.id);
+      }
+    }
   }
 
   // Sync schedule triggers (Brief 076)
@@ -554,6 +574,30 @@ async function ensureSystemAgentRecord(def: ProcessDefinition): Promise<void> {
       systemRole,
     });
     console.log(`  System agent created: ${def.name}`);
+  }
+}
+
+/**
+ * Ensure a system agent record exists for a system agent referenced in a step config.
+ * Creates the agent record if it doesn't exist (Brief 104: process-validator pattern).
+ */
+async function ensureReferencedSystemAgent(systemRole: string, stepName: string): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(schema.agents)
+    .where(eq(schema.agents.systemRole, systemRole))
+    .limit(1);
+
+  if (!existing) {
+    await db.insert(schema.agents).values({
+      name: `${systemRole} Agent`,
+      role: "system",
+      description: `System agent for ${stepName}`,
+      adapterType: "system",
+      category: "system" as AgentCategory,
+      systemRole,
+    });
+    console.log(`  System agent registered: ${systemRole} (referenced by ${stepName})`);
   }
 }
 

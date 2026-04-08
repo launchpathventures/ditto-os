@@ -1,0 +1,155 @@
+# Ditto — Template Process: Library Curation Pipeline
+#
+# Quality pipeline that governs which processes enter the Process Model Library.
+# Runs through the harness it governs — eats its own cooking.
+#
+# Provenance: App store review pattern (AI flags, human decides),
+# spec-testing (adversarial quality testing), package linting (normalise
+# structure before publication), semantic versioning (updates don't break).
+#
+# Brief 104
+
+name: "Library Curation Pipeline"
+id: library-curation
+version: 1
+status: active
+template: true
+
+operator: system
+
+description: >
+  Quality assurance pipeline for the Process Model Library. When a process
+  model is nominated for the library (via dynamic creation or manual
+  submission), this pipeline validates it through four quality checks
+  (edge-cases, compliance, efficiency, duplicates), standardises the
+  definition, presents structured results for admin review, and publishes
+  approved models with versioning.
+
+  Admin review is always required — the AI does the heavy lifting, the
+  human makes the final call.
+
+trigger:
+  type: system-event
+  description: Process model nominated for library (status = nominated)
+
+inputs:
+  - name: processModelId
+    type: text
+    source: system
+    required: true
+    description: The ID of the nominated process model in the processModels table
+  - name: nominatedBy
+    type: text
+    source: system
+    required: false
+    description: Who nominated this model (system agent slug or "admin")
+
+steps:
+  - id: nomination
+    name: "Record Nomination"
+    executor: rules
+    description: >
+      Verify the nominated process model exists and is in "nominated" status.
+      Extract the process definition for downstream validation steps.
+    inputs: [processModelId]
+    outputs: [processDefinition, modelMetadata]
+
+  - id: validate
+    name: "Validate Process Quality"
+    executor: ai-agent
+    description: >
+      Run the process-validator system agent. Performs four checks in one
+      pass: (1) edge-case testing — missing/malformed inputs, unexpected
+      data types, circular dependencies, (2) compliance scanning — no
+      hardcoded secrets, PII flagged, trust tier recommendation,
+      (3) efficiency analysis — parameterisation opportunities, step
+      consolidation, quality criteria presence, (4) duplicate detection —
+      keyword overlap + structural similarity against existing library,
+      merge recommendation when similarity > 70%.
+    config:
+      model_hint: capable
+      system_agent: process-validator
+    tools: [db-read, process-model-lookup]
+    inputs: [processModelId]
+    outputs: [validationReport]
+    depends_on: [nomination]
+
+  - id: standardise
+    name: "Standardise Definition"
+    executor: ai-agent
+    description: >
+      Normalise the process definition for library publication:
+      ensure parameterisation (configurable inputs instead of hardcoded
+      values), add/improve description for discoverability, assign
+      industry and function tags, classify complexity, ensure quality
+      criteria are present. Update the process model record with
+      standardised definition.
+    config:
+      model_hint: capable
+    inputs: [processModelId, validationReport]
+    outputs: [standardisedDefinition]
+    depends_on: [validate]
+
+  - id: admin-review
+    name: "Admin Review Gate"
+    executor: human
+    description: >
+      Present the validation report and standardised definition to
+      a Ditto admin for review. The admin sees: per-check evidence
+      (what was tested, expected vs actual, pass/fail), duplicate
+      detection results, parameterisation analysis, and the
+      standardised definition.
+
+      Admin decides: approve (→ publish), reject (→ archive with
+      reason), or revise (→ back to standardise with feedback).
+
+      This step cannot be bypassed — even autonomous-trust agents
+      must go through human review for library publication.
+    inputs: [processModelId, validationReport, standardisedDefinition]
+    outputs: [adminDecision, adminFeedback]
+    depends_on: [standardise]
+
+  - id: publish
+    name: "Publish to Library"
+    executor: rules
+    description: >
+      If admin approved: set status to "published", bump version if
+      updating an existing model (archive the previous version),
+      record publishedAt timestamp and approvedBy.
+
+      If admin rejected: set status to "archived" with rejection reason.
+
+      Published models are versioned — existing adoptions reference
+      specific versions and are not broken by updates.
+    inputs: [processModelId, adminDecision, adminFeedback]
+    outputs: [publishResult]
+    depends_on: [admin-review]
+
+outputs:
+  - name: publishResult
+    type: json
+    description: Publication outcome — published version number or rejection reason
+
+quality_criteria:
+  - "Validation report includes structured per-check evidence"
+  - "Admin review is never bypassed"
+  - "Published models are versioned"
+  - "Duplicate detection catches >70% similarity matches"
+  - "Pipeline runs through the harness (eats own cooking)"
+
+feedback:
+  metrics:
+    - validation_accuracy
+    - admin_approval_rate
+    - time_to_publish
+  capture:
+    - admin_override_reason
+    - false_positive_flags
+    - missed_quality_issues
+
+trust:
+  initial_tier: supervised
+  upgrade_path: []
+  downgrade_triggers:
+    - "Admin frequently overrides validation results"
+    - "Published model causes quality issues in production"

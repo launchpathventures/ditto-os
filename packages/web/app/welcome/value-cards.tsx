@@ -13,14 +13,14 @@ export function ValueCards() {
     <div className="grid gap-4 md:grid-cols-2">
       <ValueCard
         icon={<Users size={24} className="text-vivid" />}
-        title="Super-Connector"
-        description="AI outreach that people actually respond to. 5 great emails a week, not 500 generic ones."
+        title="Find the Right People"
+        description="Alex researches who you should meet, drafts introductions you review, and reaches out on your behalf."
         href="/network"
       />
       <ValueCard
         icon={<Shield size={24} className="text-vivid" />}
-        title="Chief of Staff"
-        description="The antidote to AI you can't trust. Processes that learn, corrections that stick."
+        title="Your Priorities, Organized"
+        description="Weekly briefings, decision tracking, and someone managing the details. Works entirely through email."
         href="/chief-of-staff"
       />
     </div>

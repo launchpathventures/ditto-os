@@ -1,10 +1,11 @@
 /**
  * POST /api/v1/network/admin/provision — Provision a managed workspace (admin-only).
  *
- * Creates a Fly.io Machine + Volume, generates a network token,
- * waits for deep health check, and records in fleet registry.
+ * Creates a Railway service + volume, generates a network token,
+ * sets env vars, deploys, creates domain, waits for health check,
+ * and records in fleet registry.
  *
- * Provenance: Brief 090, ADR-025.
+ * Provenance: Brief 090, Brief 100 (Railway migration), ADR-025.
  */
 
 import { NextResponse } from "next/server";
@@ -39,28 +40,26 @@ export async function POST(request: Request) {
       );
     }
 
-    const flyToken = process.env.FLY_API_TOKEN;
-    const flyOrg = process.env.FLY_ORG;
-    const flyRegion = process.env.FLY_REGION ?? "syd";
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
     const image = imageRef ?? process.env.DITTO_IMAGE_REF;
     const networkUrl = process.env.DITTO_NETWORK_URL ?? `https://${request.headers.get("host")}`;
 
-    if (!flyToken || !flyOrg || !image) {
+    if (!railwayToken || !railwayProjectId || !image) {
       return NextResponse.json(
-        { error: "Server misconfigured: FLY_API_TOKEN, FLY_ORG, and DITTO_IMAGE_REF are required." },
+        { error: "Server misconfigured: RAILWAY_API_TOKEN, RAILWAY_PROJECT_ID, and DITTO_IMAGE_REF are required." },
         { status: 500 },
       );
     }
 
-    const { provisionWorkspace, createFlyClient } = await import(
+    const { provisionWorkspace, createRailwayClient } = await import(
       "../../../../../../../../src/engine/workspace-provisioner"
     );
 
-    const flyClient = createFlyClient(flyToken);
+    const railwayClient = createRailwayClient(railwayToken, railwayProjectId);
     const result = await provisionWorkspace(userId, {
-      flyClient,
-      flyAppName: flyOrg,
-      flyRegion,
+      railwayClient,
+      projectId: railwayProjectId,
       imageRef: image,
       networkUrl,
     });

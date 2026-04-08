@@ -104,9 +104,8 @@ feedback:
     - user_channel_overrides
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "20 routings with >70% response on recommended channel" }
-    - { from: spot_checked, to: autonomous, after: "50 routings with >70% response" }
+  # Context 5: Internal routing, no external action (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "Recommended channel gets <30% response rate over 10 routings"

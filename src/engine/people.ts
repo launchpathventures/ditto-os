@@ -87,6 +87,20 @@ export async function getPersonByEmail(email: string, userId: string) {
   return person ?? null;
 }
 
+/**
+ * Find a person by email across ALL users (global lookup).
+ * Used by the centralized network service when the owning user is unknown
+ * (e.g., inbound emails, ACTIVATE flow before person → networkUser mapping).
+ */
+export async function findPersonByEmailGlobal(email: string) {
+  const [person] = await db
+    .select()
+    .from(schema.people)
+    .where(eq(schema.people.email, email.toLowerCase()))
+    .limit(1);
+  return person ?? null;
+}
+
 export async function listConnections(userId: string) {
   return db
     .select()

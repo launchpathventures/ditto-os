@@ -116,9 +116,9 @@ feedback:
     - user_edits_to_touchpoints
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "5 approved cycles with no opt-outs" }
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "Any opt-out from a nurture touchpoint"
     - "User rejects 2+ touchpoints in a cycle"

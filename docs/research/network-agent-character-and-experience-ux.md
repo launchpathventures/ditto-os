@@ -476,7 +476,7 @@ The most elegant growth path: a recipient who had a good experience with Ditto a
 **How this happens naturally:**
 1. Recipient receives 2-3 high-quality touchpoints from Ditto over months
 2. Recipient starts associating Ditto's name with quality (institutional trust builds)
-3. Recipient asks "What is Ditto?" or visits ditto.network
+3. Recipient asks "What is Ditto?" or visits ditto.partners
 4. Onboarding begins with the relationship Ditto already has with them
 
 **Design principle:** Never hard-sell Ditto to recipients. The quality of the interactions IS the marketing. If someone asks, explain. If they don't, just be useful.
@@ -490,7 +490,7 @@ The most elegant growth path: a recipient who had a good experience with Ditto a
 The primary outreach and follow-up channel. Where Ditto's reputation is built or burned.
 
 **Technical requirements:**
-- Dedicated sending domain (e.g., `@ditto.network`)
+- Dedicated sending domain (e.g., `@ditto.partners`)
 - Proper SPF/DKIM/DMARC authentication
 - Domain warming (4-6 weeks before full volume)
 - Reply-to routes to Ditto's email handling system

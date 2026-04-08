@@ -1,10 +1,12 @@
 /**
- * Ditto — Front Door Chat Tests (Brief 093)
+ * Ditto — Front Door Chat Tests
  *
  * Tests for prompt construction, response parsing, session management,
- * email detection, funnel events, and rate limiting.
+ * email detection, funnel events, rate limiting, mode detection, and
+ * ACTIVATE branching.
  *
- * Provenance: Brief 093. Follows people.test.ts mocking pattern.
+ * Provenance: Brief 093, layered prompt architecture.
+ * Follows people.test.ts mocking pattern.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -25,7 +27,7 @@ describe("network-chat-prompt", () => {
       expect(prompt).toContain("Ditto");
       expect(prompt).toContain("Australian");
       expect(prompt).toContain("MAX 3 SENTENCES");
-      expect(prompt).toContain("Front Door Conversation");
+      expect(prompt).toContain("Front Door Advisor");
     });
 
     it("builds a referred system prompt with different instructions", async () => {
@@ -34,10 +36,10 @@ describe("network-chat-prompt", () => {
       expect(prompt).toContain("Alex");
       expect(prompt).toContain("Referred Visitor");
       expect(prompt).toContain("MAX 3 SENTENCES");
-      expect(prompt).not.toContain("Front Door Conversation");
+      expect(prompt).not.toContain("Front Door Advisor");
     });
 
-    it("includes character extract with house values", async () => {
+    it("includes house values from cognitive core", async () => {
       const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
       const prompt = buildFrontDoorPrompt("front-door");
       expect(prompt).toContain("Candour over comfort");
@@ -52,48 +54,82 @@ describe("network-chat-prompt", () => {
       expect(prompt).toContain("Directness: 9/10");
     });
 
-    it("requires JSON response format", async () => {
+    it("requires tool-call response format with detectedMode", async () => {
       const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
       const prompt = buildFrontDoorPrompt("front-door");
       expect(prompt).toContain("requestEmail");
-      expect(prompt).toContain("JSON");
+      expect(prompt).toContain("detectedMode");
+      expect(prompt).toContain("alex_response");
+    });
+
+    // New: Self's cognitive backbone
+    it("includes cognitive core consultative protocol", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Consultative Protocol");
+      expect(prompt).toContain("Reflect back");
+    });
+
+    it("includes cognitive core trade-off heuristics", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Human judgment over AI confidence");
+    });
+
+    it("includes transparency & consent section", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Transparency & Consent");
+      expect(prompt).toContain("informed consent");
+    });
+
+    it("does NOT contain super connector framing", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).not.toContain("You connect people who should know each other");
+      expect(prompt).not.toContain("Super-Connector");
+    });
+
+    // New: Mode detection
+    it("includes connector and CoS signal lists", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Connector signals");
+      expect(prompt).toContain("CoS signals");
+    });
+
+    it("includes REFLECT & PROPOSE stage", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("REFLECT & PROPOSE");
+      expect(prompt).toContain("trust-building");
+    });
+
+    it("describes approval model in connector mode", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Nothing goes out without your approval");
+    });
+
+    it("includes mode switching as additive", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("additive");
     });
   });
 
-  describe("parseAlexResponse", () => {
-    it("parses valid JSON response", async () => {
-      const { parseAlexResponse } = await import("./network-chat-prompt");
-      const result = parseAlexResponse('{"reply": "Hey mate!", "requestEmail": false}');
-      expect(result.reply).toBe("Hey mate!");
-      expect(result.requestEmail).toBe(false);
-    });
-
-    it("parses JSON with requestEmail true", async () => {
-      const { parseAlexResponse } = await import("./network-chat-prompt");
-      const result = parseAlexResponse('{"reply": "Drop me your email.", "requestEmail": true}');
-      expect(result.reply).toBe("Drop me your email.");
-      expect(result.requestEmail).toBe(true);
-    });
-
-    it("extracts JSON from markdown code block", async () => {
-      const { parseAlexResponse } = await import("./network-chat-prompt");
-      const result = parseAlexResponse('```json\n{"reply": "Hello!", "requestEmail": false}\n```');
-      expect(result.reply).toBe("Hello!");
-      expect(result.requestEmail).toBe(false);
-    });
-
-    it("falls back to raw text when JSON is invalid", async () => {
-      const { parseAlexResponse } = await import("./network-chat-prompt");
-      const result = parseAlexResponse("Hey mate, good to hear from you!");
-      expect(result.reply).toBe("Hey mate, good to hear from you!");
-      expect(result.requestEmail).toBe(false);
-    });
-
-    it("handles empty string", async () => {
-      const { parseAlexResponse } = await import("./network-chat-prompt");
-      const result = parseAlexResponse("");
-      expect(result.reply).toBe("");
-      expect(result.requestEmail).toBe(false);
+  describe("ALEX_RESPONSE_TOOL", () => {
+    it("exports a valid LlmToolDefinition", async () => {
+      const { ALEX_RESPONSE_TOOL } = await import("./network-chat-prompt");
+      expect(ALEX_RESPONSE_TOOL.name).toBe("alex_response");
+      expect(ALEX_RESPONSE_TOOL.input_schema.type).toBe("object");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("suggestions");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("requestEmail");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("done");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("detectedMode");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("searchQuery");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("resendEmail");
+      expect(ALEX_RESPONSE_TOOL.input_schema.required).toEqual(["suggestions"]);
     });
   });
 });
@@ -121,21 +157,54 @@ const mockStartIntake = vi.fn().mockResolvedValue({
   message: "Welcome!",
 });
 
+const mockSendActionEmail = vi.fn().mockResolvedValue(undefined);
+const mockSendCosActionEmail = vi.fn().mockResolvedValue(undefined);
+
 vi.mock("./self-tools/network-tools", () => ({
   startIntake: (...args: unknown[]) => mockStartIntake(...args),
+  sendActionEmail: (...args: unknown[]) => mockSendActionEmail(...args),
+  sendCosActionEmail: (...args: unknown[]) => mockSendCosActionEmail(...args),
 }));
+
+/** Build a mock LLM response with text + alex_response tool call */
+function mockAlexResponse(
+  text: string,
+  toolArgs: Record<string, unknown> = {},
+) {
+  return {
+    content: [
+      { type: "text", text },
+      {
+        type: "tool_use",
+        id: `mock-alex-${Date.now()}`,
+        name: "alex_response",
+        input: {
+          suggestions: [],
+          requestEmail: false,
+          done: false,
+          resendEmail: false,
+          detectedMode: null,
+          searchQuery: null,
+          ...toolArgs,
+        },
+      },
+    ],
+    tokensUsed: 50,
+    costCents: 0,
+    stopReason: "tool_use",
+    model: "mock",
+  };
+}
+
+const mockCreateCompletion = vi.fn().mockResolvedValue(
+  mockAlexResponse("Good to meet you. What are you working on?"),
+);
 
 vi.mock("./llm", async () => {
   const real = await vi.importActual<typeof import("./llm")>("./llm");
   return {
     ...real,
-    createCompletion: vi.fn().mockResolvedValue({
-      content: [{ type: "text", text: '{"reply": "Good to meet you. What are you working on?", "requestEmail": false}' }],
-      tokensUsed: 50,
-      costCents: 0,
-      stopReason: "end_turn",
-      model: "mock",
-    }),
+    createCompletion: (...args: unknown[]) => mockCreateCompletion(...args),
   };
 });
 
@@ -147,11 +216,21 @@ describe("network-chat integration", () => {
     const result = createTestDb();
     testDb = result.db;
     cleanup = result.cleanup;
+    mockCreateCompletion.mockResolvedValue(
+      mockAlexResponse("Good to meet you. What are you working on?"),
+    );
+    mockStartIntake.mockClear();
+    mockSendActionEmail.mockClear();
+    mockSendCosActionEmail.mockClear();
   });
 
   afterEach(() => {
     cleanup();
   });
+
+  // ============================================================
+  // Existing tests (backward compatibility)
+  // ============================================================
 
   it("creates a new session on first message", async () => {
     const result = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
@@ -188,14 +267,10 @@ describe("network-chat integration", () => {
   });
 
   it("detects email, triggers intake, and sets emailCaptured", async () => {
-    // First message to create session
     const turn1 = await handleChatTurn(null, "I need help with sales", "front-door", "127.0.0.1");
-
-    // Submit email — backend detects it and triggers intake as a side effect
     const turn2 = await handleChatTurn(turn1.sessionId, "tim@example.com", "front-door", "127.0.0.1");
 
     expect(turn2.emailCaptured).toBe(true);
-    // Reply comes from LLM (mocked), not a hardcoded string
     expect(turn2.reply).toBeTruthy();
   });
 
@@ -219,7 +294,6 @@ describe("network-chat integration", () => {
       .select()
       .from(schema.chatSessions);
 
-    // Should be a hex hash, not the raw IP
     expect(session.ipHash).not.toBe("192.168.1.1");
     expect(session.ipHash).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -237,30 +311,26 @@ describe("network-chat integration", () => {
 
     expect(session.messageCount).toBe(2);
     const messages = session.messages as Array<{ role: string; content: string }>;
-    // 2 user messages + 2 assistant responses = 4 total
     expect(messages.length).toBeGreaterThanOrEqual(3);
   });
 
   it("creates new session for expired sessionId", async () => {
-    // Create a session with expired TTL
     const expiredId = "expired-session";
     await testDb.insert(schema.chatSessions).values({
       sessionId: expiredId,
       messages: [],
       context: "front-door",
       ipHash: "hash",
-      expiresAt: new Date(Date.now() - 1000), // expired
+      expiresAt: new Date(Date.now() - 1000),
     });
 
     const result = await handleChatTurn(expiredId, "Hello", "front-door", "127.0.0.1");
 
-    // Should create a new session (the expired one is ignored)
     expect(result.sessionId).toBeTruthy();
     expect(result.reply).toBeTruthy();
   });
 
   it("returns rate limit at 21st message per session", async () => {
-    // Create session with 20 messages already
     const sessionId = "rate-limit-session";
     await testDb.insert(schema.chatSessions).values({
       sessionId,
@@ -294,7 +364,7 @@ describe("network-chat integration", () => {
 
     expect(mockStartIntake).toHaveBeenCalledWith(
       "test@company.com",
-      undefined, // no name detected
+      undefined,
       "I need help finding logistics partners",
       undefined,
       "alex",
@@ -308,7 +378,6 @@ describe("network-chat integration", () => {
     expect(eventResult.reply).toBe("");
     expect(eventResult.sessionId).toBe(turn1.sessionId);
 
-    // The event should be recorded
     const events = await testDb
       .select()
       .from(schema.funnelEvents)
@@ -331,7 +400,6 @@ describe("network-chat integration", () => {
     const turn2 = await handleChatTurn(turn1.sessionId, "known@example.com", "front-door", "127.0.0.1");
 
     expect(turn2.emailCaptured).toBe(true);
-    // Reply comes from LLM based on [EMAIL_CAPTURED] context
     expect(turn2.reply).toBeTruthy();
   });
 
@@ -346,5 +414,205 @@ describe("network-chat integration", () => {
 
     const startEvents = events.filter((e) => e.event === "conversation_started");
     expect(startEvents.length).toBe(1);
+  });
+
+  // ============================================================
+  // Mode Detection Tests
+  // ============================================================
+
+  describe("mode detection", () => {
+    it("returns detectedMode from LLM response", async () => {
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Sounds like you need clients.", { detectedMode: "connector" }),
+      );
+
+      const result = await handleChatTurn(null, "I need more clients", "front-door", "127.0.0.1");
+      expect(result.detectedMode).toBe("connector");
+    });
+
+    it("returns cos detectedMode", async () => {
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Let me help with that.", { detectedMode: "cos" }),
+      );
+
+      const result = await handleChatTurn(null, "I'm drowning in tasks", "front-door", "127.0.0.1");
+      expect(result.detectedMode).toBe("cos");
+    });
+
+    it("returns both detectedMode", async () => {
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I can help with both.", { detectedMode: "both" }),
+      );
+
+      const result = await handleChatTurn(null, "I need clients and help organizing", "front-door", "127.0.0.1");
+      expect(result.detectedMode).toBe("both");
+    });
+
+    it("returns null detectedMode when unclear", async () => {
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Tell me more.", { detectedMode: null }),
+      );
+
+      const result = await handleChatTurn(null, "I'm stuck on a problem", "front-door", "127.0.0.1");
+      expect(result.detectedMode).toBeNull();
+    });
+
+    it("records mode_detected funnel event", async () => {
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Got it.", { detectedMode: "cos" }),
+      );
+
+      const result = await handleChatTurn(null, "I need help organizing", "front-door", "127.0.0.1");
+
+      const events = await testDb
+        .select()
+        .from(schema.funnelEvents)
+        .where(eq(schema.funnelEvents.sessionId, result.sessionId));
+
+      const modeEvent = events.find((e) => e.event === "mode_detected");
+      expect(modeEvent).toBeTruthy();
+      const metadata = modeEvent!.metadata as Record<string, unknown>;
+      expect(metadata.mode).toBe("cos");
+    });
+
+    it("does not record mode_detected when mode is null", async () => {
+      const result = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
+
+      const events = await testDb
+        .select()
+        .from(schema.funnelEvents)
+        .where(eq(schema.funnelEvents.sessionId, result.sessionId));
+
+      const modeEvents = events.filter((e) => e.event === "mode_detected");
+      expect(modeEvents.length).toBe(0);
+    });
+  });
+
+  // ============================================================
+  // ACTIVATE Branching Tests
+  // ============================================================
+
+  describe("ACTIVATE branching", () => {
+    it("calls sendActionEmail for connector mode on ACTIVATE", async () => {
+      const turn1 = await handleChatTurn(null, "I need clients", "front-door", "127.0.0.1");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      // ACTIVATE — pass returningEmail so knownEmail is set (mimics frontend localStorage)
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I'll get started.", { done: true, detectedMode: "connector" }),
+      );
+
+      await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
+
+      expect(mockSendActionEmail).toHaveBeenCalled();
+      expect(mockSendCosActionEmail).not.toHaveBeenCalled();
+    });
+
+    it("calls sendCosActionEmail for cos mode on ACTIVATE", async () => {
+      const turn1 = await handleChatTurn(null, "I need help organizing", "front-door", "127.0.0.1");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I'll send your first briefing.", { done: true, detectedMode: "cos" }),
+      );
+
+      await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
+
+      expect(mockSendCosActionEmail).toHaveBeenCalled();
+      expect(mockSendActionEmail).not.toHaveBeenCalled();
+    });
+
+    it("calls both email functions for both mode on ACTIVATE", async () => {
+      const turn1 = await handleChatTurn(null, "I need clients and help organizing", "front-door", "127.0.0.1");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I'll get started on both.", { done: true, detectedMode: "both" }),
+      );
+
+      await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
+
+      expect(mockSendActionEmail).toHaveBeenCalled();
+      expect(mockSendCosActionEmail).toHaveBeenCalled();
+    });
+
+    it("defaults to connector on ACTIVATE with null mode", async () => {
+      const turn1 = await handleChatTurn(null, "I need help", "front-door", "127.0.0.1");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I'll get started.", { done: true }),
+      );
+
+      await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
+
+      // Defaults to connector (backward compat)
+      expect(mockSendActionEmail).toHaveBeenCalled();
+      expect(mockSendCosActionEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Mode Switching Tests
+  // ============================================================
+
+  describe("mode switching", () => {
+    it("updates detectedMode when conversation pivots", async () => {
+      // Turn 1: connector signal
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Clients — got it.", { detectedMode: "connector" }),
+      );
+      const turn1 = await handleChatTurn(null, "I need more clients", "front-door", "127.0.0.1");
+      expect(turn1.detectedMode).toBe("connector");
+
+      // Turn 2: pivot to cos
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Actually sounds like you need help organizing.", { detectedMode: "cos" }),
+      );
+      const turn2 = await handleChatTurn(turn1.sessionId, "actually I need help organizing my pipeline", "front-door", "127.0.0.1");
+      expect(turn2.detectedMode).toBe("cos");
+    });
+
+    it("uses final mode for ACTIVATE after pivot", async () => {
+      // Turn 1: connector
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Clients.", { detectedMode: "connector" }),
+      );
+      const turn1 = await handleChatTurn(null, "I need clients", "front-door", "127.0.0.1");
+
+      // Turn 2: pivot to cos
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Organizing.", { detectedMode: "cos" }),
+      );
+      await handleChatTurn(turn1.sessionId, "actually I need help organizing", "front-door", "127.0.0.1");
+
+      // Email
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      // ACTIVATE with cos — pass returningEmail
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Done.", { done: true, detectedMode: "cos" }),
+      );
+      await handleChatTurn(turn1.sessionId, "go ahead", "front-door", "127.0.0.1", "test@example.com");
+
+      expect(mockSendCosActionEmail).toHaveBeenCalled();
+      expect(mockSendActionEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Edge Cases
+  // ============================================================
+
+  describe("edge cases", () => {
+    it("new pill messages are excluded from need extraction", async () => {
+      mockStartIntake.mockClear();
+      const turn1 = await handleChatTurn(null, "I need help organizing my work", "front-door", "127.0.0.1");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
+
+      // The pill message should NOT be passed as the "need" to startIntake
+      const call = mockStartIntake.mock.calls[0];
+      expect(call[2]).not.toBe("I need help organizing my work");
+    });
   });
 });

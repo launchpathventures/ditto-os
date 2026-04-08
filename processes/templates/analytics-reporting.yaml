@@ -160,10 +160,9 @@ feedback:
     - recommendations_acted_on
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "8 reports with no metric corrections" }
-    - { from: spot_checked, to: autonomous, after: "20 reports with consistent quality" }
+  # Context 1: Alex → User, direct communication (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User corrects a metric significantly"
     - "Recommendation contradicts actual data"

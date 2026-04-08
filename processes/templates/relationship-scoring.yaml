@@ -123,10 +123,9 @@ feedback:
     - missed_signals_flagged_by_user
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "10 cycles with no signal corrections" }
-    - { from: spot_checked, to: autonomous, after: "30 cycles with no corrections" }
+  # Context 1: Alex → User, direct communication (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User corrects a relationship score significantly"
     - "Missed a disengagement signal that led to an opt-out"

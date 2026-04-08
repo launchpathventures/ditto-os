@@ -14,38 +14,78 @@ import { db, schema } from "../db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
-import { createCompletion, extractText, getConfiguredModel } from "./llm";
-import { mockCreateCompletion } from "./llm-mock";
-import { buildFrontDoorPrompt, parseAlexResponse, type ChatContext, type VisitorContext } from "./network-chat-prompt";
-import { startIntake, sendActionEmail } from "./self-tools/network-tools";
-import { getPersonByEmail, getPersonMemories } from "./people";
+import { createCompletion, extractText, extractToolUse, getConfiguredModel } from "./llm";
+import { createStreamingCompletion, type StreamEvent } from "./llm-stream";
+import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode } from "./network-chat-prompt";
+import { startIntake, sendActionEmail, sendCosActionEmail } from "./self-tools/network-tools";
+import { getPersonByEmail, findPersonByEmailGlobal, getPersonMemories } from "./people";
 import { webSearch } from "./web-search";
 import type { LlmMessage } from "./llm";
 
 // ============================================================
-// Search Query Extraction
+// Tool Call Extraction
 // ============================================================
 
-/** Extract searchQuery from LLM JSON response (not part of ParsedAlexResponse — internal to handler) */
-function parseSearchQuery(rawText: string): string | null {
-  try {
-    const parsed = JSON.parse(rawText);
-    if (typeof parsed.searchQuery === "string" && parsed.searchQuery.trim()) {
-      return parsed.searchQuery.trim();
-    }
-  } catch {
-    // Try code block extraction
-    const jsonMatch = rawText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1]);
-        if (typeof parsed.searchQuery === "string" && parsed.searchQuery.trim()) {
-          return parsed.searchQuery.trim();
-        }
-      } catch { /* fall through */ }
-    }
+const VALID_MODES = new Set(["connector", "cos", "both"]);
+
+interface AlexToolArgs {
+  reply: string;
+  suggestions: string[];
+  requestEmail: boolean;
+  done: boolean;
+  resendEmail: boolean;
+  detectedMode: DetectedMode;
+  searchQuery: string | null;
+}
+
+/**
+ * Extract structured response data from LLM content blocks.
+ * Text blocks provide the reply; the alex_response tool call provides metadata.
+ */
+function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexToolArgs {
+  const reply = extractText(content).trim();
+  const toolCalls = extractToolUse(content);
+
+  const alexCall = toolCalls.find((tc) => tc.name === "alex_response");
+  if (!alexCall) {
+    // Fallback: no tool call — treat text as reply with defaults
+    return {
+      reply,
+      suggestions: [],
+      requestEmail: false,
+      done: false,
+      resendEmail: false,
+      detectedMode: null,
+      searchQuery: null,
+    };
   }
-  return null;
+
+  const args = alexCall.input as Record<string, unknown>;
+  return {
+    reply,
+    suggestions: Array.isArray(args.suggestions)
+      ? args.suggestions.filter((s): s is string => typeof s === "string")
+      : [],
+    requestEmail: Boolean(args.requestEmail),
+    done: Boolean(args.done),
+    resendEmail: Boolean(args.resendEmail),
+    detectedMode:
+      typeof args.detectedMode === "string" && VALID_MODES.has(args.detectedMode)
+        ? (args.detectedMode as DetectedMode)
+        : null,
+    searchQuery:
+      typeof args.searchQuery === "string" && args.searchQuery.trim()
+        ? args.searchQuery.trim()
+        : null,
+  };
+}
+
+// ============================================================
+// Test Mode
+// ============================================================
+
+function isTestMode(): boolean {
+  return process.env.DITTO_TEST_MODE === "true";
 }
 
 // ============================================================
@@ -61,7 +101,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // IP Hashing
 // ============================================================
 
-function hashIp(ip: string): string {
+export function hashIp(ip: string): string {
   const salt = process.env.IP_HASH_SALT || "ditto-default-salt";
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
@@ -70,7 +110,7 @@ function hashIp(ip: string): string {
 // Rate Limiting
 // ============================================================
 
-async function checkIpRateLimit(ipHash: string): Promise<boolean> {
+export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
   const oneHourAgoMs = Date.now() - 60 * 60 * 1000;
   const result = await db
     .select({ count: sql<number>`count(*)` })
@@ -272,6 +312,7 @@ const PILL_MESSAGES = new Set([
   "i need more clients",
   "i'm stuck on a problem",
   "i need to meet the right people",
+  "i need help organizing my work",
   "help me find partners",
   "what can you do for me?",
 ]);
@@ -302,6 +343,8 @@ export interface ChatTurnResult {
   done?: boolean;
   rateLimited?: boolean;
   suggestions?: string[];
+  detectedMode?: DetectedMode;
+  testMode?: boolean;
 }
 
 export async function handleChatTurn(
@@ -310,6 +353,7 @@ export async function handleChatTurn(
   context: ChatContext,
   ip: string,
   returningEmail?: string | null,
+  funnelMetadata?: Record<string, unknown>,
 ): Promise<ChatTurnResult> {
   const ipHash = hashIp(ip);
 
@@ -345,7 +389,7 @@ export async function handleChatTurn(
   const funnelEventMatch = message.trim().match(/^\[(\w+)\]$/);
   if (funnelEventMatch) {
     const eventName = funnelEventMatch[1];
-    await recordFunnelEvent(session.sessionId, eventName, context, { ipHash });
+    await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
     return { reply: "", sessionId: session.sessionId };
   }
 
@@ -362,18 +406,18 @@ export async function handleChatTurn(
   // ============================================================
 
   // Determine the visitor's email from: returning cookie, email in message, or conversation history
-  let knownEmail = returningEmail || null;
+  // In test mode, ignore returningEmail so every visit feels like a new user
+  let knownEmail = (isTestMode() ? null : returningEmail) || null;
   let emailCaptured = false;
 
   if (EMAIL_REGEX.test(trimmedMessage)) {
     knownEmail = trimmedMessage;
     emailCaptured = true;
 
-    // Trigger intake as side effect
+    // Trigger intake as side effect — creates person record + sends intro email
+    // In test mode, emails are suppressed at the channel adapter level
     const name = extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
-    // Create person record and send quick intro email (so they have Alex's email)
-    // The detailed action email is sent later when Alex has gathered enough info (ACTIVATE)
     try { await startIntake(trimmedMessage, name, need, undefined, "alex"); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
@@ -387,8 +431,9 @@ export async function handleChatTurn(
   session.messageCount += 1;
 
   // Look up what Ditto knows about this person
+  // In test mode, skip — Alex treats everyone as brand new
   let visitorContext: VisitorContext | undefined;
-  if (knownEmail) {
+  if (knownEmail && !isTestMode()) {
     try {
       visitorContext = await assembleVisitorContext(knownEmail);
     } catch {
@@ -408,18 +453,25 @@ export async function handleChatTurn(
 
   const systemPrompt = buildFrontDoorPrompt(context, visitorContext);
 
-  const llmRequest = { system: systemPrompt, messages: llmMessages, maxTokens: 256, ...(model ? { model } : {}) };
-  let response;
-  try {
-    response = await createCompletion(llmRequest);
-  } catch (err) {
-    console.warn("[network-chat] LLM call failed, falling back to mock:", (err as Error).message);
-    response = mockCreateCompletion(llmRequest);
-  }
+  const llmRequest = {
+    system: systemPrompt,
+    messages: llmMessages,
+    tools: [ALEX_RESPONSE_TOOL],
+    maxTokens: 256,
+    ...(model ? { model } : {}),
+  };
+  const response = await createCompletion(llmRequest);
 
-  const rawText = extractText(response.content);
-  let { reply, requestEmail, done, resendEmail, suggestions } = parseAlexResponse(rawText);
-  const searchQuery = parseSearchQuery(rawText);
+  let { reply, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery } =
+    extractAlexResponse(response.content);
+
+  // Record mode detection funnel event
+  if (detectedMode) {
+    await recordFunnelEvent(session.sessionId, "mode_detected", context, {
+      mode: detectedMode,
+      messageCount: session.messageCount,
+    });
+  }
 
   if (requestEmail) {
     session.requestEmailFlagged = true;
@@ -447,16 +499,18 @@ export async function handleChatTurn(
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
+        tools: [ALEX_RESPONSE_TOOL],
         maxTokens: 256,
         ...(model ? { model } : {}),
       };
 
       try {
         const followUp = await createCompletion(followUpRequest);
-        const followUpParsed = parseAlexResponse(extractText(followUp.content));
+        const followUpParsed = extractAlexResponse(followUp.content);
         reply = followUpParsed.reply;
         done = followUpParsed.done;
         suggestions = followUpParsed.suggestions;
+        if (followUpParsed.detectedMode) detectedMode = followUpParsed.detectedMode;
         // Remove the intermediate messages — the user sees one clean response
         session.messages.pop(); // search results
         session.messages.pop(); // first reply
@@ -469,39 +523,68 @@ export async function handleChatTurn(
   }
 
   // ACTIVATE: Alex has gathered enough — send action email and start the engine process
+  // Branch by detected mode: connector, cos, both, or null (general intake)
   if (done && knownEmail) {
     const conversationSummary = session.messages
       .filter((m) => m.role === "user" && !m.content.startsWith("["))
       .map((m) => `- ${m.content}`)
       .join("\n");
     const personName = extractNameFromConversation(session.messages);
+    const effectiveMode = detectedMode || "connector"; // default to connector for backward compat
 
-    // Send the action email with what happens next
+    // Look up person for interaction recording — search globally since
+    // networkUsers.id (the owner) is a UUID created during intake, not a fixed value
+    const activatePerson = await findPersonByEmailGlobal(knownEmail);
+    const activatePersonId = activatePerson?.id;
+
+    // Send the action email with what happens next (mode-specific)
     try {
-      await sendActionEmail(knownEmail, "alex", personName, conversationSummary);
+      if (effectiveMode === "cos") {
+        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
+      } else if (effectiveMode === "both") {
+        // Send connector email (includes transparency), CoS details in follow-up
+        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
+        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
+      } else {
+        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
+      }
     } catch { /* non-fatal */ }
 
-    // Start the engine process — research targets, draft intros, get approval, send outreach
+    // Start the engine process — branch by mode
+    // In test mode, processes run normally but emails are suppressed at the channel adapter
     try {
       const { startSystemAgentRun } = await import("./heartbeat");
-      const person = await getPersonByEmail(knownEmail, "founder");
-
-      // Extract target type from conversation (what kind of people they want to reach)
+      const person = activatePerson;
       const targetType = extractNeedFromConversation(session.messages) || "relevant contacts";
-
-      await startSystemAgentRun("front-door-intake", {
+      const baseInputs = {
         personId: person?.id || "unknown",
+        // userId = networkUsers.id (canonical user identity for processes)
+        // people.userId is set to networkUsers.id during intake
+        userId: person?.userId || "unknown",
         email: knownEmail,
         name: personName,
         need: targetType,
-        targetType,
-        businessContext: conversationSummary,
         conversationSummary,
-      }, "front-door-chat");
+      };
 
-      console.log(`[network-chat] Started front-door-intake process for ${knownEmail}`);
+      if (effectiveMode === "connector" || effectiveMode === "both") {
+        await startSystemAgentRun("front-door-intake", {
+          ...baseInputs,
+          targetType,
+          businessContext: conversationSummary,
+        }, "front-door-chat");
+        console.log(`[network-chat] Started front-door-intake process for ${knownEmail}`);
+      }
+
+      if (effectiveMode === "cos" || effectiveMode === "both") {
+        await startSystemAgentRun("front-door-cos-intake", {
+          ...baseInputs,
+          statedPriorities: targetType,
+          knownContext: conversationSummary,
+        }, "front-door-chat");
+        console.log(`[network-chat] Started front-door-cos-intake process for ${knownEmail}`);
+      }
     } catch (err) {
-      // Process may not be synced yet — non-fatal, the email still went out
       console.warn("[network-chat] Could not start intake process:", (err as Error).message);
     }
   }
@@ -516,5 +599,267 @@ export async function handleChatTurn(
     emailCaptured,
     done,
     suggestions,
+    detectedMode,
+    ...(isTestMode() ? { testMode: true } : {}),
   };
+}
+
+// ============================================================
+// Streaming Chat Handler
+// ============================================================
+
+/**
+ * SSE event types for the streaming chat response.
+ * - text-delta: partial text chunk
+ * - metadata: tool call args (suggestions, flags) — sent once at end
+ * - done: stream complete
+ * - error: something went wrong
+ */
+export type ChatStreamEvent =
+  | { type: "session"; sessionId: string; testMode?: boolean }
+  | { type: "text-delta"; text: string }
+  | { type: "metadata"; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+/**
+ * Streaming version of handleChatTurn.
+ * Yields SSE events: session ID, text deltas, then metadata + done.
+ * All pre/post-LLM logic (session, rate limiting, email detection, ACTIVATE) is identical.
+ */
+export async function* handleChatTurnStreaming(
+  sessionId: string | null,
+  message: string,
+  context: ChatContext,
+  ip: string,
+  returningEmail?: string | null,
+  funnelMetadata?: Record<string, unknown>,
+): AsyncGenerator<ChatStreamEvent> {
+  const ipHash = hashIp(ip);
+
+  // Rate limit: IP
+  const ipAllowed = await checkIpRateLimit(ipHash);
+  if (!ipAllowed) {
+    yield { type: "session", sessionId: sessionId || randomUUID(), ...(isTestMode() ? { testMode: true } : {}) };
+    yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
+    yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
+    yield { type: "done" };
+    return;
+  }
+
+  // Load or create session
+  const session = await loadOrCreateSession(sessionId, context, ipHash);
+
+  // Emit session ID immediately so the frontend can store it
+  yield { type: "session", sessionId: session.sessionId, ...(isTestMode() ? { testMode: true } : {}) };
+
+  // Rate limit: per-session
+  if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
+    yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
+    yield { type: "done" };
+    return;
+  }
+
+  // Resolve model
+  let model: string | undefined;
+  try { model = getConfiguredModel(); } catch { /* mock mode */ }
+
+  // Intercept bracket-tagged funnel events
+  const funnelEventMatch = message.trim().match(/^\[(\w+)\]$/);
+  if (funnelEventMatch) {
+    const eventName = funnelEventMatch[1];
+    await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
+    yield { type: "done" };
+    return;
+  }
+
+  // Record chat message event
+  await recordFunnelEvent(session.sessionId, "chat_message", context, { ipHash });
+  if (session.messageCount === 0) {
+    await recordFunnelEvent(session.sessionId, "conversation_started", context);
+  }
+
+  const trimmedMessage = message.trim();
+
+  // Email detection (same as non-streaming)
+  // In test mode, ignore returningEmail so every visit feels like a new user
+  let knownEmail = (isTestMode() ? null : returningEmail) || null;
+  let emailCaptured = false;
+
+  if (EMAIL_REGEX.test(trimmedMessage)) {
+    knownEmail = trimmedMessage;
+    emailCaptured = true;
+    const name = extractNameFromConversation(session.messages);
+    const need = extractNeedFromConversation(session.messages);
+    try { await startIntake(trimmedMessage, name, need, undefined, "alex"); } catch { /* non-fatal */ }
+    await recordFunnelEvent(session.sessionId, "email_captured", context, {
+      hasName: !!name, hasNeed: !!need,
+    });
+    session.messages.push({ role: "user", content: `[EMAIL_CAPTURED] ${trimmedMessage}` });
+  } else {
+    session.messages.push({ role: "user", content: trimmedMessage });
+  }
+
+  session.messageCount += 1;
+
+  // Visitor context — skip in test mode so Alex treats everyone as brand new
+  let visitorContext: VisitorContext | undefined;
+  if (knownEmail && !isTestMode()) {
+    try {
+      visitorContext = await assembleVisitorContext(knownEmail);
+    } catch {
+      visitorContext = { email: knownEmail, isReturning: !!returningEmail };
+    }
+  }
+
+  // Build prompt + stream LLM
+  const llmMessages: LlmMessage[] = session.messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext);
+
+  const llmRequest = {
+    system: systemPrompt,
+    messages: llmMessages,
+    tools: [ALEX_RESPONSE_TOOL],
+    maxTokens: 256,
+    ...(model ? { model } : {}),
+  };
+
+  // Stream the LLM response — no fallback, let errors propagate to the frontend
+  // which shows an email capture form
+  let fullContent: import("./llm").LlmContentBlock[] = [];
+  for await (const event of createStreamingCompletion(llmRequest)) {
+    if (event.type === "text-delta") {
+      yield { type: "text-delta", text: event.text };
+    }
+    if (event.type === "content-complete") {
+      fullContent = event.content;
+    }
+  }
+
+  // Extract structured data from tool call
+  let { reply, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery } =
+    extractAlexResponse(fullContent);
+
+  // Mode detection funnel event
+  if (detectedMode) {
+    await recordFunnelEvent(session.sessionId, "mode_detected", context, {
+      mode: detectedMode,
+      messageCount: session.messageCount,
+    });
+  }
+
+  if (requestEmail) {
+    session.requestEmailFlagged = true;
+  }
+
+  // Resend email
+  if (resendEmail && knownEmail) {
+    try {
+      await startIntake(knownEmail, undefined, undefined, undefined, "alex");
+    } catch { /* non-fatal */ }
+  }
+
+  // Web search — if needed, do a non-streaming follow-up (search is rare)
+  if (searchQuery) {
+    const searchResults = await webSearch(searchQuery);
+    if (searchResults) {
+      session.messages.push({ role: "assistant", content: reply });
+      session.messages.push({ role: "user", content: `[SEARCH_RESULTS for "${searchQuery}"]\n${searchResults}` });
+
+      const followUpRequest = {
+        system: systemPrompt,
+        messages: session.messages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+        tools: [ALEX_RESPONSE_TOOL],
+        maxTokens: 256,
+        ...(model ? { model } : {}),
+      };
+
+      try {
+        const followUp = await createCompletion(followUpRequest);
+        const followUpParsed = extractAlexResponse(followUp.content);
+        // Stream the replacement text
+        yield { type: "text-delta", text: `\n${followUpParsed.reply}` };
+        reply = followUpParsed.reply;
+        done = followUpParsed.done;
+        suggestions = followUpParsed.suggestions;
+        if (followUpParsed.detectedMode) detectedMode = followUpParsed.detectedMode;
+        session.messages.pop();
+        session.messages.pop();
+      } catch {
+        session.messages.pop();
+        session.messages.pop();
+      }
+    }
+  }
+
+  // ACTIVATE (same as non-streaming)
+  if (done && knownEmail) {
+    const conversationSummary = session.messages
+      .filter((m) => m.role === "user" && !m.content.startsWith("["))
+      .map((m) => `- ${m.content}`)
+      .join("\n");
+    const personName = extractNameFromConversation(session.messages);
+    const effectiveMode = detectedMode || "connector";
+
+    // Look up person for interaction recording
+    const streamActivatePerson = await findPersonByEmailGlobal(knownEmail);
+    const streamActivatePersonId = streamActivatePerson?.id;
+
+    try {
+      if (effectiveMode === "cos") {
+        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
+      } else if (effectiveMode === "both") {
+        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
+        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
+      } else {
+        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
+      }
+    } catch { /* non-fatal */ }
+
+    try {
+      const { startSystemAgentRun } = await import("./heartbeat");
+      const person = streamActivatePerson;
+      const targetType = extractNeedFromConversation(session.messages) || "relevant contacts";
+      const baseInputs = {
+        personId: person?.id || "unknown",
+        userId: person?.userId || "unknown",
+        email: knownEmail,
+        name: personName,
+        need: targetType,
+        conversationSummary,
+      };
+
+      if (effectiveMode === "connector" || effectiveMode === "both") {
+        await startSystemAgentRun("front-door-intake", {
+          ...baseInputs,
+          targetType,
+          businessContext: conversationSummary,
+        }, "front-door-chat");
+      }
+      if (effectiveMode === "cos" || effectiveMode === "both") {
+        await startSystemAgentRun("front-door-cos-intake", {
+          ...baseInputs,
+          statedPriorities: targetType,
+          knownContext: conversationSummary,
+        }, "front-door-chat");
+      }
+    } catch (err) {
+      console.warn("[network-chat] Could not start intake process:", (err as Error).message);
+    }
+  }
+
+  session.messages.push({ role: "assistant", content: reply });
+  await saveSession(session);
+
+  // Send metadata and done
+  yield { type: "metadata", requestEmail, done, suggestions, detectedMode, emailCaptured };
+  yield { type: "done" };
 }

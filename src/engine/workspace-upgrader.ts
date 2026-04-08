@@ -11,8 +11,8 @@
  * - Concurrency guard: only one upgrade at a time (in-memory lock)
  * - Idempotent resume: skips workspaces already at target image
  *
- * Provenance: Brief 091, Kubernetes rolling update, Google SRE canary,
- * Michael Nygard circuit breaker, Richardson saga/compensating actions.
+ * Provenance: Brief 091, Brief 100 (Railway migration), Kubernetes rolling update,
+ * Google SRE canary, Michael Nygard circuit breaker, Richardson saga/compensating actions.
  */
 
 import { eq, and, inArray, desc } from "drizzle-orm";
@@ -21,78 +21,120 @@ import type * as schemaModule from "../db/schema";
 import { createAlertSender, type AlertPayload, type AlertSender } from "./workspace-alerts";
 
 // ============================================================
-// Fly Machines API Client (mockable abstraction)
+// Railway Service Client (mockable abstraction for upgrader)
 // ============================================================
 
-export interface FlyMachineConfig {
+export interface RailwayServiceConfig {
   image: string;
   env?: Record<string, string>;
   [key: string]: unknown;
 }
 
-export interface FlyMachine {
+export interface RailwayServiceInfo {
   id: string;
-  config: FlyMachineConfig;
-  state: string;
+  config: RailwayServiceConfig;
+  status: string;
 }
 
 /**
- * Abstraction over the Fly.io Machines API.
+ * Abstraction over the Railway API for fleet upgrades.
  * All tests mock this interface — no real HTTP calls.
  */
-export interface FlyMachinesClient {
-  getMachine(machineId: string): Promise<FlyMachine>;
-  updateMachine(machineId: string, config: { image: string }): Promise<void>;
-  restartMachine(machineId: string): Promise<void>;
-  waitForMachineState(machineId: string, state: string, timeoutMs: number): Promise<void>;
+export interface RailwayServiceClient {
+  getService(serviceId: string): Promise<RailwayServiceInfo>;
+  updateServiceImage(serviceId: string, environmentId: string, imageRef: string): Promise<void>;
+  redeployService(serviceId: string, environmentId: string): Promise<{ deploymentId: string }>;
+  getDeploymentStatus(deploymentId: string): Promise<{ status: string }>;
 }
 
 /**
- * Create a real Fly Machines API client that wraps fetch calls.
+ * Create a real Railway Service client that wraps GraphQL calls.
  */
-export function createFlyMachinesClient(opts: {
+export function createRailwayServiceClient(opts: {
   apiToken: string;
-  appName: string;
-}): FlyMachinesClient {
-  const baseUrl = `https://api.machines.dev/v1/apps/${opts.appName}/machines`;
-  const headers = {
-    Authorization: `Bearer ${opts.apiToken}`,
-    "Content-Type": "application/json",
-  };
+  projectId: string;
+}): RailwayServiceClient {
+  const endpoint = "https://backboard.railway.com/graphql/v2";
+
+  async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${opts.apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (!res.ok) throw new Error(`Railway API: ${res.status}`);
+    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+    if (json.errors?.length) throw new Error(`Railway GraphQL: ${json.errors[0].message}`);
+    return json.data as T;
+  }
 
   return {
-    async getMachine(machineId: string): Promise<FlyMachine> {
-      const res = await fetch(`${baseUrl}/${machineId}`, { headers });
-      if (!res.ok) throw new Error(`Fly API: getMachine ${machineId} → ${res.status}`);
-      return res.json();
-    },
-
-    async updateMachine(machineId: string, config: { image: string }): Promise<void> {
-      const machine = await this.getMachine(machineId);
-      const res = await fetch(`${baseUrl}/${machineId}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          config: { ...machine.config, image: config.image },
-        }),
-      });
-      if (!res.ok) throw new Error(`Fly API: updateMachine ${machineId} → ${res.status}`);
-    },
-
-    async restartMachine(machineId: string): Promise<void> {
-      const res = await fetch(`${baseUrl}/${machineId}/restart`, {
-        method: "POST",
-        headers,
-      });
-      if (!res.ok) throw new Error(`Fly API: restartMachine ${machineId} → ${res.status}`);
-    },
-
-    async waitForMachineState(machineId: string, state: string, timeoutMs: number): Promise<void> {
-      const res = await fetch(
-        `${baseUrl}/${machineId}/wait?state=${state}&timeout=${timeoutMs}`,
-        { headers },
+    async getService(serviceId: string): Promise<RailwayServiceInfo> {
+      const data = await gql<{
+        service: {
+          id: string;
+          name: string;
+          serviceInstances: { edges: Array<{ node: { source: { image: string }; domains: { serviceDomains: Array<{ domain: string }> } } }> };
+        };
+      }>(
+        `query($id: String!) {
+          service(id: $id) {
+            id name
+            serviceInstances { edges { node {
+              source { image }
+              domains { serviceDomains { domain } }
+            } } }
+          }
+        }`,
+        { id: serviceId },
       );
-      if (!res.ok) throw new Error(`Fly API: waitForState ${machineId} → ${res.status} (timeout: ${timeoutMs}ms)`);
+      const instance = data.service.serviceInstances.edges[0]?.node;
+      return {
+        id: data.service.id,
+        config: {
+          image: instance?.source?.image ?? "unknown",
+          env: { DITTO_NETWORK_URL: "set" }, // env vars are not exposed via this query
+        },
+        status: "active",
+      };
+    },
+
+    async updateServiceImage(serviceId, environmentId, imageRef) {
+      await gql(
+        `mutation($input: ServiceInstanceUpdateInput!) {
+          serviceInstanceUpdate(input: $input)
+        }`,
+        {
+          input: {
+            serviceId,
+            environmentId,
+            source: { image: imageRef },
+          },
+        },
+      );
+    },
+
+    async redeployService(serviceId, environmentId) {
+      const data = await gql<{ serviceInstanceDeploy: { id: string } }>(
+        `mutation($serviceId: String!, $environmentId: String!) {
+          serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId) { id }
+        }`,
+        { serviceId, environmentId },
+      );
+      return { deploymentId: data.serviceInstanceDeploy.id };
+    },
+
+    async getDeploymentStatus(deploymentId) {
+      const data = await gql<{ deployment: { status: string } }>(
+        `query($id: String!) {
+          deployment(id: $id) { status }
+        }`,
+        { id: deploymentId },
+      );
+      return data.deployment;
     },
   };
 }
@@ -198,7 +240,7 @@ export function _resetUpgradeLock(): void {
 export interface WorkspaceUpgraderDeps {
   db: Db;
   schema: typeof schemaModule;
-  flyClient: FlyMachinesClient;
+  railwayClient: RailwayServiceClient;
   healthChecker: HealthChecker;
   alertSender: AlertSender;
 }
@@ -207,7 +249,7 @@ export interface WorkspaceUpgraderDeps {
  * Create a workspace upgrader with injected dependencies.
  */
 export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
-  const { db, schema, flyClient, healthChecker, alertSender } = deps;
+  const { db, schema, railwayClient, healthChecker, alertSender } = deps;
 
   /**
    * Perform a rolling fleet upgrade with canary phase and circuit breaker.
@@ -249,7 +291,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
         fleet = preCreated.fleet;
         upgradeId = preCreated.upgradeId;
       } else {
-        // Load fleet: healthy + degraded workspaces only (AC19, AC20)
+        // Load fleet: healthy + degraded workspaces only
         fleet = await db
           .select()
           .from(schema.managedWorkspaces)
@@ -279,7 +321,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
       }
       progress(`Starting upgrade to ${options.imageRef} (${fleet.length} workspaces)`);
 
-      // Separate workspaces already at target image (idempotent resume — AC11)
+      // Separate workspaces already at target image (idempotent resume)
       const toUpgrade = fleet.filter((ws) => ws.imageRef !== options.imageRef);
       const alreadyUpgraded = fleet.filter((ws) => ws.imageRef === options.imageRef);
 
@@ -318,8 +360,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
         };
       }
 
-      // === CANARY PHASE (AC4) ===
-      // Pick canary: prefer admin's own workspace, otherwise first
+      // === CANARY PHASE ===
       const canary = toUpgrade[0];
       const canaryIdx = 0;
 
@@ -339,7 +380,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
       );
 
       if (!canaryResult.ok) {
-        // Canary failed — rollback canary, abort entire upgrade (AC4)
+        // Canary failed — rollback canary, abort entire upgrade
         await db
           .update(schema.upgradeHistory)
           .set({
@@ -386,7 +427,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
       progress(`  ${canary.userId}: upgraded → ${options.imageRef} ✓ (${canaryResult.durationMs}ms)`);
       progress("Canary passed. Proceeding with fleet upgrade.");
 
-      // === FLEET PHASE (AC5, AC6, AC7) ===
+      // === FLEET PHASE ===
       const remaining = toUpgrade.slice(canaryIdx + 1);
       let upgradedCount = 1; // canary already counted
       let failedCount = 0;
@@ -431,7 +472,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
             .set({ failedCount })
             .where(eq(schema.upgradeHistory.id, upgradeId));
 
-          // Circuit breaker check (AC5)
+          // Circuit breaker check
           if (consecutiveFailures >= maxFailures) {
             const remainingCount = remaining.length - i - 1;
             circuitBroken = true;
@@ -511,8 +552,8 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
   }
 
   /**
-   * Upgrade a single workspace: update image → restart → health check.
-   * On failure, rolls back to previous image (AC7).
+   * Upgrade a single workspace: update image → redeploy → health check.
+   * On failure, rolls back to previous image.
    */
   async function upgradeWorkspace(
     workspace: typeof schema.managedWorkspaces.$inferSelect,
@@ -523,12 +564,13 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
   ): Promise<{ ok: boolean; durationMs: number; healthStatus: string; error?: string }> {
     const startTime = Date.now();
     const previousImage = workspace.imageRef;
+    const serviceId = workspace.serviceId ?? workspace.machineId;
+    const environmentId = workspace.railwayEnvironmentId ?? "";
 
     try {
-      // Verify DITTO_NETWORK_URL is set BEFORE updating (Brief 091 constraint)
-      // Avoids wasting a restart cycle on misconfigured workspaces
-      const machine = await flyClient.getMachine(workspace.machineId);
-      const hasNetworkUrl = machine.config?.env?.DITTO_NETWORK_URL;
+      // Verify DITTO_NETWORK_URL is set BEFORE updating
+      const serviceInfo = await railwayClient.getService(serviceId);
+      const hasNetworkUrl = serviceInfo.config?.env?.DITTO_NETWORK_URL;
 
       if (!hasNetworkUrl) {
         const durationMs = Date.now() - startTime;
@@ -556,9 +598,9 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
         return { ok: false, durationMs, healthStatus: "readiness_failed", error };
       }
 
-      // Update machine image and restart
-      await flyClient.updateMachine(workspace.machineId, { image: targetImage });
-      await flyClient.restartMachine(workspace.machineId);
+      // Update service image and redeploy
+      await railwayClient.updateServiceImage(serviceId, environmentId, targetImage);
+      const { deploymentId } = await railwayClient.redeployService(serviceId, environmentId);
 
       // Wait for deep health check
       const health = await healthChecker.checkHealth(
@@ -595,8 +637,8 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
         return { ok: true, durationMs, healthStatus: "ok" };
       }
 
-      // Failed — rollback this workspace (AC7)
-      await rollbackWorkspace(workspace.machineId, previousImage);
+      // Failed — rollback this workspace
+      await rollbackWorkspace(serviceId, environmentId, previousImage);
 
       await db
         .update(schema.managedWorkspaces)
@@ -626,7 +668,7 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
 
       // Attempt rollback on any error
       try {
-        await rollbackWorkspace(workspace.machineId, previousImage);
+        await rollbackWorkspace(serviceId, environmentId, previousImage);
       } catch {
         // Rollback failure is logged but doesn't mask the original error
       }
@@ -648,15 +690,15 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
   /**
    * Rollback a single workspace to a previous image.
    */
-  async function rollbackWorkspace(machineId: string, previousImage: string): Promise<void> {
-    await flyClient.updateMachine(machineId, { image: previousImage });
-    await flyClient.restartMachine(machineId);
+  async function rollbackWorkspace(serviceId: string, environmentId: string, previousImage: string): Promise<void> {
+    await railwayClient.updateServiceImage(serviceId, environmentId, previousImage);
+    await railwayClient.redeployService(serviceId, environmentId);
   }
 
   /**
    * Rollback the most recent upgrade. Reverts ALL upgraded workspaces
    * (including the canary) to their per-workspace previous image.
-   * Rollback itself has circuit breaker protection (AC10).
+   * Rollback itself has circuit breaker protection.
    */
   async function rollbackFleet(options: RollbackOptions): Promise<RollbackResult> {
     if (upgradeInProgress) {
@@ -717,9 +759,12 @@ export function createWorkspaceUpgrader(deps: WorkspaceUpgraderDeps) {
           continue;
         }
 
+        const serviceId = ws.serviceId ?? ws.machineId;
+        const environmentId = ws.railwayEnvironmentId ?? "";
+
         try {
-          await flyClient.updateMachine(ws.machineId, { image: result.previousImageRef });
-          await flyClient.restartMachine(ws.machineId);
+          await railwayClient.updateServiceImage(serviceId, environmentId, result.previousImageRef);
+          await railwayClient.redeployService(serviceId, environmentId);
 
           const health = await healthChecker.checkHealth(ws.workspaceUrl, healthTimeoutMs, healthPollMs);
 

@@ -122,6 +122,9 @@ feedback:
     - recipient_follow_up_response
 
 trust:
-  initial_tier: critical
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
   upgrade_path: []
-  downgrade_triggers: []
+  downgrade_triggers:
+    - "Introduction damages a relationship"
+    - "User overrides connector recommendation"

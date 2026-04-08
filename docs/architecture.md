@@ -87,9 +87,9 @@ Every work item carries **goal ancestry** — the chain of parent goals that exp
 
 ### The System Runs ON Itself
 
-Ditto's core orchestration capabilities are not hardcoded infrastructure — they are **meta-processes** with system agents going through the same harness pipeline as user processes. They start supervised. They earn trust. They get corrected. They improve.
+Ditto's core orchestration capabilities are not hardcoded infrastructure — they are **meta-processes** with system agents going through the same harness pipeline as user processes. Initial trust tiers are context-dependent (Insight-160): processes communicating directly to the user or operating as Alex's professional work start autonomous (quality-gate as safety net); processes acting in the user's name start supervised. All earn trust, get corrected, and improve.
 
-Thirteen system agents drive the framework (see ADR-008 + ADR-010 + Brief 079):
+Fourteen system agents drive the framework (see ADR-008 + ADR-010 + Brief 079 + Brief 104):
 
 | Agent | Purpose | Earns trust in |
 |-------|---------|---------------|
@@ -106,6 +106,7 @@ Thirteen system agents drive the framework (see ADR-008 + ADR-010 + Brief 079):
 | **process-discoverer** | Discovers processes from org data (inward hunting) | Discovery accuracy |
 | **governance-monitor** | Watches for trust gaming, compliance gaps | Detection accuracy |
 | **network-agent** | External relationship management — outreach, introductions, and nurture on behalf of users. Operates through personas (Alex/Mira). Mode-shifted posture: Selling (BDR) vs Connecting (researcher/advisor). (Brief 079) | Outreach quality, introduction match quality, reply rate |
+| **process-validator** | Unified quality validator for the Process Model Library. Four checks: edge-case testing, compliance scanning, efficiency analysis, duplicate detection. Runs in the library-curation pipeline. (Brief 104) | Validation accuracy, false positive rate |
 
 The system that governs user work is itself governed by the same system. This is what makes Ditto a living system, not a platform.
 
@@ -272,6 +273,10 @@ Process: [Name]
 ### Layer 2: Agent Layer (The Workforce)
 
 **Heartbeat execution model** (borrowed from Paperclip): Agents wake, execute, sleep. Not continuous. Cost-efficient, clean state boundaries.
+
+**Pulse — continuous operation loop** (Brief 098a): The pulse is Alex's internal clock. Registered as a cron job (configurable via `PULSE_INTERVAL_MS`, default 5 min). On each tick: (1) scan `delayed_runs` table for due runs → start them via `startProcessRun()`, (2) scan completed `processRuns` where `chainsProcessed = false` → execute chain definitions. Idempotent: DB-backed state, not in-memory timers. Overlap guard prevents concurrent ticks. Provenance: OpenClaw heartbeat pattern (Insight-141), adapted from LLM-driven to code-driven for cost.
+
+**Process chaining** (Brief 098a): Process definitions include optional `chain: ChainDefinition[]` — what happens after a process completes. `ChainDefinition` is a core engine primitive (`packages/core/`): trigger type, target process, input mappings with `{variable}` placeholders. Three trigger types: `delay` (creates a `delayed_runs` record, executed by pulse after N days), `schedule` (creates a `schedules` record, picked up by existing scheduler), `event` (logged as registered, activated by inbound email classification in 098b). Variable substitution (`{personId}` → actual process output value) is product-layer logic in `chain-executor.ts`. Chain-spawned runs inherit the more restrictive trust tier between parent and target (AC9).
 
 **Adapter pattern** (Insight-041): Any runtime plugs in — the harness is AI-provider-agnostic. Users bring their own execution substrate (Claude CLI, Codex CLI, Anthropic API, OpenAI API, local models via ollama). All adapters implement the same `StepExecutionResult` interface: `outputs`, `tokensUsed`, `costCents`, `confidence` (categorical: high/medium/low per ADR-011), `model` (actual model that executed this step — Brief 033), `logs`. Three core methods: `invoke()`, `status()`, `cancel()`. Seven executor types: `ai-agent`, `cli-agent`, `script`, `rules`, `human`, `handoff`, `integration`.
 

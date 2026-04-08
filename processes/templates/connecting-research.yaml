@@ -99,9 +99,9 @@ feedback:
     - which_candidates_rejected_and_why
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "15 searches where >60% candidates selected by user" }
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User finds no relevant candidates in 3 consecutive searches"
     - "Candidate quality rated low by user"

@@ -871,6 +871,32 @@ export async function executeTierChange(params: {
 
   // Recompute and cache trust state
   await computeAndCacheTrustState(params.processId);
+
+  // Brief 108 AC8: Notify admin on system-initiated downgrades
+  const tierRank: Record<string, number> = { critical: 0, supervised: 1, spot_checked: 2, autonomous: 3 };
+  const isDowngrade = (tierRank[params.toTier] ?? 0) < (tierRank[params.fromTier] ?? 0);
+  if (params.actor === "system" && isDowngrade) {
+    // Look up process name for the notification
+    const [process] = await db
+      .select({ name: schema.processes.name })
+      .from(schema.processes)
+      .where(eq(schema.processes.id, params.processId))
+      .limit(1);
+
+    const triggers = (params.metadata?.triggers as Array<{ name: string; threshold: string; actual: string }>) ?? [];
+
+    // Fire and forget — don't block trust evaluation on notification delivery
+    import("./notify-admin").then(({ notifyAdminOfDowngrade }) =>
+      notifyAdminOfDowngrade({
+        userName: "Network user", // Process-level — no single user context available here
+        processName: process?.name ?? params.processId,
+        fromTier: params.fromTier,
+        toTier: params.toTier,
+        reason: params.reason,
+        triggers,
+      }).catch((err) => console.error("[trust] Admin notification failed:", err)),
+    );
+  }
 }
 
 /**

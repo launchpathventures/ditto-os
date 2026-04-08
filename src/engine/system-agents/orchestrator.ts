@@ -1,13 +1,20 @@
 /**
- * Orchestrator — System Agent Module (Brief 021)
+ * Orchestrator — System Agent Module (Brief 021, Brief 102, Brief 103)
  *
- * Goal-directed orchestrator that decomposes goals into tasks using
- * process step lists as blueprints, spawns child work items with
- * dependencies, and manages work-queue scheduling.
+ * Goal-directed orchestrator with two decomposition paths:
  *
- * Decomposition strategy: the assigned process definition's steps
- * become the task list. Dependencies mirror depends_on in YAML.
- * Conditional steps (route_to) are included but may be skipped at runtime.
+ * 1. **Fast path** (Brief 021): goal + pre-assigned process slug →
+ *    1:1 map to process steps as child work items. Used when a goal
+ *    has a clear single-process match.
+ *
+ * 2. **Goal-level path** (Brief 102): goal without process slug →
+ *    LLM-powered decomposition into sub-goals tagged as find/build,
+ *    with dimension map clarity assessment and action boundaries.
+ *
+ * 3. **Find-or-Build routing** (Brief 103): three-tier routing per
+ *    sub-goal: Process Model Library → matchTaskToProcess → Build.
+ *    Includes goal-level trust inheritance, output threading, and
+ *    bundled reviews at phase boundaries.
  *
  * Provenance:
  * - LangGraph plan-and-execute (plan-track loop)
@@ -16,17 +23,25 @@
  * - CrewAI hierarchical (manager-outside-the-pool)
  * - ADR-010 (orchestrator specification)
  * - Insight-045 (confidence as stopping condition)
+ * - Brief 102 (goal-level reasoning, action boundaries)
+ * - Brief 103 (find-or-build routing, goal trust, bundled reviews)
  */
 
 import type { StepExecutionResult } from "../step-executor";
+import type { DimensionMap, GoalDecompositionResult, SubGoal } from "@ditto/core";
 import { db, schema } from "../../db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   flattenSteps,
   type ProcessDefinition,
 } from "../process-loader";
 import { startProcessRun } from "../heartbeat";
 import { matchTaskToProcess, type TaskRouteMatch } from "./router";
+import { decomposeGoalWithLLM } from "./goal-decomposition";
+import { findProcessModel, type ProcessModelMatch } from "./process-model-lookup";
+import { triggerBuild, archiveBuildInProgress, type BuildResult } from "./build-on-gap";
+import { resolveSubGoalTrust, type GoalTrust } from "../goal-trust";
+import { collectForBundledReview, isReviewBoundary, presentBundledReview, clearPendingReviews } from "../bundled-review";
 import type { TrustTier } from "../../db/schema";
 
 // ============================================================
@@ -57,6 +72,8 @@ export interface OrchestrationResult {
     options?: string[];
   };
   reasoning: string;
+  /** Present when goal-level LLM decomposition was used (Brief 102) */
+  goalDecompositionResult?: GoalDecompositionResult;
 }
 
 // ============================================================
@@ -77,12 +94,48 @@ export interface OrchestrationResult {
 export async function executeOrchestrator(
   inputs: Record<string, unknown>,
 ): Promise<StepExecutionResult> {
-  const processSlug = inputs.processSlug as string;
+  const processSlug = inputs.processSlug as string | undefined;
   const workItemId = inputs.workItemId as string;
   const workItemContent = inputs.content as string;
   const workItemType = inputs.workItemType as string | undefined;
   const goalTrustOverrides = inputs.goalTrustOverrides as Record<string, TrustTier> | undefined;
+  const dimensionMap = inputs.dimensionMap as DimensionMap | undefined;
+  const industrySignals = inputs.industrySignals as string[] | undefined;
+  const enableWebSearch = inputs.enableWebSearch as boolean | undefined;
 
+  const isGoalType = workItemType === "goal" || workItemType === "outcome";
+
+  // ── Goal-level decomposition path (Brief 102 + Brief 103) ──
+  // Activates when: goal/outcome type AND no pre-assigned process slug
+  // Brief 103: after decomposition, routes sub-goals via find-or-build
+  if (isGoalType && !processSlug) {
+    const result = await decomposeGoalLLM(
+      workItemId,
+      workItemContent,
+      dimensionMap,
+      industrySignals,
+      enableWebSearch,
+    );
+
+    const orchestration = result.outputs["orchestration-result"] as OrchestrationResult;
+    if (orchestration.action === "decomposed" && workItemId && orchestration.goalDecompositionResult?.ready) {
+      const subGoals = orchestration.goalDecompositionResult.decomposition?.subGoals;
+      // Brief 103: three-tier routing for LLM-decomposed sub-goals
+      await routeDecomposedTasks(workItemId, orchestration.tasks, subGoals, industrySignals);
+
+      // Auto-trigger goalHeartbeatLoop (non-blocking)
+      const { goalHeartbeatLoop } = await import("../heartbeat");
+      setImmediate(() => {
+        goalHeartbeatLoop(workItemId, goalTrustOverrides).catch((err) => {
+          console.error(`Goal heartbeat loop failed for ${workItemId}:`, err);
+        });
+      });
+    }
+
+    return result;
+  }
+
+  // ── No process slug for non-goal types → escalate ──
   if (!processSlug) {
     return makeResult({
       action: "escalated",
@@ -100,13 +153,13 @@ export async function executeOrchestrator(
     });
   }
 
-  // For goals: decompose into tasks, then auto-start goalHeartbeatLoop
-  if (workItemType === "goal" || workItemType === "outcome") {
+  // ── Fast path (Brief 021): goal + process slug → step decomposition ──
+  if (isGoalType) {
     const result = await decomposeGoal(processSlug, workItemId, workItemContent);
 
     const orchestration = result.outputs["orchestration-result"] as OrchestrationResult;
     if (orchestration.action === "decomposed" && workItemId) {
-      // Auto-route decomposed tasks to processes (Brief 074)
+      // Auto-route decomposed tasks to processes (Brief 074 → Brief 103 three-tier)
       await routeDecomposedTasks(workItemId, orchestration.tasks);
 
       // Auto-trigger goalHeartbeatLoop (non-blocking)
@@ -122,7 +175,7 @@ export async function executeOrchestrator(
     return result;
   }
 
-  // For tasks/questions: pass-through (backward-compatible)
+  // ── Pass-through (backward-compatible with Phase 4c) ──
   return passThroughOrchestration(processSlug, workItemId, workItemContent);
 }
 
@@ -297,24 +350,145 @@ async function passThroughOrchestration(
 }
 
 // ============================================================
-// Task-to-process routing (Brief 074)
+// Find-or-Build Sub-Goal Routing (Brief 103)
 // ============================================================
 
+export type RoutingPath = "model" | "find" | "build" | "escalated";
+
+export interface SubGoalRoutingResult {
+  subGoalId: string;
+  path: RoutingPath;
+  processSlug: string | null;
+  processId: string | null;
+  confidence: number;
+  reasoning: string;
+  costCents: number;
+}
+
 /**
- * Route decomposed tasks to processes using rule-based matching.
- * For each task, match against available processes. If confidence >= 0.6,
- * auto-route. Otherwise, set to "waiting_human" with escalation context.
+ * Route a single sub-goal using three-tier routing (AC1):
+ *   1. Check Process Model Library (templates/) → adopt path (cheap)
+ *   2. Check matchTaskToProcess (existing processes) → find path (free)
+ *   3. Trigger Build meta-process → build path (expensive)
  *
- * All routing decisions are logged to the activity log.
+ * All routing decisions logged to activity log with cost (AC17).
+ */
+export async function routeSubGoal(
+  subGoalId: string,
+  subGoalDescription: string,
+  subGoalRouting: "find" | "build",
+  goalWorkItemId: string,
+  opts?: {
+    industryKeywords?: string[];
+    buildDepth?: number;
+  },
+): Promise<SubGoalRoutingResult> {
+  const CONFIDENCE_THRESHOLD = 0.6;
+
+  // ── Tier 1: Process Model Library (AC2, AC3 — Brief 104: DB-backed) ──
+  const modelMatch = await findProcessModel(subGoalDescription, {
+    industryKeywords: opts?.industryKeywords,
+  });
+
+  if (modelMatch && modelMatch.confidence >= CONFIDENCE_THRESHOLD) {
+    // Check if the template process exists in DB
+    const [proc] = await db
+      .select()
+      .from(schema.processes)
+      .where(eq(schema.processes.slug, modelMatch.slug))
+      .limit(1);
+
+    if (proc) {
+      const result: SubGoalRoutingResult = {
+        subGoalId,
+        path: "model",
+        processSlug: modelMatch.slug,
+        processId: proc.id,
+        confidence: modelMatch.confidence,
+        reasoning: `Process Model Library match: ${modelMatch.reasoning}`,
+        costCents: 0, // model match is free
+      };
+      await logRoutingDecision(goalWorkItemId, subGoalId, result);
+      return result;
+    }
+  }
+
+  // ── Tier 2: matchTaskToProcess — existing processes (AC4) ──
+  const processMatch = await matchTaskToProcess(subGoalDescription);
+
+  if (processMatch.processSlug && processMatch.confidence >= CONFIDENCE_THRESHOLD) {
+    const [proc] = await db
+      .select()
+      .from(schema.processes)
+      .where(eq(schema.processes.slug, processMatch.processSlug))
+      .limit(1);
+
+    if (proc) {
+      const result: SubGoalRoutingResult = {
+        subGoalId,
+        path: "find",
+        processSlug: processMatch.processSlug,
+        processId: proc.id,
+        confidence: processMatch.confidence,
+        reasoning: `Existing process match: ${processMatch.reasoning}`,
+        costCents: 0, // find is free
+      };
+      await logRoutingDecision(goalWorkItemId, subGoalId, result);
+      return result;
+    }
+  }
+
+  // ── Tier 3: Build meta-process (AC5) ──
+  // Only trigger build if the sub-goal was tagged as "build" by decomposition,
+  // OR if find/model both failed
+  const buildResult = await triggerBuild({
+    subGoalId,
+    subGoalDescription,
+    goalId: goalWorkItemId,
+    buildDepth: opts?.buildDepth ?? 0,
+    industryKeywords: opts?.industryKeywords,
+    validateFirstRun: true,
+  });
+
+  if (buildResult.success && buildResult.processSlug) {
+    const result: SubGoalRoutingResult = {
+      subGoalId,
+      path: "build",
+      processSlug: buildResult.processSlug,
+      processId: buildResult.processId,
+      confidence: 0.7, // Generated process starts at moderate confidence
+      reasoning: buildResult.reasoning,
+      costCents: buildResult.costCents,
+    };
+    await logRoutingDecision(goalWorkItemId, subGoalId, result);
+    return result;
+  }
+
+  // Build failed — escalate to user (AC7)
+  const result: SubGoalRoutingResult = {
+    subGoalId,
+    path: "escalated",
+    processSlug: buildResult.processSlug,
+    processId: buildResult.processId,
+    confidence: 0,
+    reasoning: `All routing tiers failed. Build result: ${buildResult.reasoning}`,
+    costCents: buildResult.costCents,
+  };
+  await logRoutingDecision(goalWorkItemId, subGoalId, result);
+  return result;
+}
+
+/**
+ * Route all decomposed sub-goals using find-or-build routing.
+ * Replaces the Brief 074 routeDecomposedTasks with three-tier routing.
  */
 async function routeDecomposedTasks(
   goalWorkItemId: string,
   tasks: DecompositionTask[],
+  subGoals?: SubGoal[],
+  industryKeywords?: string[],
 ): Promise<void> {
-  const CONFIDENCE_THRESHOLD = 0.6;
-
   for (const task of tasks) {
-    // Load the child work item
     const [childItem] = await db
       .select()
       .from(schema.workItems)
@@ -323,50 +497,36 @@ async function routeDecomposedTasks(
 
     if (!childItem) continue;
 
-    // Attempt to match task content to a process
-    const match: TaskRouteMatch = await matchTaskToProcess(childItem.content);
+    // Determine routing hint from decomposition
+    const subGoal = subGoals?.find((sg) => sg.id === task.taskId);
+    const routingHint = subGoal?.routing || "find";
 
-    // Log the routing decision
-    await db.insert(schema.activities).values({
-      action: "orchestrator.routing",
-      actorType: "system",
-      entityType: "work_item",
-      entityId: task.taskId,
-      metadata: {
-        goalWorkItemId,
-        processSlug: match.processSlug,
-        confidence: match.confidence,
-        reasoning: match.reasoning,
-        autoRouted: match.confidence >= CONFIDENCE_THRESHOLD && match.processSlug !== null,
-      },
-    });
+    const routingResult = await routeSubGoal(
+      task.taskId,
+      childItem.content,
+      routingHint,
+      goalWorkItemId,
+      { industryKeywords, buildDepth: 0 },
+    );
 
-    if (match.processSlug && match.confidence >= CONFIDENCE_THRESHOLD) {
-      // Auto-route: assign process to task
-      const [proc] = await db
-        .select()
-        .from(schema.processes)
-        .where(eq(schema.processes.slug, match.processSlug))
-        .limit(1);
-
-      if (proc) {
-        await db
-          .update(schema.workItems)
-          .set({
-            assignedProcess: proc.id,
-            status: "routed",
-            context: {
-              ...(childItem.context as Record<string, unknown> || {}),
-              processSlug: match.processSlug,
-              routingConfidence: match.confidence,
-              routingReasoning: match.reasoning,
-            },
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.workItems.id, task.taskId));
-      }
+    if (routingResult.processId && routingResult.path !== "escalated") {
+      await db
+        .update(schema.workItems)
+        .set({
+          assignedProcess: routingResult.processId,
+          status: "routed",
+          context: {
+            ...(childItem.context as Record<string, unknown> || {}),
+            processSlug: routingResult.processSlug,
+            routingPath: routingResult.path,
+            routingConfidence: routingResult.confidence,
+            routingReasoning: routingResult.reasoning,
+            routingCostCents: routingResult.costCents,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.workItems.id, task.taskId));
     } else {
-      // No match or low confidence — escalate to user
       await db
         .update(schema.workItems)
         .set({
@@ -374,14 +534,209 @@ async function routeDecomposedTasks(
           context: {
             ...(childItem.context as Record<string, unknown> || {}),
             routingEscalation: true,
-            routingConfidence: match.confidence,
-            routingReasoning: match.reasoning,
-            routingAttemptedSlug: match.processSlug,
+            routingPath: routingResult.path,
+            routingConfidence: routingResult.confidence,
+            routingReasoning: routingResult.reasoning,
+            routingCostCents: routingResult.costCents,
           },
           updatedAt: new Date(),
         })
         .where(eq(schema.workItems.id, task.taskId));
     }
+  }
+}
+
+/** Log a routing decision to the activity log with cost observability (AC17). */
+async function logRoutingDecision(
+  goalWorkItemId: string,
+  subGoalId: string,
+  result: SubGoalRoutingResult,
+): Promise<void> {
+  await db.insert(schema.activities).values({
+    action: `orchestrator.routing.${result.path}`,
+    actorType: "system",
+    entityType: "work_item",
+    entityId: subGoalId,
+    metadata: {
+      goalWorkItemId,
+      path: result.path,
+      processSlug: result.processSlug,
+      confidence: result.confidence,
+      reasoning: result.reasoning,
+      costCents: result.costCents,
+      costCategory: result.path === "find" ? "free"
+        : result.path === "model" ? "cheap"
+        : result.path === "build" ? "expensive"
+        : "none",
+    },
+  });
+}
+
+// ============================================================
+// Goal cancellation (Brief 103 AC16)
+// ============================================================
+
+/**
+ * Cancel a goal: pause all in-progress sub-goals, archive
+ * build-in-progress processes, preserve completed outputs.
+ */
+export async function cancelGoal(goalWorkItemId: string): Promise<void> {
+  const [goalItem] = await db
+    .select()
+    .from(schema.workItems)
+    .where(eq(schema.workItems.id, goalWorkItemId))
+    .limit(1);
+
+  if (!goalItem) return;
+
+  const decomposition = goalItem.decomposition as Array<{
+    taskId: string;
+    stepId: string;
+    dependsOn: string[];
+    status: string;
+  }> | null;
+
+  if (decomposition) {
+    const childIds = decomposition.map((t) => t.taskId);
+    const childItems = await db
+      .select()
+      .from(schema.workItems)
+      .where(inArray(schema.workItems.id, childIds));
+
+    for (const child of childItems) {
+      // Pause in-progress sub-goals (not delete)
+      if (child.status === "in_progress" || child.status === "routed" || child.status === "intake") {
+        await db
+          .update(schema.workItems)
+          .set({ status: "waiting_human", updatedAt: new Date() })
+          .where(eq(schema.workItems.id, child.id));
+
+        // Cancel active process runs
+        const executionIds = (child.executionIds as string[]) || [];
+        for (const runId of executionIds) {
+          await db
+            .update(schema.processRuns)
+            .set({ status: "cancelled" })
+            .where(eq(schema.processRuns.id, runId));
+        }
+      }
+      // Completed sub-goals and their outputs are preserved
+    }
+  }
+
+  // Archive build-in-progress processes
+  await archiveBuildInProgress(goalWorkItemId);
+
+  // Clear pending bundled reviews
+  clearPendingReviews(goalWorkItemId);
+
+  // Mark goal as cancelled. Schema has no "paused" status — using "waiting_human"
+  // to allow the goal to be resumed via resumeGoal(). The activity log records
+  // the "goal.cancelled" action for disambiguation.
+  await db
+    .update(schema.workItems)
+    .set({ status: "waiting_human", updatedAt: new Date() })
+    .where(eq(schema.workItems.id, goalWorkItemId));
+
+  await db.insert(schema.activities).values({
+    action: "goal.cancelled",
+    actorType: "human",
+    entityType: "work_item",
+    entityId: goalWorkItemId,
+    metadata: { reason: "User cancelled goal" },
+  });
+}
+
+// ============================================================
+// Goal-level LLM decomposition (Brief 102)
+// ============================================================
+
+/**
+ * Decompose a goal into sub-goals using LLM reasoning.
+ * Used when no process slug is pre-assigned — the orchestrator
+ * needs to reason about what sub-goals are needed.
+ */
+async function decomposeGoalLLM(
+  goalWorkItemId: string,
+  goalContent: string,
+  dimensionMap?: DimensionMap,
+  industrySignals?: string[],
+  enableWebSearch?: boolean,
+): Promise<StepExecutionResult> {
+  try {
+    const result: GoalDecompositionResult = await decomposeGoalWithLLM({
+      goalId: goalWorkItemId,
+      goalDescription: goalContent,
+      dimensionMap,
+      industrySignals,
+      enableWebSearch,
+    });
+
+    if (!result.ready) {
+      // Clarity insufficient — return questions for the Self to ask
+      return makeResult({
+        action: "escalated",
+        goalWorkItemId,
+        tasks: [],
+        confidence: "low",
+        escalation: {
+          type: "blocked",
+          reason: "Goal clarity insufficient for decomposition",
+          tasksCompleted: 0,
+          tasksRemaining: 0,
+          openQuestions: result.questions.map(q => `[${q.dimension}] ${q.question}`),
+        },
+        reasoning: result.reasoning,
+        goalDecompositionResult: result,
+      });
+    }
+
+    // Decomposition succeeded — store on work item
+    const decomposition = result.decomposition;
+    const tasks: DecompositionTask[] = decomposition.subGoals.map(sg => ({
+      taskId: sg.id,
+      stepId: sg.id, // sub-goals use their own ID (no process step mapping)
+      dependsOn: sg.dependsOn,
+      status: "pending",
+    }));
+
+    if (goalWorkItemId) {
+      await db
+        .update(schema.workItems)
+        .set({
+          status: "in_progress",
+          decomposition: tasks,
+          context: {
+            goalDecomposition: decomposition,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.workItems.id, goalWorkItemId));
+    }
+
+    return makeResult({
+      action: "decomposed",
+      goalWorkItemId,
+      tasks,
+      confidence: decomposition.confidence,
+      reasoning: decomposition.reasoning,
+      goalDecompositionResult: result,
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return makeResult({
+      action: "escalated",
+      goalWorkItemId,
+      tasks: [],
+      confidence: "low",
+      escalation: {
+        type: "error",
+        reason: `Goal-level decomposition failed: ${errMsg}`,
+        tasksCompleted: 0,
+        tasksRemaining: 0,
+      },
+      reasoning: `LLM decomposition failed: ${errMsg}`,
+    });
   }
 }
 

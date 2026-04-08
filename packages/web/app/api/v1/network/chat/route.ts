@@ -20,11 +20,12 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail } = body as {
+    const { message, sessionId, context, returningEmail, funnelMetadata } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
       returningEmail?: string;
+      funnelMetadata?: Record<string, unknown>;
     };
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
       chatContext,
       ip,
       returningEmail ?? null,
+      funnelMetadata,
     );
 
     if (result.rateLimited) {

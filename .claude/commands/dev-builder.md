@@ -13,6 +13,9 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 - MUST do a buildability check on the brief before starting: Are there ambiguities? Missing details? Flag to human before building, don't guess.
 - MUST follow the brief/plan precisely — it has been approved by the human
 - MUST use existing project conventions (pnpm, TypeScript strict, Drizzle, existing patterns)
+- MUST follow the engine-first rule: when changing engine primitives (harness types, trust logic, process types, content blocks, cognitive loading, LLM types), modify `packages/core/` first. The corresponding `src/engine/` files are thin re-exports — never add implementation to a re-export file. See CLAUDE.md "Engine Core" section for the full boundary.
+- MUST run type-check at BOTH root (`npx tsc --noEmit`) AND core (`cd packages/core && npx tsc --noEmit`) when engine changes are involved
+- MUST ask "could ProcessOS use this?" when adding new engine code. If yes, it belongs in `packages/core/`. If it's Ditto-specific (Self, personas, network), it stays in `src/engine/`.
 - MUST run automated quality checks before declaring done:
   - `pnpm run type-check` must pass
   - `pnpm test` must pass (if test suite exists)

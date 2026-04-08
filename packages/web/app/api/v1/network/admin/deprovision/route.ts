@@ -1,10 +1,10 @@
 /**
  * POST /api/v1/network/admin/deprovision — Deprovision a managed workspace (admin-only).
  *
- * Stops and destroys Fly Machine + Volume, revokes token, updates fleet registry.
+ * Deletes Railway service (cascades volume), revokes token, updates fleet registry.
  * Destructive — permanently deletes all workspace data.
  *
- * Provenance: Brief 090, ADR-025.
+ * Provenance: Brief 090, Brief 100 (Railway migration), ADR-025.
  */
 
 import { NextResponse } from "next/server";
@@ -39,26 +39,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const flyToken = process.env.FLY_API_TOKEN;
-    const flyOrg = process.env.FLY_ORG;
-    const flyRegion = process.env.FLY_REGION ?? "syd";
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
 
-    if (!flyToken || !flyOrg) {
+    if (!railwayToken || !railwayProjectId) {
       return NextResponse.json(
-        { error: "Server misconfigured: FLY_API_TOKEN and FLY_ORG are required." },
+        { error: "Server misconfigured: RAILWAY_API_TOKEN and RAILWAY_PROJECT_ID are required." },
         { status: 500 },
       );
     }
 
-    const { deprovisionWorkspace, createFlyClient } = await import(
+    const { deprovisionWorkspace, createRailwayClient } = await import(
       "../../../../../../../../src/engine/workspace-provisioner"
     );
 
-    const flyClient = createFlyClient(flyToken);
+    const railwayClient = createRailwayClient(railwayToken, railwayProjectId);
     const result = await deprovisionWorkspace(userId, {
-      flyClient,
-      flyAppName: flyOrg,
-      flyRegion,
+      railwayClient,
+      projectId: railwayProjectId,
     });
 
     return NextResponse.json({

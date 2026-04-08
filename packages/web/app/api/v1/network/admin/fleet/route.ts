@@ -1,9 +1,9 @@
 /**
  * GET /api/v1/network/admin/fleet — Fleet status (admin-only).
  *
- * Returns all managed workspaces with status, version, URL, and health.
+ * Returns all managed workspaces with status, version, serviceId, URL, and health.
  *
- * Provenance: Brief 090, ADR-025.
+ * Provenance: Brief 090, Brief 100 (Railway migration), ADR-025.
  */
 
 import { NextResponse } from "next/server";

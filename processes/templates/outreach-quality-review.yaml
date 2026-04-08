@@ -125,10 +125,9 @@ feedback:
     - draft_changes_after_review
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "15 reviews where user agrees with verdict" }
-    - { from: spot_checked, to: autonomous, after: "40 reviews with consistent alignment" }
+  # Alex is the professional — quality-gate is the safety net (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "User disagrees with 3+ verdicts in a row"
     - "Approved draft gets negative recipient reaction"

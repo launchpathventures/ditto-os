@@ -9,7 +9,7 @@
  * ditto network deprovision --user-id <id> [--confirm]  — Deprovision a managed workspace
  * ditto network fleet                                   — Show fleet status
  *
- * Provenance: Brief 088, Brief 090 (admin auth, provisioning), ADR-025 (Network API auth).
+ * Provenance: Brief 088, Brief 090 (admin auth, provisioning), Brief 100 (Railway migration), ADR-025 (Network API auth).
  */
 
 import { defineCommand } from "citty";
@@ -142,7 +142,7 @@ const tokenCommand = defineCommand({
 const provisionCommand = defineCommand({
   meta: {
     name: "provision",
-    description: "Provision a managed workspace for a user",
+    description: "Provision a managed workspace for a user on Railway",
   },
   args: {
     "user-id": {
@@ -162,28 +162,26 @@ const provisionCommand = defineCommand({
       process.exit(1);
     }
 
-    const flyToken = process.env.FLY_API_TOKEN;
-    const flyOrg = process.env.FLY_ORG;
-    const flyRegion = process.env.FLY_REGION ?? "syd";
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
     const imageRef = args["image-ref"] ?? process.env.DITTO_IMAGE_REF;
     const networkUrl = process.env.DITTO_NETWORK_URL;
 
-    if (!flyToken || !flyOrg || !imageRef || !networkUrl) {
-      console.error("Required environment variables: FLY_API_TOKEN, FLY_ORG, DITTO_IMAGE_REF, DITTO_NETWORK_URL");
+    if (!railwayToken || !railwayProjectId || !imageRef || !networkUrl) {
+      console.error("Required environment variables: RAILWAY_API_TOKEN, RAILWAY_PROJECT_ID, DITTO_IMAGE_REF, DITTO_NETWORK_URL");
       process.exit(1);
     }
 
-    const { provisionWorkspace, createFlyClient } = await import(
+    const { provisionWorkspace, createRailwayClient } = await import(
       "../../engine/workspace-provisioner"
     );
 
-    const flyClient = createFlyClient(flyToken);
+    const railwayClient = createRailwayClient(railwayToken, railwayProjectId);
 
     try {
       const result = await provisionWorkspace(userId, {
-        flyClient,
-        flyAppName: flyOrg,
-        flyRegion,
+        railwayClient,
+        projectId: railwayProjectId,
         imageRef,
         networkUrl,
         onProgress: (msg) => console.log(msg),
@@ -236,26 +234,24 @@ const deprovisionCommand = defineCommand({
       process.exit(0);
     }
 
-    const flyToken = process.env.FLY_API_TOKEN;
-    const flyOrg = process.env.FLY_ORG;
-    const flyRegion = process.env.FLY_REGION ?? "syd";
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
 
-    if (!flyToken || !flyOrg) {
-      console.error("Required environment variables: FLY_API_TOKEN, FLY_ORG");
+    if (!railwayToken || !railwayProjectId) {
+      console.error("Required environment variables: RAILWAY_API_TOKEN, RAILWAY_PROJECT_ID");
       process.exit(1);
     }
 
-    const { deprovisionWorkspace, createFlyClient } = await import(
+    const { deprovisionWorkspace, createRailwayClient } = await import(
       "../../engine/workspace-provisioner"
     );
 
-    const flyClient = createFlyClient(flyToken);
+    const railwayClient = createRailwayClient(railwayToken, railwayProjectId);
 
     try {
       await deprovisionWorkspace(userId, {
-        flyClient,
-        flyAppName: flyOrg,
-        flyRegion,
+        railwayClient,
+        projectId: railwayProjectId,
         onProgress: (msg) => console.log(msg),
       });
 
@@ -315,7 +311,7 @@ const fleetCommand = defineCommand({
 });
 
 // ============================================================
-// Fleet Upgrade Commands (Brief 091)
+// Fleet Upgrade Commands (Brief 091, Brief 100)
 // ============================================================
 
 const upgradeCommand = defineCommand({
@@ -347,27 +343,28 @@ const upgradeCommand = defineCommand({
     const { db, schema } = await import("../../db");
     const {
       createWorkspaceUpgrader,
-      createFlyMachinesClient,
+      createRailwayServiceClient,
       createHealthChecker,
       UpgradeConflictError,
     } = await import("../../engine/workspace-upgrader");
     const { createAlertSender } = await import("../../engine/workspace-alerts");
 
-    const flyApiToken = process.env.FLY_API_TOKEN;
-    if (!flyApiToken) {
-      console.error("FLY_API_TOKEN environment variable is required");
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+    if (!railwayToken || !railwayProjectId) {
+      console.error("RAILWAY_API_TOKEN and RAILWAY_PROJECT_ID environment variables are required");
       process.exit(1);
     }
 
-    const flyClient = createFlyMachinesClient({
-      apiToken: flyApiToken,
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: railwayToken,
+      projectId: railwayProjectId,
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),
     });
@@ -404,27 +401,28 @@ const rollbackCommand = defineCommand({
     const { db, schema } = await import("../../db");
     const {
       createWorkspaceUpgrader,
-      createFlyMachinesClient,
+      createRailwayServiceClient,
       createHealthChecker,
       UpgradeConflictError,
     } = await import("../../engine/workspace-upgrader");
     const { createAlertSender } = await import("../../engine/workspace-alerts");
 
-    const flyApiToken = process.env.FLY_API_TOKEN;
-    if (!flyApiToken) {
-      console.error("FLY_API_TOKEN environment variable is required");
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+    if (!railwayToken || !railwayProjectId) {
+      console.error("RAILWAY_API_TOKEN and RAILWAY_PROJECT_ID environment variables are required");
       process.exit(1);
     }
 
-    const flyClient = createFlyMachinesClient({
-      apiToken: flyApiToken,
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: railwayToken,
+      projectId: railwayProjectId,
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),
     });
@@ -469,20 +467,20 @@ const upgradesCommand = defineCommand({
     const { db, schema } = await import("../../db");
     const {
       createWorkspaceUpgrader,
-      createFlyMachinesClient,
+      createRailwayServiceClient,
       createHealthChecker,
     } = await import("../../engine/workspace-upgrader");
     const { createAlertSender } = await import("../../engine/workspace-alerts");
 
-    const flyClient = createFlyMachinesClient({
-      apiToken: process.env.FLY_API_TOKEN || "",
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: process.env.RAILWAY_API_TOKEN || "",
+      projectId: process.env.RAILWAY_PROJECT_ID || "",
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),
     });

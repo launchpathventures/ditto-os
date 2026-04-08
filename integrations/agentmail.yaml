@@ -28,7 +28,7 @@ connection:
 # the SDK methods. Listed here for documentation/registry completeness.
 tools:
   - name: create_inbox
-    description: Create a new email inbox for a persona (e.g. alex@ditto.network)
+    description: Create a new email inbox for a persona (e.g. alex@ditto.partners)
     parameters:
       username:
         type: string

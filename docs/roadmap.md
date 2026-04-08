@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-04-06
-**Current phase:** Phase 10 **complete**. Phase 14 **in progress** (Network Agent — engine code complete, deployment briefs 086-089 approved, build order 086→088→089). Phase 15 **in progress** (Managed Workspace Infrastructure — Brief 090 provisioning complete, Brief 091 fleet upgrades complete). Phases 11-13 **future**. Universal Work Loop activation (parent Brief 071) sub-briefs shipping. Briefs 057-069, 072-074, 076, 078, 080-085, 090-091 complete. 745 unit tests (44 test files) + 14 e2e tests (4 spec files). Three-layer persona architecture (Insight-153) complete. 20 process templates. Front door conversational experience live.
+**Last updated:** 2026-04-08
+**Current phase:** Phase 10 **complete**. Phase 14 **in progress** (Network Agent — engine code complete, Briefs 097+098a+098b+099a+099b+099c+108 all complete. Brief 099 fully shipped. Brief 108 admin oversight complete). Phase 15 **complete** (Managed Workspace Infrastructure — Brief 090 provisioning, Brief 091 fleet upgrades, Brief 100 Railway migration all complete). Phase 11 **in progress** (Briefs 101-104+107 complete — goal decomposition, find-or-build routing, library curation pipeline, budget infrastructure). Phases 12-13 **future**. 1106 unit tests (64 test files) + 14 e2e tests (4 spec files). Three-layer persona architecture (Insight-153) complete. 22 process templates. Front door conversational experience live.
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -540,6 +540,9 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Block Renderer Polish — Tier 2→Tier 1 visual quality for 7 block renderers — **done (Brief 063, verified 2026-04-01)** | Brief 063, P30 prototype | Tier 1 block patterns (existing), Lucide icons (depend) |
 | Interactive ContentBlocks — editable ProcessProposalBlock, WorkItemFormBlock, ConnectionSetupBlock, form-submit action routing — **done (Brief 072)** | Brief 072, ADR-021, Insight-135 | Notion block editor (pattern), Paperclip.ai (pattern), ADR-021 handleSurfaceAction (extend) |
 | Orchestrator Auto-Wiring — goalHeartbeatLoop, auto-decompose → route → execute → chain, pause_goal tool, keyword+slug task routing — **done (Brief 074)** | Brief 074, ADR-010, ADR-015, Insight-132/133 | Temporal workflow engine (pattern), Mastra control-flow (adopt) |
+| Goal-Level Reasoning — LLM-powered goal decomposition into sub-goals (find/build tagged), dimension map clarity assessment (6 dimensions), system-enforced action boundaries per context (front_door/workspace/workspace_budgeted), GoalDecomposition types in @ditto/core — **done (Brief 102)** | Brief 102, ADR-015, ADR-010 | LangGraph plan-and-execute (pattern), MEDDIC/BANT clarity assessment (pattern), RBAC on tools (pattern) |
+| Budget Infrastructure — per-goal budget ledger, Stripe Checkout payment, spend tracking per sub-goal, budget exhaustion soft-stop with notifyUser top-up request, 90% warning, heartbeat integration — **done (Brief 107)** | Brief 107, Brief 102 | Stripe Checkout (depend), AgentMail webhook pattern (adopt), double-entry bookkeeping (pattern) |
+| Find-or-Build Routing — three-tier sub-goal routing (Process Model Library → existing process → Build meta-process), build depth=1 enforcement, first-run gate, goal-level trust inheritance (more-restrictive resolution), LLM output threading between sub-goals, bundled phase-boundary reviews, concurrent build dedup, goal cancellation — **done (Brief 103)** | Brief 103, ADR-015, Insight-163 | npm registry (pattern: check before build), canary deployment (pattern: first-run gate), session trust Brief 053 (adopt: relax-only inheritance), Agile sprint review (pattern: bundled reviews) |
 | Composition Intent Activation — 6 intent compose functions with empty/active states, intentContext in Self system prompt — **done (Brief 073)** | Brief 073, ADR-024, Insight-134/136 | Linear empty states (pattern), ADR-024 deterministic composition (extend) |
 | Live Preview viewer as extension seam | ADR-024, Insight-104 | Claude Artifacts / Cursor / Lovable (pattern) |
 | Self-driven composition (replaces deterministic functions) | ADR-024 Phase 11+ | Original — deferred |
@@ -566,6 +569,12 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | `process-analyst` system agent (conversational classification against APQC, template comparison) | human-layer.md, ADR-006, ADR-008 | Original |
 | `onboarding-guide` system agent (first-run flow, template-aware) | ADR-008 | Original |
 | `process-discoverer` system agent (data-driven pattern finding from connected sources) | ADR-006, ADR-008 | Informed by PKAI + ClearWork + Original |
+| **Process Model Library curation** (Brief 104) | ADR-008, ADR-015, Insight-099 | App store review pattern + spec testing + semantic versioning |
+| `process-validator` system agent (4-check quality gate) | Brief 104 | Done |
+| `library-manager.ts` (nominate/publish/archive/query) | Brief 104 | Done |
+| `processModels` DB table (engine primitive in @ditto/core) | Brief 104 | Done |
+| `library-curation.yaml` (5-step meta-process) | Brief 104 | Done |
+| `findProcessModel()` DB-backed (replaces filesystem) | Brief 104 | Done |
 | **Reactive-to-repetitive lifecycle** | | |
 | System detects repeated ad-hoc work patterns | ADR-010, Insight-027 | Original to Ditto |
 | System proposes new process creation from observed patterns | ADR-010 | Original to Ditto |
@@ -607,7 +616,7 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 ### Phase 14: Network Agent
 
 **Re-entry condition:** Phase 10 complete, Proactive Operating Layer designed
-**Status:** Engine code complete (Briefs 080-085). Process templates complete. Character bible + persona architecture complete. Front door + intake flow complete. **Web acquisition funnel complete (Briefs 093-095):** conversational front door, verify page, referred page, post-submission engagement. **Multi-provider purpose routing complete (Brief 096, ADR-026):** Anthropic + OpenAI + Google simultaneous loading, purpose-based model selection. Deployment briefs (086-089) designed and approved.
+**Status:** Engine code complete (Briefs 080-085). Process templates complete. Character bible + persona architecture complete. Front door + intake flow complete. **Web acquisition funnel complete (Briefs 093-095):** conversational front door, verify page, referred page, post-submission engagement. **Multi-provider purpose routing complete (Brief 096, ADR-026):** Anthropic + OpenAI + Google simultaneous loading, purpose-based model selection. Deployment briefs (086-089) designed and approved. **Integration tools complete (Brief 097):** CRM built-in tools, atomic send-and-record. **Pulse + chain execution complete (Brief 098a):** continuous operation loop, chain definitions, delayed runs, trust inheritance. **Inbound email + status composition complete (Brief 098b).** **Communication intelligence complete (Brief 099a/b/c).** **Referral footer complete (Brief 109):** two-sided acquisition loop end-to-end (Insight-155). **Admin oversight complete (Brief 108):** admin dashboard, pause/resume, feedback, act-as-Alex, downgrade notifications (Insight-160 implementation). **Workspace suggestion trigger complete (Brief 110):** automated detection of workspace readiness (3+ processes, 4+ sub-goals, keyword signals), woven into status email, 30-day cooldown (Insight-161). Next: Briefs 086-089 (Network Service deployment).
 
 | Capability | Status | Source doc | Build from | Deliverable |
 |-----------|--------|-----------|------------|-------------|
@@ -644,8 +653,41 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Google Gemini provider | done | Brief 096, ADR-026 | `@google/generative-ai` (depend) | `src/engine/llm.ts` |
 | Purpose-based routing (conversation/writing/analysis/classification/extraction) | done | Brief 096, ADR-026, Insight-157 | RouteLLM (pattern) | `src/engine/model-routing.ts` |
 | Multi-provider simultaneous loading | done | Brief 096, Insight-158 | Vercel AI SDK (pattern) | `src/engine/llm.ts` |
+| **Integration Tools + Interaction Recording (Brief 097)** | | | | |
+| CRM built-in tools (send_email, record_interaction, create_person) | done | Brief 097 | tool-resolver builtInTools pattern | `src/engine/tool-resolver.ts` |
+| Atomic send-and-record (`sendAndRecord()`) | done | Brief 097 | Original | `src/engine/channel.ts` |
+| **Pulse Engine + Chain Execution (Brief 098a)** | | | | |
+| `ChainDefinition` type on `ProcessDefinition` | done | Brief 098a | Original (core primitive) | `packages/core/src/harness/harness.ts` |
+| `delayed_runs` table | done | Brief 098a | BullMQ delayed job pattern (SQLite) | `src/db/schema.ts` |
+| Chain executor (variable substitution, delay/schedule/event) | done | Brief 098a | Inngest event fan-out (pattern) | `src/engine/chain-executor.ts` |
+| Pulse — continuous operation loop (cron, configurable interval) | done | Brief 098a | OpenClaw heartbeat (Insight-141, pattern) | `src/engine/pulse.ts` |
+| Trust inheritance for chain-spawned runs | done | Brief 098a AC9 | Original | `src/engine/heartbeat.ts` |
+| Heartbeat → chain processing on completion | done | Brief 098a | Original | `src/engine/heartbeat.ts` |
+| 22 tests (pulse + chain executor) | done | Brief 098a | — | `src/engine/pulse.test.ts` |
+| **Inbound Email + Status Composition (Brief 098b)** | | | | |
+| Inbound email webhook + status composer + weekly briefing | done | Brief 098b | AgentMail webhook pattern | `src/engine/inbound-email.ts`, `src/engine/status-composer.ts`, `src/engine/notify-user.ts`, `src/engine/completion-notifier.ts` |
+| **Communication Intelligence (Brief 099)** | | | | |
+| 099a: Route inbound messages through Self | done | Brief 099 | Self `selfConverse()` pattern | `src/engine/self.ts`, `src/engine/self-context.ts`, `src/engine/inbound-email.ts` |
+| 099b: Adaptive relationship building (relationship-pulse) | done | Brief 099 | `status-composer.ts` `createCompletion()` pattern | `src/engine/relationship-pulse.ts`, `src/engine/pulse.ts`, `cognitive/self.md` |
+| 099c: Workspace graduation + channel transition | done | Brief 099 (depends on 089) | Insight-161 | `src/engine/notify-user.ts`, `src/engine/relationship-pulse.ts`, `src/engine/status-composer.ts` |
+| **Referral Footer — Two-Sided Acquisition (Brief 109)** | | | | |
+| Referral footer in every outgoing email | done | Brief 109, Insight-155 | Standard SaaS referral (pattern) | `src/engine/channel.ts` |
+| Referral click tracking via funnel events | done | Brief 109, Insight-155 | UTM tracking (pattern) | `packages/web/app/welcome/referred/page.tsx`, `src/engine/network-chat.ts` |
+| **Admin Oversight (Brief 108)** | | | | |
+| `adminFeedback` table + `pausedAt` on networkUsers | done | Brief 108, Insight-160 | Intercom/Zendesk admin impersonation (pattern) | `src/db/schema.ts` |
+| Admin dashboard with user health (green/yellow/red) | done | Brief 108 | Original | `src/engine/admin-oversight.ts`, `packages/web/app/admin/page.tsx` |
+| Per-user detail + admin actions (pause/resume/feedback/act-as) | done | Brief 108 | Original | `packages/web/app/admin/users/[userId]/page.tsx` |
+| `notifyAdmin()` + trust downgrade hook | done | Brief 108 | `notifyUser()` pattern (adopt) | `src/engine/notify-admin.ts`, `src/engine/trust.ts` |
+| Pause-flag propagation in pulse pipeline | done | Brief 108 | Original | `src/engine/status-composer.ts`, `src/engine/relationship-pulse.ts` |
+| Admin API routes (users list + user detail/actions) | done | Brief 108 | Existing admin auth pattern | `packages/web/app/api/v1/network/admin/users/` |
+| 12 tests (pause/resume, feedback, dashboard, notify) | done | Brief 108 | — | `src/engine/admin-oversight.test.ts` |
+| **Workspace Suggestion Trigger (Brief 110)** | | | | |
+| `checkWorkspaceReadiness()` — 3 threshold checks | done | Brief 110, Insight-161 | SaaS upgrade prompt pattern | `src/engine/workspace-readiness.ts` |
+| Status composer workspace suggestion integration | done | Brief 110, Insight-161 | Insight-161 (woven communication) | `src/engine/status-composer.ts` |
+| 30-day cooldown + dismissal tracking | done | Brief 110 | `suggestion_dismissals` pattern (adopt) | `src/engine/status-composer.ts` |
+| 20 tests (readiness thresholds + multi-cycle no-nag) | done | Brief 110 | — | `src/engine/workspace-readiness.test.ts`, `src/engine/status-composer.test.ts` |
 | **Network Service Deployment (Briefs 086-089)** | | | | |
-| Brief 086: Network Service deployment (Fly.io) | not started | ADR-025, Brief 086 | Fly.io patterns | — |
+| Brief 086: Network Service deployment (Railway — was Fly.io, needs brief update) | not started | ADR-025, Brief 086 | Railway patterns | — |
 | Brief 088: Network API + Auth | not started | ADR-025, Brief 088 | Standard REST API | — |
 | Brief 089: Workspace Seed + SSE Bridge | not started | ADR-025, Brief 089 | Turso/SSE patterns | — |
 
@@ -654,13 +696,13 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 ### Phase 15: Managed Workspace Infrastructure
 
 **Re-entry condition:** Phase 14 Network Service deployment briefs (086-089) complete
-**Status:** Brief 090 (Workspace Provisioning) complete. Brief 091 (Fleet Upgrades) complete. Phase 15 **complete**.
+**Status:** Brief 090 (Workspace Provisioning) complete. Brief 091 (Fleet Upgrades) complete. Brief 100 (Railway Migration) complete. Phase 15 **complete**. All infrastructure now targets Railway (migrated from Fly.io).
 
 | Capability | Status | Source doc | Build from | Deliverable |
 |-----------|--------|-----------|------------|-------------|
 | **Automated Workspace Provisioning (Brief 090)** | | | | |
 | `managedWorkspaces` table + admin auth | done | Brief 090, ADR-025 | Temporal namespace registry | `src/db/schema.ts` |
-| One-command provisioning via Fly Machines API | done | Brief 090 | Fly.io Machines API | `src/engine/workspace-provisioner.ts` |
+| One-command provisioning via Railway GraphQL API | done | Brief 090, 100 | Railway API (migrated from Fly.io) | `src/engine/workspace-provisioner.ts` |
 | Deep health checks (liveness + readiness) | done | Brief 090 | Kubernetes probe pattern | `packages/web/app/api/healthz/route.ts` |
 | Provisioning rollback on failure | done | Brief 090 | Saga/compensating actions | `src/engine/workspace-provisioner.ts` |
 | Admin CLI (provision, deprovision, fleet) | done | Brief 090 | — | `src/cli/commands/network.ts` |
@@ -669,7 +711,7 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Rate limiting (10 req/min per token) | done | Brief 090 | — | `src/engine/workspace-provisioner.ts` |
 | 14 tests, all passing | done | Brief 090 | — | `src/engine/workspace-provisioner.test.ts` |
 | **Fleet-Wide Workspace Upgrades (Brief 091)** | | | | |
-| `upgradeHistory` + `upgradeWorkspaceResults` tables | done | Brief 091 | Fly.io release history | `src/db/schema.ts` |
+| `upgradeHistory` + `upgradeWorkspaceResults` tables | done | Brief 091 | Railway upgrade history | `src/db/schema.ts` |
 | Canary-first rolling upgrade | done | Brief 091 | Google SRE canary deployment | `src/engine/workspace-upgrader.ts` |
 | Circuit breaker (configurable threshold) | done | Brief 091 | Nygard "Release It!" | `src/engine/workspace-upgrader.ts` |
 | Per-workspace rollback on failure | done | Brief 091 | Saga/compensating actions | `src/engine/workspace-upgrader.ts` |
@@ -680,6 +722,14 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | `/healthz?deep=true` version field | done | Brief 091 | — | `packages/web/app/api/healthz/route.ts` |
 | Idempotent resume | done | Brief 091 | — | `src/engine/workspace-upgrader.ts` |
 | 24 tests, all passing | done | Brief 091 | — | `src/engine/workspace-upgrader.test.ts` |
+| **Railway Migration (Brief 100)** | | | | |
+| `RailwayClient` + `RailwayServiceClient` interfaces | done | Brief 100 | Railway GraphQL API | `src/engine/workspace-provisioner.ts`, `workspace-upgrader.ts` |
+| `service_id`, `railway_environment_id`, `auth_secret_hash` columns | done | Brief 100 | — | `src/db/schema.ts` |
+| SQLite-safe ALTER TABLE migration + backfill | done | Brief 100 | — | `src/db/index.ts` |
+| `NETWORK_AUTH_SECRET` per workspace (magic link readiness) | done | Brief 100 | — | `src/engine/workspace-provisioner.ts` |
+| Two-phase health check (deploy status + deep health) | done | Brief 100 | Railway deploy lifecycle | `src/engine/workspace-provisioner.ts` |
+| Zero Fly.io references (grep-verified) | done | Brief 100 | — | All provisioner/upgrader/admin/CLI files |
+| All admin routes + CLI updated for Railway | done | Brief 100 | — | 7 admin routes, `src/cli/commands/network.ts` |
 
 ---
 

@@ -4,7 +4,7 @@
  * Reverts the most recent upgrade. Each workspace is reverted to its own
  * pre-upgrade image (not a single global image).
  *
- * Provenance: Brief 091, AC17.
+ * Provenance: Brief 091, Brief 100 (Railway migration).
  */
 
 import { NextResponse } from "next/server";
@@ -19,22 +19,22 @@ export async function POST(request: Request) {
 
   try {
     const { db, schema } = await import("../../../../../../../../src/db");
-    const { createWorkspaceUpgrader, createFlyMachinesClient, createHealthChecker, UpgradeConflictError } = await import(
+    const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker, UpgradeConflictError } = await import(
       "../../../../../../../../src/engine/workspace-upgrader"
     );
     const { createAlertSender } = await import(
       "../../../../../../../../src/engine/workspace-alerts"
     );
 
-    const flyClient = createFlyMachinesClient({
-      apiToken: process.env.FLY_API_TOKEN!,
-      appName: process.env.FLY_APP_NAME || "ditto-ws",
+    const railwayClient = createRailwayServiceClient({
+      apiToken: process.env.RAILWAY_API_TOKEN!,
+      projectId: process.env.RAILWAY_PROJECT_ID!,
     });
 
     const upgrader = createWorkspaceUpgrader({
       db: db as any,
       schema,
-      flyClient,
+      railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),
     });

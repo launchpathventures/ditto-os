@@ -119,6 +119,8 @@ function createTables(sqlite: Database.Database): void {
       orchestrator_confidence TEXT,
       definition_override TEXT,
       definition_override_version INTEGER NOT NULL DEFAULT 0,
+      chains_processed INTEGER NOT NULL DEFAULT 0,
+      trust_tier_override TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
@@ -324,6 +326,17 @@ function createTables(sqlite: Database.Database): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
+    CREATE TABLE IF NOT EXISTS delayed_runs (
+      id TEXT PRIMARY KEY,
+      process_slug TEXT NOT NULL,
+      inputs TEXT NOT NULL DEFAULT '{}',
+      execute_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_by_run_id TEXT REFERENCES process_runs(id),
+      parent_trust_tier TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
     CREATE TABLE IF NOT EXISTS people (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -374,11 +387,24 @@ function createTables(sqlite: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'active',
       workspace_id TEXT,
       person_id TEXT REFERENCES people(id),
+      workspace_suggested_at INTEGER,
+      wants_visibility INTEGER NOT NULL DEFAULT 0,
+      paused_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
     CREATE INDEX IF NOT EXISTS network_users_email ON network_users(email);
+
+    CREATE TABLE IF NOT EXISTS admin_feedback (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES network_users(id),
+      feedback TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS admin_feedback_user_id ON admin_feedback(user_id);
 
     CREATE TABLE IF NOT EXISTS network_tokens (
       id TEXT PRIMARY KEY,
@@ -406,6 +432,9 @@ function createTables(sqlite: Database.Database): void {
       last_health_status TEXT,
       error_log TEXT,
       token_id TEXT NOT NULL,
+      service_id TEXT,
+      railway_environment_id TEXT,
+      auth_secret_hash TEXT,
       deprovisioned_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
@@ -497,6 +526,65 @@ function createTables(sqlite: Database.Database): void {
       event TEXT NOT NULL,
       surface TEXT NOT NULL,
       metadata TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS review_pages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      person_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      content_blocks TEXT NOT NULL DEFAULT '[]',
+      chat_messages TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      user_name TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      expires_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      first_accessed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS process_models (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      industry_tags TEXT DEFAULT '[]',
+      function_tags TEXT DEFAULT '[]',
+      complexity TEXT NOT NULL DEFAULT 'moderate',
+      version INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'nominated',
+      source TEXT NOT NULL DEFAULT 'template',
+      process_definition TEXT NOT NULL DEFAULT '{}',
+      quality_criteria TEXT DEFAULT '[]',
+      validation_report TEXT,
+      nominated_by TEXT,
+      approved_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      published_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS budgets (
+      id TEXT PRIMARY KEY,
+      goal_work_item_id TEXT NOT NULL UNIQUE REFERENCES work_items(id),
+      user_id TEXT NOT NULL,
+      total_cents INTEGER NOT NULL,
+      spent_cents INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'created',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS budget_transactions (
+      id TEXT PRIMARY KEY,
+      budget_id TEXT NOT NULL REFERENCES budgets(id),
+      type TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      description TEXT,
+      sub_goal_id TEXT,
+      stripe_payment_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
   `);

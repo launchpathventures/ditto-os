@@ -1,8 +1,8 @@
 /**
- * Tests for workspace provisioner.
- * Uses a mock FlyClient — no real Fly.io API calls.
+ * Tests for workspace provisioner (Railway).
+ * Uses a mock RailwayClient — no real Railway API calls.
  *
- * Provenance: Brief 090 AC 5-8, 12, 16.
+ * Provenance: Brief 090 AC 5-8, 12, 16. Brief 100 (Railway migration).
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -10,82 +10,87 @@ import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
 import { eq } from "drizzle-orm";
 import type {
-  FlyClient,
-  FlyVolume,
-  FlyMachine,
+  RailwayClient,
+  RailwayService,
+  RailwayVolume,
+  RailwayDomain,
+  RailwayDeployment,
   ProvisionerConfig,
 } from "./workspace-provisioner";
 
 // ============================================================
-// Mock Fly Client
+// Mock Railway Client
 // ============================================================
 
-function createMockFlyClient(overrides: Partial<FlyClient> = {}): FlyClient & {
-  volumes: Map<string, FlyVolume>;
-  machines: Map<string, FlyMachine>;
+function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): RailwayClient & {
+  services: Map<string, RailwayService>;
+  volumes: Map<string, RailwayVolume>;
   calls: string[];
 } {
-  const volumes = new Map<string, FlyVolume>();
-  const machines = new Map<string, FlyMachine>();
+  const services = new Map<string, RailwayService>();
+  const volumes = new Map<string, RailwayVolume>();
   const calls: string[] = [];
+  let serviceCounter = 0;
   let volumeCounter = 0;
-  let machineCounter = 0;
 
   return {
+    services,
     volumes,
-    machines,
     calls,
 
-    async createVolume(_appName, name, region, sizeGb) {
-      calls.push("createVolume");
-      const vol: FlyVolume = {
-        id: `vol_${++volumeCounter}`,
+    async getEnvironmentId() {
+      calls.push("getEnvironmentId");
+      return "env_prod_1";
+    },
+
+    async createService(_projectId, name) {
+      calls.push("createService");
+      const svc: RailwayService = {
+        id: `svc_${++serviceCounter}`,
         name,
-        region,
-        size_gb: sizeGb,
-        state: "created",
+      };
+      services.set(svc.id, svc);
+      return svc;
+    },
+
+    async deleteService(serviceId) {
+      calls.push("deleteService");
+      services.delete(serviceId);
+    },
+
+    async createVolume(serviceId, mountPath) {
+      calls.push("createVolume");
+      const vol: RailwayVolume = {
+        id: `vol_${++volumeCounter}`,
+        name: `volume-${serviceId}`,
       };
       volumes.set(vol.id, vol);
       return vol;
     },
 
-    async destroyVolume(_appName, volumeId) {
-      calls.push("destroyVolume");
+    async deleteVolume(volumeId) {
+      calls.push("deleteVolume");
       volumes.delete(volumeId);
     },
 
-    async createMachine(_appName, name, _config, region) {
-      calls.push("createMachine");
-      const machine: FlyMachine = {
-        id: `mach_${++machineCounter}`,
-        name,
-        state: "created",
-        region,
-        instance_id: `inst_${machineCounter}`,
-      };
-      machines.set(machine.id, machine);
-      return machine;
+    async upsertVariables() {
+      calls.push("upsertVariables");
     },
 
-    async startMachine(_appName, machineId) {
-      calls.push("startMachine");
-      const m = machines.get(machineId);
-      if (m) m.state = "started";
+    async deployService(serviceId, environmentId) {
+      calls.push("deployService");
+      return { id: `deploy_1`, status: "ACTIVE" } as RailwayDeployment;
     },
 
-    async stopMachine(_appName, machineId) {
-      calls.push("stopMachine");
-      const m = machines.get(machineId);
-      if (m) m.state = "stopped";
+    async createDomain(serviceId, environmentId) {
+      calls.push("createDomain");
+      const name = Array.from(services.values()).find((s) => s.id === serviceId)?.name ?? serviceId;
+      return { id: `dom_1`, domain: `${name}.up.railway.app` } as RailwayDomain;
     },
 
-    async destroyMachine(_appName, machineId) {
-      calls.push("destroyMachine");
-      machines.delete(machineId);
-    },
-
-    async waitForMachine() {
-      calls.push("waitForMachine");
+    async getDeploymentStatus(deploymentId) {
+      calls.push("getDeploymentStatus");
+      return { id: deploymentId, status: "ACTIVE" } as RailwayDeployment;
     },
 
     ...overrides,
@@ -145,16 +150,16 @@ describe("workspace-provisioner", () => {
     cleanup();
   });
 
-  function makeConfig(flyClient: FlyClient, overrides: Partial<ProvisionerConfig> = {}): ProvisionerConfig {
+  function makeConfig(railwayClient: RailwayClient, overrides: Partial<ProvisionerConfig> = {}): ProvisionerConfig {
     return {
-      flyClient,
-      flyAppName: "ditto-test",
-      flyRegion: "syd",
-      imageRef: "registry.fly.io/ditto:latest",
-      networkUrl: "https://ditto-network.fly.dev",
+      railwayClient,
+      projectId: "proj_test_1",
+      imageRef: "ghcr.io/ditto/workspace:latest",
+      networkUrl: "https://ditto-network.up.railway.app",
       db: db as unknown as typeof import("../db").db,
       healthCheckTimeoutMs: 500,
       healthCheckIntervalMs: 50,
+      deployPollIntervalMs: 50,
       ...overrides,
     };
   }
@@ -166,14 +171,14 @@ describe("workspace-provisioner", () => {
   describe("provisionWorkspace", () => {
     it("provisions a new workspace end-to-end", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       const result = await provisionWorkspace("user-1", config);
 
       expect(result.status).toBe("created");
-      expect(result.workspaceUrl).toBe("https://ditto-ws-user-1.fly.dev");
-      expect(result.machineId).toBe("mach_1");
+      expect(result.workspaceUrl).toBe("https://ditto-ws-user-1.up.railway.app");
+      expect(result.serviceId).toBe("svc_1");
       expect(result.volumeId).toBe("vol_1");
       expect(result.tokenId).toBe("tok_1");
 
@@ -186,52 +191,60 @@ describe("workspace-provisioner", () => {
 
       expect(record).toBeDefined();
       expect(record.status).toBe("healthy");
-      expect(record.machineId).toBe("mach_1");
+      expect(record.serviceId).toBe("svc_1");
+      expect(record.machineId).toBe("svc_1"); // backward compat
       expect(record.volumeId).toBe("vol_1");
-      expect(record.region).toBe("syd");
-      expect(record.imageRef).toBe("registry.fly.io/ditto:latest");
+      expect(record.railwayEnvironmentId).toBe("env_prod_1");
+      expect(record.authSecretHash).toBeDefined();
+      expect(record.authSecretHash!.length).toBe(64); // SHA-256 hex
+      expect(record.imageRef).toBe("ghcr.io/ditto/workspace:latest");
 
-      // Verify Fly API call order
-      expect(flyClient.calls).toEqual([
+      // Verify Railway API call order
+      expect(railwayClient.calls).toEqual([
+        "getEnvironmentId",
+        "createService",
         "createVolume",
-        "createMachine",
-        "startMachine",
+        "upsertVariables",
+        "deployService",
+        "createDomain",
+        "getDeploymentStatus",
       ]);
     });
 
     it("returns existing workspace if healthy (idempotent)", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       // First provision
       const first = await provisionWorkspace("user-1", config);
       expect(first.status).toBe("created");
 
-      // Reset fly calls
-      flyClient.calls.length = 0;
+      // Reset calls
+      railwayClient.calls.length = 0;
 
       // Second provision — should be idempotent
       const second = await provisionWorkspace("user-1", config);
       expect(second.status).toBe("existing");
       expect(second.workspaceUrl).toBe(first.workspaceUrl);
 
-      // No Fly API calls should have been made
-      expect(flyClient.calls).toHaveLength(0);
+      // No Railway API calls should have been made
+      expect(railwayClient.calls).toHaveLength(0);
     });
 
     it("cleans up stale provisioning record before re-provisioning", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       // Insert a degraded record
       await db.insert(schema.managedWorkspaces).values({
         userId: "user-1",
-        machineId: "old-mach",
+        machineId: "old-svc",
+        serviceId: "old-svc",
         volumeId: "old-vol",
-        workspaceUrl: "https://old.fly.dev",
-        region: "syd",
+        workspaceUrl: "https://old.up.railway.app",
+        region: "railway",
         imageRef: "old-image",
         status: "degraded",
         tokenId: "old-tok",
@@ -249,21 +262,22 @@ describe("workspace-provisioner", () => {
 
       expect(records).toHaveLength(1);
       expect(records[0].status).toBe("healthy");
-      expect(records[0].machineId).toBe("mach_1");
+      expect(records[0].serviceId).toBe("svc_1");
     });
 
     it("cleans up stale 'provisioning' record before re-provisioning", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       // Insert a stale provisioning record (e.g. previous attempt crashed)
       await db.insert(schema.managedWorkspaces).values({
         userId: "user-1",
-        machineId: "stale-mach",
+        machineId: "stale-svc",
+        serviceId: "stale-svc",
         volumeId: "stale-vol",
-        workspaceUrl: "https://stale.fly.dev",
-        region: "syd",
+        workspaceUrl: "https://stale.up.railway.app",
+        region: "railway",
         imageRef: "stale-image",
         status: "provisioning",
         tokenId: "stale-tok",
@@ -281,12 +295,10 @@ describe("workspace-provisioner", () => {
 
       expect(records).toHaveLength(1);
       expect(records[0].status).toBe("healthy");
-      expect(records[0].machineId).toBe("mach_1");
+      expect(records[0].serviceId).toBe("svc_1");
 
       // Cleanup calls should include stale resource teardown
-      expect(flyClient.calls).toContain("stopMachine");
-      expect(flyClient.calls).toContain("destroyMachine");
-      expect(flyClient.calls).toContain("destroyVolume");
+      expect(railwayClient.calls).toContain("deleteService");
     });
 
     it("rolls back all resources on health check failure", async () => {
@@ -298,21 +310,18 @@ describe("workspace-provisioner", () => {
         json: async () => ({ status: "error" }),
       });
 
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
         "Health check failed after",
       );
 
-      // Verify rollback happened
-      expect(flyClient.calls).toContain("stopMachine");
-      expect(flyClient.calls).toContain("destroyMachine");
-      expect(flyClient.calls).toContain("destroyVolume");
+      // Verify rollback happened — service deleted (cascades volume)
+      expect(railwayClient.calls).toContain("deleteService");
 
-      // Volume and machine should be cleaned up
-      expect(flyClient.volumes.size).toBe(0);
-      expect(flyClient.machines.size).toBe(0);
+      // Service should be cleaned up
+      expect(railwayClient.services.size).toBe(0);
 
       // Token should be revoked
       const tokenEntry = Array.from(mockTokens.values())[0];
@@ -326,18 +335,18 @@ describe("workspace-provisioner", () => {
       expect(records).toHaveLength(0);
     }, 15_000);
 
-    it("rolls back on volume creation failure", async () => {
+    it("rolls back on service creation failure", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
 
-      const flyClient = createMockFlyClient({
-        createVolume: async () => {
-          throw new Error("Volume creation failed");
+      const railwayClient = createMockRailwayClient({
+        createService: async () => {
+          throw new Error("Service creation failed");
         },
       });
-      const config = makeConfig(flyClient);
+      const config = makeConfig(railwayClient);
 
       await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
-        "Volume creation failed",
+        "Service creation failed",
       );
 
       // Nothing should have been created
@@ -348,26 +357,22 @@ describe("workspace-provisioner", () => {
       expect(records).toHaveLength(0);
     });
 
-    it("rolls back on machine creation failure", async () => {
+    it("rolls back on volume creation failure", async () => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
 
-      const flyClient = createMockFlyClient({
-        createMachine: async () => {
-          throw new Error("Machine creation failed");
+      const railwayClient = createMockRailwayClient({
+        createVolume: async () => {
+          throw new Error("Volume creation failed");
         },
       });
-      const config = makeConfig(flyClient);
+      const config = makeConfig(railwayClient);
 
       await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
-        "Machine creation failed",
+        "Volume creation failed",
       );
 
-      // Volume should be cleaned up
-      expect(flyClient.volumes.size).toBe(0);
-
-      // Token should be revoked
-      const tokenEntry = Array.from(mockTokens.values())[0];
-      expect(tokenEntry?.revoked).toBe(true);
+      // Service should be cleaned up by rollback
+      expect(railwayClient.services.size).toBe(0);
     });
   });
 
@@ -380,12 +385,12 @@ describe("workspace-provisioner", () => {
       const { provisionWorkspace, deprovisionWorkspace } = await import(
         "./workspace-provisioner"
       );
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       // Provision first
       await provisionWorkspace("user-1", config);
-      flyClient.calls.length = 0;
+      railwayClient.calls.length = 0;
 
       // Deprovision
       const result = await deprovisionWorkspace("user-1", config);
@@ -393,10 +398,8 @@ describe("workspace-provisioner", () => {
       expect(result.status).toBe("deprovisioned");
       expect(result.userId).toBe("user-1");
 
-      // Verify Fly calls
-      expect(flyClient.calls).toContain("stopMachine");
-      expect(flyClient.calls).toContain("destroyMachine");
-      expect(flyClient.calls).toContain("destroyVolume");
+      // Verify Railway calls — service delete cascades volume
+      expect(railwayClient.calls).toContain("deleteService");
 
       // Verify DB record updated
       const [record] = await db
@@ -411,8 +414,8 @@ describe("workspace-provisioner", () => {
 
     it("throws for non-existent workspace", async () => {
       const { deprovisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       await expect(deprovisionWorkspace("nonexistent", config)).rejects.toThrow(
         "No managed workspace found",
@@ -421,16 +424,17 @@ describe("workspace-provisioner", () => {
 
     it("throws for already deprovisioned workspace", async () => {
       const { deprovisionWorkspace } = await import("./workspace-provisioner");
-      const flyClient = createMockFlyClient();
-      const config = makeConfig(flyClient);
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
 
       // Insert a deprovisioned record
       await db.insert(schema.managedWorkspaces).values({
         userId: "user-1",
-        machineId: "mach-1",
+        machineId: "svc-1",
+        serviceId: "svc-1",
         volumeId: "vol-1",
-        workspaceUrl: "https://test.fly.dev",
-        region: "syd",
+        workspaceUrl: "https://test.up.railway.app",
+        region: "railway",
         imageRef: "test-image",
         status: "deprovisioned",
         tokenId: "tok-1",
@@ -448,16 +452,17 @@ describe("workspace-provisioner", () => {
   // ============================================================
 
   describe("getFleetStatus", () => {
-    it("returns all non-deprovisioned workspaces", async () => {
+    it("returns all non-deprovisioned workspaces with serviceId", async () => {
       const { getFleetStatus } = await import("./workspace-provisioner");
 
       // Insert workspaces
       await db.insert(schema.managedWorkspaces).values({
         userId: "user-1",
-        machineId: "mach-1",
+        machineId: "svc-1",
+        serviceId: "svc-1",
         volumeId: "vol-1",
-        workspaceUrl: "https://ws1.fly.dev",
-        region: "syd",
+        workspaceUrl: "https://ws1.up.railway.app",
+        region: "railway",
         imageRef: "img:1",
         status: "healthy",
         tokenId: "tok-1",
@@ -465,10 +470,11 @@ describe("workspace-provisioner", () => {
 
       await db.insert(schema.managedWorkspaces).values({
         userId: "user-2",
-        machineId: "mach-2",
+        machineId: "svc-2",
+        serviceId: "svc-2",
         volumeId: "vol-2",
-        workspaceUrl: "https://ws2.fly.dev",
-        region: "syd",
+        workspaceUrl: "https://ws2.up.railway.app",
+        region: "railway",
         imageRef: "img:1",
         status: "deprovisioned",
         tokenId: "tok-2",
@@ -480,6 +486,7 @@ describe("workspace-provisioner", () => {
       expect(fleet).toHaveLength(1);
       expect(fleet[0].userId).toBe("user-1");
       expect(fleet[0].status).toBe("healthy");
+      expect(fleet[0].serviceId).toBe("svc-1");
     });
   });
 
@@ -512,7 +519,7 @@ describe("workspace-provisioner", () => {
   });
 
   // ============================================================
-  // Self-hosted unaffected (AC16)
+  // Self-hosted unaffected
   // ============================================================
 
   describe("self-hosted unaffected", () => {

@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 let testDb: TestDb;
@@ -36,7 +37,7 @@ vi.mock("./llm", async () => {
 });
 
 // Import after mock
-const { loadWorkStateSummary, loadSelfMemories, loadSessionTurns, getOrCreateSession, appendSessionTurn, SESSION_IDLE_TIMEOUT_MS, recordSelfDecision, recordSelfCorrection, detectSelfRedirect } = await import("./self-context");
+const { loadWorkStateSummary, loadSelfMemories, loadSessionTurns, getOrCreateSession, appendSessionTurn, SESSION_IDLE_TIMEOUT_MS, INBOUND_SESSION_IDLE_TIMEOUT_MS, recordSelfDecision, recordSelfCorrection, detectSelfRedirect } = await import("./self-context");
 const { selfTools, executeDelegation } = await import("./self-delegation");
 const { assembleSelfContext } = await import("./self");
 
@@ -959,5 +960,106 @@ describe("standalone YAML structure (Brief 031)", () => {
       const def = yaml.parse(content);
       expect(def.version).toBe(2);
     }
+  });
+});
+
+// ============================================================
+// Brief 099a: Inbound surface support
+// ============================================================
+
+describe("inbound surface (099a)", () => {
+  it("assembleSelfContext accepts 'inbound' surface (AC2)", async () => {
+    const userId = randomUUID();
+    const context = await assembleSelfContext(userId, "inbound");
+    expect(context.systemPrompt).toBeTruthy();
+    expect(context.sessionId).toBeTruthy();
+  });
+
+  it("suppresses delegation_guidance for inbound surface (AC4)", async () => {
+    const userId = randomUUID();
+    const context = await assembleSelfContext(userId, "inbound");
+
+    // Should NOT contain workspace-specific delegation guidance
+    expect(context.systemPrompt).not.toContain("WORKSPACE CONDUCTOR");
+    expect(context.systemPrompt).not.toContain("process builder panel activates");
+    expect(context.systemPrompt).not.toContain("WORKSPACE MODE TRANSITIONS");
+
+    // Should contain inbound-appropriate guidance
+    expect(context.systemPrompt).toContain("asynchronous inbound message");
+    expect(context.systemPrompt).toContain("Bias toward action");
+  });
+
+  it("includes delegation_guidance for web surface", async () => {
+    const userId = randomUUID();
+    const context = await assembleSelfContext(userId, "web");
+
+    // Should contain workspace-specific guidance
+    expect(context.systemPrompt).toContain("WORKSPACE CONDUCTOR");
+    expect(context.systemPrompt).not.toContain("asynchronous inbound message");
+  });
+
+  it("getOrCreateSession scopes inbound sessions separately (AC3)", async () => {
+    const userId = randomUUID();
+
+    // Create a web session
+    const webSession = await getOrCreateSession(userId, "web");
+    expect(webSession.resumed).toBe(false);
+
+    // Create an inbound session — should NOT resume the web session
+    const inboundSession = await getOrCreateSession(userId, "inbound");
+    expect(inboundSession.resumed).toBe(false);
+    expect(inboundSession.sessionId).not.toBe(webSession.sessionId);
+
+    // Resume the inbound session — should find its own session
+    const inboundResume = await getOrCreateSession(userId, "inbound");
+    expect(inboundResume.resumed).toBe(true);
+    expect(inboundResume.sessionId).toBe(inboundSession.sessionId);
+
+    // Web session should resume its own session (not the inbound one)
+    const webResume = await getOrCreateSession(userId, "web");
+    expect(webResume.resumed).toBe(true);
+    expect(webResume.sessionId).toBe(webSession.sessionId);
+  });
+
+  it("inbound session does not contaminate web session history", async () => {
+    const userId = randomUUID();
+
+    // Create and populate a web session
+    const webSession = await getOrCreateSession(userId, "web");
+    await appendSessionTurn(webSession.sessionId, {
+      role: "user",
+      content: "Hello from workspace",
+      timestamp: Date.now(),
+      surface: "web",
+    });
+
+    // Create inbound session — should be fresh, no web turns
+    const inboundSession = await getOrCreateSession(userId, "inbound");
+    const inboundTurns = await loadSessionTurns(inboundSession.sessionId);
+    expect(inboundTurns).toHaveLength(0);
+  });
+
+  it("inbound sessions use 24h timeout, not 30min (Flag 2 fix)", async () => {
+    // Verify the constants are correct
+    expect(INBOUND_SESSION_IDLE_TIMEOUT_MS).toBe(24 * 60 * 60 * 1000);
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000);
+    expect(INBOUND_SESSION_IDLE_TIMEOUT_MS).toBeGreaterThan(SESSION_IDLE_TIMEOUT_MS);
+
+    const userId = randomUUID();
+
+    // Create an inbound session
+    const session1 = await getOrCreateSession(userId, "inbound");
+
+    // Simulate 2 hours passing by updating lastActiveAt
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await testDb
+      .update(schema.sessions)
+      .set({ lastActiveAt: twoHoursAgo })
+      .where(eq(schema.sessions.id, session1.sessionId));
+
+    // Should still resume — 2h < 24h timeout
+    const session2 = await getOrCreateSession(userId, "inbound");
+    expect(session2.resumed).toBe(true);
+    expect(session2.sessionId).toBe(session1.sessionId);
   });
 });

@@ -242,7 +242,7 @@ The Cognitive Framework is **not static**. It evolves through Feedback & Evoluti
 
 ### 7. Map system agents to meta processes
 
-The existing ten system agents (ADR-008) are implementations of meta process functions:
+The system agents (ADR-008) are implementations of meta process functions:
 
 | System Agent | Meta Process | Role Within |
 |---|---|---|
@@ -256,8 +256,9 @@ The existing ten system agents (ADR-008) are implementations of meta process fun
 | brief-synthesizer | Execution (+ Goal Framing) | Produces Daily Brief |
 | improvement-scanner | Feedback & Evolution | Detects degradation, proposes improvements |
 | governance-monitor | Feedback & Evolution | Watches for governance violations |
+| process-validator | Build (+ Feedback) | Validates process models before library publication (Brief 104) |
 
-No new system agents are introduced. The meta process architecture organizes and elevates the existing agents into coherent higher-order processes.
+New system agents may be introduced when warranted by evidence (e.g., process-validator was added in Brief 104 when the library curation pipeline required quality gating). The meta process architecture organizes agents into coherent higher-order processes.
 
 ### 8. Define the validation path: this repo first
 

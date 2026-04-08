@@ -22,6 +22,7 @@ import { checkSignificanceThreshold } from "../system-agents/knowledge-extractor
 
 export const feedbackRecorderHandler: HarnessHandler = {
   name: "feedback-recorder",
+  alwaysRun: true,
 
   canHandle(_context: HarnessContext): boolean {
     // Always runs — records decisions for all steps, including failures

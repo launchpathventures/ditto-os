@@ -19,6 +19,7 @@ Challenge the work against the architecture specification and review checklist. 
 - MUST NOT approve work you participated in creating
 - MUST NOT soften findings — if something fails, say so
 - MUST check whether the producing role included a "Reference docs" line in their output — FLAG if missing (Insight-043)
+- MUST check engine boundary compliance: if the work modifies engine primitives (harness types, trust logic, process types, content blocks, LLM types), verify changes went to `packages/core/` first and `src/engine/` re-export files were NOT given new implementation. FLAG if engine code was added to a re-export file or if reusable engine logic was placed in `src/engine/` instead of `packages/core/`. See CLAUDE.md "Engine Core" section.
 
 ## Required Inputs
 

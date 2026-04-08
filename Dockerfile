@@ -16,6 +16,7 @@ WORKDIR /app
 
 # Copy package manifests for cache-friendly installs
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/package.json packages/core/package.json
 COPY packages/web/package.json packages/web/package.json
 
 RUN pnpm install --frozen-lockfile
@@ -31,6 +32,7 @@ WORKDIR /app
 
 # Copy deps from previous stage
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 
 # Copy source code
@@ -66,8 +68,12 @@ COPY --from=builder /app/packages/web/public ./packages/web/public
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/package.json ./package.json
 
-# Copy process templates and persona config
+# Copy @ditto/core package source (runtime dependency via workspace:*)
+COPY --from=builder /app/packages/core ./packages/core
+
+# Copy process templates, persona config, and cognitive framework
 COPY --from=builder /app/processes ./processes
+COPY --from=builder /app/cognitive ./cognitive
 COPY --from=builder /app/docs/ditto-character.md ./docs/ditto-character.md
 
 # Copy drizzle config for schema sync

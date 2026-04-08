@@ -19,6 +19,7 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
+import { getCognitiveCore } from "./cognitive-core";
 import {
   createCompletion,
   extractText,
@@ -67,28 +68,34 @@ export interface SelfContext {
  * Assemble the Self's operating context for a conversation turn.
  *
  * Loads and combines:
- * 1. Cognitive framework (cognitive/self.md) — core identity
- * 2. Self-scoped memories — user knowledge, preferences, corrections
- * 3. Work state summary — active runs, pending reviews, recent activity
- * 4. Session state — new/resumed, previous session summary if relevant
+ * 1. Cognitive core (cognitive/core.md) — universal judgment layer
+ * 2. Workspace extensions (cognitive/self.md) — workspace-specific context
+ * 3. Self-scoped memories — user knowledge, preferences, corrections
+ * 4. Work state summary — active runs, pending reviews, recent activity
+ * 5. Session state — new/resumed, previous session summary if relevant
  *
- * Total always-loaded content fits within ~6K tokens.
+ * Total always-loaded content fits within ~7K tokens.
  *
  * AC1: Returns structured system prompt with all context tiers.
  */
 export async function assembleSelfContext(
   userId: string,
-  surface: "cli" | "telegram" | "web",
+  surface: "cli" | "telegram" | "web" | "inbound",
 ): Promise<SelfContext> {
-  // 1. Load cognitive framework
+  // 1. Load cognitive core (universal judgment) + workspace extensions
+  // Note: Prior to 099a, only self.md was loaded. self.md's own header says
+  // "Core judgment (cognitive/core.md) is loaded separately and always present"
+  // — this was a pre-existing gap. Now correctly loading both for all surfaces.
   let cognitiveFramework: string;
   try {
-    cognitiveFramework = readFileSync(
+    const core = getCognitiveCore();
+    const workspaceExtensions = readFileSync(
       join(process.cwd(), "cognitive", "self.md"),
       "utf-8",
     );
+    cognitiveFramework = core + "\n\n" + workspaceExtensions;
   } catch {
-    cognitiveFramework = "You are Ditto. A competent, persistent entity that helps work evolve.";
+    cognitiveFramework = getCognitiveCore();
   }
 
   // 2. Load self-scoped memories (budget: ~1K tokens of the 6K total)
@@ -126,8 +133,31 @@ export async function assembleSelfContext(
   );
 
   // Delegation guidance — when to use tools vs respond directly
-  sections.push(
-    `<delegation_guidance>
+  // For inbound surface: suppress workspace-specific guidance (panels, artifact mode,
+  // process builder) and replace with async-appropriate instructions (AC4, Reviewer Flag A2)
+  if (surface === "inbound") {
+    sections.push(
+      `<delegation_guidance>
+This is an asynchronous inbound message (email/voice). Respond concisely and actionably. Do not reference workspace UI, panels, artifact mode, or process builder — the user is not in a workspace.
+
+**Your tools still work.** Use them to take action on the user's behalf:
+- create_work_item: When the user asks you to do something
+- start_pipeline / start_dev_role: When the user requests work that needs a process
+- get_briefing: When the user asks for a status update
+- update_user_model: When you learn something about the user
+- quick_capture: When the user shares a note or observation
+- generate_process: When the user describes a recurring need (draft and describe it — they can't see a panel)
+
+**Bias toward action over clarifying questions.** The user sent a message and is waiting for a response — likely hours from now. Make reasonable assumptions, start the work, and mention what you assumed. One round-trip is expensive in async channels.
+
+**When you start a process:** Mention what you started and the expected timeline ("I've kicked off research — expect results within 24 hours").
+
+**Confirmation model:** For irreversible actions (trust changes, process saves), describe what you plan to do and ask for confirmation. The user will reply when they're ready.
+</delegation_guidance>`,
+    );
+  } else {
+    sections.push(
+      `<delegation_guidance>
 You have tools to delegate work, manage processes, and help the user build their workspace.
 
 **YOU ARE A WORKSPACE CONDUCTOR, NOT A CHATBOT.**
@@ -216,7 +246,8 @@ These tools are IRREVERSIBLE and require explicit user confirmation before execu
 - connect_service action='guide' (shows credential input — user controls submission)
 For these tools, always: (1) present what you intend to do, (2) show the evidence/preview, (3) wait for the user to explicitly say "yes", "go ahead", "do it", or similar. Never assume confirmation from ambiguous input.
 </delegation_guidance>`,
-  );
+    );
+  }
 
   // Onboarding and coaching guidance (Insight-093, AC9, AC10)
   sections.push(
@@ -335,7 +366,7 @@ export interface SelfConverseCallbacks {
 export async function selfConverse(
   userId: string,
   message: string,
-  surface: "cli" | "telegram" | "web",
+  surface: "cli" | "telegram" | "web" | "inbound",
   callbacks?: SelfConverseCallbacks,
 ): Promise<SelfConverseResult> {
   // 1. Assemble context

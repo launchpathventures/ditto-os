@@ -104,6 +104,64 @@ tools:
 }
 
 describe("tool-resolver", () => {
+  // ============================================================
+  // CRM Built-in Tools (Brief 097)
+  // ============================================================
+
+  describe("CRM built-in tools", () => {
+    it("resolves crm.send_email as a built-in tool", () => {
+      const result = resolveTools(["crm.send_email"]);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe("crm_send_email");
+      expect(result.tools[0].input_schema.required).toContain("to");
+      expect(result.tools[0].input_schema.required).toContain("subject");
+      expect(result.tools[0].input_schema.required).toContain("body");
+      expect(result.tools[0].input_schema.required).toContain("personId");
+      expect(result.tools[0].input_schema.required).toContain("mode");
+    });
+
+    it("resolves crm.record_interaction as a built-in tool", () => {
+      const result = resolveTools(["crm.record_interaction"]);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe("crm_record_interaction");
+      expect(result.tools[0].input_schema.required).toContain("personId");
+      expect(result.tools[0].input_schema.required).toContain("type");
+      expect(result.tools[0].input_schema.required).toContain("mode");
+    });
+
+    it("resolves crm.create_person as a built-in tool", () => {
+      const result = resolveTools(["crm.create_person"]);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe("crm_create_person");
+      expect(result.tools[0].input_schema.required).toContain("name");
+    });
+
+    it("resolves all three CRM tools together", () => {
+      const result = resolveTools(["crm.send_email", "crm.record_interaction", "crm.create_person"]);
+      expect(result.tools).toHaveLength(3);
+      const names = result.tools.map(t => t.name);
+      expect(names).toContain("crm_send_email");
+      expect(names).toContain("crm_record_interaction");
+      expect(names).toContain("crm_create_person");
+    });
+
+    it("resolves CRM tools alongside integration registry tools", () => {
+      setupGithubIntegration();
+      const result = resolveTools(["crm.send_email", "github.search_issues"], tmpDir);
+      expect(result.tools).toHaveLength(2);
+      expect(result.tools.map(t => t.name)).toContain("crm_send_email");
+      expect(result.tools.map(t => t.name)).toContain("github.search_issues");
+    });
+
+    it("dispatches CRM tool via executeIntegrationTool using LLM name", async () => {
+      // This tests the dispatch path (actual execution requires DB, but the lookup path works)
+      const result = resolveTools(["crm.create_person"]);
+      // The tool is in the builtInMap via its definition.name
+      const builtInNames = result.tools.map(t => t.name);
+      expect(builtInNames).toContain("crm_create_person");
+    });
+  });
+
   describe("resolveTools", () => {
     it("resolves valid CLI-backed tools into LlmToolDefinitions", () => {
       setupGithubIntegration();

@@ -34,13 +34,13 @@ interface Message {
 
 const INTRO_MESSAGES: Message[] = [
   { role: "alex", text: "Hey, I\u2019m Alex." },
-  { role: "alex", text: "I\u2019m an AI advisor — think of me as the person in your corner who knows everyone. What are you working on?" },
+  { role: "alex", text: "I\u2019m an AI advisor at Ditto. Tell me what you\u2019re working on and I\u2019ll figure out how I can help." },
 ];
 
 const FRONT_DOOR_PILLS = [
   "I need more clients",
+  "I need help organizing my work",
   "I\u2019m stuck on a problem",
-  "I need to meet the right people",
 ];
 
 const SESSION_KEY = "ditto-chat-session";
@@ -62,6 +62,7 @@ export function DittoConversation() {
   const [emailCaptured, setEmailCaptured] = useState(false);
   const [done, setDone] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [detectedMode, setDetectedMode] = useState<"connector" | "cos" | "both" | null>(null);
 
   // Error state
   const [errorFallback, setErrorFallback] = useState(false);
@@ -72,23 +73,56 @@ export function DittoConversation() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Test mode flag — when set, every page load is a fresh new user
+  const [testMode, setTestMode] = useState(false);
+
   // Returning visitor — instant greeting, no API call. LLM kicks in when they type.
   useEffect(() => {
-    const savedEmail = localStorage.getItem(EMAIL_KEY);
-    const savedSession = localStorage.getItem(SESSION_KEY);
-    if (savedEmail) {
-      setEmailCaptured(true);
-      setShowIntro(false);
-      if (savedSession) setSessionId(savedSession);
-      setMessages([
-        { role: "alex", text: "Hey again." },
-        { role: "alex", text: "Check your inbox \u2014 that\u2019s where I work. Need anything else? I\u2019m here." },
-      ]);
-      return;
-    }
-    if (savedSession) {
-      setSessionId(savedSession);
-    }
+    // Check test mode — clear saved state so every visit is fresh
+    fetch("/api/v1/network/chat/config")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.testMode) {
+          setTestMode(true);
+          localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(EMAIL_KEY);
+          return; // Fresh start — skip returning user flow
+        }
+        // Normal mode — restore returning user state
+        const savedEmail = localStorage.getItem(EMAIL_KEY);
+        const savedSession = localStorage.getItem(SESSION_KEY);
+        if (savedEmail) {
+          setEmailCaptured(true);
+          setShowIntro(false);
+          if (savedSession) setSessionId(savedSession);
+          setMessages([
+            { role: "alex", text: "Hey again." },
+            { role: "alex", text: "Check your inbox \u2014 that\u2019s where I work. Need anything else? I\u2019m here." },
+          ]);
+          return;
+        }
+        if (savedSession) {
+          setSessionId(savedSession);
+        }
+      })
+      .catch(() => {
+        // Config endpoint unavailable — use normal flow
+        const savedEmail = localStorage.getItem(EMAIL_KEY);
+        const savedSession = localStorage.getItem(SESSION_KEY);
+        if (savedEmail) {
+          setEmailCaptured(true);
+          setShowIntro(false);
+          if (savedSession) setSessionId(savedSession);
+          setMessages([
+            { role: "alex", text: "Hey again." },
+            { role: "alex", text: "Check your inbox \u2014 that\u2019s where I work. Need anything else? I\u2019m here." },
+          ]);
+          return;
+        }
+        if (savedSession) {
+          setSessionId(savedSession);
+        }
+      });
   }, []);
 
   // Stagger intro messages
@@ -134,7 +168,7 @@ export function DittoConversation() {
     try {
       // Pass returning user's email so backend knows context
       const savedEmail = emailCaptured ? localStorage.getItem(EMAIL_KEY) : null;
-      const res = await fetch("/api/v1/network/chat", {
+      const res = await fetch("/api/v1/network/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -148,7 +182,7 @@ export function DittoConversation() {
       if (!res.ok) {
         if (res.status === 429) {
           const data = await res.json();
-          setMessages((prev) => [...prev, { role: "alex", text: data.reply }]);
+          setMessages((prev) => [...prev, { role: "alex", text: data.reply || data.error }]);
           setRequestEmail(true);
           setLoading(false);
           return;
@@ -156,32 +190,85 @@ export function DittoConversation() {
         throw new Error("API error");
       }
 
-      const data = await res.json();
+      // Stream SSE response
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No stream");
 
-      // Store sessionId
-      if (data.sessionId) {
-        setSessionId(data.sessionId);
-        localStorage.setItem(SESSION_KEY, data.sessionId);
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamedText = "";
+      let alexMsgAdded = false;
+
+      while (true) {
+        const { done: readerDone, value } = await reader.read();
+        if (readerDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6);
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === "session" && event.sessionId) {
+              setSessionId(event.sessionId);
+              if (!testMode) localStorage.setItem(SESSION_KEY, event.sessionId);
+              if (event.testMode) setTestMode(true);
+            }
+
+            if (event.type === "text-delta") {
+              streamedText += event.text;
+              if (!alexMsgAdded) {
+                // Add a new Alex message with streaming text
+                alexMsgAdded = true;
+                setMessages((prev) => [...prev, { role: "alex", text: streamedText }]);
+                setLoading(false); // Hide typing indicator once text starts
+              } else {
+                // Update the last message in place
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: "alex", text: streamedText };
+                  return updated;
+                });
+              }
+            }
+
+            if (event.type === "metadata") {
+              setSuggestions(Array.isArray(event.suggestions) ? event.suggestions : []);
+              if (event.detectedMode) setDetectedMode(event.detectedMode);
+              if (event.emailCaptured) {
+                setEmailCaptured(true);
+                if (!testMode) localStorage.setItem(EMAIL_KEY, text);
+                setRequestEmail(false);
+              }
+              if (event.requestEmail) setRequestEmail(true);
+              if (event.done) setDone(true);
+            }
+
+            if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          } catch (parseErr) {
+            // Skip malformed SSE lines
+            if ((parseErr as Error).message !== "API error" &&
+                !(parseErr as Error).message?.startsWith("Something went wrong")) {
+              continue;
+            }
+            throw parseErr;
+          }
+        }
       }
 
-      // Add Alex's response
-      setMessages((prev) => [...prev, { role: "alex", text: data.reply }]);
-
-      // Dynamic suggestions from LLM
-      setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
-
-      // Respond to LLM signals
-      if (data.emailCaptured) {
-        setEmailCaptured(true);
-        localStorage.setItem(EMAIL_KEY, text);
-        // Clear requestEmail since email was just given
-        setRequestEmail(false);
-      }
-      if (data.requestEmail) {
-        setRequestEmail(true);
-      }
-      if (data.done) {
-        setDone(true);
+      // If no text was streamed (e.g. funnel event), just finish
+      if (!alexMsgAdded) {
+        setLoading(false);
       }
     } catch {
       setErrorFallback(true);
@@ -192,9 +279,8 @@ export function DittoConversation() {
           text: "Sorry \u2014 something went wrong on my end. Drop your email and I\u2019ll reach out directly.",
         },
       ]);
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -314,11 +400,24 @@ export function DittoConversation() {
                       What happens next
                     </p>
                     <div className="space-y-4">
-                      {[
-                        "Alex emails you (within the hour)",
-                        "You reply when you're ready",
-                        "Alex starts working your network",
-                      ].map((step, i) => (
+                      {(detectedMode === "cos"
+                        ? [
+                            "Alex emails you (within the hour)",
+                            "First weekly briefing by Monday",
+                            "Alex starts managing your priorities",
+                          ]
+                        : detectedMode === "both"
+                          ? [
+                              "Alex emails you (within the hour)",
+                              "You review introductions before they go out",
+                              "First weekly briefing by Monday",
+                            ]
+                          : [
+                              "Alex emails you (within the hour)",
+                              "You review introductions before they go out",
+                              "Alex reaches out on your behalf",
+                            ]
+                      ).map((step, i) => (
                         <div key={i} className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-vivid-subtle text-xs font-semibold text-vivid">
                             {i + 1}
@@ -328,7 +427,7 @@ export function DittoConversation() {
                       ))}
                     </div>
                     <p className="mt-4 text-sm text-text-muted">
-                      No account needed. No app to download. It all happens in your inbox.
+                      You approve everything. Nothing happens without your say-so.
                     </p>
                   </div>
                 )}
@@ -435,6 +534,9 @@ export function DittoConversation() {
           </Link>
           <Link href="/about" className="hover:text-text-secondary">
             About
+          </Link>
+          <Link href="/admin" className="hover:text-text-secondary">
+            Admin
           </Link>
         </div>
       </footer>

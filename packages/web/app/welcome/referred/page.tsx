@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ChatMessage } from "../chat-message";
@@ -44,6 +45,8 @@ export default function ReferredPage() {
   const [requestEmail, setRequestEmail] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
+  const ref = searchParams.get("ref");
 
   // Check for returning visitor
   useEffect(() => {
@@ -64,6 +67,20 @@ export default function ReferredPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "[referred_landed]", sessionId: null, context: "referred" }),
     }).catch(() => {});
+
+    // Record referred_click with referrer attribution (Brief 109)
+    if (ref) {
+      fetch("/api/v1/network/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "[referred_click]",
+          sessionId: null,
+          context: "referred",
+          funnelMetadata: { referredBy: ref },
+        }),
+      }).catch(() => {});
+    }
 
     // Set up greeting messages
     const timer = setTimeout(() => {

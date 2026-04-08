@@ -1,0 +1,137 @@
+name: "Weekly Briefing"
+id: weekly-briefing
+version: 1
+status: active
+template: true
+
+description: >
+  Weekly status briefing for active users. Gathers recent activity data,
+  drafts a concise briefing, and sends it via email. Starts at supervised
+  tier (user reviews drafts), graduates to spot_checked (spot-checks some),
+  then autonomous (Alex sends directly).
+
+  Self-referencing chain: after completion, schedules the next weekly briefing.
+
+trigger:
+  type: schedule
+  description: Runs every 7 days, or chained from front-door-cos-intake
+
+inputs:
+  - name: userId
+    type: text
+    source: self
+    required: true
+    description: The network user ID (networkUsers.id) — canonical user identity for interaction scoping
+  - name: personId
+    type: text
+    source: self
+    required: false
+    description: The person record ID (people.id) — optional, can be looked up via networkUsers.personId
+
+steps:
+  - id: gather-state
+    name: "Gather activity state"
+    executor: ai-agent
+    description: >
+      Query recent interactions, completed process runs, pending approvals,
+      active processes, and upcoming deadlines for this user. Compile a
+      structured summary of what happened since the last briefing.
+    config:
+      model_hint: fast
+    tools:
+      - crm.list_interactions
+      - crm.list_people
+    inputs:
+      - userId
+      - personId
+    outputs:
+      - activity-summary
+
+  - id: draft-briefing
+    name: "Draft weekly briefing"
+    executor: ai-agent
+    description: >
+      Compose a concise, actionable weekly briefing from the activity summary.
+      Format:
+      - Top 3 highlights (what happened)
+      - Pending items (what needs attention)
+      - Upcoming (what's scheduled)
+      - Questions (1-2 light intake questions to deepen understanding)
+
+      Be honest about quiet weeks. Don't pad with filler. If nothing
+      meaningful happened, say so briefly — silence is a feature.
+    config:
+      model_hint: capable
+    inputs:
+      - activity-summary
+    outputs:
+      - briefing-draft
+    depends_on:
+      - gather-state
+
+  - id: send-briefing
+    name: "Send briefing to user"
+    executor: ai-agent
+    description: >
+      Send the drafted briefing via email to the user. Record as an
+      interaction. The harness trust gate applies to this step at the
+      process trust tier — at supervised, the user reviews before send;
+      at autonomous, it sends directly. This is the step where trust
+      tier matters most (sending is irreversible, drafting is not).
+    config:
+      model_hint: fast
+    tools:
+      - crm.send_email
+      - crm.record_interaction
+    inputs:
+      - briefing-draft
+    outputs:
+      - send-result
+    depends_on:
+      - draft-briefing
+
+outputs:
+  - name: briefing-draft
+    type: text
+    description: The composed weekly briefing text
+  - name: send-result
+    type: json
+    description: Email send confirmation and interaction record
+
+# Self-referencing chain: schedule the next weekly briefing
+chain:
+  - trigger: schedule
+    interval: 7d
+    process: weekly-briefing
+    inputs:
+      userId: "{userId}"
+      personId: "{personId}"
+
+quality_criteria:
+  - "Briefing references specific recent activity, not generic filler"
+  - "Quiet weeks are acknowledged honestly, not padded"
+  - "Pending approvals are highlighted clearly"
+  - "Intake questions are woven naturally, not interrogative"
+  - "Email is concise — under 300 words"
+
+feedback:
+  metrics:
+    - name: briefing_relevance
+      description: User confirms briefing captured what matters
+      target: ">80% accuracy"
+    - name: open_rate
+      description: User opens/reads the briefing email
+      target: ">60%"
+  capture:
+    - Briefing corrections (what was wrong or missing)
+    - Preferred briefing day/time
+    - Topics user wants more/less coverage on
+
+trust:
+  # Context 1: Alex → User (direct communication). User IS the recipient.
+  # No approval needed to send someone their own briefing. (Insight-160)
+  # Quality signal: reply corrections, not pre-approval.
+  initial_tier: autonomous
+  downgrade_triggers:
+    - "User says briefing missed critical information"
+    - "User corrects more than 50% of highlights"

@@ -17,6 +17,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.1.0
+      '@ditto/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
@@ -62,6 +65,9 @@ importers:
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
+      stripe:
+        specifier: ^22.0.0
+        version: 22.0.0(@types/node@25.5.0)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -102,6 +108,25 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(msw@2.12.14(@types/node@25.5.0)(typescript@5.9.3))(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/core:
+    dependencies:
+      better-sqlite3:
+        specifier: ^11.9.1
+        version: 11.10.0
+      diff:
+        specifier: ^8.0.3
+        version: 8.0.3
+      drizzle-orm:
+        specifier: ^0.45.1
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8)
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
   packages/web:
     dependencies:
@@ -4925,6 +4950,15 @@ packages:
   strip-json-comments@2.0.1:
     resolution: {integrity: sha512-4gB8na07fecVVkOI6Rs4e7T6NOTki5EmL7TUduTs6bu3EdnSycntVJ4re8kgZA+wx9IueI2Y11bfbgwtzuE0KQ==}
     engines: {node: '>=0.10.0'}
+
+  stripe@22.0.0:
+    resolution: {integrity: sha512-q1UgXXpSfZCmkyzZEh3vFEWT7+ajuaFGqaP9Tsi2NMtwlkigIWNr+KBIUQqtNeNEsreDKgdn+BP5HRW9JDj22Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   style-to-js@1.1.21:
     resolution: {integrity: sha512-RjQetxJrrUJLQPHbLku6U/ocGtzyjbJMP9lCNK7Ag0CNh690nSH8woqWH9u16nMjYBAok+i7JO1NP2pOy8IsPQ==}
@@ -10282,6 +10316,10 @@ snapshots:
   strip-final-newline@4.0.0: {}
 
   strip-json-comments@2.0.1: {}
+
+  stripe@22.0.0(@types/node@25.5.0):
+    optionalDependencies:
+      '@types/node': 25.5.0
 
   style-to-js@1.1.21:
     dependencies:

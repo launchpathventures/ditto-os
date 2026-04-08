@@ -232,31 +232,40 @@ describe("startIntake", () => {
   });
 
   it("recognises existing network participant", async () => {
+    // Pre-create networkUser (startIntake now ensures this exists)
+    const [networkUser] = await testDb.insert(schema.networkUsers).values({
+      email: "existing@example.com",
+      name: "Existing Person",
+      status: "active",
+    }).returning();
+
     const person = await createPerson({
-      userId: "user-1",
+      userId: networkUser.id,
       name: "Existing Person",
       email: "existing@example.com",
       personaAssignment: "mira",
     });
     await recordInteraction({
       personId: person.id,
-      userId: "user-1",
+      userId: networkUser.id,
       type: "outreach_sent",
       mode: "connecting",
       subject: "Logistics consultants",
     });
 
-    const result = await startIntake("existing@example.com", undefined, undefined, "user-1");
+    const result = await startIntake("existing@example.com");
     expect(result.success).toBe(true);
     expect(result.recognised).toBe(true);
+    expect(result.networkUserId).toBe(networkUser.id);
     expect(result.personaName).toBe("Mira");
     expect(result.message).toContain("we've met");
     expect(result.message).toContain("Logistics consultants");
   });
 
   it("includes need acknowledgment for new visitors", async () => {
-    const result = await startIntake("visitor@example.com", "Visitor", "a good accountant", "user-1");
+    const result = await startIntake("visitor@example.com", "Visitor", "a good accountant");
     expect(result.message).toContain("accountant");
+    expect(result.networkUserId).toBeDefined();
   });
 
   it("fails for invalid email", async () => {

@@ -43,6 +43,169 @@ interface BuiltInTool {
 }
 
 const builtInTools: Record<string, BuiltInTool> = {
+  // ---- CRM tools (Brief 097) ----
+  "crm.send_email": {
+    definition: {
+      name: "crm_send_email",
+      description:
+        "Send an email on behalf of the user and record it as an interaction. Every email is tracked — no silent sends.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          to: {
+            type: "string",
+            description: "Recipient email address",
+          },
+          subject: {
+            type: "string",
+            description: "Email subject line",
+          },
+          body: {
+            type: "string",
+            description: "Email body text",
+          },
+          personId: {
+            type: "string",
+            description: "Person ID from the people table",
+          },
+          mode: {
+            type: "string",
+            description: "Outreach mode: selling, connecting, or nurture",
+          },
+          processRunId: {
+            type: "string",
+            description: "Process run ID (if called from a process step)",
+          },
+        },
+        required: ["to", "subject", "body", "personId", "mode"],
+      },
+    },
+    execute: async (input: Record<string, unknown>): Promise<string> => {
+      const { sendAndRecord } = await import("./channel");
+      const result = await sendAndRecord({
+        to: input.to as string,
+        subject: input.subject as string,
+        body: input.body as string,
+        personaId: "alex",
+        mode: (input.mode as "selling" | "connecting" | "nurture") ?? "nurture",
+        personId: input.personId as string,
+        userId: "founder", // single-user MVP
+        processRunId: input.processRunId as string | undefined,
+        includeOptOut: true,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "crm.record_interaction": {
+    definition: {
+      name: "crm_record_interaction",
+      description:
+        "Record an interaction (email, meeting, call) with a person in the network. Used for tracking all touchpoints.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          personId: {
+            type: "string",
+            description: "Person ID from the people table",
+          },
+          type: {
+            type: "string",
+            description: "Interaction type: outreach_sent, follow_up, reply_received, reply_sent, introduction_made, introduction_received, meeting_booked, nurture, opt_out",
+          },
+          channel: {
+            type: "string",
+            description: "Channel: email, voice, sms (default: email)",
+          },
+          mode: {
+            type: "string",
+            description: "Mode: selling, connecting, or nurture",
+          },
+          subject: {
+            type: "string",
+            description: "Subject or title of the interaction",
+          },
+          summary: {
+            type: "string",
+            description: "Brief summary of the interaction",
+          },
+          outcome: {
+            type: "string",
+            description: "Outcome: positive, negative, neutral, no_response",
+          },
+          processRunId: {
+            type: "string",
+            description: "Process run ID (if called from a process step)",
+          },
+        },
+        required: ["personId", "type", "mode"],
+      },
+    },
+    execute: async (input: Record<string, unknown>): Promise<string> => {
+      const { recordInteraction } = await import("./people");
+      const interaction = await recordInteraction({
+        personId: input.personId as string,
+        userId: "founder", // single-user MVP
+        type: input.type as import("../db/schema").InteractionType,
+        channel: (input.channel as import("../db/schema").InteractionChannel) ?? "email",
+        mode: input.mode as import("../db/schema").InteractionMode,
+        subject: input.subject as string | undefined,
+        summary: input.summary as string | undefined,
+        outcome: (input.outcome as import("../db/schema").InteractionOutcome) ?? "pending",
+        processRunId: input.processRunId as string | undefined,
+      });
+      return JSON.stringify({ success: true, interactionId: interaction.id }, null, 2);
+    },
+  },
+
+  "crm.create_person": {
+    definition: {
+      name: "crm_create_person",
+      description:
+        "Create a new person in the network. Returns the person ID for use in interactions and outreach.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          name: {
+            type: "string",
+            description: "Person's full name",
+          },
+          email: {
+            type: "string",
+            description: "Email address",
+          },
+          organization: {
+            type: "string",
+            description: "Company or organization name",
+          },
+          role: {
+            type: "string",
+            description: "Job title or role",
+          },
+          source: {
+            type: "string",
+            description: "How this person was found: manual, research, referral, inbound",
+          },
+        },
+        required: ["name"],
+      },
+    },
+    execute: async (input: Record<string, unknown>): Promise<string> => {
+      const { createPerson } = await import("./people");
+      const person = await createPerson({
+        userId: "founder", // single-user MVP
+        name: input.name as string,
+        email: input.email as string | undefined,
+        organization: input.organization as string | undefined,
+        role: input.role as string | undefined,
+        source: (input.source as import("../db/schema").PersonSource) ?? "research",
+        visibility: "internal",
+      });
+      return JSON.stringify({ success: true, personId: person.id }, null, 2);
+    },
+  },
+
+  // ---- Knowledge tools (Brief 079) ----
   "knowledge.search": {
     definition: {
       name: "knowledge_search",

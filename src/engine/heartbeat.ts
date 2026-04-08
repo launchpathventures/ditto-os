@@ -39,6 +39,23 @@ import { trustGateHandler } from "./harness-handlers/trust-gate";
 import { metacognitiveCheckHandler } from "./harness-handlers/metacognitive-check";
 import { feedbackRecorderHandler } from "./harness-handlers/feedback-recorder";
 import { deliverOutput } from "./process-io";
+import { processChains } from "./chain-executor";
+import { notifyProcessCompletion } from "./completion-notifier";
+import { checkBudgetExhausted, checkBudgetWarning, formatBudgetForLlm, requestTopUp } from "./budget";
+import { notifyUser } from "./notify-user";
+
+/**
+ * Trust tier restrictiveness order (most restrictive first).
+ * Chain-spawned runs use the MORE restrictive of parent and target.
+ * Provenance: Brief 098a AC9
+ */
+const TRUST_TIER_ORDER: TrustTier[] = ["critical", "supervised", "spot_checked", "autonomous"];
+
+function moreRestrictiveTrust(a: TrustTier, b: TrustTier): TrustTier {
+  const aIdx = TRUST_TIER_ORDER.indexOf(a);
+  const bIdx = TRUST_TIER_ORDER.indexOf(b);
+  return aIdx <= bIdx ? a : b;
+}
 
 export interface HeartbeatResult {
   processRunId: string;
@@ -604,6 +621,23 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
       });
     }
 
+    // Chain execution: process chain definitions after completion (Brief 098a AC4)
+    try {
+      await processChains(processRunId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Chain processing failed for run ${processRunId.slice(0, 8)}: ${message}`);
+      await logActivity("chain.processing.failed", processRunId, "process_run", {
+        error: message,
+      });
+    }
+
+    // Completion notification: email user immediately if no outputDelivery configured
+    // Fire-and-forget — notification failure never affects completion
+    notifyProcessCompletion(processRunId).catch((error) => {
+      console.error(`Completion notification failed for run ${processRunId.slice(0, 8)}:`, error);
+    });
+
     return { processRunId, stepsExecuted: 0, status: "completed", message: "All steps complete" };
   }
 
@@ -621,7 +655,11 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
     })
     .where(eq(schema.processRuns.id, processRunId));
 
-  const trustTier = process.trustTier as TrustTier;
+  // AC9 (Brief 098a): Chain-spawned runs use the more restrictive tier
+  const baseTier = process.trustTier as TrustTier;
+  const trustTier = run.trustTierOverride
+    ? moreRestrictiveTrust(run.trustTierOverride as TrustTier, baseTier)
+    : baseTier;
 
   // 6. Execute
   if (nextWork.type === "step") {
@@ -889,7 +927,8 @@ export async function resumeHumanStep(
 export async function startProcessRun(
   processSlug: string,
   inputs: Record<string, unknown> = {},
-  triggeredBy: string = "manual"
+  triggeredBy: string = "manual",
+  options?: { parentTrustTier?: TrustTier },
 ): Promise<string> {
   const [process] = await db
     .select()
@@ -901,6 +940,19 @@ export async function startProcessRun(
     throw new Error(`Process not found: ${processSlug}`);
   }
 
+  // AC9: If chain-spawned, compute the effective trust tier (more restrictive of parent and target)
+  let trustTierOverride: TrustTier | undefined;
+  if (options?.parentTrustTier) {
+    const targetTier = process.trustTier as TrustTier;
+    const effectiveTier = moreRestrictiveTrust(options.parentTrustTier, targetTier);
+    if (effectiveTier !== targetTier) {
+      trustTierOverride = effectiveTier;
+      console.log(
+        `[chain] Trust inheritance: ${processSlug} constrained from ${targetTier} to ${effectiveTier} (parent was ${options.parentTrustTier})`,
+      );
+    }
+  }
+
   const [run] = await db
     .insert(schema.processRuns)
     .values({
@@ -908,12 +960,14 @@ export async function startProcessRun(
       status: "queued",
       triggeredBy,
       inputs,
+      trustTierOverride: trustTierOverride ?? null,
     })
     .returning();
 
   await logActivity("process.run.created", run.id, "process_run", {
     processSlug,
     triggeredBy,
+    parentTrustTier: options?.parentTrustTier,
   });
 
   console.log(`Started process run: ${process.name} (${run.id})`);
@@ -1327,6 +1381,65 @@ export async function goalHeartbeatLoop(
           status: "paused",
           ...counts,
         };
+      }
+
+      // Budget check (Brief 107 AC8): if budget is exhausted, pause goal
+      const budgetExhausted = await checkBudgetExhausted(goalWorkItemId);
+      if (budgetExhausted) {
+        await db
+          .update(schema.workItems)
+          .set({ status: "waiting_human", updatedAt: new Date() })
+          .where(eq(schema.workItems.id, goalWorkItemId));
+
+        await logActivity("goal.budget_exhausted", goalWorkItemId, "work_item", {
+          budgetStatus: formatBudgetForLlm(budgetExhausted),
+        });
+
+        // AC9: Send exhaustion notification via notifyUser (fire-and-forget)
+        requestTopUp(goalWorkItemId).then(async (topUp) => {
+          if (!topUp) return;
+          // Look up the budget's userId to find their network user + person records
+          const [budget] = await db
+            .select({ userId: schema.budgets.userId })
+            .from(schema.budgets)
+            .where(eq(schema.budgets.goalWorkItemId, goalWorkItemId))
+            .limit(1);
+          if (!budget) return;
+          const [networkUser] = await db
+            .select({ id: schema.networkUsers.id, personId: schema.networkUsers.personId })
+            .from(schema.networkUsers)
+            .where(eq(schema.networkUsers.id, budget.userId))
+            .limit(1);
+          if (!networkUser?.personId) return;
+          notifyUser({
+            userId: networkUser.id,
+            personId: networkUser.personId,
+            subject: topUp.subject,
+            body: topUp.body,
+            personaId: "alex",
+            reviewPageUrl: topUp.checkoutUrl,
+          }).catch((err) => {
+            console.error(`[heartbeat] Budget exhaustion notification failed:`, err);
+          });
+        }).catch((err) => {
+          console.error(`[heartbeat] requestTopUp failed:`, err);
+        });
+
+        const counts = getTaskCounts(goalItem);
+        return {
+          goalWorkItemId,
+          status: "paused",
+          ...counts,
+        };
+      }
+
+      // Budget warning (Brief 107 AC10): log when at 90% but continue
+      const budgetWarning = await checkBudgetWarning(goalWorkItemId);
+      if (budgetWarning) {
+        await logActivity("goal.budget_warning", goalWorkItemId, "work_item", {
+          budgetStatus: formatBudgetForLlm(budgetWarning),
+          percentUsed: budgetWarning.percentUsed,
+        });
       }
 
       // Run one orchestrator heartbeat iteration

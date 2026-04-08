@@ -103,6 +103,8 @@ export function ensureSchema(): void {
       orchestrator_confidence TEXT,
       definition_override TEXT,
       definition_override_version INTEGER NOT NULL DEFAULT 0,
+      chains_processed INTEGER NOT NULL DEFAULT 0,
+      trust_tier_override TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
@@ -308,6 +310,17 @@ export function ensureSchema(): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
+    CREATE TABLE IF NOT EXISTS delayed_runs (
+      id TEXT PRIMARY KEY,
+      process_slug TEXT NOT NULL,
+      inputs TEXT NOT NULL DEFAULT '{}',
+      execute_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_by_run_id TEXT REFERENCES process_runs(id),
+      parent_trust_tier TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
     CREATE TABLE IF NOT EXISTS people (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -358,11 +371,24 @@ export function ensureSchema(): void {
       status TEXT NOT NULL DEFAULT 'active',
       workspace_id TEXT,
       person_id TEXT REFERENCES people(id),
+      workspace_suggested_at INTEGER,
+      wants_visibility INTEGER NOT NULL DEFAULT 0,
+      paused_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
 
     CREATE INDEX IF NOT EXISTS network_users_email ON network_users(email);
+
+    CREATE TABLE IF NOT EXISTS admin_feedback (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES network_users(id),
+      feedback TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS admin_feedback_user_id ON admin_feedback(user_id);
 
     CREATE TABLE IF NOT EXISTS network_tokens (
       id TEXT PRIMARY KEY,
@@ -390,6 +416,9 @@ export function ensureSchema(): void {
       last_health_status TEXT,
       error_log TEXT,
       token_id TEXT NOT NULL,
+      service_id TEXT,
+      railway_environment_id TEXT,
+      auth_secret_hash TEXT,
       deprovisioned_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
@@ -483,5 +512,45 @@ export function ensureSchema(): void {
       metadata TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
+
+    CREATE TABLE IF NOT EXISTS process_models (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      industry_tags TEXT DEFAULT '[]',
+      function_tags TEXT DEFAULT '[]',
+      complexity TEXT NOT NULL DEFAULT 'moderate',
+      version INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'nominated',
+      source TEXT NOT NULL DEFAULT 'template',
+      process_definition TEXT NOT NULL DEFAULT '{}',
+      quality_criteria TEXT DEFAULT '[]',
+      validation_report TEXT,
+      nominated_by TEXT,
+      approved_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      published_at INTEGER
+    );
   `);
+
+  // Brief 100: Railway migration — add new columns to managed_workspaces
+  // Safe to run repeatedly: SQLite ignores ALTER TABLE ADD COLUMN if column exists
+  const migrationColumns = [
+    "ALTER TABLE managed_workspaces ADD COLUMN service_id TEXT",
+    "ALTER TABLE managed_workspaces ADD COLUMN railway_environment_id TEXT",
+    "ALTER TABLE managed_workspaces ADD COLUMN auth_secret_hash TEXT",
+  ];
+  for (const stmt of migrationColumns) {
+    try {
+      sqlite.exec(stmt);
+    } catch (e: unknown) {
+      // Ignore "duplicate column name" — means migration already ran
+      if (e instanceof Error && !e.message.includes("duplicate column")) throw e;
+    }
+  }
+
+  // Backfill service_id from machine_id for existing Fly.io records
+  sqlite.exec(`UPDATE managed_workspaces SET service_id = machine_id WHERE service_id IS NULL`);
 }

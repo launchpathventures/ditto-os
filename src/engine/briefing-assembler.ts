@@ -76,6 +76,14 @@ export interface BriefingData {
   lastActiveAt: Date | null;
   /** User model completeness — verbose for new users, terse for power users */
   userFamiliarity: "new" | "developing" | "established";
+  /** Journey smoke test health — "8/8 passing" or "7/8 — [name] failing" (Brief 112) */
+  journeyHealth?: {
+    total: number;
+    passing: number;
+    failing: number;
+    failingJourneys: string[];
+    lastRunAt: Date | null;
+  };
 }
 
 // ============================================================
@@ -130,6 +138,18 @@ export async function assembleBriefing(
     ? []
     : suggestions.slice(0, 2);
 
+  // Journey health (Brief 112) — non-blocking, optional
+  let journeyHealth: BriefingData["journeyHealth"];
+  try {
+    const { getJourneyHealth } = await import("./smoke-test-runner");
+    const health = await getJourneyHealth();
+    if (health.lastRunAt) {
+      journeyHealth = health;
+    }
+  } catch {
+    // Smoke test runner not available — skip
+  }
+
   return {
     focus,
     attention,
@@ -139,6 +159,7 @@ export async function assembleBriefing(
     stats,
     lastActiveAt,
     userFamiliarity,
+    journeyHealth,
   };
 }
 

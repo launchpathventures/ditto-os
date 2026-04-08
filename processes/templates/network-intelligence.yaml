@@ -121,10 +121,9 @@ feedback:
     - user_requested_topic_added
 
 trust:
-  initial_tier: supervised
-  upgrade_path:
-    - { from: supervised, to: spot_checked, after: "8 cycles where >50% signals acted on" }
-    - { from: spot_checked, to: autonomous, after: "20 cycles with consistent quality" }
+  # Context 1: Alex → User, direct communication (Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
   downgrade_triggers:
     - "3+ consecutive cycles where all signals dismissed"
     - "User flags a fabricated signal"

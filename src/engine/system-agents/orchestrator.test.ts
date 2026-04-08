@@ -165,12 +165,13 @@ describe("Orchestrator goal decomposition", () => {
 });
 
 describe("Orchestrator confidence and escalation", () => {
-  it("escalates with low confidence when no process slug (AC 11-14)", async () => {
+  it("escalates with low confidence when no process slug for non-goal (AC 11-14)", async () => {
     const { executeOrchestrator } = await import("./orchestrator");
 
+    // Non-goal type without processSlug → escalate with "No process assigned"
     const result = await executeOrchestrator({
       content: "test",
-      workItemType: "goal",
+      workItemType: "task",
     });
 
     expect(result.confidence).toBe("low");
@@ -181,6 +182,24 @@ describe("Orchestrator confidence and escalation", () => {
     expect(orchestration.action).toBe("escalated");
     expect(orchestration.escalation.type).toBe("blocked");
     expect(orchestration.escalation.reason).toContain("No process assigned");
+  });
+
+  it("uses LLM decomposition when goal has no process slug (Brief 102)", async () => {
+    const { executeOrchestrator } = await import("./orchestrator");
+
+    // Goal without processSlug → LLM decomposition path
+    // With vague content and no dimension map → clarity insufficient
+    const result = await executeOrchestrator({
+      content: "test",
+      workItemType: "goal",
+    });
+
+    expect(result.confidence).toBe("low");
+    const orchestration = result.outputs["orchestration-result"] as {
+      action: string;
+      escalation?: { type: string; reason: string };
+    };
+    expect(orchestration.action).toBe("escalated");
   });
 
   it("escalates when process not found (AC 12)", async () => {

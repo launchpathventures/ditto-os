@@ -31,6 +31,8 @@ export interface OutboundMessage {
   includeOptOut?: boolean;
   /** Reply to an existing message (threading) */
   inReplyToMessageId?: string;
+  /** User ID for referral footer tracking (Brief 109) */
+  referralUserId?: string;
 }
 
 export interface SendResult {
@@ -62,6 +64,41 @@ export interface ChannelAdapter {
 }
 
 // ============================================================
+// Test Mode — Gate External Emails
+// ============================================================
+
+/**
+ * When DITTO_TEST_MODE=true, only emails to addresses in
+ * DITTO_TEST_EMAILS are actually sent. Everything else is
+ * logged and suppressed. Prevents accidental outreach to
+ * real people during testing.
+ *
+ * Set DITTO_TEST_EMAILS to the registering user's email
+ * (comma-separated for multiple).
+ */
+function isTestModeSuppressed(toAddress: string): boolean {
+  if (process.env.DITTO_TEST_MODE !== "true") return false;
+
+  const allowlist = (process.env.DITTO_TEST_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (allowlist.length === 0) {
+    // Test mode with no allowlist = suppress everything
+    console.log(`[channel] TEST MODE: suppressed email to ${toAddress} (no DITTO_TEST_EMAILS set)`);
+    return true;
+  }
+
+  if (allowlist.includes(toAddress.toLowerCase())) {
+    return false; // Allowed — send normally
+  }
+
+  console.log(`[channel] TEST MODE: suppressed email to ${toAddress} (not in DITTO_TEST_EMAILS)`);
+  return true;
+}
+
+// ============================================================
 // Persona Sign-off Formatting
 // ============================================================
 
@@ -72,10 +109,21 @@ const PERSONA_SIGNOFFS: Record<PersonaId, string> = {
 
 const OPT_OUT_FOOTER = "\n\n---\nIf you'd prefer not to hear from me, just reply with 'unsubscribe' and I won't reach out again.";
 
+function buildReferralFooter(userId: string): string {
+  const baseUrl = process.env.NETWORK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  return `\nKnow someone who'd benefit from an advisor like me? ${baseUrl}/welcome/referred?ref=${userId}`;
+}
+
 /**
- * Format an outbound message with persona sign-off and optional opt-out footer.
+ * Format an outbound message with persona sign-off, optional opt-out footer,
+ * and referral footer.
+ *
+ * @param referralUserId When provided, appends a referral link footer after
+ *   the opt-out line (or at the end of the body). Omitted when
+ *   `includeOptOut === false` (internal/system emails).
  */
 export function formatEmailBody(message: OutboundMessage): string {
+  const referralUserId = message.referralUserId;
   let body = message.body;
 
   // Add persona sign-off if not already present
@@ -89,6 +137,12 @@ export function formatEmailBody(message: OutboundMessage): string {
     body += OPT_OUT_FOOTER;
   }
 
+  // Add referral footer (Brief 109 — two-sided acquisition)
+  // Skipped when includeOptOut is explicitly false (internal emails)
+  if (referralUserId && message.includeOptOut !== false) {
+    body += buildReferralFooter(referralUserId);
+  }
+
   return body;
 }
 
@@ -100,7 +154,7 @@ export function formatEmailBody(message: OutboundMessage): string {
  * AgentMail adapter — purpose-built email infrastructure for AI agents.
  *
  * Features over Gmail:
- * - Programmatic inbox creation (alex@ditto.network, mira@ditto.network)
+ * - Programmatic inbox creation (alex@ditto.partners, mira@ditto.partners)
  * - Native reply handling with extractedText (reply without quoted history)
  * - Thread management built in
  * - Webhook support for inbound messages
@@ -120,6 +174,10 @@ export class AgentMailAdapter implements ChannelAdapter {
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {
+    if (isTestModeSuppressed(message.to)) {
+      return { success: true, messageId: `test-suppressed-${Date.now()}` };
+    }
+
     const body = formatEmailBody(message);
 
     try {
@@ -204,7 +262,11 @@ export class AgentMailAdapter implements ChannelAdapter {
     }
   }
 
-  async reply(messageId: string, body: string, personaId: PersonaId): Promise<SendResult> {
+  async reply(messageId: string, body: string, personaId: PersonaId, toAddress?: string): Promise<SendResult> {
+    if (toAddress && isTestModeSuppressed(toAddress)) {
+      return { success: true, messageId: `test-suppressed-${Date.now()}` };
+    }
+
     const signoff = PERSONA_SIGNOFFS[personaId];
     const fullBody = body.trimEnd() + "\n\n" + signoff;
 
@@ -271,6 +333,10 @@ export class GmailChannelAdapter implements ChannelAdapter {
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {
+    if (isTestModeSuppressed(message.to)) {
+      return { success: true, messageId: `test-suppressed-${Date.now()}` };
+    }
+
     const body = formatEmailBody(message);
 
     try {
@@ -371,6 +437,104 @@ export function createAgentMailAdapterForPersona(
 
   const inboxId = personaId === "mira" ? config.miraInbox : config.alexInbox;
   return new AgentMailAdapter(config.apiKey, inboxId);
+}
+
+// ============================================================
+// Atomic Send + Record (Brief 097)
+// ============================================================
+
+export interface SendAndRecordInput {
+  to: string;
+  subject: string;
+  body: string;
+  personaId: PersonaId;
+  mode: "selling" | "connecting" | "nurture";
+  personId: string;
+  userId: string;
+  processRunId?: string;
+  includeOptOut?: boolean;
+  inReplyToMessageId?: string;
+}
+
+export interface SendAndRecordResult {
+  success: boolean;
+  interactionId?: string;
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * Atomically send an email via channel adapter AND record it as an interaction.
+ * This is the single path for all outreach — no email goes untracked.
+ *
+ * In test mode (DITTO_TEST_MODE=true), the channel adapter suppresses real sends
+ * but the interaction is still recorded and processes still advance.
+ */
+export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndRecordResult> {
+  const { recordInteraction } = await import("./people");
+
+  const adapter = createAgentMailAdapterForPersona(input.personaId);
+  if (!adapter) {
+    console.warn("[channel] AgentMail not configured — recording interaction without sending to", input.to);
+    // Still record the interaction even if we can't send
+    const interaction = await recordInteraction({
+      personId: input.personId,
+      userId: input.userId,
+      type: "outreach_sent",
+      channel: "email",
+      mode: input.mode,
+      subject: input.subject,
+      summary: input.body.slice(0, 500),
+      outcome: undefined,
+      processRunId: input.processRunId,
+      metadata: { sendFailed: true, reason: "agentmail_not_configured" },
+    });
+    return { success: false, interactionId: interaction.id, error: "AgentMail not configured" };
+  }
+
+  // Send the email (with referral footer — Brief 109)
+  const sendResult = await adapter.send({
+    to: input.to,
+    subject: input.subject,
+    body: input.body,
+    personaId: input.personaId,
+    mode: input.mode,
+    includeOptOut: input.includeOptOut,
+    inReplyToMessageId: input.inReplyToMessageId,
+    referralUserId: input.userId,
+  });
+
+  // Record the interaction regardless of send success
+  // (test mode suppression still returns success: true with a test-suppressed messageId)
+  const interaction = await recordInteraction({
+    personId: input.personId,
+    userId: input.userId,
+    type: "outreach_sent",
+    channel: "email",
+    mode: input.mode,
+    subject: input.subject,
+    summary: input.body.slice(0, 500),
+    outcome: undefined,
+    processRunId: input.processRunId,
+    metadata: {
+      messageId: sendResult.messageId,
+      threadId: sendResult.threadId,
+      ...(sendResult.error ? { sendError: sendResult.error } : {}),
+    },
+  });
+
+  if (sendResult.success) {
+    console.log(`[channel] sendAndRecord: email sent to ${input.to}, interaction ${interaction.id}`);
+  } else {
+    console.error(`[channel] sendAndRecord: send failed for ${input.to}:`, sendResult.error);
+  }
+
+  return {
+    success: sendResult.success,
+    interactionId: interaction.id,
+    messageId: sendResult.messageId,
+    ...(sendResult.error ? { error: sendResult.error } : {}),
+  };
 }
 
 /**

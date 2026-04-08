@@ -11,7 +11,7 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, ne, and, desc, gte } from "drizzle-orm";
 import { updateWorkingPatterns } from "./user-model";
 import { buildInteractionSummary } from "./interaction-events";
 
@@ -204,8 +204,14 @@ export async function loadSessionTurns(
 // Session Lifecycle
 // ============================================================
 
-/** Idle timeout for session suspension: 30 minutes */
+/** Idle timeout for session suspension: 30 minutes (workspace surfaces) */
 export const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Idle timeout for inbound sessions: 24 hours.
+ * Async channels (email) have hours between messages. A 30-minute timeout
+ * would break conversational continuity across a slow email thread.
+ * 24h keeps the thread context alive for a full day of back-and-forth. */
+export const INBOUND_SESSION_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Find or create an active session for a user on a surface.
@@ -215,11 +221,13 @@ export const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
  */
 export async function getOrCreateSession(
   userId: string,
-  surface: "cli" | "telegram" | "web",
+  surface: "cli" | "telegram" | "web" | "inbound",
 ): Promise<{ sessionId: string; resumed: boolean; previousSummary: string | null }> {
-  // Look for an active session on ANY surface (ADR-016: cross-surface continuity).
-  // The session's `surface` column records where it started; per-turn surface tagging
-  // handles cross-surface tracking. A session started on Telegram should resume on CLI.
+  // Inbound sessions are SCOPED by surface — an inbound message must NOT resume a
+  // web/cli/telegram session (prevents email content leaking into workspace conversation
+  // history and vice versa). Workspace surfaces share sessions (ADR-016: cross-surface continuity).
+  const isInbound = surface === "inbound";
+
   const [activeSession] = await db
     .select()
     .from(schema.sessions)
@@ -227,6 +235,10 @@ export async function getOrCreateSession(
       and(
         eq(schema.sessions.userId, userId),
         eq(schema.sessions.status, "active"),
+        // Inbound: only match inbound sessions. Other surfaces: exclude inbound sessions.
+        isInbound
+          ? eq(schema.sessions.surface, "inbound")
+          : ne(schema.sessions.surface, "inbound"),
       ),
     )
     .orderBy(desc(schema.sessions.lastActiveAt))
@@ -238,7 +250,8 @@ export async function getOrCreateSession(
       : Number(activeSession.lastActiveAt);
     const elapsed = Date.now() - lastActive;
 
-    if (elapsed < SESSION_IDLE_TIMEOUT_MS) {
+    const timeout = isInbound ? INBOUND_SESSION_IDLE_TIMEOUT_MS : SESSION_IDLE_TIMEOUT_MS;
+    if (elapsed < timeout) {
       // Resume existing session
       await db
         .update(schema.sessions)
@@ -259,7 +272,10 @@ export async function getOrCreateSession(
     const newSession = await createNewSession(userId, surface);
 
     // Track working patterns on new session creation (Brief 043)
-    updateWorkingPatterns(userId, surface).catch(() => {});
+    // Skip for inbound — async messages don't produce meaningful pattern data
+    if (surface !== "inbound") {
+      updateWorkingPatterns(userId, surface).catch(() => {});
+    }
 
     return { sessionId: newSession, resumed: false, previousSummary: summary };
   }
@@ -280,9 +296,11 @@ export async function getOrCreateSession(
   const newSession = await createNewSession(userId, surface);
 
   // Track working patterns on new session creation (Brief 043)
-  updateWorkingPatterns(userId, surface).catch(() => {
-    // Non-critical — don't block session creation
-  });
+  if (surface !== "inbound") {
+    updateWorkingPatterns(userId, surface).catch(() => {
+      // Non-critical — don't block session creation
+    });
+  }
 
   return {
     sessionId: newSession,
@@ -296,7 +314,7 @@ export async function getOrCreateSession(
  */
 async function createNewSession(
   userId: string,
-  surface: "cli" | "telegram" | "web",
+  surface: "cli" | "telegram" | "web" | "inbound",
 ): Promise<string> {
   const [session] = await db
     .insert(schema.sessions)

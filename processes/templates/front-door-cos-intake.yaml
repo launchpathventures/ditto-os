@@ -1,0 +1,280 @@
+name: "Front Door CoS Intake — Briefing & Operations Setup"
+id: front-door-cos-intake
+version: 1
+status: active
+template: true
+
+description: >
+  Triggered when Alex detects a Chief of Staff need from a front door
+  conversation. Progressive intake: learn the user's world, deliver first
+  value, set up ongoing processes. Works entirely through email — no
+  workspace required.
+
+  The intake questions are woven INTO deliverables (briefings), not sent as
+  a separate questionnaire. Each briefing cycle deepens understanding.
+
+trigger:
+  type: user-event
+  description: Alex reaches ACTIVATE with detectedMode "cos" or "both"
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: true
+    description: The person record ID from intake (people.id)
+  - name: userId
+    type: text
+    source: self
+    required: true
+    description: The network user ID (networkUsers.id) — canonical user identity
+  - name: email
+    type: text
+    source: self
+    required: true
+    description: Visitor's email address
+  - name: name
+    type: text
+    source: self
+    required: false
+    description: Visitor's name
+  - name: need
+    type: text
+    source: self
+    required: true
+    description: What the visitor needs (from conversation)
+  - name: statedPriorities
+    type: text
+    source: self
+    required: false
+    description: Priorities mentioned in the front door conversation
+  - name: knownContext
+    type: text
+    source: self
+    required: false
+    description: Business type, team size, tools — anything gathered in chat
+  - name: conversationSummary
+    type: text
+    source: self
+    required: true
+    description: Full conversation context from front door chat
+
+steps:
+  # Phase 1: Understand and deliver first value
+  - id: analyze-conversation
+    name: "Analyze conversation context"
+    executor: ai-agent
+    description: >
+      Extract structured understanding from the front door conversation.
+      Map to user model dimensions (problems, tasks, work, challenges,
+      communication, frustrations, vision, goals, concerns). Identify what's
+      known vs unknown. Plan which questions to weave into the first briefing.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    outputs:
+      - initial-user-model
+      - knowledge-gaps
+
+  - id: draft-first-briefing
+    name: "Draft first priorities briefing"
+    executor: ai-agent
+    description: >
+      Based on conversation context, draft the first weekly briefing.
+      Format: Top 3 priorities this week, pending decisions, anything flagged.
+      Be honest about what you know and what you're guessing.
+
+      CRITICAL: Weave 2-3 intake questions naturally into the briefing.
+      "I'm guessing X — am I right?" and "What tools do you use for Y?"
+      This IS the deep intake — happening through the deliverable, not
+      through a questionnaire.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    tools:
+      - crm.send_email
+      - crm.record_interaction
+    inputs:
+      - initial-user-model
+      - knowledge-gaps
+    outputs:
+      - first-briefing-draft
+
+  - id: user-review-briefing
+    name: "Send briefing for review"
+    executor: human
+    description: >
+      Send the first briefing to the user via email. They review, correct,
+      and answer the woven-in intake questions. Corrections feed back into
+      the user model. This IS the deep intake — happening through the
+      deliverable, not through a questionnaire.
+    instructions: >
+      Review your first weekly briefing from Alex. Correct anything that's
+      off and answer any questions Alex has woven in. Reply naturally —
+      Alex will learn from everything you say.
+    input_fields:
+      - name: feedback
+        type: text
+        label: "Corrections or feedback"
+        required: false
+    outputs:
+      - briefing-feedback
+
+  # Phase 2: Learn and deepen
+  - id: update-user-model
+    name: "Update user model from feedback"
+    executor: ai-agent
+    description: >
+      Process the user's feedback on the first briefing. Update the user
+      model across all 9 dimensions. Identify what's now known vs still
+      unknown. Plan what to ask next — progressive, not front-loaded.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - briefing-feedback
+      - initial-user-model
+    outputs:
+      - updated-user-model
+
+  - id: detect-structurable-intent
+    name: "Detect processes to set up"
+    executor: ai-agent
+    description: >
+      From the conversation and feedback, identify recurring needs that
+      should become processes: weekly briefing, task tracking, decision log,
+      specific workflows. Draft process definitions using the Self's
+      draft-first-refinement pattern — don't ask, draft and present.
+
+      Also capture any tasks mentioned — store as work items even before
+      the user has a workspace app. Reference them in future briefings.
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    inputs:
+      - updated-user-model
+    outputs:
+      - proposed-processes
+      - captured-tasks
+
+  - id: propose-processes
+    name: "Present proposed processes"
+    executor: human
+    description: >
+      Send the user a summary of what Alex proposes to set up: "Based on
+      what you've told me, I'd like to set up: [list]. Here's what each
+      one does. What would you change?" User approves, adjusts, or rejects.
+    instructions: >
+      Alex has proposed some recurring processes based on your conversation.
+      Review and adjust — or just reply "looks good."
+    input_fields:
+      - name: approved_processes
+        type: text
+        label: "Which processes to activate"
+        required: true
+      - name: adjustments
+        type: text
+        label: "Any changes?"
+        required: false
+    outputs:
+      - approved-process-list
+
+  # Phase 3: Activate ongoing work
+  - id: setup-recurring
+    name: "Set up approved recurring processes"
+    executor: rules
+    description: >
+      Create the approved processes in the system. Set up schedules
+      (weekly briefing, task tracking, etc.). All start at supervised tier.
+    inputs:
+      - approved-process-list
+    outputs:
+      - active-processes
+    depends_on:
+      - propose-processes
+
+  - id: check-connector-need
+    name: "Check if connector capability also needed"
+    executor: ai-agent
+    description: >
+      Review conversation and user model for connector signals that
+      weren't the primary need. If present, propose adding connector
+      capability: "I also noticed you mentioned needing to find [X].
+      Want me to start researching targets for that too?"
+    config:
+      model_hint: capable
+      person_id: "{personId}"
+    tools:
+      - crm.send_email
+      - crm.record_interaction
+    inputs:
+      - updated-user-model
+    outputs:
+      - connector-recommendation
+
+outputs:
+  - name: updated-user-model
+    type: data
+    destination: system
+    description: Structured user understanding across 9 dimensions
+  - name: active-processes
+    type: data
+    destination: system
+    description: Recurring processes set up for the user
+  - name: captured-tasks
+    type: data
+    destination: system
+    description: Work items captured from conversation
+
+chain:
+  # Weekly briefing on 7-day schedule
+  - trigger: schedule
+    interval: 7d
+    process: weekly-briefing
+    inputs:
+      userId: "{userId}"
+      personId: "{personId}"
+
+  # If connector need detected and confirmed, chain to connector intake
+  - trigger: connector-need-confirmed
+    process: front-door-intake
+    inputs:
+      personId: "{personId}"
+      userId: "{userId}"
+      email: "{email}"
+      name: "{name}"
+      conversationSummary: "{conversationSummary}"
+
+quality_criteria:
+  - "First briefing delivered within 24 hours of email capture"
+  - "Briefing references specific things from conversation — not generic"
+  - "Intake questions woven into deliverables, not sent as a questionnaire"
+  - "User model populated across at least 3 dimensions after first exchange"
+  - "Proposed processes match stated needs, not assumed ones"
+  - "No process activated without explicit user approval"
+
+feedback:
+  metrics:
+    - name: briefing_relevance
+      description: User confirms briefing priorities are accurate
+      target: ">80%"
+    - name: first_value_time
+      description: Time from email capture to first briefing
+      target: "<24 hours"
+  capture:
+    - Briefing corrections
+    - Process proposal modifications
+    - User model dimension accuracy
+
+trust:
+  # Context 1/2 hybrid: First-time onboarding. Human steps (user-review,
+  # propose-processes) suspend regardless of tier. AI steps (analyze, draft,
+  # detect) produce output FOR the user. spot_checked lets most analysis
+  # proceed while occasionally checking Alex's early work. (Insight-160)
+  initial_tier: spot_checked
+  upgrade_path:
+    - { from: spot_checked, to: autonomous, after: "5 briefings with no corrections to priorities" }
+  downgrade_triggers:
+    - "User says briefing missed critical priority"
+    - "User rejects more than 50% of proposed processes"
+    - "Briefing contains inaccurate information about user's business"

@@ -1,0 +1,59 @@
+# Ditto — Template: Journey Smoke Test Runner (Brief 112)
+#
+# Scheduled daily, runs journey smoke tests with real LLM.
+# Creates work items on failure, auto-closes on recovery.
+# Results visible in admin dashboard and briefings.
+
+name: "Journey Smoke Test Runner"
+id: smoke-test-runner
+version: 1
+status: active
+template: true
+system: true
+
+description: >
+  Runs the 8 journey smoke tests daily using real LLM calls.
+  Verifies the product actually works end-to-end: front door
+  conversations, goal decomposition, process chaining, review
+  pages, quality gates. Creates work items for failures and
+  auto-closes them when tests recover.
+
+trigger:
+  type: schedule
+  cron: "0 6 * * *"
+  description: Daily at 6am
+
+steps:
+  - id: run-tests
+    name: "Execute journey smoke tests"
+    executor: script
+    description: >
+      Spawn vitest subprocess for journey tests. Parse results.
+      Log to activities table with full conversation turns.
+    config:
+      systemAgent: smoke-test-runner
+    outputs:
+      - test-results
+
+  - id: process-results
+    name: "Create/close work items"
+    executor: script
+    description: >
+      For each failed test: create work item if not exists.
+      For each passing test with open work item: auto-close.
+    inputs:
+      - test-results
+    outputs:
+      - work-item-actions
+
+quality_criteria:
+  - "All 8 journey branches tested with real LLM"
+  - "Failures create actionable work items"
+  - "Recoveries auto-close work items"
+  - "Conversation logs preserved for admin review"
+
+trust:
+  # System process — no user-facing output (Context 5, Insight-160)
+  initial_tier: autonomous
+  upgrade_path: []
+  downgrade_triggers: []
