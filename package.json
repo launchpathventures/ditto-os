@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:auto": "expect-cli -a claude -y --target changes",
     "type-check": "tsc --noEmit",
+    "build": "tsc --noEmit && pnpm --filter @ditto/web build",
     "dev": "pnpm --filter @ditto/web dev",
     "dev-pipeline": "tsx src/dev-pipeline.ts",
     "dev-bot": "tsx src/dev-bot.ts"

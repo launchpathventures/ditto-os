@@ -9,7 +9,7 @@
  * Provenance: Brief 095, docs/research/web-acquisition-funnel-ux.md Surface 4.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -35,6 +35,14 @@ const SESSION_KEY = "ditto-chat-session";
 const EMAIL_KEY = "ditto-email-captured";
 
 export default function ReferredPage() {
+  return (
+    <Suspense>
+      <ReferredPageInner />
+    </Suspense>
+  );
+}
+
+function ReferredPageInner() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [phase, setPhase] = useState<Phase>("greeting");
   const [input, setInput] = useState("");

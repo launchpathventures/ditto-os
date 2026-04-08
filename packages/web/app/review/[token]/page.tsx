@@ -9,6 +9,7 @@
  * Clean single-purpose review surface.
  */
 
+import type { ContentBlock } from "@/lib/engine";
 import { ReviewPageClient } from "./review-page-client";
 
 interface ReviewPageProps {
@@ -47,7 +48,7 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
       data={{
         id: page.id,
         title: page.title,
-        contentBlocks: page.contentBlocks as Array<{ type: string; [key: string]: unknown }>,
+        contentBlocks: page.contentBlocks as ContentBlock[],
         userName: page.userName,
         status: page.status,
       }}
