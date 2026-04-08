@@ -21,7 +21,7 @@ export async function GET(request: Request) {
       getLatestRunResults,
       isSmokeTestRunning,
     } = await import(
-      "../../../../../../../src/engine/smoke-test-runner"
+      "../../../../../../../../src/engine/smoke-test-runner"
     );
 
     const [health, latestResults] = await Promise.all([
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
   try {
     const { runJourneySmokeTests, isSmokeTestRunning } = await import(
-      "../../../../../../../src/engine/smoke-test-runner"
+      "../../../../../../../../src/engine/smoke-test-runner"
     );
 
     if (isSmokeTestRunning()) {

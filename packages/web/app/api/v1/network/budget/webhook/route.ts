@@ -77,9 +77,9 @@ export async function POST(request: Request) {
   }
 
   // Dynamic imports to avoid build-time SQLite initialization
-  const { db, schema } = await import("../../../../../../src/db");
+  const { db, schema } = await import("../../../../../../../../src/db");
   const { eq } = await import("drizzle-orm");
-  const { recordLoad } = await import("../../../../../../src/engine/budget");
+  const { recordLoad } = await import("../../../../../../../../src/engine/budget");
 
   // Verify budget exists
   const [budget] = await db

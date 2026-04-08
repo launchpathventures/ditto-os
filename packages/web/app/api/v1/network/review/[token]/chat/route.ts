@@ -113,7 +113,7 @@ export async function POST(
     const chatHistory = ((page.chatMessages as Array<{ role: string; text: string }>) || []);
 
     const response = await createCompletion({
-      systemPrompt,
+      system: systemPrompt,
       messages: [
         ...chatHistory.map((m) => ({
           role: m.role === "alex" ? ("assistant" as const) : ("user" as const),
@@ -122,10 +122,10 @@ export async function POST(
         { role: "user" as const, content: message },
       ],
       maxTokens: 500,
-      modelHint: "fast",
+      purpose: "conversation",
     });
 
-    const reply = extractText(response);
+    const reply = extractText(response.content);
 
     // Persist Alex's response
     await appendChatMessage(token, "alex", reply);

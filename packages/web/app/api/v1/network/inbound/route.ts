@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * AgentMail signs payloads with HMAC-SHA256 using the webhook secret.
  * The signature is sent in the x-agentmail-signature header.
  */
-export function validateSignature(
+function validateSignature(
   payload: string,
   signature: string | null,
   secret: string,
