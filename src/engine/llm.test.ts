@@ -359,6 +359,7 @@ describe("createCompletion", () => {
     const mockProvider = {
       name: "test",
       createCompletion: vi.fn().mockResolvedValue(mockResponse),
+      createStreamingCompletion: vi.fn(),
       validateConfig: vi.fn(),
     };
     _setProviderForTest(mockProvider, "test-model");
@@ -389,7 +390,7 @@ describe("getConfiguredModel", () => {
   });
 
   it("returns model after init", () => {
-    const mockProvider = { name: "test", createCompletion: vi.fn(), validateConfig: vi.fn() };
+    const mockProvider = { name: "test", createCompletion: vi.fn(), createStreamingCompletion: vi.fn(), validateConfig: vi.fn() };
     _setProviderForTest(mockProvider, "my-model");
     expect(getConfiguredModel()).toBe("my-model");
   });
@@ -406,7 +407,7 @@ describe("getProviderName", () => {
   });
 
   it("returns provider name after init", () => {
-    const mockProvider = { name: "test-provider", createCompletion: vi.fn(), validateConfig: vi.fn() };
+    const mockProvider = { name: "test-provider", createCompletion: vi.fn(), createStreamingCompletion: vi.fn(), validateConfig: vi.fn() };
     _setProviderForTest(mockProvider, "my-model");
     expect(getProviderName()).toBe("test-provider");
   });

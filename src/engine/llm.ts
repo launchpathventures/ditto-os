@@ -82,12 +82,24 @@ export interface LlmCompletionResponse {
 }
 
 // ============================================================
+// Stream event types (shared by all providers + CLI adapters)
+// ============================================================
+
+export type StreamEvent =
+  | { type: "text-delta"; text: string }
+  | { type: "thinking-delta"; text: string }
+  | { type: "tool-use-start"; toolName: string; toolCallId: string }
+  | { type: "tool-use-end"; toolCallId: string; summary?: string }
+  | { type: "content-complete"; content: LlmContentBlock[]; costCents: number; tokensUsed: number };
+
+// ============================================================
 // Provider interface
 // ============================================================
 
-interface LlmProvider {
+export interface LlmProvider {
   name: string;
   createCompletion(request: LlmCompletionRequest): Promise<LlmCompletionResponse>;
+  createStreamingCompletion(request: LlmCompletionRequest): AsyncGenerator<StreamEvent>;
   validateConfig(): void;
 }
 
@@ -335,6 +347,46 @@ class AnthropicProvider implements LlmProvider {
       model: actualModel,
     };
   }
+
+  async *createStreamingCompletion(request: LlmCompletionRequest): AsyncGenerator<StreamEvent> {
+    const model = request.model || configuredModel!;
+    const messages = toAnthropicMessages(request.messages);
+    const tools = request.tools ? toAnthropicTools(request.tools) : undefined;
+
+    // Enable extended thinking for models that support it
+    const supportsThinking = /claude-(3-5|3\.5|4|sonnet-4|opus-4|haiku-4)/.test(model);
+
+    const stream = this.client.messages.stream({
+      model,
+      max_tokens: supportsThinking ? 16384 : (request.maxTokens || 8192),
+      system: request.system,
+      messages,
+      ...(tools && tools.length > 0 ? { tools } : {}),
+      ...(supportsThinking ? { thinking: { type: "enabled", budget_tokens: 8192 } } : {}),
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") {
+          yield { type: "text-delta", text: event.delta.text };
+        } else if (event.delta.type === "thinking_delta") {
+          yield { type: "thinking-delta", text: (event.delta as { type: string; thinking: string }).thinking };
+        }
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    const inputTokens = finalMessage.usage.input_tokens;
+    const outputTokens = finalMessage.usage.output_tokens;
+    const actualModel = finalMessage.model;
+
+    yield {
+      type: "content-complete",
+      content: fromAnthropicContent(finalMessage.content),
+      costCents: calculateCostCents(actualModel, inputTokens, outputTokens),
+      tokensUsed: inputTokens + outputTokens,
+    };
+  }
 }
 
 // ============================================================
@@ -406,6 +458,76 @@ class OpenAIProvider implements LlmProvider {
       costCents: calculateCostCents(actualModel, inputTokens, outputTokens),
       stopReason,
       model: actualModel,
+    };
+  }
+
+  async *createStreamingCompletion(request: LlmCompletionRequest): AsyncGenerator<StreamEvent> {
+    const model = request.model || configuredModel!;
+    const openaiMessages = toOpenAIMessages(request.system, request.messages);
+    const tools = request.tools && request.tools.length > 0
+      ? toOpenAITools(request.tools)
+      : undefined;
+
+    const stream = await this.client.chat.completions.create({
+      model,
+      messages: openaiMessages,
+      max_tokens: request.maxTokens || 8192,
+      stream: true,
+      ...(tools ? { tools } : {}),
+    });
+
+    let fullText = "";
+    const toolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let actualModel = model;
+
+    for await (const chunk of stream) {
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+
+      if (choice.delta?.content) {
+        fullText += choice.delta.content;
+        yield { type: "text-delta", text: choice.delta.content };
+      }
+
+      if (choice.delta?.tool_calls) {
+        for (const tc of choice.delta.tool_calls) {
+          const existing = toolCalls.get(tc.index) || { id: "", name: "", arguments: "" };
+          if (tc.id) existing.id = tc.id;
+          if (tc.function?.name) existing.name = tc.function.name;
+          if (tc.function?.arguments) existing.arguments += tc.function.arguments;
+          toolCalls.set(tc.index, existing);
+        }
+      }
+
+      if (chunk.usage) {
+        totalInputTokens = chunk.usage.prompt_tokens || 0;
+        totalOutputTokens = chunk.usage.completion_tokens || 0;
+      }
+      if (chunk.model) {
+        actualModel = chunk.model;
+      }
+    }
+
+    const content: LlmContentBlock[] = [];
+    if (fullText) {
+      content.push({ type: "text", text: fullText });
+    }
+    for (const [, tc] of toolCalls) {
+      content.push({
+        type: "tool_use",
+        id: tc.id,
+        name: tc.name,
+        input: JSON.parse(tc.arguments),
+      });
+    }
+
+    yield {
+      type: "content-complete",
+      content,
+      costCents: calculateCostCents(actualModel, totalInputTokens, totalOutputTokens),
+      tokensUsed: totalInputTokens + totalOutputTokens,
     };
   }
 }
@@ -546,6 +668,25 @@ class GoogleProvider implements LlmProvider {
       costCents: calculateCostCents(model, inputTokens, outputTokens),
       stopReason,
       model,
+    };
+  }
+
+  async *createStreamingCompletion(request: LlmCompletionRequest): AsyncGenerator<StreamEvent> {
+    // Google streaming not yet implemented — fall back to non-streaming
+    // and emit the complete response as a single text-delta + content-complete.
+    const result = await this.createCompletion(request);
+    const text = result.content
+      .filter((b): b is LlmTextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    if (text) {
+      yield { type: "text-delta", text };
+    }
+    yield {
+      type: "content-complete",
+      content: result.content,
+      costCents: result.costCents,
+      tokensUsed: result.tokensUsed,
     };
   }
 }
@@ -696,6 +837,26 @@ export function getProviderName(): string {
     throw new Error("LLM not initialized. Call initLlm() during startup.");
   }
   return activeProvider.name;
+}
+
+/**
+ * Get the active provider instance. Used by llm-stream.ts to delegate
+ * streaming to the provider's createStreamingCompletion method.
+ */
+export function getActiveProvider(): LlmProvider {
+  if (!activeProvider) {
+    throw new Error("LLM not initialized. Call initLlm() during startup.");
+  }
+  return activeProvider;
+}
+
+/**
+ * Get the provider name if initialized, or null if not yet.
+ * Use this in code that needs to gracefully handle the uninitialized case
+ * (e.g. embedding provider inference) rather than throwing.
+ */
+export function getProviderNameSafe(): string | null {
+  return activeProvider?.name ?? null;
 }
 
 // ============================================================

@@ -4,7 +4,7 @@
  * Embedded vector + BM25 store for knowledge base chunks.
  * Uses LanceDB (zero-infra, JS/TS native, built-in hybrid search).
  *
- * Embedding strategy: maps to user's LLM_PROVIDER.
+ * Embedding strategy: maps to initialized LLM provider.
  * - OpenAI → text-embedding-3-small
  * - Ollama → nomic-embed-text (local, free)
  * - Anthropic → falls back to Ollama
@@ -17,6 +17,7 @@ import { Index } from "@lancedb/lancedb";
 import path from "path";
 import { DATA_DIR } from "../../paths";
 import { getCredential } from "../credential-vault";
+import { getProviderNameSafe } from "../llm";
 
 // ============================================================
 // Types
@@ -64,7 +65,7 @@ export interface SearchResult {
 
 /**
  * Resolve the embedding provider and API key.
- * Priority: explicit EMBEDDING_PROVIDER env > inferred from LLM_PROVIDER.
+ * Priority: explicit EMBEDDING_PROVIDER env > inferred from initialized LLM provider.
  * Returns null when no embedding provider is available (BM25-only mode).
  */
 async function resolveEmbeddingProvider(): Promise<{
@@ -91,15 +92,15 @@ async function resolveEmbeddingProvider(): Promise<{
   const voyageKey = cred?.value ?? process.env.VOYAGE_API_KEY;
   if (voyageKey) return { provider: "voyage", apiKey: voyageKey };
 
-  // Infer from LLM_PROVIDER
-  const llmProvider = process.env.LLM_PROVIDER ?? "ollama";
+  // Infer from initialized LLM provider (single source of truth from initLlm())
+  const llmProvider = getProviderNameSafe() ?? "ollama";
 
   if (llmProvider === "openai") {
     const key = process.env.OPENAI_API_KEY;
     return key ? { provider: "openai", apiKey: key } : null;
   }
 
-  if (llmProvider === "anthropic") {
+  if (llmProvider === "anthropic" || llmProvider === "google") {
     // No Voyage key and no embedding API — try Ollama as local fallback
     try {
       const res = await fetch(`${process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"}/api/tags`, {

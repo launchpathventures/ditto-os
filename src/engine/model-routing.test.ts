@@ -31,43 +31,43 @@ describe("resolveModel", () => {
   });
 
   it("returns deployment default when hint is undefined", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     expect(resolveModel(undefined)).toBe("claude-sonnet-4-6");
   });
 
   it("returns deployment default when hint is 'default'", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     expect(resolveModel("default")).toBe("claude-sonnet-4-6");
   });
 
   it("resolves 'fast' to Haiku for Anthropic provider", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     expect(resolveModel("fast")).toBe("claude-haiku-4-5-20251001");
   });
 
   it("resolves 'capable' to Opus for Anthropic provider", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     expect(resolveModel("capable")).toBe("claude-opus-4-6");
   });
 
   it("resolves 'fast' to gpt-4o-mini for OpenAI provider", () => {
-    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), validateConfig: () => {} }, "gpt-4o");
+    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "gpt-4o");
     expect(resolveModel("fast")).toBe("gpt-4o-mini");
   });
 
   it("resolves 'capable' to gpt-4o for OpenAI provider", () => {
-    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), validateConfig: () => {} }, "gpt-4o");
+    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "gpt-4o");
     expect(resolveModel("capable")).toBe("gpt-4o");
   });
 
   it("falls back to default for Ollama (no model families)", () => {
-    _setProviderForTest({ name: "ollama", createCompletion: async () => ({} as never), validateConfig: () => {} }, "llama3.3");
+    _setProviderForTest({ name: "ollama", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "llama3.3");
     expect(resolveModel("fast")).toBe("llama3.3");
     expect(resolveModel("capable")).toBe("llama3.3");
   });
 
   it("falls back to default for unknown hint", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     expect(resolveModel("turbo")).toBe("claude-sonnet-4-6");
   });
 });
@@ -458,14 +458,14 @@ describe("resolveProviderForPurpose", () => {
   });
 
   it("returns anthropic + sonnet for conversation when anthropic is loaded", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     const result = resolveProviderForPurpose("conversation");
     expect(result.provider).toBe("anthropic");
     expect(result.model).toBe("claude-sonnet-4-6");
   });
 
   it("returns anthropic + haiku for classification when anthropic is loaded", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     const result = resolveProviderForPurpose("classification");
     expect(result.provider).toBe("anthropic");
     expect(result.model).toBe("claude-haiku-4-5-20251001");
@@ -473,7 +473,7 @@ describe("resolveProviderForPurpose", () => {
 
   it("falls back to first loaded provider when preference provider is not loaded", () => {
     // Load openai as the only provider
-    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), validateConfig: () => {} }, "gpt-4o");
+    _setProviderForTest({ name: "openai", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "gpt-4o");
     const result = resolveProviderForPurpose("conversation");
     // Anthropic is first in the preference list but not loaded, so falls through to OpenAI
     expect(result.provider).toBe("openai");
@@ -481,7 +481,7 @@ describe("resolveProviderForPurpose", () => {
   });
 
   it("returns fast model for extraction purpose", () => {
-    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), validateConfig: () => {} }, "claude-sonnet-4-6");
+    _setProviderForTest({ name: "anthropic", createCompletion: async () => ({} as never), createStreamingCompletion: async function*() { yield undefined as never; }, validateConfig: () => {} }, "claude-sonnet-4-6");
     const result = resolveProviderForPurpose("extraction");
     expect(result.provider).toBe("anthropic");
     expect(result.model).toBe("claude-haiku-4-5-20251001");
