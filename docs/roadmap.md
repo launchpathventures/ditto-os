@@ -704,6 +704,13 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Email-initiated cancellation (keyword detection + goal pause) | done | Brief 125 | `isOptOutSignal()` pattern (adopt) | `src/engine/inbound-email.ts` |
 | Thread-context → goal resolution with ownership validation | done | Brief 125 | Interaction `processRunId` (adopt) | `src/engine/inbound-email.ts` |
 | Report-back + day-7 templates include actual outreach text | done | Brief 125 | Original | `processes/templates/` |
+| **Workspace Lite — Magic Link Auth (Brief 123)** | | | | |
+| Magic link module (create/validate/consume, rate limiting, atomic single-use) | done | Brief 123 | Slack magic link pattern | `src/engine/magic-link.ts` |
+| `/chat` page with ai-elements message rendering + status strip | done | Brief 123 | `/welcome` layout + `/review` token pattern | `packages/web/app/chat/` |
+| POST `/chat/auth` with httpOnly session cookie (GET auto-submit redirect) | done | Brief 123 | Next.js cookies() API | `packages/web/app/chat/auth/route.ts` |
+| Auto-generated magic link footer in all outbound emails | done | Brief 123 | `sendAndRecord` pattern (adopt) | `src/engine/channel.ts` |
+| Rolling 30-day TTL for authenticated sessions | done | Brief 123 | Redis session pattern | `src/engine/network-chat.ts` |
+| Session revocation on opt-out | done | Brief 123 | `isOptOutSignal` pattern (adopt) | `src/engine/inbound-email.ts` |
 | **Network Service Deployment (Briefs 086-089)** | | | | |
 | Brief 086: Network Service deployment (Railway — was Fly.io, needs brief update) | not started | ADR-025, Brief 086 | Railway patterns | — |
 | Brief 088: Network API + Auth | not started | ADR-025, Brief 088 | Standard REST API | — |
