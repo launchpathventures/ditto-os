@@ -411,62 +411,57 @@ describe("front-door workflow — end to end", () => {
   // ============================================================
 
   describe("both mode — full journey", () => {
-    it("creates BOTH process runs on ACTIVATE", async () => {
+    it("creates front-door-intake process run on ACTIVATE (CoS chains from report-back)", async () => {
+      // Brief 126: "both" mode starts ONLY front-door-intake.
+      // CoS chains from the report-back step, not started in parallel.
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("I can help with both.", { detectedMode: "both" }),
       );
       const turn1 = await handleChatTurn(null, "I need clients AND help organizing my pipeline", "front-door", "127.0.0.1");
 
+      // Email capture — safety net forces done=true, so set correct mode
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Starting on both now.", { detectedMode: "both" }),
+      );
       await handleChatTurn(turn1.sessionId, "tim@launchpathventures.com", "front-door", "127.0.0.1");
 
-      mockCreateCompletion.mockResolvedValueOnce(
-        mockAlexResponse("Starting on both now.", { done: true, detectedMode: "both" }),
-      );
-      await handleChatTurn(turn1.sessionId, "go", "front-door", "127.0.0.1", "tim@launchpathventures.com");
-
-      // Both processes should have runs
+      // Only front-door-intake should have a run (CoS chains later)
       const allRuns = await testDb.select().from(schema.processRuns);
 
       const [intakeProc] = await testDb
         .select()
         .from(schema.processes)
         .where(eq(schema.processes.slug, "front-door-intake"));
-      const [cosProc] = await testDb
-        .select()
-        .from(schema.processes)
-        .where(eq(schema.processes.slug, "front-door-cos-intake"));
 
       const intakeRun = allRuns.find((r) => r.processId === intakeProc.id);
-      const cosRun = allRuns.find((r) => r.processId === cosProc.id);
 
       expect(intakeRun).toBeTruthy();
-      expect(cosRun).toBeTruthy();
       expect(intakeRun!.triggeredBy).toBe("front-door-chat");
-      expect(cosRun!.triggeredBy).toBe("front-door-chat");
     });
 
-    it("sends both connector and CoS emails", async () => {
+    it("sends ONE action email for both mode (Brief 126)", async () => {
+      // Brief 126: "both" mode sends ONE outreach-focused action email.
+      // CoS intake chains from front-door-intake report-back.
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("Both.", { detectedMode: "both" }),
       );
       const turn1 = await handleChatTurn(null, "I need clients and help organizing", "front-door", "127.0.0.1");
-      await handleChatTurn(turn1.sessionId, "tim@launchpathventures.com", "front-door", "127.0.0.1");
 
       mockSendAndRecord.mockClear();
 
+      // Email capture — safety net forces done=true, so set correct mode
+      // This turn sends both the intro email AND the action email
       mockCreateCompletion.mockResolvedValueOnce(
-        mockAlexResponse("On it.", { done: true, detectedMode: "both" }),
+        mockAlexResponse("On it.", { detectedMode: "both" }),
       );
-      await handleChatTurn(turn1.sessionId, "go", "front-door", "127.0.0.1", "tim@launchpathventures.com");
+      await handleChatTurn(turn1.sessionId, "tim@launchpathventures.com", "front-door", "127.0.0.1");
 
-      // Should have sent 2 emails via sendAndRecord (connector + CoS action emails)
+      // 2 calls: intro email + 1 action email (not 3 — no separate CoS action email)
       expect(mockSendAndRecord.mock.calls.length).toBe(2);
 
-      const subjects = mockSendAndRecord.mock.calls.map(
-        (call) => (call[0] as Record<string, unknown>).subject,
-      );
-      expect(subjects).toContain("Here's the plan");
-      expect(subjects).toContain("Your priorities briefing starts this week");
+      // The second call is the action email — should be outreach-focused
+      const subject = (mockSendAndRecord.mock.calls[1][0] as Record<string, unknown>).subject;
+      expect(subject).toBe("Here's the plan");
     });
   });
 
@@ -488,14 +483,11 @@ describe("front-door workflow — end to end", () => {
       );
       await handleChatTurn(turn1.sessionId, "actually I need help organizing my pipeline", "front-door", "127.0.0.1");
 
-      // Email
-      await handleChatTurn(turn1.sessionId, "tim@launchpathventures.com", "front-door", "127.0.0.1");
-
-      // ACTIVATE — final mode is CoS
+      // Email capture — safety net forces done=true, so set correct final mode (cos)
       mockCreateCompletion.mockResolvedValueOnce(
-        mockAlexResponse("Briefing coming.", { done: true, detectedMode: "cos" }),
+        mockAlexResponse("Briefing coming.", { detectedMode: "cos" }),
       );
-      await handleChatTurn(turn1.sessionId, "go", "front-door", "127.0.0.1", "tim@launchpathventures.com");
+      await handleChatTurn(turn1.sessionId, "tim@launchpathventures.com", "front-door", "127.0.0.1");
 
       // Only CoS process should be started, NOT connector
       const [cosProc] = await testDb
