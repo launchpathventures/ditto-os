@@ -71,7 +71,23 @@ export interface LlmCompletionRequest {
   messages: LlmMessage[];
   tools?: LlmToolDefinition[];
   maxTokens?: number;
+  /** Hints for Anthropic prompt caching — byte offsets into system prompt where cache breakpoints should be placed */
+  cacheBreakpoints?: number[];
 }
+
+// ============================================================
+// Thinking budget by purpose (token efficiency — Insight-170)
+// ============================================================
+
+const THINKING_BUDGET_BY_PURPOSE: Record<string, number> = {
+  conversation: 2048,
+  writing: 4096,
+  analysis: 4096,
+  classification: 0,  // disable thinking for classification
+  extraction: 1024,
+};
+
+const DEFAULT_THINKING_BUDGET = 4096;
 
 export interface LlmCompletionResponse {
   content: LlmContentBlock[];
@@ -304,6 +320,55 @@ function fromOpenAIChoice(choice: OpenAI.Chat.Completions.ChatCompletion.Choice)
 }
 
 // ============================================================
+// Anthropic prompt caching (Insight-170: token efficiency)
+// ============================================================
+
+/**
+ * Build Anthropic system content with cache_control breakpoints.
+ * When breakpoints are provided, splits the system prompt into segments
+ * with cache_control markers at each breakpoint. This allows Anthropic to
+ * cache static prompt prefixes — cached tokens cost 90% less on hits.
+ *
+ * If no breakpoints, returns the plain string (backward compat).
+ */
+function buildAnthropicSystemContent(
+  system: string,
+  breakpoints?: number[],
+): string | Anthropic.Messages.TextBlockParam[] {
+  if (!breakpoints || breakpoints.length === 0) {
+    return system;
+  }
+
+  // Sort breakpoints and deduplicate
+  const sorted = [...new Set(breakpoints)].sort((a, b) => a - b).filter((bp) => bp > 0 && bp < system.length);
+
+  if (sorted.length === 0) return system;
+
+  const blocks: Anthropic.Messages.TextBlockParam[] = [];
+  let start = 0;
+
+  for (const bp of sorted) {
+    const text = system.slice(start, bp);
+    if (text.length > 0) {
+      blocks.push({
+        type: "text",
+        text,
+        cache_control: { type: "ephemeral" },
+      });
+    }
+    start = bp;
+  }
+
+  // Remaining text after last breakpoint (no cache_control — it changes each turn)
+  const remaining = system.slice(start);
+  if (remaining.length > 0) {
+    blocks.push({ type: "text", text: remaining });
+  }
+
+  return blocks;
+}
+
+// ============================================================
 // Anthropic Provider
 // ============================================================
 
@@ -327,10 +392,13 @@ class AnthropicProvider implements LlmProvider {
   async createCompletion(request: LlmCompletionRequest): Promise<LlmCompletionResponse> {
     const model = request.model || configuredModel!;
 
+    // Build system content with cache_control breakpoints for token efficiency (Insight-170)
+    const systemContent = buildAnthropicSystemContent(request.system, request.cacheBreakpoints);
+
     const response = await this.client.messages.create({
       model,
       max_tokens: request.maxTokens || 8192,
-      system: request.system,
+      system: systemContent,
       messages: toAnthropicMessages(request.messages),
       ...(request.tools ? { tools: toAnthropicTools(request.tools) } : {}),
     });
@@ -356,13 +424,23 @@ class AnthropicProvider implements LlmProvider {
     // Enable extended thinking for models that support it
     const supportsThinking = /claude-(3-5|3\.5|4|sonnet-4|opus-4|haiku-4)/.test(model);
 
+    // Adaptive thinking budget based on purpose (Insight-170: token efficiency)
+    const thinkingBudget = supportsThinking
+      ? (request.purpose && THINKING_BUDGET_BY_PURPOSE[request.purpose] !== undefined
+          ? THINKING_BUDGET_BY_PURPOSE[request.purpose]
+          : DEFAULT_THINKING_BUDGET)
+      : 0;
+
+    // Build system content with cache_control breakpoints (Insight-170)
+    const systemContent = buildAnthropicSystemContent(request.system, request.cacheBreakpoints);
+
     const stream = this.client.messages.stream({
       model,
-      max_tokens: supportsThinking ? 16384 : (request.maxTokens || 8192),
-      system: request.system,
+      max_tokens: supportsThinking ? Math.max(8192, thinkingBudget * 2) : (request.maxTokens || 8192),
+      system: systemContent,
       messages,
       ...(tools && tools.length > 0 ? { tools } : {}),
-      ...(supportsThinking ? { thinking: { type: "enabled", budget_tokens: 8192 } } : {}),
+      ...(supportsThinking && thinkingBudget > 0 ? { thinking: { type: "enabled", budget_tokens: thinkingBudget } } : {}),
     });
 
     for await (const event of stream) {

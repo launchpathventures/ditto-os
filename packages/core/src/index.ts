@@ -43,6 +43,7 @@ export {
   type ChainDefinition,
   type OutboundQualityRule,
   type OutboundActionRecord,
+  type StagedOutboundAction,
 } from "./harness/index.js";
 
 export {
@@ -62,6 +63,9 @@ export {
   setSamplingSalt,
   parseHarnessConfig,
   type HarnessConfig,
+  // Model purpose resolution (Brief 128)
+  modelPurposeResolverHandler,
+  resolveModelPurpose,
   // Operating Cycle handlers (Brief 116)
   identityRouterHandler,
   voiceCalibrationHandler,

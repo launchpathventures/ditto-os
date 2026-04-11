@@ -11,6 +11,7 @@ id: content-creation
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 operator: user-agent
 gear: digital-acquisition

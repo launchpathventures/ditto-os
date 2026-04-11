@@ -336,6 +336,7 @@ export async function startIntake(
   _userId?: string, // Deprecated: networkUsers.id is now auto-created from email
   forcePersona?: "alex" | "mira",
   skipEmail?: boolean,
+  sessionId?: string,
 ): Promise<IntakeResult> {
   if (!email || !email.includes("@")) {
     return { success: false, recognised: false, message: "A valid email is required." };
@@ -372,7 +373,7 @@ export async function startIntake(
 
     // Send welcome-back email (unless caller will send later)
     if (!skipEmail) {
-      await sendWelcomeEmail(normalizedEmail, personaId, existing.name, need, true, contextNote, existing.id, ownerUserId);
+      await sendWelcomeEmail(normalizedEmail, personaId, existing.name, need, true, contextNote, existing.id, ownerUserId, sessionId);
     }
 
     return {
@@ -419,7 +420,7 @@ export async function startIntake(
 
   // Send welcome email (unless caller will send later with richer context)
   if (!skipEmail) {
-    await sendWelcomeEmail(normalizedEmail, personaId, name, need, false, undefined, person.id, ownerUserId);
+    await sendWelcomeEmail(normalizedEmail, personaId, name, need, false, undefined, person.id, ownerUserId, sessionId);
   }
 
   const needAck = need ? ` You mentioned you're looking for help with "${need}" — I'll keep that in mind.` : "";
@@ -452,6 +453,7 @@ async function sendIntroEmail(
   contextNote?: string,
   personId?: string,
   userId?: string,
+  sessionId?: string,
 ): Promise<void> {
   const { sendAndRecord } = await import("../channel");
 
@@ -492,6 +494,9 @@ async function sendIntroEmail(
       personId,
       userId: userId || "founder",
       includeOptOut: true,
+      // Brief 126 AC4: sessionId in DB metadata (never in email headers/body — AC18)
+      // so replies to the intro email can be traced to the user's session
+      ...(sessionId ? { metadata: { sessionId, chatContext: true } } : {}),
     });
 
     if (result.success) {
@@ -673,6 +678,7 @@ async function sendWelcomeEmail(
   contextNote?: string,
   personId?: string,
   userId?: string,
+  sessionId?: string,
 ): Promise<void> {
-  return sendIntroEmail(email, personaId, name, recognised, contextNote, personId, userId);
+  return sendIntroEmail(email, personaId, name, recognised, contextNote, personId, userId, sessionId);
 }

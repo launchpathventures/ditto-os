@@ -129,7 +129,7 @@ function inferConversationStage(session: ChatSession): ConversationStage {
   if (session.requestEmailFlagged) {
     // Check if last assistant message indicated done
     const lastAssistantMsg = [...session.messages].reverse().find((m) => m.role === "assistant");
-    if (lastAssistantMsg?.content.includes("[ACTIVATED]") || lastAssistantMsg?.content.includes("done")) {
+    if (lastAssistantMsg?.content.includes("[ACTIVATED]")) {
       return "activate";
     }
     return "details";
@@ -468,7 +468,8 @@ export async function handleChatTurn(
     // In test mode, emails are suppressed at the channel adapter level
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
-    try { await startIntake(trimmedMessage, name, need, undefined, "alex"); } catch { /* non-fatal */ }
+    // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
+    try { await startIntake(trimmedMessage, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -506,6 +507,7 @@ export async function handleChatTurn(
   // ============================================================
 
   if (isSpendCeilingReached()) {
+    await saveSession(session);
     return {
       reply: "I'm getting a lot of traffic right now — drop me your email and I'll follow up personally.",
       sessionId: session.sessionId,
@@ -620,6 +622,20 @@ export async function handleChatTurn(
     }
   }
 
+  // Brief 126: Safety net — if email was captured in THIS turn (emailCaptured flag)
+  // and the LLM's response + enrichment loop didn't set done, force it.
+  // This prevents the limbo state where ACTIVATE never fires after EMAIL_CAPTURED.
+  // Only applies when emailCaptured was set THIS turn (from regex match) — not
+  // for returning visitors where knownEmail comes from the cookie.
+  if (!done && emailCaptured && knownEmail) {
+    console.warn(`[network-chat] Forced done=true after EMAIL_CAPTURED — enrichment did not set done (session ${session.sessionId})`);
+    done = true;
+    await recordFunnelEvent(session.sessionId, "forced_done", context, {
+      reason: "enrichment_did_not_set_done",
+      messageCount: session.messageCount,
+    });
+  }
+
   // ACTIVATE: Alex has gathered enough — send action email and start the engine process
   // Branch by detected mode: connector, cos, both, or null (general intake)
   if (done && knownEmail) {
@@ -649,28 +665,27 @@ export async function handleChatTurn(
     const activatePersonId = activatePerson?.id;
 
     // Send the action email with what happens next (mode-specific)
+    // Brief 126: "both" mode sends ONE action email (outreach-focused), not two.
+    // CoS intake chains from front-door-intake report-back, not in parallel.
     const outreachStyle: "connector" | "sales" = effectiveMode === "sales" ? "sales" : "connector";
     try {
       if (effectiveMode === "cos") {
         await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
-      } else if (effectiveMode === "both") {
-        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId, outreachStyle);
-        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
       } else {
+        // "both" and single outreach modes both send the outreach action email
         await sendActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId, outreachStyle);
       }
     } catch { /* non-fatal */ }
 
     // Start the engine process — branch by mode
-    // In test mode, processes run normally but emails are suppressed at the channel adapter
+    // Brief 126: "both" mode starts ONLY front-door-intake. CoS chains from report-back.
+    // This gives the user ONE email thread, not two parallel ones.
     try {
       const { startSystemAgentRun } = await import("./heartbeat");
       const person = activatePerson;
       const targetType = extractNeedFromConversation(session.messages) || "relevant contacts";
       const baseInputs = {
         personId: person?.id || "unknown",
-        // userId = networkUsers.id (canonical user identity for processes)
-        // people.userId is set to networkUsers.id during intake
         userId: person?.userId || "unknown",
         email: knownEmail,
         name: personName,
@@ -679,8 +694,7 @@ export async function handleChatTurn(
       };
 
       const isOutreach = effectiveMode === "connector" || effectiveMode === "sales" || effectiveMode === "both";
-      const isCos = effectiveMode === "cos" || effectiveMode === "both";
-      // Determine outreach style: "connector" = Alex's identity, "sales" = user's brand
+      const isCosOnly = effectiveMode === "cos";
       const outreachMode = effectiveMode === "sales" ? "sales" : "connector";
 
       if (isOutreach) {
@@ -689,11 +703,13 @@ export async function handleChatTurn(
           targetType,
           businessContext: conversationSummary,
           outreachMode,
+          // Pass detectedMode so the chain can trigger cos-intake when mode is "both"
+          detectedMode: effectiveMode,
         }, "front-door-chat");
-        console.log(`[network-chat] Started front-door-intake (${outreachMode}) process for ${knownEmail}`);
+        console.log(`[network-chat] Started front-door-intake (${outreachMode}${effectiveMode === "both" ? " + cos chained" : ""}) process for ${knownEmail}`);
       }
 
-      if (isCos) {
+      if (isCosOnly) {
         await startSystemAgentRun("front-door-cos-intake", {
           ...baseInputs,
           statedPriorities: targetType,
@@ -812,7 +828,8 @@ export async function* handleChatTurnStreaming(
     emailCaptured = true;
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
-    try { await startIntake(trimmedMessage, name, need, undefined, "alex"); } catch { /* non-fatal */ }
+    // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
+    try { await startIntake(trimmedMessage, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -843,6 +860,7 @@ export async function* handleChatTurnStreaming(
 
   // Daily spend ceiling — circuit breaker for cost control
   if (isSpendCeilingReached()) {
+    await saveSession(session);
     yield { type: "text-delta", text: "I'm getting a lot of traffic right now — drop me your email and I'll follow up personally." };
     yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
     yield { type: "done" };
@@ -965,6 +983,16 @@ export async function* handleChatTurnStreaming(
     }
   }
 
+  // Brief 126: Safety net — if email was captured but enrichment didn't set done
+  if (!done && emailCaptured && knownEmail) {
+    console.warn(`[network-chat] Forced done=true after EMAIL_CAPTURED — enrichment did not set done (session ${session.sessionId})`);
+    done = true;
+    await recordFunnelEvent(session.sessionId, "forced_done", context, {
+      reason: "enrichment_did_not_set_done",
+      messageCount: session.messageCount,
+    });
+  }
+
   // ACTIVATE (same as non-streaming)
   if (done && knownEmail) {
     // Authenticate this session for magic link access (Brief 123)
@@ -990,12 +1018,10 @@ export async function* handleChatTurnStreaming(
     const streamActivatePerson = await findPersonByEmailGlobal(knownEmail);
     const streamActivatePersonId = streamActivatePerson?.id;
 
+    // Brief 126: "both" sends ONE action email, CoS chains from report-back
     const streamOutreachStyle: "connector" | "sales" = effectiveMode === "sales" ? "sales" : "connector";
     try {
       if (effectiveMode === "cos") {
-        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
-      } else if (effectiveMode === "both") {
-        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId, streamOutreachStyle);
         await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
       } else {
         await sendActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId, streamOutreachStyle);
@@ -1016,7 +1042,7 @@ export async function* handleChatTurnStreaming(
       };
 
       const isOutreach = effectiveMode === "connector" || effectiveMode === "sales" || effectiveMode === "both";
-      const isCos = effectiveMode === "cos" || effectiveMode === "both";
+      const isCosOnly = effectiveMode === "cos";
       const outreachMode = effectiveMode === "sales" ? "sales" : "connector";
 
       if (isOutreach) {
@@ -1025,9 +1051,10 @@ export async function* handleChatTurnStreaming(
           targetType,
           businessContext: conversationSummary,
           outreachMode,
+          detectedMode: effectiveMode,
         }, "front-door-chat");
       }
-      if (isCos) {
+      if (isCosOnly) {
         await startSystemAgentRun("front-door-cos-intake", {
           ...baseInputs,
           statedPriorities: targetType,

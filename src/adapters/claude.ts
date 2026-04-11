@@ -286,9 +286,11 @@ export const claudeAdapter = {
     const allTools: LlmToolDefinition[] = [...codebaseTools, ...integrationToolDefs];
     const tools = allTools.length > 0 ? allTools : undefined;
 
-    const model = resolveModel(step.config?.model_hint as string | undefined);
+    // Model selection: resolved purpose (Brief 128) takes precedence over model_hint
+    const resolvedPurpose = step.config?._resolvedPurpose as import("../engine/model-routing").ModelPurpose | undefined;
+    const model = resolvedPurpose ? undefined : resolveModel(step.config?.model_hint as string | undefined);
     console.log(`    Claude adapter: ${step.agent_role || "general"} agent`);
-    console.log(`    Model: ${model}`);
+    console.log(`    ${resolvedPurpose ? `Purpose: ${resolvedPurpose}` : `Model: ${model}`}`);
     if (tools) {
       console.log(`    Tools: ${tools.map(t => t.name).join(", ")}`);
     }
@@ -308,7 +310,8 @@ export const claudeAdapter = {
     // Tool use loop: call API, handle tool_use responses, repeat until text
     while (true) {
       const response = await createCompletion({
-        model,
+        ...(model ? { model } : {}),
+        ...(resolvedPurpose ? { purpose: resolvedPurpose } : {}),
         system: systemPrompt,
         messages,
         ...(tools ? { tools } : {}),

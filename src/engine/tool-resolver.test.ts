@@ -248,4 +248,85 @@ describe("tool-resolver", () => {
       });
     });
   });
+
+  describe("staged outbound tools (Brief 129)", () => {
+    it("queues crm.send_email to staging queue instead of dispatching", async () => {
+      const stagedQueue: import("./harness").StagedOutboundAction[] = [];
+      const result = resolveTools(["crm.send_email"], undefined, undefined, stagedQueue);
+
+      const output = await result.executeIntegrationTool("crm_send_email", {
+        to: "test@example.com",
+        subject: "Hello",
+        body: "Hi there",
+        personId: "p-1",
+        mode: "connecting",
+      });
+
+      const parsed = JSON.parse(output);
+      expect(parsed.status).toBe("queued");
+      expect(parsed.draftId).toBeDefined();
+      expect(stagedQueue).toHaveLength(1);
+      expect(stagedQueue[0].toolName).toBe("crm.send_email");
+      expect(stagedQueue[0].args.to).toBe("test@example.com");
+      expect(stagedQueue[0].draftId).toBe(parsed.draftId);
+    });
+
+    it("extracts outbound metadata for quality gate checking", async () => {
+      const stagedQueue: import("./harness").StagedOutboundAction[] = [];
+      const result = resolveTools(["crm.send_email"], undefined, undefined, stagedQueue);
+
+      await result.executeIntegrationTool("crm_send_email", {
+        to: "test@example.com",
+        subject: "Meeting Follow-up",
+        body: "Great meeting today",
+        personId: "p-1",
+        mode: "connecting",
+      });
+
+      expect(stagedQueue[0].content).toBe("Meeting Follow-up\n\nGreat meeting today");
+      expect(stagedQueue[0].channel).toBe("email");
+      expect(stagedQueue[0].recipientId).toBe("p-1");
+    });
+
+    it("executes non-staged tools immediately (crm.record_interaction)", async () => {
+      const stagedQueue: import("./harness").StagedOutboundAction[] = [];
+      const result = resolveTools(
+        ["crm.send_email", "crm.record_interaction"],
+        undefined,
+        undefined,
+        stagedQueue,
+      );
+
+      // record_interaction is not staged — it should try to execute (will fail without DB, but won't queue)
+      expect(result.tools).toHaveLength(2);
+      expect(stagedQueue).toHaveLength(0);
+    });
+
+    it("executes crm.send_email immediately when no staging queue provided", async () => {
+      // No stagedQueue param = backward compat, sends immediately
+      const result = resolveTools(["crm.send_email"]);
+      // Tool resolves normally
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe("crm_send_email");
+      // executeIntegrationTool would call the real execute function (not queue)
+      // We can't fully test this without DB, but verify no queue behavior
+    });
+
+    it("stages multiple emails from same step into the queue", async () => {
+      const stagedQueue: import("./harness").StagedOutboundAction[] = [];
+      const result = resolveTools(["crm.send_email"], undefined, undefined, stagedQueue);
+
+      await result.executeIntegrationTool("crm_send_email", {
+        to: "alice@example.com", subject: "Hi Alice", body: "Hello", personId: "p-1", mode: "connecting",
+      });
+      await result.executeIntegrationTool("crm_send_email", {
+        to: "bob@example.com", subject: "Hi Bob", body: "Hey", personId: "p-2", mode: "selling",
+      });
+
+      expect(stagedQueue).toHaveLength(2);
+      expect(stagedQueue[0].args.to).toBe("alice@example.com");
+      expect(stagedQueue[1].args.to).toBe("bob@example.com");
+      expect(stagedQueue[0].draftId).not.toBe(stagedQueue[1].draftId);
+    });
+  });
 });

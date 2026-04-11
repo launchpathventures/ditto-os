@@ -14,6 +14,7 @@ id: library-curation
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 operator: system
 

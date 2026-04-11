@@ -11,6 +11,7 @@ id: person-research
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 description: >
   Deep-dive research on a specific person. Assembles everything knowable:

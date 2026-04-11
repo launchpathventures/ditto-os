@@ -20,8 +20,17 @@ export const stepExecutionHandler: HarnessHandler = {
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
     try {
+      // Inject resolved model purpose into step config for the adapter (Brief 128)
+      let step = context.stepDefinition;
+      if (context.resolvedModelPurpose) {
+        step = {
+          ...step,
+          config: { ...step.config, _resolvedPurpose: context.resolvedModelPurpose },
+        };
+      }
+
       const result = await executeStep(
-        context.stepDefinition,
+        step,
         context.processRun.inputs,
         context.processDefinition,
         context.resolvedTools ?? undefined,

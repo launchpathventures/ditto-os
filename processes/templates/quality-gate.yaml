@@ -11,6 +11,7 @@ id: quality-gate
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 description: >
   Universal pre-send quality check for all outbound communication —

@@ -22,7 +22,7 @@ import { eq, and, desc, ne } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { resolveTools } from "../tool-resolver";
 import { getCognitiveCoreCompact, getCognitiveModeExtension } from "../cognitive-core";
-import { resolveModeFromProcess, resolveGhostModeOverride } from "../cognitive-core";
+import { resolveModeFromProcess, resolveGhostModeOverride } from "../cognitive-mode-resolver";
 
 /** Default token budget for memory injection (4 chars ≈ 1 token) */
 const DEFAULT_TOKEN_BUDGET = 2000;

@@ -64,10 +64,11 @@ function makeContext(overrides: {
 }
 
 describe("memory-assembly handler", () => {
-  it("returns empty memories when no memories or run context exist", async () => {
+  it("returns compact cognitive core when no memories or run context exist", async () => {
     const context = makeContext();
     const result = await memoryAssemblyHandler.execute(context);
-    expect(result.memories).toBe("");
+    // Brief 114: compact core is always prepended (trade-off heuristics + escalation)
+    expect(result.memories).toContain("Trade-Off Heuristics");
     expect(result.memoriesInjected).toBe(0);
   });
 

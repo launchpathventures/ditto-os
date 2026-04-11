@@ -39,7 +39,7 @@ import {
   type SessionTurn,
 } from "./self-context";
 import { selfTools, executeDelegation } from "./self-delegation";
-import { getUserModelSummary } from "./user-model";
+import { getUserModelSummary, getUserModel } from "./user-model";
 import { assembleBriefing } from "./briefing-assembler";
 
 // ============================================================
@@ -62,6 +62,8 @@ export interface SelfContext {
   sessionId: string;
   resumed: boolean;
   previousSummary: string | null;
+  /** Byte offset for Anthropic prompt cache breakpoint (end of static cognitive framework) */
+  cacheBreakpointOffset?: number;
 }
 
 /**
@@ -114,6 +116,8 @@ export async function assembleSelfContext(
   const sections: string[] = [];
 
   // Core identity (always loaded, largest section)
+  // Track length for cache breakpoint — cognitive framework is static across turns
+  const cacheBreakpointOffset = cognitiveFramework.length;
   sections.push(cognitiveFramework);
 
   // User knowledge from self-scoped memories
@@ -133,29 +137,35 @@ export async function assembleSelfContext(
   );
 
   // Delegation guidance — when to use tools vs respond directly
-  // For inbound surface: suppress workspace-specific guidance (panels, artifact mode,
-  // process builder) and replace with async-appropriate instructions (AC4, Reviewer Flag A2)
+  // Token efficiency (Insight-170): compact guidance for established users,
+  // full guidance for new users. Inbound always uses async-specific compact guidance.
+  const userModel = await getUserModel(userId);
+  const isEstablished = userModel.completeness > 0.5;
+
   if (surface === "inbound") {
     sections.push(
       `<delegation_guidance>
-This is an asynchronous inbound message (email/voice). Respond concisely and actionably. Do not reference workspace UI, panels, artifact mode, or process builder — the user is not in a workspace.
+Async inbound (email/voice). Be concise, actionable. No workspace UI references.
+Tools work: create_work_item, start_pipeline, start_dev_role, get_briefing, update_user_model, quick_capture, generate_process.
+Bias action over questions — round-trips are expensive in async. Mention assumptions.
+Irreversible actions (trust, process save): describe plan, ask confirmation.
+</delegation_guidance>`,
+    );
+  } else if (isEstablished) {
+    // Compact delegation for established users (~150 tokens vs ~800) — Insight-170
+    sections.push(
+      `<delegation_guidance>
+You are a workspace conductor. Tools shape the workspace — use them to move from chat into structured experiences.
 
-**Your tools still work.** Use them to take action on the user's behalf:
-- create_work_item: When the user asks you to do something
-- start_pipeline / start_dev_role: When the user requests work that needs a process
-- get_briefing: When the user asks for a status update
-- update_user_model: When you learn something about the user
-- quick_capture: When the user shares a note or observation
-- generate_process: When the user describes a recurring need (draft and describe it — they can't see a panel)
-
-**Bias toward action over clarifying questions.** The user sent a message and is waiting for a response — likely hours from now. Make reasonable assumptions, start the work, and mention what you assumed. One round-trip is expensive in async channels.
-
-**When you start a process:** Mention what you started and the expected timeline ("I've kicked off research — expect results within 24 hours").
-
-**Confirmation model:** For irreversible actions (trust changes, process saves), describe what you plan to do and ask for confirmation. The user will reply when they're ready.
+**Tool routing:** Recurring need → generate_process(save=false). Substantial work → start_dev_role / start_pipeline. Quick question → consult_role. Planning → plan_with_role. Status → use loaded context. Casual → respond directly.
+**Process creation:** Draft early with generate_process(save=false), iterate through the tool, save after confirmation.
+**Delegation** = full harness run (~1-5 min). **Consultation** = quick perspective (~10 sec). **Planning** = doc reading + analysis. **Pipeline** = end-to-end (PM→Builder→Reviewer).
+**Proactive:** get_briefing on return, detect_risks for signals, suggest_next for coverage gaps (never during exceptions).
+**Confirmation required:** adjust_trust(confirmed=true), generate_process(save=true), connect_service(action='guide') — always preview first, get explicit "yes".
 </delegation_guidance>`,
     );
   } else {
+    // Full delegation guidance for new users learning the workspace
     sections.push(
       `<delegation_guidance>
 You have tools to delegate work, manage processes, and help the user build their workspace.
@@ -250,8 +260,10 @@ For these tools, always: (1) present what you intend to do, (2) show the evidenc
   }
 
   // Onboarding and coaching guidance (Insight-093, AC9, AC10)
-  sections.push(
-    `<onboarding_guidance>
+  // Token efficiency (Insight-170): skip for established users (completeness > 0.5)
+  if (!isEstablished) {
+    sections.push(
+      `<onboarding_guidance>
 **For new users (empty user model):**
 Drive a multi-session deep intake. First session: understand their problems and immediate tasks (enough to create their first process and deliver value). Subsequent sessions: deepen into vision, goals, challenges. Ask open questions, pick up signals, suggest where to start. Use update_user_model to store what you learn.
 
@@ -264,7 +276,8 @@ When you notice learning accumulating: "You've taught me 4 things this week — 
 When reviewing work: explain what knowledge you used and where it came from.
 This builds trust through transparency and helps users become better AI collaborators.
 </onboarding_guidance>`,
-  );
+    );
+  }
 
   // Surface context
   sections.push(
@@ -309,20 +322,31 @@ This is a brand new user with no work history. You MUST speak first — greet th
     }
   }
 
-  // Budget check — truncate if over ~4K tokens
+  // Budget check — truncate if over token budget
+  // Priority order for dropping (Insight-170): onboarding → delegation → memories (most valuable last)
   let systemPrompt = sections.join("\n\n");
   const charBudget = SELF_CONTEXT_TOKEN_BUDGET * CHARS_PER_TOKEN;
   if (systemPrompt.length > charBudget) {
-    // Truncate memories first (they're the most expendable)
-    const withoutMemories = sections.filter((s) => !s.startsWith("<memories>"));
-    systemPrompt = withoutMemories.join("\n\n");
+    // Drop onboarding guidance first (least valuable for established users)
+    let filtered = sections.filter((s) => !s.startsWith("<onboarding_guidance>"));
+    systemPrompt = filtered.join("\n\n");
+    if (systemPrompt.length > charBudget) {
+      // Drop delegation guidance next
+      filtered = filtered.filter((s) => !s.startsWith("<delegation_guidance>"));
+      systemPrompt = filtered.join("\n\n");
+    }
+    if (systemPrompt.length > charBudget) {
+      // Drop memories last (personalization is high value)
+      filtered = filtered.filter((s) => !s.startsWith("<memories>"));
+      systemPrompt = filtered.join("\n\n");
+    }
     if (systemPrompt.length > charBudget) {
       const truncSuffix = "\n... (context truncated)";
       systemPrompt = systemPrompt.slice(0, charBudget - truncSuffix.length) + truncSuffix;
     }
   }
 
-  return { systemPrompt, sessionId, resumed, previousSummary };
+  return { systemPrompt, sessionId, resumed, previousSummary, cacheBreakpointOffset };
 }
 
 // ============================================================
@@ -432,10 +456,13 @@ export async function selfConverse(
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     const completion = await createCompletion({
+      purpose: "conversation",
       system: context.systemPrompt,
       messages,
       tools: selfTools,
       maxTokens: 4096,
+      // Cache breakpoint after cognitive framework (static across turns) — Insight-170
+      cacheBreakpoints: context.cacheBreakpointOffset ? [context.cacheBreakpointOffset] : undefined,
     });
 
     totalCostCents += completion.costCents;
@@ -525,10 +552,16 @@ export async function selfConverse(
         });
       }
 
+      // Token efficiency (Insight-170): truncate large tool results
+      const TOOL_RESULT_CHAR_LIMIT = 2000;
+      const truncatedOutput = result.output.length > TOOL_RESULT_CHAR_LIMIT
+        ? result.output.slice(0, TOOL_RESULT_CHAR_LIMIT) + `\n... [truncated, ${result.output.length} chars total]`
+        : result.output;
+
       toolResults.push({
         type: "tool_result",
         tool_use_id: toolUse.id,
-        content: result.output,
+        content: truncatedOutput,
       });
     }
 

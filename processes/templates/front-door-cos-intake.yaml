@@ -3,6 +3,7 @@ id: front-door-cos-intake
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 description: >
   Triggered when Alex detects a Chief of Staff need from a front door
@@ -243,6 +244,18 @@ chain:
       userId: "{userId}"
       email: "{email}"
       name: "{name}"
+      conversationSummary: "{conversationSummary}"
+
+  # User relationship nurture — Alex stays in touch with the USER:
+  - trigger: step-complete
+    step: user-review
+    process: user-nurture-first-week
+    inputs:
+      personId: "{personId}"
+      userId: "{userId}"
+      email: "{email}"
+      name: "{name}"
+      detectedMode: "cos"
       conversationSummary: "{conversationSummary}"
 
 quality_criteria:

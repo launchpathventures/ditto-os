@@ -20,7 +20,7 @@ export function ValueCards() {
       <ValueCard
         icon={<Users size={24} className="text-vivid" />}
         title="The Right People, Found"
-        description="Alex researches who you should meet, drafts introductions you review, and reaches out on your behalf."
+        description="Alex researches who you should meet, shows you how he'd frame the introduction, and reaches out on your behalf."
         href="/network"
       />
     </div>

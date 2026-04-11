@@ -11,6 +11,7 @@ id: warm-path-finder
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 operator: alex-or-mira
 

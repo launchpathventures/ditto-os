@@ -12,6 +12,7 @@ id: selling-outreach
 version: 2
 status: active
 template: true
+callable_as: sub-process
 
 operator: user-agent
 gear: direct-outreach

@@ -108,13 +108,87 @@ describe("network-chat-prompt", () => {
     it("describes approval model in connector mode", async () => {
       const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
       const prompt = buildFrontDoorPrompt("front-door");
-      expect(prompt).toContain("Nothing goes out without your approval");
+      // Connector mode explains Alex reaches out as himself with framing examples
+      expect(prompt).toContain("consent");
     });
 
     it("includes mode switching as additive", async () => {
       const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
       const prompt = buildFrontDoorPrompt("front-door");
       expect(prompt).toContain("additive");
+    });
+
+    // Brief 122: Temporal context
+    it("includes Current Time section", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("## Current Time");
+    });
+
+    it("uses visitor timezone when provided", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door", {
+        location: { city: "Melbourne", timezone: "Australia/Melbourne" },
+      });
+      expect(prompt).toContain("Australia/Melbourne");
+    });
+
+    // Brief 122: No time promises
+    it("contains no specific time commitments", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).not.toContain("within the hour");
+      expect(prompt).not.toContain("within 24 hours");
+      expect(prompt).toContain("I'll get started right away");
+    });
+
+    it("includes never-commit-to-delivery-times rule", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Never commit to specific delivery times");
+      expect(prompt).toContain("I'll get started right away");
+    });
+
+    // Brief 122: Judgment framework
+    it("includes connector judgment question in REFLECT & PROPOSE", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Would both sides thank me for this?");
+    });
+
+    it("includes sales judgment question in REFLECT & PROPOSE", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("Does this person likely have the problem we solve?");
+    });
+
+    it("includes advisor-not-order-taker framing", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("You're an advisor, not an order-taker");
+    });
+
+    // Brief 122: Strategic framing in GATHER
+    it("includes strategic framing for connector vs sales", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door");
+      expect(prompt).toContain("mutual value");
+      expect(prompt).toContain("commercial outcome");
+    });
+
+    // Brief 122: Stage-gated prompt also has the changes
+    it("stage-gated reflect includes judgment questions", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door", undefined, "reflect");
+      expect(prompt).toContain("Would both sides thank me for this?");
+      expect(prompt).toContain("advisor, not an order-taker");
+    });
+
+    it("stage-gated gather includes strategic framing", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door", undefined, "gather");
+      expect(prompt).toContain("mutual value");
+      expect(prompt).toContain("commercial outcome");
     });
   });
 
@@ -354,7 +428,7 @@ describe("network-chat integration", () => {
     const turn2 = await handleChatTurn(turn1.sessionId, "tim@example.com", "front-door", "127.0.0.1");
 
     expect(turn2.emailCaptured).toBe(true);
-    expect(mockStartIntake).toHaveBeenCalledWith("tim@example.com", "Tim", expect.any(String), undefined, "alex");
+    expect(mockStartIntake).toHaveBeenCalledWith("tim@example.com", "Tim", expect.any(String), undefined, "alex", undefined, expect.any(String));
   });
 
   it("calls startIntake with email, extracted name, and need", async () => {
@@ -368,6 +442,8 @@ describe("network-chat integration", () => {
       "I need help finding logistics partners",
       undefined,
       "alex",
+      undefined,
+      expect.any(String), // sessionId (Brief 126 AC4)
     );
   });
 
@@ -509,20 +585,23 @@ describe("network-chat integration", () => {
     });
 
     it("calls sendCosActionEmail for cos mode on ACTIVATE", async () => {
+      // Turn 1: detect cos mode
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("I can help organize that.", { detectedMode: "cos" }),
+      );
       const turn1 = await handleChatTurn(null, "I need help organizing", "front-door", "127.0.0.1");
-      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
+      // Turn 2: email + ACTIVATE — LLM sees [EMAIL_CAPTURED], sets done
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("I'll send your first briefing.", { done: true, detectedMode: "cos" }),
       );
-
-      await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
       expect(mockSendCosActionEmail).toHaveBeenCalled();
       expect(mockSendActionEmail).not.toHaveBeenCalled();
     });
 
-    it("calls both email functions for both mode on ACTIVATE", async () => {
+    it("calls only sendActionEmail for both mode on ACTIVATE (Brief 126: CoS chains later)", async () => {
       const turn1 = await handleChatTurn(null, "I need clients and help organizing", "front-door", "127.0.0.1");
       await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
@@ -532,8 +611,10 @@ describe("network-chat integration", () => {
 
       await handleChatTurn(turn1.sessionId, "sounds good", "front-door", "127.0.0.1", "test@example.com");
 
+      // Brief 126: "both" mode sends only the outreach action email.
+      // CoS intake chains from front-door-intake report-back, not in parallel.
       expect(mockSendActionEmail).toHaveBeenCalled();
-      expect(mockSendCosActionEmail).toHaveBeenCalled();
+      expect(mockSendCosActionEmail).not.toHaveBeenCalled();
     });
 
     it("defaults to connector on ACTIVATE with null mode", async () => {
@@ -586,14 +667,11 @@ describe("network-chat integration", () => {
       );
       await handleChatTurn(turn1.sessionId, "actually I need help organizing", "front-door", "127.0.0.1");
 
-      // Email
-      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
-
-      // ACTIVATE with cos — pass returningEmail
+      // Turn 3: email + ACTIVATE — LLM sees [EMAIL_CAPTURED], sets done with cos mode
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("Done.", { done: true, detectedMode: "cos" }),
       );
-      await handleChatTurn(turn1.sessionId, "go ahead", "front-door", "127.0.0.1", "test@example.com");
+      await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
       expect(mockSendCosActionEmail).toHaveBeenCalled();
       expect(mockSendActionEmail).not.toHaveBeenCalled();

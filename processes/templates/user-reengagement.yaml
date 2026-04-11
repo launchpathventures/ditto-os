@@ -1,0 +1,140 @@
+# Ditto — Template Process: User Re-engagement
+#
+# One last try for silent users after the first week. Not a drip campaign —
+# one email, one decision. If they reply, resume. If not, respect the silence.
+#
+# Provenance: Brief 126, HubSpot re-engagement workflow (pattern)
+
+name: "User Re-engagement"
+id: user-reengagement
+version: 1
+status: active
+template: true
+callable_as: sub-process
+
+operator: alex-or-mira
+
+description: >
+  Triggered when a user was silent through the entire first week of nurture.
+  Sends one re-engagement email. If the user replies within 5 days, resume
+  normal operations. If silent, mark as passive and stop all automated outreach.
+  A real advisor tries once more then gives space.
+
+trigger:
+  type: event
+  description: Chained from user-nurture-first-week when engagement-level is "silent"
+
+inputs:
+  - name: personId
+    type: text
+    source: self
+    required: true
+  - name: userId
+    type: text
+    source: self
+    required: true
+  - name: email
+    type: text
+    source: self
+    required: true
+  - name: conversationSummary
+    type: text
+    source: self
+    required: true
+    description: Original conversation context for personalisation
+
+steps:
+  - id: send-reengagement
+    name: "Send re-engagement email"
+    executor: ai-agent
+    email_thread: "user-onboarding"
+    description: >
+      Send one warm, personal email. NOT a template — reference specifics
+      from the original conversation. Acknowledge the silence naturally.
+
+      "Hey — I put together some research for you last week based on our
+      conversation about [their specific topic]. Haven't heard back, so
+      just checking: still want me to keep working on this? If so, just
+      reply and I'll pick up where I left off. If not, no worries at all
+      — I'll stop here."
+
+      Keep it under 4 sentences. No guilt. No urgency. One clear question.
+    config:
+      model_hint: fast
+      person_id: "{personId}"
+    tools:
+      - crm.send_email
+    inputs:
+      - conversationSummary
+    outputs:
+      - reengagement-sent
+    wait_for:
+      event: reply
+      timeout: "5d"
+
+  - id: evaluate-response
+    name: "Evaluate response"
+    executor: rules
+    description: >
+      Check the outcome of the re-engagement:
+      - If user replied (wait_for returned with timedOut: false) → mark as re-engaged
+      - If timed out (timedOut: true) → mark user as passive
+    inputs:
+      - reengagement-sent
+    outputs:
+      - reengagement-outcome
+    route_to:
+      - condition: "reengagement-sent.timedOut === true"
+        goto: mark-passive
+    default_next: mark-reengaged
+    depends_on:
+      - send-reengagement
+
+  - id: mark-passive
+    name: "Mark user as passive"
+    executor: rules
+    description: >
+      Set networkUsers.status = "passive" for this user.
+      No further automated outreach. Person record preserved.
+      The user can always come back via magic link or email reply.
+    inputs:
+      - userId
+    outputs:
+      - passive-status-set
+
+  - id: mark-reengaged
+    name: "Mark user as re-engaged"
+    executor: rules
+    description: >
+      User replied — they're back. Record the re-engagement and
+      transition to normal weekly rhythm (pipeline tracking, nurture).
+    inputs:
+      - userId
+    outputs:
+      - reengaged-status-set
+
+outputs:
+  - name: reengagement-outcome
+    type: text
+    description: "reengaged or passive"
+
+chain:
+  # If re-engaged, start the normal weekly pipeline tracking
+  - trigger: step-complete
+    step: mark-reengaged
+    process: pipeline-tracking
+    inputs:
+      personId: "{personId}"
+      userId: "{userId}"
+
+quality_criteria:
+  - "Only ONE re-engagement email sent (not a drip)"
+  - "Email references specifics from original conversation"
+  - "Passive status respected — no further automated outreach"
+  - "User can always return via magic link or email reply"
+
+trust:
+  initial_tier: autonomous
+  upgrade_path: []
+  downgrade_triggers:
+    - "User marks re-engagement email as spam"

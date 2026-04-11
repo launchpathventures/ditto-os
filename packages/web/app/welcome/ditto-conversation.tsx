@@ -14,7 +14,7 @@
  * Provenance: Formless.ai (conversational form), Drift (quick-reply pills), Brief 094.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ChatMessage } from "./chat-message";
@@ -62,7 +62,8 @@ export function DittoConversation() {
   const [emailCaptured, setEmailCaptured] = useState(false);
   const [done, setDone] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [detectedMode, setDetectedMode] = useState<"connector" | "cos" | "both" | null>(null);
+  const [detectedMode, setDetectedMode] = useState<"connector" | "sales" | "cos" | "both" | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Error state
   const [errorFallback, setErrorFallback] = useState(false);
@@ -72,6 +73,54 @@ export function DittoConversation() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const sendingRef = useRef(false);
+
+  // Turnstile bot verification
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
+  const turnstileToken = useRef<string | null>(null);
+
+  const getTurnstileToken = useCallback((): string | null => {
+    const token = turnstileToken.current;
+    // Reset the widget after each use so a fresh token is generated
+    if (turnstileWidgetId.current != null && typeof window !== "undefined" && (window as any).turnstile) {
+      (window as any).turnstile.reset(turnstileWidgetId.current);
+      turnstileToken.current = null;
+    }
+    return token;
+  }, []);
+
+  // Initialize Turnstile widget once the script loads
+  useEffect(() => {
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    if (!siteKey || !turnstileRef.current) return;
+
+    function renderWidget() {
+      if (turnstileWidgetId.current != null || !turnstileRef.current) return;
+      const turnstile = (window as any).turnstile;
+      if (!turnstile) return;
+      turnstileWidgetId.current = turnstile.render(turnstileRef.current, {
+        sitekey: siteKey,
+        size: "invisible",
+        callback: (token: string) => { turnstileToken.current = token; },
+        "error-callback": () => { turnstileToken.current = null; },
+      });
+    }
+
+    // Script may already be loaded
+    if ((window as any).turnstile) {
+      renderWidget();
+    } else {
+      // Wait for the async script to load
+      const interval = setInterval(() => {
+        if ((window as any).turnstile) {
+          renderWidget();
+          clearInterval(interval);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+  }, []);
 
   // Test mode flag — when set, every page load is a fresh new user
   const [testMode, setTestMode] = useState(false);
@@ -146,7 +195,7 @@ export function DittoConversation() {
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [messages, loading]);
+  }, [messages, loading, statusMessage]);
 
   // Focus input when state changes
   useEffect(() => {
@@ -160,14 +209,19 @@ export function DittoConversation() {
   // ============================================================
 
   async function sendMessage(text: string) {
+    if (sendingRef.current) return; // Prevent concurrent sends
+    sendingRef.current = true;
+
     const userMsg: Message = { role: "user", text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
+    setStatusMessage(null);
 
     try {
       // Pass returning user's email so backend knows context
       const savedEmail = emailCaptured ? localStorage.getItem(EMAIL_KEY) : null;
+      const token = getTurnstileToken();
       const res = await fetch("/api/v1/network/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -176,6 +230,8 @@ export function DittoConversation() {
           sessionId,
           context: "front-door",
           ...(savedEmail ? { returningEmail: savedEmail } : {}),
+          ...(name.trim() ? { visitorName: name.trim() } : {}),
+          ...(token ? { turnstileToken: token } : {}),
         }),
       });
 
@@ -184,6 +240,11 @@ export function DittoConversation() {
           const data = await res.json();
           setMessages((prev) => [...prev, { role: "alex", text: data.reply || data.error }]);
           setRequestEmail(true);
+          setLoading(false);
+          return;
+        }
+        if (res.status === 403) {
+          setMessages((prev) => [...prev, { role: "alex", text: "Something went wrong verifying your browser. Please refresh the page and try again." }]);
           setLoading(false);
           return;
         }
@@ -223,7 +284,30 @@ export function DittoConversation() {
               if (event.testMode) setTestMode(true);
             }
 
+            if (event.type === "status") {
+              setStatusMessage(event.message);
+            }
+
+            if (event.type === "text-replace") {
+              // Enrichment produced a refined response — replace the message
+              setStatusMessage(null);
+              streamedText = event.text;
+              if (alexMsgAdded) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: "alex", text: streamedText };
+                  return updated;
+                });
+              } else {
+                // No text-delta was sent yet — add a new message
+                alexMsgAdded = true;
+                setMessages((prev) => [...prev, { role: "alex", text: streamedText }]);
+                setLoading(false);
+              }
+            }
+
             if (event.type === "text-delta") {
+              setStatusMessage(null);
               streamedText += event.text;
               if (!alexMsgAdded) {
                 // Add a new Alex message with streaming text
@@ -270,6 +354,8 @@ export function DittoConversation() {
       if (!alexMsgAdded) {
         setLoading(false);
       }
+      setStatusMessage(null);
+      sendingRef.current = false;
     } catch {
       setErrorFallback(true);
       setMessages((prev) => [
@@ -280,6 +366,8 @@ export function DittoConversation() {
         },
       ]);
       setLoading(false);
+      setStatusMessage(null);
+      sendingRef.current = false;
     }
   }
 
@@ -316,10 +404,6 @@ export function DittoConversation() {
   const showInput = !showIntro && !done && !errorFallback;
   const showInitialPills = showInput && messages.length <= 2 && !requestEmail && !loading;
   const showSuggestions = showInput && !loading && suggestions.length > 0 && !requestEmail;
-  const inputPlaceholder = requestEmail
-    ? "you@company.com"
-    : "Ask me anything, or tell me what you need";
-  const inputType = requestEmail ? "email" : "text";
 
   // ============================================================
   // Render
@@ -327,6 +411,8 @@ export function DittoConversation() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {/* Turnstile invisible widget container */}
+      <div ref={turnstileRef} style={{ display: "none" }} />
       {/* Minimal nav */}
       <nav className="flex items-center justify-between px-6 py-5 md:px-10">
         <Link href="/" className="text-xl font-bold text-vivid">
@@ -390,11 +476,11 @@ export function DittoConversation() {
                     }
                   />
                 ))}
-                {loading && <TypingIndicator />}
+                {(loading || statusMessage) && <TypingIndicator status={statusMessage} />}
                 <div ref={messagesEndRef} />
 
-                {/* Timeline — shown after email is captured (scrolls with messages) */}
-                {emailCaptured && (
+                {/* Timeline — shown after conversation is complete (scrolls with messages) */}
+                {done && emailCaptured && (
                   <div className="mt-6 animate-fade-in rounded-xl border border-border bg-white p-6">
                     <p className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted">
                       What happens next
@@ -402,20 +488,20 @@ export function DittoConversation() {
                     <div className="space-y-4">
                       {(detectedMode === "cos"
                         ? [
-                            "Alex emails you (within the hour)",
+                            "Full plan landing in your inbox now",
                             "First weekly briefing by Monday",
-                            "Alex starts managing your priorities",
+                            "Reply anytime to update Alex",
                           ]
-                        : detectedMode === "both"
+                        : detectedMode === "sales"
                           ? [
-                              "Alex emails you (within the hour)",
-                              "You review introductions before they go out",
-                              "First weekly briefing by Monday",
+                              "Full outreach plan landing in your inbox now",
+                              "Alex reaches out as your company, using your tone",
+                              "You get a report on every outreach",
                             ]
                           : [
-                              "Alex emails you (within the hour)",
-                              "You review introductions before they go out",
-                              "Alex reaches out on your behalf",
+                              "Full plan landing in your inbox now",
+                              "Alex reaches out using his own credibility",
+                              "You get a report on who was contacted",
                             ]
                       ).map((step, i) => (
                         <div key={i} className="flex items-start gap-3">
@@ -427,20 +513,20 @@ export function DittoConversation() {
                       ))}
                     </div>
                     <p className="mt-4 text-sm text-text-muted">
-                      You approve everything. Nothing happens without your say-so.
+                      You set the tone. Alex handles the rest.
                     </p>
                   </div>
                 )}
               </div>
 
               {/* Input — anchored at bottom, never scrolls away */}
-              {showInput && !loading && (
+              {showInput && !loading && !statusMessage && !requestEmail && (
                 <div className="shrink-0 space-y-3 animate-fade-in bg-white pb-4 pt-3">
                   <form onSubmit={handleSubmit} className="flex gap-2">
                     <input
                       ref={inputRef}
-                      type={inputType}
-                      placeholder={inputPlaceholder}
+                      type="text"
+                      placeholder="Ask me anything, or tell me what you need"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
@@ -468,11 +554,67 @@ export function DittoConversation() {
                       disabled={loading}
                     />
                   )}
-                  {requestEmail && (
+                </div>
+              )}
+
+              {/* Email + name card — shown when Alex is ready to start working */}
+              {showInput && !loading && !statusMessage && requestEmail && (
+                <div className="shrink-0 animate-fade-in bg-white pb-4 pt-3">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!email) return;
+                      sendMessage(email);
+                    }}
+                    className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-3"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        ref={inputRef}
+                        type="email"
+                        required
+                        placeholder="you@company.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="flex-1 rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!email.trim()}
+                        aria-label="Get started"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      >
+                        Go <ArrowRight size={16} />
+                      </button>
+                    </div>
                     <p className="text-xs text-text-muted">
-                      Or keep chatting — just type a question instead.
+                      Or keep chatting — just type below instead.
                     </p>
-                  )}
+                  </form>
+                  <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Or ask another question..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim()}
+                      aria-label="Send message"
+                      className="inline-flex items-center rounded-2xl bg-vivid/10 px-4 py-3 text-vivid transition-colors hover:bg-vivid/20 disabled:opacity-40"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </form>
                 </div>
               )}
 

@@ -152,6 +152,28 @@ Human: "Explore/evaluate/assess X" or "What's the state of Y?"
 
 This pattern applies when a role is invoked for its own capability rather than as a step in the build pipeline. The key difference from Patterns A-C: there is no assumption that the work leads to a brief or build. The artifact (research report, ADR, insight, triage assessment) is the deliverable.
 
+### Pattern F: Brainstorm → Insight → Brief (Brief 115 retro)
+
+```
+Human: open-ended exploration ("how should Alex do sales?")
+  → Collaborative brainstorm: explore the problem space freely
+  → Capture insights as they emerge (docs/insights/)
+  → Stress test the brainstorm against the architecture
+     (read architecture.md, schema, harness, existing code —
+      does the idea actually work within the system we've built?)
+  → The stress test produces the real design
+     (brainstorm ideas refined by architectural constraints)
+  → Dev Architect: writes brief(s) from the validated design
+  → Dev Reviewer: challenges the brief (fresh context, separate session)
+  → Dev Documenter: updates state, captures retro
+```
+
+This pattern produces higher-quality briefs than Pattern A because the stress test forces the design through the existing architecture before it becomes a build instruction. Key properties:
+
+- **Insights are captured during the brainstorm, not after.** They're provisional principles that stage in `docs/insights/` and get absorbed into architecture.md when implemented.
+- **The stress test is the most valuable step.** It catches ideas that feel right but would break architectural invariants (trust attachment, harness bypass, auditability loss). The validated design is always better than the raw brainstorm.
+- **The reviewer MUST be a separate session** with fresh context. The brainstormer will defend their own ideas — the maker-checker separation is critical here.
+
 ---
 
 ## Brief Sizing (Insight-004)
@@ -159,6 +181,8 @@ This pattern applies when a role is invoked for its own capability rather than a
 A brief is both a design document and a build instruction. These have different size constraints. A phase-level design is valuable for coherence, but a phase-level build instruction creates compounding integration risk.
 
 **Rule:** If a brief has **>17 acceptance criteria** or touches **>3 subsystems**, split it.
+
+**Design-time scoping (Brief 115 retro):** Don't write a large brief then split it — scope to sub-brief size from the start. When the Architect sees the work spans multiple subsystems, produce the parent brief as a design reference and write sub-briefs directly, rather than writing a monolithic brief and splitting on review. The parent brief captures coherence; the sub-briefs are what gets built.
 
 **How to split:**
 1. Write the **parent brief** first — full phase design showing how pieces fit together
@@ -273,6 +297,8 @@ Ditto development applies this principle directly:
 The Builder owns all automated quality gates: type-check, test suite, smoke test execution, and test authoring for new code. The Reviewer verifies these were run (checking for evidence) and challenges the work architecturally. There is no separate QA/Tester role — testing is a quality dimension distributed across Builder (execution) and Reviewer (verification). See Insight-038.
 
 **Re-entry condition (resolved):** Web UI shipped (Phase 10). Browser-based behavioral testing added via Playwright e2e tests (Brief 054) with mock LLM layer (`MOCK_LLM=true`). No dedicated QA role — testing remains distributed across Builder (execution) and Reviewer (verification).
+
+**Prompt token budgets:** For briefs that modify prompts, token budget acceptance criteria should be broken down per-change (not just a total) so the builder can verify each addition independently. A `countTokens(text)` utility in `src/test-utils.ts` would make these mechanically verifiable — currently estimated manually. (Brief 122 retro)
 
 This layering is the seed for the harness's general quality infrastructure (see Insight-001: Quality Criteria Are Additive).
 

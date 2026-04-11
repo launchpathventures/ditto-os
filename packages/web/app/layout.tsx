@@ -26,6 +26,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          async
+          defer
+        />
         <link
           rel="preconnect"
           href="https://fonts.googleapis.com"

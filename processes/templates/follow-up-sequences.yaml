@@ -11,6 +11,7 @@ id: follow-up-sequences
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 operator: user-agent
 

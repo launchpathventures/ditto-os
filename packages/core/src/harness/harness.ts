@@ -10,7 +10,7 @@
 
 import type { TrustTier, TrustAction, ReviewResult } from "../db/schema.js";
 import type { StepExecutionResult } from "../interfaces.js";
-import type { LlmToolDefinition } from "../llm/index.js";
+import type { LlmToolDefinition, ModelPurpose } from "../llm/index.js";
 
 // ============================================================
 // Process types (minimal — enough for harness context)
@@ -219,6 +219,27 @@ export interface ParallelGroupDefinition {
 export type StepEntry = StepDefinition | ParallelGroupDefinition;
 
 // ============================================================
+// Staged Outbound Actions (Brief 129 — per-action quality gating)
+// ============================================================
+
+export interface StagedOutboundAction {
+  /** Qualified tool name (e.g. "crm.send_email") */
+  toolName: string;
+  /** Tool call arguments as passed by the agent */
+  args: Record<string, unknown>;
+  /** Unique draft identifier for tracking */
+  draftId: string;
+  /** Extracted content for quality gate checking */
+  content?: string;
+  /** Channel for quality gate context (e.g. "email", "sms") */
+  channel?: string;
+  /** Recipient identifier for quality gate context */
+  recipientId?: string;
+  /** Set by quality gate: true = approved for dispatch, false = rejected */
+  approved?: boolean;
+}
+
+// ============================================================
 // Outbound types (Brief 116 — Operating Cycle infrastructure)
 // ============================================================
 
@@ -298,6 +319,10 @@ export interface HarnessContext {
   resolvedTools: ResolvedTools | null;
   routingDecision: RoutingDecision | null;
 
+  // Model purpose resolution (Brief 128)
+  /** Resolved model purpose for step execution — set by model-purpose-resolver handler */
+  resolvedModelPurpose: ModelPurpose | null;
+
   // Operating Cycle infrastructure (Brief 116)
   /** Resolved sending identity: 'principal', 'agent-of-user', 'ghost', or null */
   sendingIdentity: string | null;
@@ -305,8 +330,14 @@ export interface HarnessContext {
   audienceClassification: "broadcast" | "direct" | null;
   /** Loaded voice model content for ghost-mode prompt injection */
   voiceModel: string | null;
-  /** Outbound action metadata — set by step execution for outbound steps */
+  /** Outbound action metadata — set by step execution for outbound steps (legacy single-action) */
   outboundAction: { channel: string; actionType: string; recipientId?: string; content?: string } | null;
+
+  // Staged outbound actions (Brief 129 — per-action quality gating)
+  /** Queue of outbound tool calls staged during step execution */
+  stagedOutboundActions: StagedOutboundAction[];
+  /** Dispatch callback for approved staged actions — injected by product layer */
+  dispatchStagedAction: ((action: StagedOutboundAction) => Promise<string>) | null;
   /** Configurable house value rules — injected by product layer */
   outboundQualityRules: OutboundQualityRule[] | null;
   /** Audience classification lookup — injected by product layer */
@@ -385,11 +416,16 @@ export function createHarnessContext(params: {
     resolvedTools: null,
     routingDecision: null,
 
+    // Model purpose resolution (Brief 128) — null by default
+    resolvedModelPurpose: null,
+
     // Operating Cycle fields (Brief 116) — null by default for backward compatibility
     sendingIdentity: null,
     audienceClassification: null,
     voiceModel: null,
     outboundAction: null,
+    stagedOutboundActions: [],
+    dispatchStagedAction: null,
     outboundQualityRules: null,
     audienceClassificationRules: null,
     voiceModelLoader: null,

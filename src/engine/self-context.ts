@@ -184,16 +184,69 @@ export async function loadSessionTurns(
 
   if (!session || !session.turns || session.turns.length === 0) return [];
 
-  // Take most recent turns that fit in budget
   const turns = session.turns as SessionTurn[];
-  const result: SessionTurn[] = [];
+
+  // Token efficiency (Insight-170): for long conversations (>6 turns),
+  // summarize older turns into a compact abstract and keep only recent verbatim.
+  // This saves ~500-1000 tokens after turn 5.
+  const VERBATIM_TURN_COUNT = 6;
+
+  if (turns.length <= VERBATIM_TURN_COUNT) {
+    // Short conversation — return all turns that fit in budget
+    const result: SessionTurn[] = [];
+    let totalChars = 0;
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const turn = turns[i];
+      const charLen = turn.content.length + turn.role.length + 10;
+      if (totalChars + charLen > charBudget) break;
+      result.unshift(turn);
+      totalChars += charLen;
+    }
+    return result;
+  }
+
+  // Long conversation — summarize older turns, keep recent verbatim
+  const olderTurns = turns.slice(0, turns.length - VERBATIM_TURN_COUNT);
+  const recentTurns = turns.slice(turns.length - VERBATIM_TURN_COUNT);
+
+  // Build a compact summary of older turns (no LLM call — extractive summary)
+  const summaryParts: string[] = [];
+  for (const turn of olderTurns) {
+    const content = typeof turn.content === "string" ? turn.content : "";
+    // Extract first sentence or first 100 chars
+    const firstSentence = content.match(/^[^.!?\n]+[.!?]?/)?.[0] || content.slice(0, 100);
+    if (firstSentence.trim()) {
+      summaryParts.push(`${turn.role === "user" ? "H" : "A"}: ${firstSentence.trim()}`);
+    }
+  }
+  const summary = summaryParts.join(" | ");
+
+  // Budget: reserve ~200 tokens for summary, rest for verbatim turns
+  const SUMMARY_CHAR_BUDGET = 800; // ~200 tokens
+  const truncatedSummary = summary.length > SUMMARY_CHAR_BUDGET
+    ? summary.slice(0, SUMMARY_CHAR_BUDGET) + "..."
+    : summary;
+
+  // Create a synthetic summary turn
+  const summaryTurn: SessionTurn = {
+    role: "user",
+    content: `[Earlier conversation summary (${olderTurns.length} turns): ${truncatedSummary}]`,
+    timestamp: olderTurns[0]?.timestamp || Date.now(),
+    surface: olderTurns[0]?.surface || "web",
+  };
+
+  // Fill verbatim turns within remaining budget
+  const summaryCharLen = summaryTurn.content.length + 20;
+  const remainingBudget = charBudget - summaryCharLen;
+
+  const result: SessionTurn[] = [summaryTurn];
   let totalChars = 0;
 
-  for (let i = turns.length - 1; i >= 0; i--) {
-    const turn = turns[i];
-    const charLen = turn.content.length + turn.role.length + 10; // overhead
-    if (totalChars + charLen > charBudget) break;
-    result.unshift(turn);
+  for (let i = recentTurns.length - 1; i >= 0; i--) {
+    const turn = recentTurns[i];
+    const charLen = turn.content.length + turn.role.length + 10;
+    if (totalChars + charLen > remainingBudget) break;
+    result.splice(1, 0, turn); // Insert after summary, before later turns
     totalChars += charLen;
   }
 

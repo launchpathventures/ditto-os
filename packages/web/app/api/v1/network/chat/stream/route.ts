@@ -22,12 +22,14 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail, funnelMetadata } = body as {
+    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
       returningEmail?: string;
       funnelMetadata?: Record<string, unknown>;
+      visitorName?: string;
+      turnstileToken?: string;
     };
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -51,6 +53,16 @@ export async function POST(request: Request) {
 
     const forwarded = request.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
+
+    // Turnstile bot verification
+    const { verifyTurnstileToken } = await import("../../../../../../../../src/engine/turnstile");
+    const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+    if (!turnstile.ok) {
+      return NextResponse.json(
+        { error: "Bot verification failed. Please refresh and try again." },
+        { status: 403 },
+      );
+    }
 
     // Load env vars from root .env
     if (!process.env.ANTHROPIC_API_KEY && !process.env.MOCK_LLM) {
@@ -94,6 +106,7 @@ export async function POST(request: Request) {
             ip,
             returningEmail ?? null,
             funnelMetadata,
+            visitorName?.trim() || undefined,
           )) {
             send(event);
           }

@@ -11,6 +11,7 @@ id: opt-out-management
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 description: >
   Central opt-out enforcement. When someone opts out — by reply, link,

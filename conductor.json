@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "setup": "cp $CONDUCTOR_ROOT_PATH/.env .env; pnpm install",
+    "run": "ngrok http --url=ditto-dev.ngrok.app $CONDUCTOR_PORT --log=false & PORT=$CONDUCTOR_PORT pnpm run dev",
+    "archive": ""
+  }
+}

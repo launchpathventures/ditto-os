@@ -10,6 +10,7 @@ const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/chief-of-staff", label: "Chief of Staff" },
   { href: "/network", label: "Network" },
+  { href: "/pricing", label: "Pricing" },
 ];
 
 export function SiteNav() {

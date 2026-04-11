@@ -158,10 +158,13 @@ export async function* selfConverseStream(
     let turnCostCents = 0;
 
     for await (const event of createStreamingCompletion({
+      purpose: "conversation",
       system: context.systemPrompt,
       messages,
       tools: selfTools,
       maxTokens: 4096,
+      // Cache breakpoint after cognitive framework (static across turns) — Insight-170
+      cacheBreakpoints: context.cacheBreakpointOffset ? [context.cacheBreakpointOffset] : undefined,
     })) {
       if (event.type === "text-delta") {
         turnText += event.text;
@@ -362,10 +365,17 @@ export async function* selfConverseStream(
         }
       }
 
+      // Token efficiency (Insight-170): truncate large tool results to prevent context bloat.
+      // Full output is already emitted as content blocks above — the LLM only needs a summary.
+      const TOOL_RESULT_CHAR_LIMIT = 2000; // ~500 tokens
+      const truncatedOutput = result.output.length > TOOL_RESULT_CHAR_LIMIT
+        ? result.output.slice(0, TOOL_RESULT_CHAR_LIMIT) + `\n... [truncated, ${result.output.length} chars total]`
+        : result.output;
+
       toolResults.push({
         type: "tool_result",
         tool_use_id: toolUse.id,
-        content: result.output,
+        content: truncatedOutput,
       });
     }
 

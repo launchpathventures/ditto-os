@@ -44,6 +44,7 @@ import {
   voiceCalibrationHandler,
   broadcastDirectClassifierHandler,
   outboundQualityGateHandler,
+  modelPurposeResolverHandler,
 } from "@ditto/core";
 import { hasInteractionSince, hasAnyInteractionSince } from "./people";
 import { deliverOutput } from "./process-io";
@@ -82,17 +83,18 @@ const sharedPipeline = (() => {
   pipeline.register(memoryAssemblyHandler);          // 1. product layer
   pipeline.register(identityRouterHandler);           // 2. core — Brief 116 (sets sendingIdentity)
   pipeline.register(voiceCalibrationHandler);         // 3. core — Brief 116 (needs sendingIdentity)
+  pipeline.register(modelPurposeResolverHandler);     // 4. core — Brief 128 (reads stepDef signals → ModelPurpose)
   // Execution
-  pipeline.register(stepExecutionHandler);            // 4. core
+  pipeline.register(stepExecutionHandler);            // 5. core
   // Post-execution
-  pipeline.register(metacognitiveCheckHandler);       // 5. product layer
-  pipeline.register(broadcastDirectClassifierHandler); // 6. core — Brief 116
-  pipeline.register(outboundQualityGateHandler);      // 7. core — Brief 116
-  pipeline.register(reviewPatternHandler);            // 8. product layer
+  pipeline.register(metacognitiveCheckHandler);       // 6. product layer
+  pipeline.register(broadcastDirectClassifierHandler); // 7. core — Brief 116
+  pipeline.register(outboundQualityGateHandler);      // 8. core — Brief 116
+  pipeline.register(reviewPatternHandler);            // 9. product layer
   // Decision
-  pipeline.register(routingHandler);                  // 9. core
-  pipeline.register(trustGateHandler);                // 10. product layer (modified — Brief 116)
-  pipeline.register(feedbackRecorderHandler);         // 11. product layer
+  pipeline.register(routingHandler);                  // 10. core
+  pipeline.register(trustGateHandler);                // 11. product layer (modified — Brief 116)
+  pipeline.register(feedbackRecorderHandler);         // 12. product layer
   return pipeline;
 })();
 

@@ -10,7 +10,9 @@
  * Provenance: ADR-005 Section 4, Insight-065 (Ditto-native tools), Brief 025
  */
 
+import { randomUUID } from "crypto";
 import type { LlmToolDefinition } from "./llm";
+import type { StagedOutboundAction } from "./harness";
 import type {
   IntegrationTool,
   CliExecuteConfig,
@@ -40,11 +42,30 @@ export interface ResolvedTools {
 interface BuiltInTool {
   definition: LlmToolDefinition;
   execute: (input: Record<string, unknown>) => Promise<string>;
+  /** If true, tool calls queue to stagedOutboundActions instead of dispatching (Brief 129) */
+  staged?: boolean;
+  /** Extract content/channel/recipientId from args for quality gate checking */
+  extractOutboundMeta?: (args: Record<string, unknown>) => {
+    content?: string;
+    channel?: string;
+    recipientId?: string;
+  };
 }
 
 const builtInTools: Record<string, BuiltInTool> = {
   // ---- CRM tools (Brief 097) ----
   "crm.send_email": {
+    staged: true,
+    extractOutboundMeta: (args: Record<string, unknown>) => {
+      const subject = args.subject as string | undefined;
+      const body = args.body as string | undefined;
+      const content = subject && body ? `${subject}\n\n${body}` : subject ?? body;
+      return {
+        content,
+        channel: "email",
+        recipientId: args.personId as string | undefined,
+      };
+    },
     definition: {
       name: "crm_send_email",
       description:
@@ -387,11 +408,16 @@ async function executeRestTool(
  *
  * Rejects tool names not found in the registry (AC-6: authorisation).
  * Returns empty tools array if no valid tools found.
+ *
+ * @param stagedQueue — optional staging queue (Brief 129). When provided, tools
+ *   marked as `staged: true` queue their calls here instead of dispatching
+ *   immediately. The agent receives `{ status: "queued", draftId }`.
  */
 export function resolveTools(
   toolNames: string[],
   integrationDir?: string,
   processId?: string,
+  stagedQueue?: StagedOutboundAction[],
 ): ResolvedTools {
   const tools: LlmToolDefinition[] = [];
   // Map from qualified name (service.action) to { service, tool, executeConfig }
@@ -399,6 +425,8 @@ export function resolveTools(
 
   // Track built-in tools for dispatch
   const builtInMap = new Map<string, BuiltInTool>();
+  // Map from LLM name back to qualified name for staging lookup
+  const llmNameToQualified = new Map<string, string>();
 
   for (const qualifiedName of toolNames) {
     // Check built-in engine tools first (e.g., knowledge.search)
@@ -406,6 +434,7 @@ export function resolveTools(
     if (builtIn) {
       tools.push(builtIn.definition);
       builtInMap.set(builtIn.definition.name, builtIn);
+      llmNameToQualified.set(builtIn.definition.name, qualifiedName);
       continue;
     }
 
@@ -442,6 +471,21 @@ export function resolveTools(
     // Check built-in tools first
     const builtIn = builtInMap.get(name);
     if (builtIn) {
+      // Staged tool: queue instead of dispatching (Brief 129)
+      if (builtIn.staged && stagedQueue) {
+        const draftId = randomUUID();
+        const qualifiedName = llmNameToQualified.get(name) ?? name;
+        const meta = builtIn.extractOutboundMeta?.(input) ?? {};
+        stagedQueue.push({
+          toolName: qualifiedName,
+          args: { ...input },
+          draftId,
+          content: meta.content,
+          channel: meta.channel,
+          recipientId: meta.recipientId,
+        });
+        return JSON.stringify({ status: "queued", draftId }, null, 2);
+      }
       return builtIn.execute(input);
     }
 

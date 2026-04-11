@@ -21,6 +21,7 @@ import { join } from "path";
 let coreCache: string | null = null;
 let compactCache: string | null = null;
 let configuredCorePath: string | null = null;
+const modeCache: Map<string, string> = new Map();
 
 // ============================================================
 // Fallback (minimal judgment if file not found)
@@ -150,9 +151,56 @@ export function getCognitiveCoreCompact(): string {
 }
 
 /**
+ * Load a cognitive mode extension by name.
+ *
+ * Raw loader — performs no persona-safety checks. Ditto consumers must use
+ * `resolveModeFromProcess()` in src/engine/cognitive-core.ts to enforce
+ * persona boundaries (e.g. selling mode blocked for alex-or-mira operator).
+ *
+ * Resolution order:
+ * 1. {configuredCorePath}/modes/{mode}.md
+ * 2. {cwd}/cognitive/modes/{mode}.md
+ * 3. Empty string (no mode is valid — graceful degradation)
+ *
+ * Results are cached per mode name.
+ */
+export function getCognitiveModeExtension(mode: string): string {
+  const cached = modeCache.get(mode);
+  if (cached !== undefined) return cached;
+
+  const paths = [
+    configuredCorePath
+      ? join(
+          configuredCorePath.endsWith(".md")
+            ? join(configuredCorePath, "..")
+            : configuredCorePath,
+          "modes",
+          `${mode}.md`,
+        )
+      : null,
+    join(process.cwd(), "cognitive", "modes", `${mode}.md`),
+  ].filter(Boolean) as string[];
+
+  for (const p of paths) {
+    try {
+      const content = readFileSync(p, "utf-8").trim();
+      modeCache.set(mode, content);
+      return content;
+    } catch {
+      continue;
+    }
+  }
+
+  // No mode file found — valid case, return empty string
+  modeCache.set(mode, "");
+  return "";
+}
+
+/**
  * Clear the cache. Used in tests or when switching cognitive paths.
  */
 export function clearCognitiveCoreCache(): void {
   coreCache = null;
   compactCache = null;
+  modeCache.clear();
 }

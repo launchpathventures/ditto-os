@@ -3,6 +3,7 @@ id: weekly-briefing
 version: 1
 status: active
 template: true
+callable_as: sub-process
 
 description: >
   Weekly status briefing for active users. Gathers recent activity data,

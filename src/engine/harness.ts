@@ -17,4 +17,7 @@ export {
   type RoutingDecision,
   type ResolvedTools,
   type ChainDefinition,
+  type OutboundQualityRule,
+  type OutboundActionRecord,
+  type StagedOutboundAction,
 } from "@ditto/core";

@@ -106,6 +106,8 @@ How do we verify this work is complete? Each criterion is boolean: pass or fail.
 2. [ ] {testable criterion}
 3. ...
 
+**For prompt-affecting briefs:** If the brief includes a total token budget, break it down per-change so the builder can verify each addition independently. Example: "Total <100 tokens: temporal context <20, judgment framework <40, strategic framing <30, rules <10."
+
 ## Review Process
 
 How to validate the work after completion:

@@ -9,6 +9,7 @@ id: smoke-test-runner
 version: 1
 status: active
 template: true
+callable_as: sub-process
 system: true
 
 description: >

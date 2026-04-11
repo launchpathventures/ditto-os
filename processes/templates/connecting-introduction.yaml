@@ -11,6 +11,7 @@ id: connecting-introduction
 version: 2
 status: active
 template: true
+callable_as: sub-process
 
 operator: alex-or-mira
 

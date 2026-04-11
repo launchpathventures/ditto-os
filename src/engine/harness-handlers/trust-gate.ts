@@ -62,9 +62,26 @@ export const trustGateHandler: HarnessHandler = {
   },
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
+    // (1) Broadcast forcing — security invariant (Brief 116, Insight-167)
+    // Broadcast content must always receive human review, regardless of any other trust config.
+    if (context.audienceClassification === "broadcast") {
+      context.trustAction = "pause";
+      context.canAutoAdvance = false;
+      return context;
+    }
+
     let { trustTier } = context;
     const { reviewResult } = context;
     const confidence = context.stepResult?.confidence;
+
+    // (2) Step-category trust override (Brief 116)
+    // Can only relax within the process trust tier — never tighten.
+    if (context.stepDefinition.trustOverride) {
+      const candidate = context.stepDefinition.trustOverride as TrustTier;
+      if (isLessRestrictive(candidate, trustTier)) {
+        trustTier = candidate;
+      }
+    }
 
     // Brief 053: Check for session-scoped trust override.
     // Override can only relax, never tighten. Ignored for critical-tier steps.

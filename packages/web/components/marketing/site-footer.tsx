@@ -26,6 +26,9 @@ export function SiteFooter() {
               <Link href="/network" className="text-sm text-text-secondary hover:text-vivid">
                 Network
               </Link>
+              <Link href="/pricing" className="text-sm text-text-secondary hover:text-vivid">
+                Pricing
+              </Link>
             </div>
           </div>
 

@@ -18,6 +18,14 @@ import type { HarnessHandler, HarnessContext } from "../harness.js";
 import type { TrustTier } from "../../db/schema.js";
 import { SPOT_CHECK_RATE } from "../../trust/constants.js";
 
+/** Trust tier ordering: higher index = less restrictive */
+const TIER_ORDER: TrustTier[] = ["critical", "supervised", "spot_checked", "autonomous"];
+
+/** Returns true if `a` is strictly less restrictive than `b`. */
+function isLessRestrictive(a: TrustTier, b: TrustTier): boolean {
+  return TIER_ORDER.indexOf(a) > TIER_ORDER.indexOf(b);
+}
+
 /**
  * Session trust override resolver. Injected by the consuming application.
  * Returns a relaxed trust tier if a session override is active, or null.
@@ -55,7 +63,25 @@ export const trustGateHandler: HarnessHandler = {
   },
 
   async execute(context: HarnessContext): Promise<HarnessContext> {
+    // (1) Broadcast forcing — security invariant (Brief 116, Insight-167)
+    // Broadcast content must always receive human review, regardless of any other trust config.
+    if (context.audienceClassification === "broadcast") {
+      context.trustAction = "pause";
+      context.canAutoAdvance = false;
+      return context;
+    }
+
+    // (2) Determine effective tier: step-category override → process tier
     let effectiveTier = context.trustTier;
+
+    // Step-category trust override (Brief 116)
+    // Can only relax within the process trust tier — never tighten.
+    if (context.stepDefinition.trustOverride) {
+      const candidate = context.stepDefinition.trustOverride as TrustTier;
+      if (isLessRestrictive(candidate, effectiveTier)) {
+        effectiveTier = candidate;
+      }
+    }
 
     // Session trust override (if resolver is configured)
     if (sessionTrustResolver) {

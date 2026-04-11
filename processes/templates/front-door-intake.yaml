@@ -292,6 +292,20 @@ chain:
       conversationSummary: "{conversationSummary}"
       outreachResults: "{outreach-results}"
 
+  # Brief 126: When detectedMode was "both", chain to CoS intake after outreach
+  # report-back. This gives the user ONE email thread, not two parallel ones.
+  # The CoS intake starts AFTER outreach is underway.
+  - trigger: step-complete
+    step: report-back
+    condition: detectedMode == "both"
+    process: front-door-cos-intake
+    inputs:
+      personId: "{personId}"
+      userId: "{userId}"
+      email: "{email}"
+      name: "{name}"
+      conversationSummary: "{conversationSummary}"
+
 quality_criteria:
   - "User gave consent to approach during front-door conversation"
   - "Targets are real, verifiable companies/people"
