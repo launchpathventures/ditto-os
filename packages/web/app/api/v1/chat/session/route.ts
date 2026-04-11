@@ -72,7 +72,7 @@ export async function GET() {
           const rows = await db
             .select({ id: interactions.id })
             .from(interactions)
-            .where(and(eq(interactions.userId, networkUser.id), eq(interactions.type, type)));
+            .where(and(eq(interactions.userId, networkUser.id), eq(interactions.type, type as typeof interactions.type._.data)));
           return rows.length;
         };
 
