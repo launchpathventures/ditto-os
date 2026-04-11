@@ -553,4 +553,54 @@ export function ensureSchema(): void {
 
   // Backfill service_id from machine_id for existing Fly.io records
   sqlite.exec(`UPDATE managed_workspaces SET service_id = machine_id WHERE service_id IS NULL`);
+
+  // Multi-brief batch: new columns on existing tables
+  const batchMigrations = [
+    // process_runs: operating cycles (Briefs 116-118)
+    "ALTER TABLE process_runs ADD COLUMN cycle_type TEXT",
+    "ALTER TABLE process_runs ADD COLUMN cycle_config TEXT",
+    "ALTER TABLE process_runs ADD COLUMN parent_cycle_run_id TEXT",
+    "ALTER TABLE process_runs ADD COLUMN run_metadata TEXT",
+    "ALTER TABLE process_runs ADD COLUMN timeout_at INTEGER",
+    // step_runs: cognitive modes (Brief 114)
+    "ALTER TABLE step_runs ADD COLUMN cognitive_mode TEXT",
+    "ALTER TABLE step_runs ADD COLUMN deferred_until INTEGER",
+    // trust_suggestions: step category (Brief 128)
+    "ALTER TABLE trust_suggestions ADD COLUMN step_category TEXT",
+    // chat_sessions: magic link auth (Brief 123)
+    "ALTER TABLE chat_sessions ADD COLUMN authenticated_email TEXT",
+  ];
+  for (const stmt of batchMigrations) {
+    try {
+      sqlite.exec(stmt);
+    } catch (e: unknown) {
+      if (e instanceof Error && !e.message.includes("duplicate column")) throw e;
+    }
+  }
+
+  // New tables: outbound actions tracking + magic links
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS outbound_actions (
+      id TEXT PRIMARY KEY,
+      process_run_id TEXT NOT NULL REFERENCES process_runs(id),
+      step_run_id TEXT NOT NULL REFERENCES step_runs(id),
+      channel TEXT NOT NULL,
+      sending_identity TEXT NOT NULL,
+      recipient_id TEXT,
+      content_summary TEXT,
+      blocked INTEGER NOT NULL DEFAULT 0,
+      block_reason TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS magic_links (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      session_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+  `);
 }
