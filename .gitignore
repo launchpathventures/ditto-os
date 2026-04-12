@@ -36,3 +36,6 @@ playwright-report/
 test-results/
 .claude/worktrees/
 .gstack/
+
+# Test temp directories
+.test-tmp-cmd/
