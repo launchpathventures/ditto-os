@@ -1,0 +1,437 @@
+# Ditto — Operating Cycle: GTM Pipeline
+#
+# Archetype: SENSE -> ASSESS -> ACT -> GATE -> LAND -> LEARN -> BRIEF
+# Alex runs Ditto's go-to-market. You review at the gate and read the brief.
+#
+# Experimentation mode: tight cycles, kill what doesn't work, double down
+# on what does. Alex does the hunting, drafting, posting, sending, and
+# monitoring. You make the call on what ships.
+#
+# This is Ditto's own GTM cycle — it eats its own cooking.
+#
+# Provenance: Insight-168 (archetype), Insight-147 (recipient = growth engine),
+# Insight-155 (every email drives acquisition), Insight-154 (value before identity)
+
+name: GTM Pipeline Cycle
+id: gtm-pipeline-cycle
+version: 2
+status: active
+
+operator: alex-or-mira
+defaultIdentity: principal
+
+description: >
+  Alex runs Ditto's go-to-market. Every cycle, Alex hunts for people
+  who have the pain Ditto solves, drafts content and outreach, gets
+  your approval, ships it, monitors what happens, and reports back.
+  You review at the gate. You read the brief. Alex does everything else.
+
+  Three tracks run each cycle:
+  1. Credibility — teach developers something real (open source, threads)
+  2. Pain-naming — content that makes outcome owners think "that's me"
+  3. Direct outreach — talk to specific people who expressed the pain
+
+  Experimentation mode: short cycles, rapid learning, kill fast.
+
+trigger:
+  type: schedule
+  cron: "0 8 * * 1,4"
+  description: >
+    Monday and Thursday mornings. Twice-weekly during experimentation.
+    Drop to weekly once we know what works. Also on-demand:
+    "Alex, what's happening with GTM?"
+
+inputs:
+  - name: gtmContext
+    type: json
+    source: self
+    required: true
+    description: >
+      Accumulated GTM context (Alex maintains this across cycles):
+      - Active hooks and which ones are resonating
+      - Target audiences and where they hang out
+      - Open source repos: status, stars, engagement
+      - Content: what's been published, what performed
+      - Outreach: who's been contacted, pipeline status
+      - Experiments: what's been tried, results, kill/continue decisions
+      - Language bank: exact phrases from the audience that work
+
+steps:
+  # ─── SENSE: Alex hunts for signals ────────────────────────────
+  - id: sense
+    name: "SENSE: Hunt for pain signals"
+    executor: ai-agent
+    description: >
+      Alex searches for people who are expressing the exact pains
+      Ditto solves. This is active hunting, not passive monitoring.
+
+      Search X for:
+      - "ChatGPT keeps forgetting" / "AI has no memory"
+      - "I have to re-explain everything" / "starts from scratch"
+      - "It wrote a draft but I still had to send it"
+      - "AI is just another thing to manage"
+      - "Same prompt different result every time"
+      - Variations in the audience's actual language
+
+      Search LinkedIn, Reddit, Hacker News for:
+      - Developers complaining about agent orchestration pain
+      - Business owners sharing AI frustration stories
+      - People asking "is there something that actually does X?"
+
+      Also check:
+      - Replies/engagement on our last cycle's content
+      - New stars/forks/issues on open source repos
+      - Anyone who visited the front door since last cycle
+      - Competitor moves worth responding to
+
+      For each signal found, capture:
+      - Who said it (handle, profile link)
+      - What they said (exact quote)
+      - Where (platform, thread link)
+      - Signal strength: venting (low) | asking for help (medium) |
+        actively looking for a solution (high)
+    config:
+      model_hint: capable
+      cyclePhase: sense
+    tools:
+      - web-search
+    inputs: [gtmContext]
+    outputs: [pain-signals]
+    trustOverride: autonomous
+
+  # ─── ASSESS: Alex picks the plays ─────────────────────────────
+  - id: assess
+    name: "ASSESS: Pick 3 experiments"
+    executor: ai-agent
+    description: >
+      Based on signals found, Alex picks exactly 3 experiments for
+      this cycle. Not 5. Not 7. Three. Each one must be:
+      - Specific: "Draft an X thread about trust-earning using our
+        actual code" — not "create developer content"
+      - Completable: can ship within this cycle (2-3 days)
+      - Measurable: we'll know if it worked (engagement, replies, clicks)
+      - One per track: 1 credibility + 1 pain-naming + 1 outreach
+
+      For each experiment:
+      - Experiment: what exactly to produce
+      - Target: who sees it (specific people or audience segment)
+      - Channel: where it goes
+      - Hook: the first line or subject line (draft it now)
+      - Hypothesis: "we think X will happen because Y"
+      - Kill criteria: what result means we stop doing this
+      - Success criteria: what result means we do more
+
+      Also: review last cycle's experiments. For each one:
+      - KILL (didn't work, stop), CONTINUE (showing signal, keep going),
+        or GRADUATE (clearly works, make it a regular play)
+    config:
+      model_hint: capable
+      cyclePhase: assess
+    inputs: [pain-signals, gtmContext]
+    outputs: [experiments]
+
+  # ─── ACT: Alex produces everything ────────────────────────────
+  - id: act-credibility
+    name: "ACT: Build the credibility piece"
+    executor: ai-agent
+    description: >
+      Alex produces this cycle's credibility experiment. Examples:
+
+      If the experiment is an X thread:
+      - Write the full thread (5-8 posts)
+      - Include actual code snippets from Ditto's codebase
+      - Lead with an opinion, not a feature announcement
+      - End with a link to the repo or front door
+
+      If the experiment is a repo launch:
+      - Write the README (problem → solution → install → example)
+      - Prepare the launch thread
+      - Draft a Hacker News "Show HN" post
+
+      If the experiment is a response to someone:
+      - Draft a reply that's helpful first, promotional never
+      - Show expertise, don't pitch
+
+      Voice: technical, opinionated, specific. Code over claims.
+      If a developer screenshots this and shares it, mission accomplished.
+    config:
+      model_hint: capable
+      cyclePhase: act
+    tools:
+      - web-search
+    inputs: [experiments]
+    outputs: [credibility-draft]
+    depends_on: [assess]
+
+  - id: act-pain-naming
+    name: "ACT: Write the pain-naming content"
+    executor: ai-agent
+    description: >
+      Alex writes this cycle's pain-naming content piece.
+
+      The formula:
+      1. Open with the pain in the audience's exact words
+         (pulled from SENSE signals or language bank)
+      2. Describe what they're currently doing about it (the workaround)
+      3. Show the moment where it could be different (not features — the
+         feeling of handing something off and it actually getting done)
+      4. One sentence about Ditto. One link. That's it.
+
+      Formats to choose from:
+      - X thread (5-8 posts, conversational, story-driven)
+      - LinkedIn post (150-300 words, professional but warm)
+      - Short video script (60 seconds, show-don't-tell)
+      - Reply to someone else's viral post about AI frustration
+
+      Voice: empathetic, zero jargon, sounds like a person not a brand.
+      Test: would a tradie forward this to their business partner?
+      If the answer is no, rewrite.
+    config:
+      model_hint: capable
+      cyclePhase: act
+    inputs: [experiments]
+    outputs: [pain-naming-draft]
+    depends_on: [assess]
+
+  - id: act-outreach
+    name: "ACT: Draft personalised outreach"
+    executor: ai-agent
+    description: >
+      Alex drafts personalised outreach to specific people found in SENSE.
+      Max 5 people per cycle. Quality over volume.
+
+      For each person:
+      1. Research them: what they said, what they do, what they care about
+      2. Draft a message that references their specific pain
+         (not "Hi [NAME], I noticed you're interested in AI...")
+      3. Give value first: a useful insight, a relevant resource,
+         or a genuine observation about their problem
+      4. Low-friction ask: "would this be useful?" or "curious if
+         you've found a solution" — NOT "book a demo"
+      5. Keep it under 100 words. Phone-readable.
+
+      Channel selection per person:
+      - If they posted on X: reply or DM
+      - If they posted on LinkedIn: comment or DM
+      - If they have a public email: short email from Alex
+      - If they were referred: warm intro format
+
+      Every message Alex sends is a product demo.
+      The quality of this outreach IS the pitch.
+    config:
+      model_hint: capable
+      cyclePhase: act
+    tools:
+      - web-search
+      - web-fetch
+    inputs: [experiments, pain-signals]
+    outputs: [outreach-drafts]
+    depends_on: [assess]
+
+  # ─── GATE: You review, Alex waits ────────────────────────────
+  - id: gate
+    name: "GATE: Your call — ship, edit, or kill"
+    executor: human
+    description: >
+      Alex presents all three experiments for your review:
+
+      For each piece, Alex shows:
+      - The draft (full text, ready to ship)
+      - Who sees it and where
+      - The hypothesis and kill criteria
+      - Alex's confidence level (1-5) and why
+
+      You can:
+      - APPROVE: ship as-is
+      - EDIT: make changes (Alex learns from every edit)
+      - KILL: don't ship this one (Alex learns what to avoid)
+      - REDIRECT: "good idea, wrong channel" or "right message, wrong audience"
+
+      This is the one step that pauses for you. Everything else
+      Alex handles autonomously.
+    inputs: [credibility-draft, pain-naming-draft, outreach-drafts]
+    outputs: [approved-experiments]
+    trustOverride: supervised
+
+  # ─── LAND: Alex ships approved experiments ────────────────────
+  - id: land-content
+    name: "LAND: Publish approved content"
+    executor: ai-agent
+    description: >
+      Alex publishes approved credibility and pain-naming content:
+      - Posts X threads at optimal times (weekday mornings US/AU)
+      - Posts LinkedIn content
+      - Submits to Hacker News if repo launch
+      - Pushes code/README changes to repos if applicable
+
+      Records: what was posted, where, when, with links for tracking.
+    config:
+      model_hint: fast
+      cyclePhase: land
+    tools:
+      - web-search
+    inputs: [approved-experiments]
+    outputs: [content-results]
+    depends_on: [gate]
+
+  - id: land-outreach
+    name: "LAND: Send approved outreach"
+    executor: ai-agent
+    description: >
+      Alex sends approved outreach messages:
+      - DMs on X or LinkedIn
+      - Replies to public posts
+      - Emails via Alex's identity
+      - Records each send and creates person records for tracking
+
+      For each send, schedule a follow-up check in 3 days.
+    config:
+      model_hint: fast
+      cyclePhase: land
+    tools:
+      - crm.send_email
+      - crm.create_person
+      - crm.record_interaction
+    inputs: [approved-experiments]
+    outputs: [outreach-results]
+    depends_on: [gate]
+
+  # ─── LEARN: Alex analyses what happened ───────────────────────
+  - id: learn
+    name: "LEARN: What moved, what didn't"
+    executor: ai-agent
+    description: >
+      Alex reviews results from the PREVIOUS cycle's experiments
+      (this cycle's results need time to accumulate — check them
+      next cycle).
+
+      For each previous experiment:
+      - Results: engagement, replies, clicks, sign-ups, stars
+      - Verdict: KILL | CONTINUE | GRADUATE
+      - Why: specific evidence, not vibes
+      - Language captured: any new phrases from the audience
+        that worked well (add to language bank)
+
+      Cross-experiment patterns:
+      - Which hook got the strongest reaction?
+      - Which channel delivered real engagement vs vanity metrics?
+      - Did any outreach recipient engage with content too? (flywheel signal)
+      - What did people say back? (exact quotes → language bank)
+
+      Update gtmContext with all learnings. This is how Alex gets
+      smarter each cycle.
+    config:
+      model_hint: capable
+      cyclePhase: learn
+    trustOverride: autonomous
+    inputs: [content-results, outreach-results, gtmContext]
+    outputs: [cycle-learnings]
+
+  # ─── BRIEF: Alex tells you what happened ──────────────────────
+  - id: brief
+    name: "BRIEF: Here's what I did and what I learned"
+    executor: ai-agent
+    description: >
+      Alex sends you a brief you can read in 60 seconds:
+
+      WHAT I DID THIS CYCLE:
+      - [Credibility]: posted/shipped X — [link]
+      - [Pain-naming]: posted X — [link]
+      - [Outreach]: messaged N people — [names]
+
+      WHAT HAPPENED LAST CYCLE:
+      - [Experiment A]: [result] → KILL/CONTINUE/GRADUATE
+      - [Experiment B]: [result] → KILL/CONTINUE/GRADUATE
+      - [Experiment C]: [result] → KILL/CONTINUE/GRADUATE
+
+      THE NUMBER: [one headline metric]
+
+      SURPRISE: [one thing Alex didn't expect]
+
+      NEXT CYCLE: [3 experiments Alex plans to run]
+
+      That's it. No fluff. If you want details on anything,
+      ask Alex and get the full breakdown.
+    config:
+      model_hint: capable
+      cyclePhase: brief
+    trustOverride: autonomous
+    inputs: [cycle-learnings]
+    outputs: [gtm-brief]
+
+outputs:
+  - name: gtm-brief
+    type: json
+    destination: user
+    description: >
+      Cycle brief: what Alex did, what happened last cycle,
+      headline metric, surprise, next experiments.
+
+# Process chaining — Alex keeps the machine running
+chain:
+  # Monitor outreach replies between cycles
+  - trigger: schedule
+    interval: 3d
+    process: follow-up-sequences
+    inputs:
+      context: "{outreach-results}"
+
+  # Track pipeline of all GTM contacts
+  - trigger: schedule
+    interval: 7d
+    process: pipeline-tracking
+    inputs:
+      context: "{gtmContext}"
+
+quality_criteria:
+  - "SENSE finds real people expressing real pain — not hypothetical audiences"
+  - "Experiments have specific kill criteria, not just 'see what happens'"
+  - "Every piece of content uses the audience's language, not ours"
+  - "Outreach is personalised to the individual, not their segment"
+  - "The brief is honest — 'nothing worked' is a valid report"
+  - "LEARN verdicts are evidence-based — KILL means kill, not 'try harder'"
+
+feedback:
+  metrics:
+    - name: experiments_per_cycle
+      description: Experiments shipped per cycle (target 3)
+      target: "3"
+    - name: kill_rate
+      description: >
+        Experiments killed per month. Zero means Alex isn't
+        being honest enough about what's not working.
+      target: ">1 per month"
+    - name: outreach_reply_rate
+      description: Reply rate on personalised outreach
+      target: ">15%"
+    - name: content_engagement
+      description: Engagement on published content (likes, shares, replies)
+      target: "increasing trend"
+    - name: front_door_visits
+      description: Weekly front door conversation starts
+      target: "increasing trend"
+    - name: language_bank_additions
+      description: New audience phrases captured per cycle
+      target: ">0"
+    - name: approval_rate
+      description: Percentage of experiments you approve without major edits
+      target: ">70% (increasing as Alex learns your standards)"
+  capture:
+    - user_edits_at_gate
+    - experiments_user_killed
+    - experiments_user_redirected
+    - audience_language_from_replies
+    - hooks_that_resonated
+
+trust:
+  initial_tier: supervised
+  upgrade_path:
+    - after: "6 cycles with >80% approval rate and honest retrospectives"
+      upgrade_to: spot_checked
+    - after: "20 cycles with consistent quality and funnel growth"
+      upgrade_to: autonomous
+  downgrade_triggers:
+    - "You kill 3+ experiments in a single cycle"
+    - "Content goes out that you find embarrassing"
+    - "Outreach generates complaints or opt-outs"
+    - "Brief is misleading about results"
