@@ -13,6 +13,7 @@ import { resolveSystemAgent } from "./system-agents";
 import { getIntegration } from "./integration-registry";
 import { executeIntegration } from "./integration-handlers";
 import type { ResolvedTools } from "./tool-resolver";
+import { evaluateRules } from "./rules-executor";
 
 export interface StepExecutionResult {
   outputs: Record<string, unknown>;
@@ -94,6 +95,12 @@ export async function executeStep(
         integration,
       );
     }
+
+    case "rules":
+      // Deterministic rule evaluation — no LLM, no external calls.
+      // Used by ghost eligibility (Brief 124), quality gates, and other
+      // condition-checking steps that route based on rule outcomes.
+      return evaluateRules(step, runInputs);
 
     case "human":
       // Should not reach here — heartbeat catches human steps

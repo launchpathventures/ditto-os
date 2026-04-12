@@ -1,6 +1,6 @@
 # Insight 172: Cognitive Orchestration Over Prescriptive Processes
 
-**Status:** Active
+**Status:** Absorbed — principle encoded in ADR-027, implemented via Briefs 127-130
 **Emerged from:** Journey stress test + process template audit (Brief 126 session)
 **Affects:** All process templates, Self orchestration, heartbeat execution model
 

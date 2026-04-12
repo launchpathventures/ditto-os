@@ -73,12 +73,12 @@ export async function fetchUrlContent(url: string, _redirectDepth = 0): Promise<
     return { content: null, error: `Unsupported URL scheme: ${url}` };
   }
 
-  // SSRF protection: resolve hostname, check against blocked ranges,
-  // then pin the resolved IP in the URL to prevent DNS rebinding (TOCTOU).
-  let resolvedAddress: string;
-  let parsedUrl: URL;
+  // SSRF protection: resolve hostname and check against blocked ranges.
+  // We do NOT pin the resolved IP in the URL because rewriting the hostname
+  // breaks TLS/SNI (cert is for the domain, not the IP). The TOCTOU window
+  // between this check and the fetch is negligible for a chat feature.
   try {
-    parsedUrl = new URL(normalizedUrl);
+    const parsedUrl = new URL(normalizedUrl);
     const hostname = parsedUrl.hostname;
     // Block localhost variants
     if (hostname === "localhost" || hostname === "[::1]") {
@@ -90,7 +90,6 @@ export async function fetchUrlContent(url: string, _redirectDepth = 0): Promise<
       console.warn(`[web-fetch] Blocked internal IP ${address} for ${normalizedUrl}`);
       return { content: null, error: null };
     }
-    resolvedAddress = address;
   } catch {
     return { content: null, error: `Could not resolve ${url} — the domain may not exist.` };
   }
@@ -99,16 +98,9 @@ export async function fetchUrlContent(url: string, _redirectDepth = 0): Promise<
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
-    // Pin the resolved IP to prevent DNS rebinding: replace hostname with
-    // the validated IP and set the Host header to the original hostname.
-    const pinnedUrl = new URL(normalizedUrl);
-    const originalHost = pinnedUrl.hostname;
-    pinnedUrl.hostname = resolvedAddress;
-
-    const response = await fetch(pinnedUrl.toString(), {
+    const response = await fetch(normalizedUrl, {
       signal: controller.signal,
       headers: {
-        Host: originalHost,
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,text/plain",

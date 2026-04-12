@@ -18,6 +18,7 @@
     "type-check": "tsc --noEmit",
     "build": "tsc --noEmit && pnpm --filter @ditto/web build",
     "dev": "pnpm --filter @ditto/web dev",
+    "ditto:sync": "tsx src/scripts/validate-templates.ts",
     "dev-pipeline": "tsx src/dev-pipeline.ts",
     "dev-bot": "tsx src/dev-bot.ts"
   },

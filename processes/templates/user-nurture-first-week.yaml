@@ -4,20 +4,21 @@
 # This is NOT prospect follow-ups — this is Alex being a good advisor:
 # checking in, sharing progress, asking for feedback, building trust.
 #
-# KEY PATTERN: Response-gated cadence. Alex sends, waits for engagement,
-# then decides what to do next. Not a fixed timer that fires regardless.
-# If the user is engaged, Alex matches their energy. If silent, Alex
-# adjusts cadence and eventually gives space.
+# KEY PATTERN: Adaptive cadence driven by cognitive judgment, not fixed
+# day 2/4/7 schedule. Alex stays in touch when he has something worth
+# saying. If the user is engaged, Alex matches their energy. If silent,
+# Alex adjusts and eventually gives space.
 #
 # ALL emails are replies in the same thread started by front-door-intake's
-# gather-details step. The user sees ONE conversation, not 6 separate emails.
+# gather-details step. The user sees ONE conversation, not separate emails.
 #
 # Provenance: Insight-164 (professional consent model),
 # Insight-166 (connection first, commerce follows)
+# Refactored: Brief 130, ADR-027 (cognitive orchestration — thin templates)
 
 name: "User Nurture — First Week"
 id: user-nurture-first-week
-version: 2
+version: 3
 status: active
 template: true
 callable_as: sub-process
@@ -26,10 +27,13 @@ operator: alex-or-mira
 
 description: >
   The first week after a user signs up. Alex stays in touch like a real
-  advisor — adaptive, not mechanical. Response-gated: each step checks
-  whether the user has engaged before deciding what to send next.
-  All emails reply in the same thread. A real advisor has ONE conversation
-  with you, not a drip campaign.
+  advisor — adaptive, not mechanical. Cognitive mode guides when and what
+  to say. All emails reply in the same thread. A real advisor has ONE
+  conversation with you, not a drip campaign.
+
+  Thin template: one broad cognitive step. Alex's connecting/selling mode
+  decides timing, content, and cadence. No fixed schedule — Alex sends
+  when he has something worth saying. (ADR-027, Insight-172)
 
 trigger:
   type: process-complete
@@ -67,126 +71,49 @@ inputs:
     required: false
 
 steps:
-  # Day 2: Progress note — only if user hasn't already replied to report-back
-  # If they replied, they're engaged — Alex should respond to THEM, not fire
-  # a canned update. The gate checks: have they replied since report-back?
-  - id: day-2-check-in
-    name: "Day 2 — Progress check-in"
+  # One broad cognitive step — Alex decides when and what to send.
+  - id: nurture-the-relationship
+    name: "Nurture the relationship"
     executor: ai-agent
     email_thread: "user-onboarding"
-    schedule:
-      delay: "24h"
-      after: trigger
-    gate:
-      engagement: silent
-      since_step: report-back
-      fallback: skip
     description: >
-      The user hasn't replied to the report-back yet. Send a brief,
-      personal progress note in the same thread. NOT a status report —
-      a human note from someone who's working on your thing.
+      Stay in touch like a real advisor. Use your connecting/selling mode
+      to guide your judgment about timing and content.
 
-      [If connector/sales] Share one development: an early response,
-      a new target found, or an observation about their market.
-      [If CoS] Share what you've learned from analyzing their situation.
+      Check engagement before sending — if the user replied, respond to
+      THEM, don't fire a canned update. If silent, share something
+      genuinely useful — or stay quiet. A real advisor knows when silence
+      is better than another email.
 
-      Keep it under 3 sentences. End with something that invites a reply
-      but doesn't demand one. This is a heartbeat, not a deliverable.
-    config:
-      model_hint: fast
-      person_id: "{personId}"
-    tools:
-      - crm.send_email
-      - crm.get_interactions
-    inputs:
-      - conversationSummary
-      - outreachResults
+      Over the course of the week:
+      - Share progress when there's something worth reporting
+      - Offer insights when you find something genuinely useful
+      - Ask for feedback naturally, not as a checklist item
+      - If the user engages, match their energy and respond to what they said
+      - If silent, don't escalate — give space
 
-  # Day 4: Value-add — only if still silent. If they replied, skip.
-  - id: day-4-value
-    name: "Day 4 — Mid-week insight"
-    executor: ai-agent
-    email_thread: "user-onboarding"
-    schedule:
-      delay: "4d"
-      after: trigger
-    gate:
-      engagement: silent
-      since_step: report-back
-      fallback: skip
-    description: >
-      Still no reply. Share something genuinely useful — not a check-in.
+      By end of week, summarise what happened and ask for feedback.
+      The feedback question is critical — capture the response as
+      process memory.
 
-      [If connector/sales] A market insight, a relevant trend, or a
-      strategic observation about their target space. "I noticed [insight].
-      Thought you should know."
-      [If CoS] A decision framework, priority observation, or pattern.
-      "I've been thinking about [their situation] — have you considered
-      [reframe]?"
-
-      If you don't have something genuinely useful, DO NOT SEND. A real
-      advisor knows when to stay quiet. Set output { skipped: true }.
+      Your connecting/selling/chief-of-staff mode guides your judgment
+      about what to say and when.
     config:
       model_hint: capable
       person_id: "{personId}"
     tools:
       - crm.send_email
+      - crm.get_interactions
       - web-search
     inputs:
       - conversationSummary
-    depends_on:
-      - day-2-check-in
-
-  # Day 7: Week 1 wrap-up — ALWAYS sends (whether they replied or not)
-  # This is the one guaranteed touchpoint. It summarizes the week and
-  # explicitly asks for feedback. If they've been engaged, reference
-  # the conversation. If silent, make this the "are you still there?"
-  - id: day-7-summary
-    name: "Day 7 — Week 1 wrap-up"
-    executor: ai-agent
-    email_thread: "user-onboarding"
-    schedule:
-      delay: "7d"
-      after: trigger
-    description: >
-      End the first week with a proper summary. This ALWAYS sends.
-
-      Check engagement since report-back:
-      [If user has replied] Reference their feedback. Summarize what you've
-      done, how their input shaped your work, and what's next.
-      [If user has been silent] Acknowledge the silence gracefully. Summarize
-      what you did this week anyway. Make the ask explicit: "I want to make
-      sure I'm heading in the right direction — does this look right to you?"
-
-      [If connector/sales] Include:
-      - Who was contacted and responses so far
-      - Actual outreach text sent (quote from outreachResults if available):
-        "Here's what I sent to [name]: [quoted text]"
-      - Follow-ups sent or queued
-      - What you plan next week
-      End with: "How am I doing? Anyone I should be targeting that I'm not?"
-
-      [If CoS] Include:
-      - What you've learned about their priorities
-      - How you plan to structure next Monday's briefing
-      End with: "Is this useful? What would make the briefing better?"
-
-      The feedback question is critical. Capture response as process memory.
-    config:
-      model_hint: capable
-      person_id: "{personId}"
-    tools:
-      - crm.send_email
-      - crm.get_interactions
-    inputs:
-      - conversationSummary
       - outreachResults
-    depends_on:
-      - day-4-value
-    # Wait for their response to the week 1 summary
+    outputs:
+      - user-feedback
+      - engagement-level
     wait_for:
       event: reply
-      timeout: "5d"
+      timeout: "7d"
 
 outputs:
   - name: user-feedback
@@ -224,7 +151,7 @@ quality_criteria:
   - "All emails in the same thread — ONE conversation"
   - "Silent users get fewer emails, not more"
   - "Engaged users get responses, not canned sequences"
-  - "Day 7 always sends — it's the guaranteed checkpoint"
+  - "End-of-week summary always sends — it's the guaranteed checkpoint"
   - "Feedback invited and captured"
 
 trust:

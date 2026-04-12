@@ -40,7 +40,8 @@ export async function verifyTurnstileToken(
 
   // Graceful degradation: if Turnstile isn't configured, allow all requests.
   // This lets local dev and staging work without Turnstile keys.
-  if (!secretKey) {
+  // Also skip when using Cloudflare's testing secret key.
+  if (!secretKey || secretKey.startsWith("1x000000000000000000000000000000")) {
     return { ok: true };
   }
 

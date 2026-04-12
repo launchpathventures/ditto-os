@@ -3,7 +3,7 @@
 /**
  * Typing indicator — three-dot pulse animation with optional status text.
  * Shows while waiting for Alex's response from the chat API.
- * Status text appears when Alex is doing background work (searching, fetching).
+ * Status text shows what Alex is doing: "Considering…", "Reading that page…", etc.
  * Provenance: iMessage/WhatsApp pattern, Brief 094.
  */
 export function TypingIndicator({ status }: { status?: string | null }) {
@@ -22,7 +22,7 @@ export function TypingIndicator({ status }: { status?: string | null }) {
         ))}
       </div>
       {status && (
-        <span className="text-sm text-text-muted">{status}</span>
+        <span className="text-sm text-text-muted italic">{status}</span>
       )}
     </div>
   );

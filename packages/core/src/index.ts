@@ -131,6 +131,20 @@ export * from "./goal-decomposition.js";
 export { parseDuration, isValidDuration } from "./duration.js";
 
 // ============================================================
+// Learning (SLM training data pipeline types — Brief 135/136)
+// ============================================================
+export {
+  type TrainingExample,
+  type TrainingDataExport,
+  type TrainingDataOptions,
+  type SlmReadinessScore,
+  type SlmReadinessSignals,
+  type SlmReadinessThresholds,
+  DEFAULT_READINESS_THRESHOLDS,
+  SLM_SUITABLE_PURPOSES,
+} from "./learning/index.js";
+
+// ============================================================
 // Content blocks
 // ============================================================
 export * from "./content-blocks.js";

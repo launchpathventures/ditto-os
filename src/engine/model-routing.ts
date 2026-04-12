@@ -19,6 +19,8 @@ import { getConfiguredModel, getProviderName, getLoadedProviders } from "./llm.j
 import { sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schemaTypes from "../db/schema";
+import { scoreAllSteps } from "./readiness-scorer.js";
+import { getPromotedDeployment } from "./slm-deployment.js";
 
 // ============================================================
 // Purpose-based routing (ADR-026, Insight-157)
@@ -103,6 +105,36 @@ export function resolveProviderForPurpose(purpose: ModelPurpose): { provider: st
 }
 
 /**
+ * Resolve provider+model for a step, checking for promoted SLM deployments first.
+ * Falls through to normal PURPOSE_ROUTING if no SLM override exists.
+ *
+ * Brief 137: per-(process, step) routing overrides for deployed SLMs.
+ */
+export function resolveProviderForStep(
+  db: BetterSQLite3Database<typeof schemaTypes>,
+  processSlug: string,
+  stepId: string,
+  purpose: ModelPurpose,
+): { provider: string; model: string; slmDeploymentId?: string } {
+  // Check for a promoted SLM deployment for this (process, step)
+  const promoted = getPromotedDeployment(db, processSlug, stepId);
+
+  if (promoted) {
+    const loadedProviders = getLoadedProviders();
+    if (loadedProviders.has(promoted.provider)) {
+      return {
+        provider: promoted.provider,
+        model: promoted.model,
+        slmDeploymentId: promoted.id,
+      };
+    }
+    // Provider not loaded — fall through to normal routing
+  }
+
+  return resolveProviderForPurpose(purpose);
+}
+
+/**
  * Map old model hints to purposes for backward compatibility.
  */
 const HINT_TO_PURPOSE: Record<string, ModelPurpose> = {
@@ -176,6 +208,8 @@ export interface ModelRecommendation {
   currentAvgCostCents: number;
   suggestedAvgCostCents: number | null;
   rationale: string;
+  /** Recommendation type: model_switch for existing models, fine_tune_candidate for SLM training (Brief 136) */
+  type?: "model_switch" | "fine_tune_candidate";
 }
 
 /** Minimum completed runs per (process, step, model) before we can recommend */
@@ -338,6 +372,27 @@ export async function generateModelRecommendations(
           rationale: `${current.model} has low approval rate (${Math.round(currentApprovalRate * 100)}%). ${alternative.model} achieves ${Math.round(altApprovalRate * 100)}% — consider upgrading for quality`,
         });
       }
+    }
+  }
+
+  // ── Fine-tuning candidate detection (Brief 136) ──
+  // Check for (process, step) pairs with enough approved data to warrant SLM fine-tuning.
+  // This supplements model-switch recommendations with "consider training a custom SLM" signals.
+  const readinessScores = scoreAllSteps(db);
+  for (const score of readinessScores) {
+    if (score.recommendation === "ready" || score.recommendation === "strong_candidate") {
+      recommendations.push({
+        processSlug: score.processSlug,
+        stepId: score.stepId,
+        currentModel: "current",
+        suggestedModel: "fine-tuned-slm",
+        currentApprovalRate: score.signals.consistency.approvalRate,
+        suggestedApprovalRate: null,
+        currentAvgCostCents: score.signals.costImpact.currentAvgCostCents,
+        suggestedAvgCostCents: score.signals.costImpact.estimatedSlmCostCents,
+        rationale: `SLM fine-tuning ${score.recommendation}: ${score.signals.volume.count} approved examples at ${Math.round(score.signals.consistency.approvalRate * 100)}% approval rate. Estimated savings: ${score.estimatedMonthlySavingsCents}¢/month`,
+        type: "fine_tune_candidate",
+      });
     }
   }
 

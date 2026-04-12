@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1775911315608,
+      "tag": "0000_amusing_doctor_faustus",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775994438582,
+      "tag": "0001_last_patch",
+      "breakpoints": true
+    }
+  ]
+}

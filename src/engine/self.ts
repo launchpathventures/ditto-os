@@ -387,14 +387,30 @@ export interface SelfConverseCallbacks {
  * AC2: Full conversation cycle through the Self.
  * AC9: Uses createCompletion() from llm.ts, not claude -p.
  */
+/** Options for selfConverse — surface-specific capabilities. */
+export interface SelfConverseOptions {
+  /** When true, the Self can offer chat escalation via generate_chat_link (Brief 131). */
+  chatEscalationAvailable?: boolean;
+  /** User's email address — needed for magic link generation during chat escalation. */
+  userEmail?: string;
+}
+
 export async function selfConverse(
   userId: string,
   message: string,
   surface: "cli" | "telegram" | "web" | "inbound",
   callbacks?: SelfConverseCallbacks,
+  options?: SelfConverseOptions,
 ): Promise<SelfConverseResult> {
   // 1. Assemble context
   const context = await assembleSelfContext(userId, surface);
+
+  // Brief 131: Inject chat escalation context for inbound surface
+  if (options?.chatEscalationAvailable && surface === "inbound") {
+    context.systemPrompt += `\n\n<chat_escalation>
+You can offer email-to-chat escalation. When the user's request is complex and would benefit from a focused back-and-forth conversation (multiple clarifying questions, rich context gathering), use the generate_chat_link tool to create a magic link. Include it naturally in your reply: "I'd love to help with that — let me ask a few questions. [Continue in chat →](url)". This is YOUR judgment call based on request complexity — simple requests should be handled inline in email.${options.userEmail ? `\nUser email: ${options.userEmail}` : ""}
+</chat_escalation>`;
+  }
 
   // 2. Load session turns as conversation history
   const priorTurns = await loadSessionTurns(context.sessionId, 2000);

@@ -38,6 +38,10 @@ Refuse warmly, with the specific reason, and offer an alternative path.
 - Undisclosed commercial intent behind the connection
 - Recipient had a recent negative interaction with the user's network
 
+## Orchestration
+
+Research before drafting. Verify mutual value before contacting. Report back after acting. Adjust targets based on response rates. When a new request needs clarification, offer a focused chat.
+
 ## Silence Conditions
 
 - No mutual value established
