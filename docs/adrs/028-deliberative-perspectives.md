@@ -80,87 +80,127 @@ Replace the unimplemented "Ensemble Consensus" review pattern with **Deliberativ
 | **Specification Testing** | Validation agent checks output against defined criteria | Established processes |
 | **Deliberative Perspectives** | Configurable cognitive lenses evaluate from different angles; Self synthesizes | Complex/ambiguous decisions, goal framing, process design |
 
-### 2. Perspectives are cognitive lenses, not personas
+### 2. Dynamic lens composition, not a static library
 
-Each perspective is defined by:
+The lenses needed for any given decision depend on the decision itself — its domain, its stakes, its novelty, and the user's operating context. A pricing decision needs different perspectives than an email draft. A first-time process needs different scrutiny than a 50th run. Prescribing a fixed lens set is premature rigidity.
+
+**The Lens Composer** is a fast LLM call (stage 0) that analyzes the decision context and generates the specific lenses this decision needs:
 
 ```typescript
-interface PerspectiveLens {
-  id: string;                    // e.g. "contrarian", "first-principles"
-  name: string;                  // Human-readable
-  cognitiveFunction: string;     // What this lens does (evaluable)
-  systemPrompt: string;          // The lens-specific prompt
-  evaluationQuestions: string[];  // What this lens asks of the output
-  memoryCategories?: string[];   // ADR-022 failure knowledge to inject
-  costTier: "fast" | "capable";  // Model routing hint (Brief 033)
+interface LensComposerInput {
+  output: string;                // The step's output being evaluated
+  processContext: {
+    name: string;
+    qualityCriteria: string[];
+    goalAncestry: string[];      // WHY this work exists
+    trustTier: TrustTier;
+    runCount: number;            // How many times this process has run
+  };
+  userContext: {
+    cognitiveMode: string;       // connecting, selling, CoS, ghost
+    recentCorrections: string[]; // What the user has been fixing lately
+    operatingCycle: string;      // What cycle Alex is in
+  };
+  decisionSignals: {
+    confidence: "high" | "medium" | "low";
+    novelty: "routine" | "variant" | "novel"; // vs. prior inputs
+    stakes: "low" | "medium" | "high";        // from process trust tier + output type
+    domain: string;              // extracted from process definition
+  };
+}
+
+interface GeneratedLens {
+  id: string;                    // Generated identifier
+  cognitiveFunction: string;     // What this lens evaluates
+  systemPrompt: string;          // The complete lens prompt
+  evaluationQuestions: string[]; // 2-4 specific questions for this decision
+  memoryCategories?: string[];   // Which memory types to inject (ADR-022)
 }
 ```
 
-**Standard library of lenses:**
+**The Lens Composer prompt receives:**
+- The decision context (what's being evaluated, why it exists, what the user cares about)
+- The user's recent correction patterns (what they've been fixing — this shapes which angles matter)
+- The process's accumulated failure knowledge (ADR-022 categories)
+- A constraint: generate 2-5 lenses, each defined by cognitive function not personality
 
-| Lens | Cognitive Function | What It Asks | Memory Injection |
-|------|-------------------|-------------|-----------------|
-| **Contrarian** | Risk assessment, assumption challenging | "What could go wrong? What assumption is wrong? What's the worst case?" | `failure_pattern`, `overconfidence_pattern` (ADR-022) |
-| **Expansionist** | Opportunity identification, divergent thinking | "What else could this enable? What adjacent possibilities exist? What's the second-order effect?" | None |
-| **First Principles** | Reductive analysis, foundational reasoning | "Strip away assumptions — what's actually true? What's the simplest version? What's the core problem?" | None |
-| **Executor** | Pragmatic sequencing, feasibility assessment | "How do we actually ship this? What's the critical path? What's the first concrete step?" | None |
-| **Customer Advocate** | External perspective, empathy | "How does the end user experience this? What do they actually need? What would frustrate them?" | None |
-| **Historian** | Pattern matching, precedent | "What have we tried before? What patterns from past decisions apply? What does accumulated data show?" | `correction` memories, `solution` memories (Brief 060) |
-| **Simplifier** | Complexity reduction, essentialism | "Is this actually necessary? What can be removed? What's the minimum viable version?" | None |
+**What the Lens Composer outputs:**
+- 2-5 `GeneratedLens` objects, each tailored to this specific decision
+- Each lens has a clear cognitive function, specific evaluation questions, and relevant memory injection categories
 
-Lenses are extensible — users and processes can define custom lenses. The standard library is the default; processes override or extend per their needs.
+**Why dynamic over static:** The same process may need different lenses at different stages of its trust lifecycle. A supervised quoting process on run #3 needs a Contrarian and Executor lens. The same process at run #50 (spot-checked) on a routine bathroom quote might need no perspectives at all — but a novel commercial quote might generate a Pricing Strategist and Compliance Checker lens that no static library would have included.
 
-### 3. Two-stage architecture (adapted from Karpathy)
+**Reference lenses (examples, not a fixed library):** The Lens Composer draws on cognitive functions like risk assessment, opportunity identification, first-principles analysis, pragmatic sequencing, customer empathy, historical pattern matching, and complexity reduction. But it combines and tailors them per-context rather than selecting from a menu.
+
+### 3. Three-stage architecture (adapted from Karpathy)
+
+**Stage 0 — Lens Composition (fast, ~200 output tokens):**
+The Lens Composer analyzes the decision context and generates 2-5 tailored lenses. Uses `fast` model tier. This is the "who should be in the room?" step — it's cheap and it prevents wasting tokens on irrelevant perspectives.
 
 **Stage 1 — Parallel Perspective Generation:**
-Each configured lens receives:
+Each generated lens receives:
 - The step's output (what's being evaluated)
 - The process context (quality criteria, goal ancestry)
-- Lens-specific memory injection (from ADR-022 failure knowledge)
-- Lens-specific system prompt + evaluation questions
+- Lens-specific memory injection (from ADR-022 failure knowledge, per the composer's `memoryCategories`)
+- The lens-specific system prompt + evaluation questions (generated by the composer)
 
 Lenses run in parallel (no inter-lens communication in stage 1). Each returns:
 
 ```typescript
 interface PerspectiveResult {
   lensId: string;
+  cognitiveFunction: string;   // What this lens was evaluating
   assessment: string;          // The lens's evaluation
-  signals: PerspectiveSignal[];  // Structured: opportunity | risk | simplification | precedent | ...
+  signals: PerspectiveSignal[];
   confidence: "high" | "medium" | "low";
   costCents: number;
 }
 
 interface PerspectiveSignal {
-  type: "opportunity" | "risk" | "simplification" | "precedent" | "feasibility" | "user-impact";
+  type: "opportunity" | "risk" | "simplification" | "precedent" | "feasibility" | "user-impact" | "quality" | "compliance";
   summary: string;             // One sentence
   severity: "critical" | "significant" | "minor";
   evidence?: string;           // What supports this signal
 }
 ```
 
-**Stage 2 — Self Synthesis:**
-The Self (already the chairman per ADR-016) receives all perspective results and synthesizes:
-- Strongest arguments across lenses
-- Points of convergence (multiple lenses flagged the same thing)
-- Points of genuine divergence (where lenses disagree)
+**Stage 2 — Peer Review (the cross-examination loop):**
+After initial perspectives are generated, each lens receives:
+- Its own initial assessment
+- The assessments from all other lenses (anonymized as "Perspective A, B, C..." per Karpathy's pattern — prevents favoritism)
+- A prompt: "Review the other perspectives. Where do you agree? Where do you disagree? What did they catch that you missed? What did they get wrong? Update your assessment."
+
+Each lens produces a **revised assessment** that incorporates or rebuts the other perspectives. This is the key value-add over single-pass evaluation — it's where genuine deliberation happens. Lenses that were overconfident get challenged. Lenses that missed something absorb it. Genuine disagreements become explicit rather than hidden.
+
+**Peer review constraints:**
+- **Single round only.** Research shows diminishing returns after round 1. The loop is: compose → generate → cross-examine → synthesize. Not compose → generate → cross-examine → cross-examine → cross-examine.
+- **Anonymized.** Lenses see "Perspective A said..." not "The Contrarian said..." — prevents anchoring on perceived authority.
+- **Optional per-process.** Peer review can be disabled via `peer_review: false` in the process config for cost-sensitive processes. When disabled, the architecture degrades to two stages (compose → generate → synthesize) — still valuable, just less thorough.
+
+**Stage 3 — Self Synthesis:**
+The Self (already the chairman per ADR-016) receives all revised perspective results and synthesizes:
+- Strongest arguments across lenses (post-cross-examination)
+- Points of convergence (multiple lenses agree, especially after peer review)
+- Points of genuine divergence (where lenses disagree even after seeing each other's work)
 - A single recommendation incorporating the most valuable signals
 
-The user sees Alex's synthesized recommendation. Perspective details are available on demand (drill-down in the Review Queue, not in the primary response).
-
-**No Stage 3 (peer review between lenses).** Research shows single-pass perspectives with chairman synthesis has the best cost/quality ratio for a governance harness. Multi-round debate is reserved for research tools, not production decision-making.
+The user sees Alex's synthesized recommendation. Perspective details are available on demand (drill-down in the Review Queue, not in the primary response). The peer review layer means Alex's synthesis is grounded in perspectives that have already stress-tested each other — not raw first impressions.
 
 ### 4. Process declaration
 
-Perspectives are declared on process definitions, alongside existing review patterns:
+Perspectives are declared on process definitions. Because lenses are dynamically composed, the declaration is about **when and how** to deliberate, not **which lenses** to use:
 
 ```yaml
 # In process YAML
 harness:
   review: ["spec-testing"]
   perspectives:
-    lenses: ["contrarian", "first-principles", "executor"]
-    trigger: "always" | "low-confidence" | "novel-input"
-    model_tier: "fast"          # Use fast model for perspectives (Brief 033)
+    enabled: true
+    trigger: "always" | "low-confidence" | "novel-input" | "high-stakes"
+    peer_review: true           # Enable stage 2 cross-examination (default: true)
+    max_lenses: 4               # Cap on dynamically generated lenses (default: 4)
+    model_tier: "fast"          # Model tier for lenses (Brief 033)
+    composer_hints: []          # Optional: domain hints for the lens composer
 ```
 
 **Trigger conditions:**
@@ -170,6 +210,51 @@ harness:
 | `always` | Every step execution | Critical/compliance processes, goal framing |
 | `low-confidence` | Only when step execution returns low/medium confidence | Cost-optimized: perspectives where they're most needed |
 | `novel-input` | When input signature differs significantly from prior runs | Catches novel situations that routine processing might mishandle |
+| `high-stakes` | When the output has external consequences (outbound email, financial, customer-facing) | Prevents costly mistakes on consequential actions |
+
+**`composer_hints`:** Optional strings that give the Lens Composer domain context. Example: `["this process handles financial compliance", "the user is particularly sensitive to tone"]`. These are not lens names — they're context for dynamic composition. Most processes don't need hints; the Composer infers from the process definition and user context.
+
+### 4a. When perspectives fire — scenario analysis
+
+The trigger system must be precise. Perspectives are valuable for specific decision types, not universal quality improvement. Here's when each persona would benefit and when they wouldn't:
+
+**Rob (trades MD) — Quoting process:**
+
+| Scenario | Trigger? | Why |
+|----------|----------|-----|
+| Routine bathroom quote (run #40, standard job) | No | Autonomous trust, routine input. Perspectives add cost without value. |
+| First commercial quote (novel input type) | Yes — `novel-input` | New domain. Lens Composer might generate: Pricing Risk Assessor, Commercial Compliance Checker, Margin Strategist. |
+| Quote for a customer who previously complained | Yes — `high-stakes` | Reputational risk. Composer might generate: Customer Relationship Lens, Quality Scrutineer, Tone Assessor. |
+| Quote with materials Rob has never used before | Yes — `novel-input` | Material pricing uncertainty. Composer might generate: Cost Verification Lens, Supplier Risk Assessor. |
+
+**Lisa (ecommerce MD) — Product description process:**
+
+| Scenario | Trigger? | Why |
+|----------|----------|-----|
+| Standard product listing (run #80) | No | Spot-checked trust, routine. Lisa reviews 1 in 5. |
+| New product category launch | Yes — `novel-input` | New domain. Composer: Brand Voice Guardian, Competitive Differentiator, SEO Strategist. |
+| Product in a regulated category (supplements, electronics) | Yes — `high-stakes` | Compliance risk. Composer: Regulatory Compliance Checker, Claims Verifier. |
+| Product description after a negative review about misleading descriptions | Yes — `high-stakes` | Reputational risk. Composer: Accuracy Scrutineer, Customer Expectation Setter. |
+
+**Nadia (team manager) — Report formatting process:**
+
+| Scenario | Trigger? | Why |
+|----------|----------|-----|
+| Standard weekly report (run #100+) | No | Autonomous, routine. |
+| First report from a new analyst | Yes — `novel-input` | New author, unknown patterns. Composer: Quality Baseline Assessor, Style Compliance Checker. |
+| Report going to board / external stakeholders | Yes — `high-stakes` | Audience-aware. Composer: Executive Communication Lens, Data Accuracy Verifier, Narrative Coherence Checker. |
+| Report on a topic the team hasn't covered before | Yes — `novel-input` | Domain unfamiliarity. Composer: Domain Accuracy Checker, Assumption Questioner. |
+
+**Goal Framing (the Self's consultative conversation):**
+
+| Scenario | Trigger? | Why |
+|----------|----------|-----|
+| Simple task: "Follow up with Henderson" | No | Clear intent, existing process, low ambiguity. |
+| Vague strategic goal: "I want to grow the business" | Yes — `always` | High ambiguity. Composer: Scope Definer, Feasibility Assessor, Opportunity Mapper, Risk Assessor. |
+| Process design: "I need a quoting process" | Yes — `always` | Complex build decision. Composer: Process Architect, Edge Case Identifier, Simplicity Advocate, User Experience Lens. |
+| Decision with trade-offs: "Should I hire or automate?" | Yes — `always` | Genuine dilemma. Composer: Cost-Benefit Analyzer, Long-Term Strategist, Operational Reality Checker, Risk Assessor. |
+
+**The pattern:** Perspectives fire when there's genuine ambiguity, novelty, or consequence. They don't fire on routine, proven operations. The trust tier provides the baseline signal (supervised processes may benefit from perspectives more often; autonomous processes rarely need them). The trigger conditions provide the per-execution signal.
 
 ### 5. Pipeline position
 
@@ -193,13 +278,24 @@ Deliberative Perspectives runs as a new handler after `review-pattern` and befor
 
 ### 6. Cost governance
 
-**Token budget:** Each lens invocation targets ~500-800 output tokens. With 3 lenses (typical), the perspective layer costs ~3K output tokens + input context per lens.
+**Token budget per stage:**
 
-**Model routing:** Perspectives use the `fast` model tier by default (Brief 033). They're evaluation tasks, not generation tasks — they don't need the most capable model.
+| Stage | Calls | Output tokens | Typical cost |
+|-------|-------|---------------|-------------|
+| Stage 0 (Lens Composer) | 1 | ~200 | Negligible |
+| Stage 1 (Parallel Generation) | N lenses (2-5) | ~500-800 per lens | 1K-4K |
+| Stage 2 (Peer Review) | N lenses | ~300-500 per lens (shorter — revision, not generation) | 0.6K-2.5K |
+| Stage 3 (Self Synthesis) | 0 (folded into Self's response) | 0 additional | Free |
 
-**Conditional invocation:** The `trigger` field (section 4) prevents perspectives from running on every step. `low-confidence` is the recommended default — perspectives only fire when the primary agent isn't sure.
+**Total typical cost:** 3-5 lenses with peer review: ~5K-10K output tokens + input context per lens invocation. This is significant — roughly 3-5x the cost of a single adversarial review.
 
-**Budget integration:** Perspective costs accumulate in `context.reviewCostCents` alongside existing review pattern costs. Per-process budget controls (L2) apply to the combined review spend.
+**Model routing:** All perspective stages use the `fast` model tier by default (Brief 033). They're evaluation tasks, not generation tasks — they don't need the most capable model. The Lens Composer especially benefits from fast models since it generates structure, not deep analysis.
+
+**Conditional invocation is the primary cost control.** The trigger conditions (section 4) are not optional — they are the mechanism that makes perspectives affordable. A process that runs 100 times/month at `novel-input` trigger might fire perspectives on 5-10 of those runs. The same process at `always` would fire 100 times — 10-20x the cost.
+
+**Peer review is the secondary cost control.** `peer_review: false` halves the lens invocation cost. Recommended for processes where speed matters more than thoroughness, or where the trigger condition already ensures only high-value invocations.
+
+**Budget integration:** Perspective costs accumulate in `context.reviewCostCents` alongside existing review pattern costs. Per-process budget controls (L2) apply to the combined review spend. If the perspective layer would exceed the remaining step budget, it degrades gracefully: drop peer review first, then reduce lens count, then skip perspectives entirely.
 
 ### 7. Feedback and learning
 
@@ -221,7 +317,7 @@ Deliberative Perspectives runs as a new handler after `review-pattern` and befor
 
 | Component | Relationship |
 |-----------|-------------|
-| **Review Patterns (L3)** | Perspectives compose alongside, not replace. A step can have `review: ["spec-testing"]` AND `perspectives: { lenses: ["contrarian", "executor"] }`. |
+| **Review Patterns (L3)** | Perspectives compose alongside, not replace. A step can have `review: ["spec-testing"]` AND `perspectives: { enabled: true, trigger: "novel-input" }`. |
 | **Metacognitive Check** | Internal self-review (same agent lens). Perspectives are external multi-lens review. Complementary — both can flag, trust-gate sees both. |
 | **Accumulated Failure Knowledge (ADR-022)** | Injected into relevant lenses. Contrarian loads `failure_pattern` + `overconfidence_pattern`. Historian loads `correction` + `solution` memories. |
 | **Cognitive Modes (connecting, selling, CoS)** | Modes shift HOW Alex thinks about a category of work. Perspectives shift WHAT ANGLES Alex considers for a specific decision. Orthogonal. |
@@ -231,16 +327,16 @@ Deliberative Perspectives runs as a new handler after `review-pattern` and befor
 ### 9. What this is NOT
 
 - **Not a visible committee.** The user never sees agents debating. They see Alex, who has considered multiple angles.
-- **Not a fixed panel.** Lenses are configurable per-process and learnable over time. No "permanent board of directors."
+- **Not a fixed panel.** Lenses are dynamically composed per-decision based on context, not selected from a static menu. No "permanent board of directors."
 - **Not a replacement for review patterns.** Perspectives enrich thinking; review patterns catch errors. Different jobs.
 - **Not for every decision.** Conditional triggers prevent perspectives from running on routine, proven processes.
-- **Not multi-round debate.** Single-pass perspectives + synthesis. Research shows diminishing returns after round 1 in production settings.
+- **Not multi-round debate.** One round of peer review after initial generation. Research shows diminishing returns after round 1. The loop is: compose → generate → cross-examine → synthesize — not an open-ended debate.
 
 ## Provenance
 
 | Pattern | Source | What we took | What we changed |
 |---------|--------|-------------|----------------|
-| Three-stage council | Karpathy `llm-council` (github.com/karpathy/llm-council) | Parallel generation → peer review → chairman synthesis | Dropped peer review stage (cost/benefit wrong for harness). Self is chairman (already exists). Anonymization unnecessary (lenses don't review each other). |
+| Three-stage council | Karpathy `llm-council` (github.com/karpathy/llm-council) | Parallel generation → anonymized peer review → chairman synthesis | Adopted all three stages. Added stage 0 (dynamic lens composition). Self is chairman (already exists). Peer review is anonymized and single-round. |
 | Sparse communication | AutoGen multi-agent debate (microsoft.github.io/autogen) | Sparse topology outperforms all-to-all | Applied: lenses don't see each other's output. Only the Self sees all. |
 | Single-model role diversity | Self-MoA (2025, arXiv follow-up to Mixture-of-Agents) | Same model with different prompts outperforms mixed models | Applied: all lenses use same provider, different system prompts. |
 | Cognitive function over personality | LLM Role Archetypes research (arXiv:2602.11924) | Function-defined roles are evaluable; personality-defined roles are unreliable | Applied: lenses defined by cognitive function ("risk assessment"), not personality ("cautious pessimist"). |
@@ -267,14 +363,16 @@ Deliberative Perspectives runs as a new handler after `review-pattern` and befor
 ### What new constraints this introduces
 
 - Perspectives must use the `fast` model tier by default to control costs.
-- The standard lens library should start small (3-4 lenses) and grow based on evidence, not aspiration.
+- The Lens Composer prompt is a critical artifact — it determines what lenses get generated. Must be evolved through Feedback & Evolution with the same care as `cognitive/core.md`.
 - Perspective results must be storable for feedback analysis — new fields in the step run record.
-- The Self's synthesis prompt must handle 0-7 perspective inputs gracefully (from "no perspectives configured" to "full standard library").
+- The Self's synthesis prompt must handle 0-5 perspective inputs gracefully (from "no perspectives triggered" to max lenses).
+- Trigger conditions must be configured thoughtfully per process — `always` on a high-volume process is a cost explosion.
+- Peer review anonymization must be consistent — lenses must not be identifiable by writing style or perspective name during cross-examination.
 
 ### Follow-up decisions needed
 
-1. **Brief 136** — Implementation brief for the `deliberative-perspectives` handler, standard lens library, process declaration schema, and Self synthesis integration.
+1. **Brief 136** — Implementation brief for the `deliberative-perspectives` handler, Lens Composer, peer review loop, process declaration schema, and Self synthesis integration.
 2. **Architecture spec update** — Replace Ensemble Consensus with Deliberative Perspectives in Layer 3 review patterns table.
-3. **ADR-022 integration** — Wire failure knowledge memory categories into lens-specific memory injection.
-4. **Self prompt update** — Add synthesis instructions to `cognitive/self.md` for handling perspective results.
-5. **Determine MVP lens set** — Start with 3 lenses (contrarian, first-principles, executor) based on highest expected value. Expand from evidence.
+3. **ADR-022 integration** — Wire failure knowledge memory categories into Lens Composer context so it can assign `memoryCategories` to generated lenses.
+4. **Self prompt update** — Add synthesis instructions to `cognitive/self.md` for handling perspective results (post-peer-review).
+5. **Lens Composer prompt design** — The prompt that generates lenses is the single highest-leverage artifact. It needs its own design iteration with scenario testing across all four personas.

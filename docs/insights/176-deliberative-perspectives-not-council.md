@@ -23,23 +23,25 @@ This means: perspectives are not a universal quality mechanism. They are a **dec
 
 The architectural implication: **Deliberative Perspectives** is a harness-level pattern (like review patterns), not a cognitive mode (like connecting/selling). It's declared on processes, composable with existing review layers, and governed by trust and feedback like everything else. The Self synthesizes perspective outputs the way a good executive synthesizes advisor input — incorporating the strongest arguments, noting dissent, and making one clear recommendation.
 
+Critically, the lenses must be **dynamically composed** based on decision context — not selected from a fixed menu. A pricing decision needs different perspectives than an email draft. A novel input to a trusted process needs different scrutiny than a routine run. A Lens Composer (fast LLM call) analyzes the decision context and generates the specific lenses this decision needs. After initial generation, lenses cross-examine each other in a single anonymized peer review round (Karpathy's pattern), then the Self synthesizes. The loop is: compose → generate → cross-examine → synthesize.
+
 ## Implications
 
 1. **Ensemble Consensus evolves.** The architecture spec (Layer 3) defines Ensemble Consensus as "multiple agents produce independently, compare for divergence." Deliberative Perspectives is the richer version: instead of N agents doing the same task, N cognitive lenses evaluating from different angles. The ensemble slot in the architecture becomes the perspectives slot.
 
-2. **Cost must be gated.** Research shows 4.3x average token amplification per perspective. Five perspectives on every step is prohibitive. Perspectives must be conditional: declared per-process, gated by decision complexity, and respecting trust tiers (autonomous processes that have proven reliable don't need five perspectives on routine outputs).
+2. **Lenses must be dynamic, not static.** The lenses needed depend on the decision's domain, stakes, novelty, and user context. A Lens Composer generates tailored lenses per-decision rather than selecting from a fixed library. The same process may need completely different perspectives at run #3 vs run #50, or for a routine input vs a novel one.
 
-3. **Sparse topology beats all-to-all.** AutoGen research shows sparse communication outperforms dense. Perspectives should see the original output and optionally 1-2 neighboring perspectives, not all of them. The chairman (Self) sees everything; individual lenses see less.
+3. **Peer review adds genuine deliberation.** After parallel generation, lenses cross-examine each other in a single anonymized round. This is where perspectives that were overconfident get challenged, where missed angles get absorbed, and where genuine disagreements become explicit. One round only — research shows diminishing returns after that.
 
-4. **Same model, different prompts works.** Self-MoA research (2025) shows a single strong model with role-differentiated prompts can outperform mixed-model ensembles. This simplifies implementation — perspectives are prompt variations on the same LLM, not different providers.
+4. **Cost must be gated by trigger conditions.** Research shows 4.3x average token amplification per perspective. Five perspectives with peer review on every step is prohibitive. Conditional triggers (`low-confidence`, `novel-input`, `high-stakes`) are the primary cost control.
 
-5. **Feedback shapes composition.** Which perspectives the user engages with (implicit signal) and which align with their final decisions (explicit signal) should feed back into perspective selection per process type. If the Contrarian never adds value for content review, the system should learn to drop it.
+5. **Same model, different prompts works.** Self-MoA research (2025) shows a single strong model with role-differentiated prompts can outperform mixed-model ensembles. This simplifies implementation — perspectives are prompt variations on the same LLM, not different providers.
 
-6. **Cap rounds at 1.** Research shows diminishing returns after 2-3 debate rounds. For a harness pattern (not a research tool), single-pass perspectives with chairman synthesis is the right trade-off.
+6. **Feedback shapes the Lens Composer.** Which perspectives the user engages with (implicit signal) and which align with their final decisions (explicit signal) should feed back into how the Lens Composer generates lenses for that process type. The Composer learns what angles matter per context.
 
 ## Where It Should Land
 
 - **ADR-028** — Full architectural decision for Deliberative Perspectives as a harness pattern
 - **Architecture spec (L3)** — Replace "Ensemble Consensus" row with "Deliberative Perspectives" in the review patterns table
 - **Brief 136** — Implementation brief for the harness handler and process declaration schema
-- **ADR-022 integration** — Accumulated failure knowledge (failure_pattern, overconfidence_pattern) should be injected into the Contrarian and Historian perspectives
+- **ADR-022 integration** — Accumulated failure knowledge fed to the Lens Composer so it can assign relevant memory categories to generated lenses
