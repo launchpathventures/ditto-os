@@ -554,13 +554,14 @@ export async function syncProcessesToDb(
     }
 
     // Validate step-level tools (Brief 025: service.tool_name format)
+    // Warn on errors instead of throwing — built-in tools (web-search, web-fetch)
+    // don't have integration entries and would block sync otherwise.
     const stepToolErrors = validateStepTools(def);
     if (stepToolErrors.length > 0) {
-      console.error(`  Step tool validation errors in ${def.name}:`);
+      console.warn(`  Step tool warnings in ${def.name}:`);
       for (const err of stepToolErrors) {
-        console.error(`    - ${err}`);
+        console.warn(`    - ${err}`);
       }
-      throw new Error(`Process "${def.name}" has step tool errors`);
     }
 
     // Validate process I/O service references (Brief 036)

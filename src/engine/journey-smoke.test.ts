@@ -378,14 +378,14 @@ describeJourney("Journey Smoke Tests (real LLM)", () => {
     const approvalStep = def.steps.find((s: { id: string }) => s.id === "user-approval");
     expect(approvalStep).toBeUndefined();
 
-    // send-outreach depends on quality-gate, not user-approval
-    const sendStep = def.steps.find((s: { id: string }) => s.id === "send-outreach");
-    expect(sendStep).toBeDefined();
-    expect(sendStep.depends_on).toContain("quality-gate");
+    // Thin template (ADR-027): work-the-lead is a broad cognitive step
+    const workStep = def.steps.find((s: { id: string }) => s.id === "work-the-lead");
+    expect(workStep).toBeDefined();
 
-    // Report-back step exists (not update-user)
+    // Report-back step exists and depends on quality-gate
     const reportStep = def.steps.find((s: { id: string }) => s.id === "report-back");
     expect(reportStep).toBeDefined();
+    expect(reportStep.depends_on).toContain("quality-gate");
   }, 10_000);
 
   // ============================================================

@@ -28,7 +28,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import type { LlmToolDefinition, LlmMessage, LlmToolResultBlock } from "./llm";
 import { createCompletion, extractText, extractToolUse } from "./llm";
-import { startProcessRun, fullHeartbeat, pauseGoal, goalHeartbeatLoop } from "./heartbeat";
+import { startProcessRun, fullHeartbeat, pauseGoal, goalHeartbeatLoop, startSystemAgentRun } from "./heartbeat";
 import { approveRun, editRun, rejectRun, getWaitingStepOutput } from "./review-actions";
 import { readOnlyTools, executeTool } from "./tools";
 import { recordSelfDecision } from "./self-context";
@@ -53,6 +53,7 @@ import {
 } from "./self-tools/cycle-tools";
 import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from "./user-model";
 import { setSessionTrust } from "./session-trust";
+import { createMagicLink } from "./magic-link";
 import { loadProcessFile } from "./process-loader";
 import { flattenSteps } from "./process-loader";
 
@@ -647,6 +648,59 @@ export const selfTools: LlmToolDefinition[] = [
       required: [],
     },
   },
+  // ============================================================
+  // Brief 131 — Self Cognitive Orchestration
+  // ============================================================
+  {
+    name: "orchestrate_work",
+    description: "Spawn a thin process template with context. Selects the right template, injects context, starts it via the harness. Can adapt mid-flight via adapt_process.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goal: {
+          type: "string",
+          description: "What the work should accomplish",
+        },
+        detectedMode: {
+          type: "string",
+          enum: ["connecting", "selling", "chief-of-staff", "nurturing", "ghost"],
+          description: "Cognitive mode guiding orchestration strategy",
+        },
+        templateSlug: {
+          type: "string",
+          description: "Process template slug to spawn (e.g., 'front-door-intake', 'follow-up-sequences', 'person-research')",
+        },
+        conversationContext: {
+          type: "string",
+          description: "Relevant conversation context to inject into the process",
+        },
+        userDetails: {
+          type: "object",
+          description: "User details relevant to this work (name, email, preferences)",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["goal", "detectedMode", "templateSlug"],
+    },
+  },
+  {
+    name: "generate_chat_link",
+    description: "Generate a magic link for email-to-chat escalation. Creates a focused chat session pre-seeded with context. Use when a user's email request needs rich context gathering.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        userEmail: {
+          type: "string",
+          description: "User's email address",
+        },
+        emailContext: {
+          type: "string",
+          description: "Summary of the email request to pre-seed the chat session",
+        },
+      },
+      required: ["userEmail", "emailContext"],
+    },
+  },
 ];
 
 // ============================================================
@@ -864,6 +918,22 @@ export async function executeDelegation(
     case "cycle_status":
       return await handleCycleStatus({
         userId: toolInput.userId as string | undefined,
+      });
+
+    // Brief 131 — Self Cognitive Orchestration
+    case "orchestrate_work":
+      return await handleOrchestrateWork({
+        goal: toolInput.goal as string,
+        detectedMode: toolInput.detectedMode as string,
+        templateSlug: toolInput.templateSlug as string,
+        conversationContext: toolInput.conversationContext as string | undefined,
+        userDetails: toolInput.userDetails as Record<string, string> | undefined,
+      });
+
+    case "generate_chat_link":
+      return await handleGenerateChatLink({
+        userEmail: toolInput.userEmail as string,
+        emailContext: toolInput.emailContext as string | undefined,
       });
 
     default:
@@ -1416,6 +1486,137 @@ ${role === "architect" ? "**IMPORTANT:** When you use write_file, the content wi
       toolName: "plan_with_role",
       success: false,
       output: `Planning failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+// ============================================================
+// Brief 131 — Self Cognitive Orchestration Handlers
+// ============================================================
+
+/**
+ * Orchestrate work by spawning a thin process template with context.
+ * The Self selects which template to spawn and injects relevant context.
+ * Reuses startSystemAgentRun() for process spawning (ADR-027).
+ */
+async function handleOrchestrateWork(params: {
+  goal: string;
+  detectedMode: string;
+  templateSlug: string;
+  conversationContext?: string;
+  userDetails?: Record<string, string>;
+}): Promise<DelegationResult> {
+  const { goal, detectedMode, templateSlug, conversationContext, userDetails } = params;
+
+  try {
+    const inputs: Record<string, unknown> = {
+      goal,
+      detectedMode,
+      ...(conversationContext && { conversationContext }),
+      ...(userDetails && { userDetails }),
+    };
+
+    const result = await startSystemAgentRun(templateSlug, inputs, "self");
+
+    if (!result) {
+      return {
+        toolName: "orchestrate_work",
+        success: false,
+        output: `Process template not found: ${templateSlug}. Available templates include: front-door-intake, follow-up-sequences, person-research, selling-outreach, connecting-introduction, user-nurture-first-week, ghost-follow-up.`,
+      };
+    }
+
+    return {
+      toolName: "orchestrate_work",
+      success: true,
+      output: JSON.stringify({
+        runId: result.processRunId,
+        status: "spawned",
+        templateSlug,
+        detectedMode,
+        goal: goal.slice(0, 200),
+        stepsExecuted: result.stepsExecuted,
+        runStatus: result.status,
+        message: result.message,
+      }),
+      metadata: { runId: result.processRunId, templateSlug, detectedMode },
+    };
+  } catch (err) {
+    return {
+      toolName: "orchestrate_work",
+      success: false,
+      output: `Failed to orchestrate work: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Generate a magic link for email-to-chat escalation (Brief 131).
+ *
+ * Creates a chat session pre-seeded with context from the email request,
+ * then generates a magic link URL. The Self includes this URL in its
+ * email reply when it decides (cognitively) that the request needs
+ * richer context gathering than email allows.
+ */
+async function handleGenerateChatLink(params: {
+  userEmail: string;
+  emailContext?: string;
+}): Promise<DelegationResult> {
+  const { userEmail, emailContext } = params;
+
+  try {
+    const { db: dbRef, schema: schemaRef } = await import("../db");
+    const { randomUUID } = await import("crypto");
+
+    // Create a new chat session pre-seeded with email context
+    const sessionId = randomUUID();
+    const initialMessages: Array<{ role: string; content: string }> = [];
+
+    if (emailContext) {
+      initialMessages.push({
+        role: "system",
+        content: `This chat session was started from an email conversation. Context: ${emailContext}`,
+      });
+    }
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await dbRef.insert(schemaRef.chatSessions).values({
+      sessionId,
+      messages: initialMessages,
+      context: "escalated",
+      ipHash: "email-escalation",
+      messageCount: 0,
+      authenticatedEmail: userEmail.toLowerCase(),
+      expiresAt,
+    });
+
+    // Generate magic link for this session
+    const magicLinkResult = await createMagicLink(userEmail.toLowerCase(), sessionId);
+
+    if (!magicLinkResult) {
+      return {
+        toolName: "generate_chat_link",
+        success: false,
+        output: "Rate limited — too many magic links generated recently. Try again later.",
+      };
+    }
+
+    return {
+      toolName: "generate_chat_link",
+      success: true,
+      output: JSON.stringify({
+        url: magicLinkResult.url,
+        sessionId,
+        expiresIn: "24 hours",
+      }),
+      metadata: { sessionId, url: magicLinkResult.url },
+    };
+  } catch (err) {
+    return {
+      toolName: "generate_chat_link",
+      success: false,
+      output: `Failed to generate chat link: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

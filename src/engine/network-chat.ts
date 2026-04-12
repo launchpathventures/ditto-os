@@ -14,7 +14,7 @@ import { db, schema } from "../db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
-import { createCompletion, extractText, extractToolUse, getConfiguredModel } from "./llm";
+import { createCompletion, extractText, extractToolUse, getConfiguredModel, type LlmToolDefinition } from "./llm";
 import { createStreamingCompletion, type StreamEvent } from "./llm-stream";
 import { isSpendCeilingReached, recordFrontDoorSpend } from "./spend-ceiling";
 import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage } from "./network-chat-prompt";
@@ -31,15 +31,31 @@ import type { LlmMessage } from "./llm";
 
 const VALID_MODES = new Set(["connector", "sales", "cos", "both"]);
 
+interface LearnedContext {
+  name?: string | null;
+  business?: string | null;
+  role?: string | null;
+  industry?: string | null;
+  location?: string | null;
+  target?: string | null;
+  problem?: string | null;
+  channel?: string | null;
+}
+
 interface AlexToolArgs {
   reply: string;
   suggestions: string[];
+  requestName: boolean;
+  requestLocation: boolean;
   requestEmail: boolean;
   done: boolean;
   resendEmail: boolean;
   detectedMode: DetectedMode;
   searchQuery: string | null;
   fetchUrl: string | null;
+  plan: string | null;
+  learned: LearnedContext | null;
+  extraQuestions: string[];
 }
 
 /**
@@ -56,12 +72,17 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
     return {
       reply,
       suggestions: [],
+      requestName: false,
+      requestLocation: false,
       requestEmail: false,
       done: false,
       resendEmail: false,
       detectedMode: null,
       searchQuery: null,
       fetchUrl: null,
+      plan: null,
+      learned: null,
+      extraQuestions: [],
     };
   }
 
@@ -71,6 +92,8 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
     suggestions: Array.isArray(args.suggestions)
       ? args.suggestions.filter((s): s is string => typeof s === "string")
       : [],
+    requestName: Boolean(args.requestName),
+    requestLocation: Boolean(args.requestLocation),
     requestEmail: Boolean(args.requestEmail),
     done: Boolean(args.done),
     resendEmail: Boolean(args.resendEmail),
@@ -86,6 +109,15 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
       typeof args.fetchUrl === "string" && args.fetchUrl.trim()
         ? args.fetchUrl.trim()
         : null,
+    plan:
+      typeof args.plan === "string" && args.plan.trim()
+        ? args.plan.trim()
+        : null,
+    learned:
+      args.learned && typeof args.learned === "object"
+        ? args.learned as LearnedContext
+        : null,
+    extraQuestions: [], // populated by validateAndCleanResponse() post-call
   };
 
   // fetchUrl takes priority — if both are set, clear searchQuery
@@ -95,6 +127,214 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
   }
 
   return result;
+}
+
+// ============================================================
+// State Directive (injected into system prompt before LLM call)
+// ============================================================
+
+/**
+ * Build a state directive from the session's learned context.
+ * Appended to the system prompt so the LLM knows what information
+ * we have and what it should focus on this turn.
+ *
+ * This is the pre-call guidance — no extra LLM call needed,
+ * just deterministic state inspection.
+ */
+function buildStateDirective(session: ChatSession): string {
+  const learned = session.learned;
+  // Use != null to avoid false negatives from empty strings
+  const hasName = learned?.name != null && learned.name !== "";
+  const hasBusiness = learned?.business != null && learned.business !== "";
+  const hasTarget = (learned?.target != null && learned.target !== "") || (learned?.problem != null && learned.problem !== "");
+  const hasLocation = learned?.location != null && learned.location !== "";
+  const hasEmail = session.requestEmailFlagged;
+
+  const lines: string[] = ["\n\n## THIS TURN — what to do (from conversation state)"];
+
+  if (!hasName) {
+    lines.push("You do NOT know this visitor's name yet. Set requestName to true. Your text should react to what they said with substance, then naturally ask who you're talking to. The name input appears below your text. Ask ONLY for their name — nothing else this turn.");
+  } else if (!hasBusiness) {
+    lines.push(`You know their name is ${learned!.name}. Use it. This turn: ask about their business. Invite them to share a website or LinkedIn. Ask ONLY about the business — nothing else.`);
+  } else if (!hasTarget) {
+    lines.push(`You know ${learned!.name} and their business (${learned!.business}). This turn: ask who they're trying to reach or what problem they're solving. Ask ONLY about the target — nothing else.`);
+  } else if (!hasLocation) {
+    lines.push(`You know ${learned!.name}, their business, and target. Set requestLocation to true. Ask where they're based so you can target the right market — the location input appears below your text. Ask ONLY about location — nothing else.`);
+  } else if (!hasEmail) {
+    lines.push(`You have name, business, target, and location. This turn: set requestEmail to true and explain why you need their email — briefings, approvals, and communication happen there.`);
+  } else {
+    lines.push(`You have all context. Reflect back what you've heard using THEIR words — confirm you got it right. Propose your approach as an option they can accept or modify. Get explicit consent before activating. Remember: confirm, never assume.`);
+  }
+
+  return lines.join("\n");
+}
+
+// ============================================================
+// Stage Gate Enforcement
+// ============================================================
+
+/**
+ * Enforce conversation stage gates using the session's learned context.
+ *
+ * Implements the gate conditions defined in front-door-conversation.yaml.
+ * The process template declares the rules; this function enforces them.
+ *
+ * Gate conditions (from process YAML):
+ *   done_requires: learned.name, learned.business, email_verified
+ *   request_email_requires: learned.name, learned.business
+ *   force_request_name_until: learned.name
+ */
+function enforceStageGates(result: AlexToolArgs, session: ChatSession): AlexToolArgs {
+  const learned = session.learned;
+  const hasName = learned?.name != null && learned.name !== "";
+  const hasBusiness = learned?.business != null && learned.business !== "";
+  const hasTarget = (learned?.target != null && learned.target !== "") || (learned?.problem != null && learned.problem !== "");
+  const hasLocation = learned?.location != null && learned.location !== "";
+  const hasEmail = session.requestEmailFlagged;
+
+  // done_requires: learned.name, learned.business, learned.location, email_verified
+  if (result.done && (!hasName || !hasBusiness || !hasLocation || !hasEmail)) {
+    const missing = [!hasName && "name", !hasBusiness && "business", !hasLocation && "location", !hasEmail && "email"].filter(Boolean);
+    console.warn(`[harness] Blocked done — missing: ${missing.join(", ")}`);
+    result.done = false;
+    if (hasName && hasBusiness && hasTarget && hasLocation && !hasEmail) {
+      result.requestEmail = true;
+    }
+  }
+
+  // request_email_requires: learned.name, learned.business, learned.target|problem, learned.location
+  if (result.requestEmail && (!hasName || !hasBusiness || !hasTarget || !hasLocation)) {
+    const missing = [!hasName && "name", !hasBusiness && "business", !hasTarget && "target", !hasLocation && "location"].filter(Boolean);
+    console.warn(`[harness] Blocked requestEmail — gate requires: ${missing.join(", ")}`);
+    result.requestEmail = false;
+  }
+
+  // force_request_name_until: learned.name
+  if (!hasName && !result.requestName && session.messageCount <= 2) {
+    result.requestName = true;
+  }
+
+  return result;
+}
+
+// ============================================================
+// Response Validator (post-call — Haiku)
+// ============================================================
+
+const VALIDATOR_TOOL: LlmToolDefinition = {
+  name: "validation_result",
+  description: "Return the validation result for Alex's reply.",
+  input_schema: {
+    type: "object",
+    properties: {
+      has_multiple_questions: {
+        type: "boolean",
+        description: "True if the reply asks MORE THAN ONE distinct question. Test: 'What's the business, and who are you trying to get in front of?' = TWO questions ('what's the business' + 'who are you trying to get in front of') joined by 'and' — even though there's only one question mark. 'B2B or B2C?' = ONE question (either/or choice). If the question contains 'and' or comma joining two DIFFERENT asks, it's multiple.",
+      },
+      primary_question: {
+        type: "string",
+        description: "The FIRST question asked. For 'What's the business, and who are you trying to get in front of?' the primary question is 'What's the business?'",
+      },
+      extra_questions: {
+        type: "array",
+        items: { type: "string" },
+        description: "Questions beyond the primary one, rephrased as standalone questions. For 'What's the business, and who are you trying to get in front of?' the extra question is 'Who are you trying to get in front of?'. Empty array if only one question.",
+      },
+      cleaned_reply: {
+        type: "string",
+        description: "The cleaned reply with ALL fixes applied: extra questions removed AND filler removed. Keep only the reaction/substance + primary question. If no changes needed, return the original reply exactly.",
+      },
+      has_filler: {
+        type: "boolean",
+        description: "True if the reply starts with empty filler like 'Good starting point', 'Great question', 'Nice', 'Interesting', 'Absolutely', 'I'd love to help'. Substantive reactions about the user's situation are NOT filler.",
+      },
+    },
+    required: ["has_multiple_questions", "primary_question", "extra_questions", "cleaned_reply", "has_filler"],
+  },
+};
+
+/**
+ * Validate Alex's reply using a fast secondary LLM call (Haiku/classification tier).
+ *
+ * Checks for:
+ * 1. Multiple questions (including compound "X and Y?" with one question mark)
+ * 2. Filler/sycophantic openings
+ *
+ * Returns cleaned reply + any extra questions for structured UI.
+ * Runs in ~100-200ms on Haiku — acceptable for the think→stream pipeline.
+ *
+ * Falls back to the original reply if the validator fails.
+ */
+async function validateAndCleanResponse(reply: string): Promise<{ cleanedReply: string; extraQuestions: string[] }> {
+  // Skip validation for very short replies (e.g. "Check your inbox")
+  if (reply.length < 40 || isTestMode()) {
+    return { cleanedReply: reply, extraQuestions: [] };
+  }
+
+  try {
+    const response = await createCompletion({
+      system: "You are a quality checker for a conversational AI. Analyze the reply and detect ALL questions — including compound questions joined by 'and', comma, or 'who/what/where' within the same sentence. Example: 'What's the business, and who are you trying to reach?' is TWO questions even with one '?'. Split them. Be aggressive about detection — false positives are better than letting compound questions through.",
+      messages: [{ role: "user", content: `Validate this reply:\n\n${reply}` }],
+      tools: [VALIDATOR_TOOL],
+      maxTokens: 300,
+      purpose: "classification",
+    });
+
+    const toolCalls = extractToolUse(response.content);
+    const call = toolCalls.find((tc) => tc.name === "validation_result");
+    if (!call) return { cleanedReply: reply, extraQuestions: [] };
+
+    const args = call.input as Record<string, unknown>;
+    const extraQuestions = Array.isArray(args.extra_questions)
+      ? args.extra_questions.filter((q): q is string => typeof q === "string" && q.length > 10 && q.length < 200)
+      : [];
+
+    // cleaned_reply has ALL fixes applied (extra questions removed + filler removed)
+    let cleanedReply = reply;
+    if ((args.has_multiple_questions || args.has_filler) && typeof args.cleaned_reply === "string" && args.cleaned_reply.trim()) {
+      cleanedReply = args.cleaned_reply.trim();
+    }
+
+    console.log(
+      `[network-chat] Validator result: multiQ=${args.has_multiple_questions}, filler=${args.has_filler}, extraQs=${extraQuestions.length}` +
+      (extraQuestions.length > 0 ? ` [${extraQuestions.map((q: string) => q.slice(0, 50)).join(" | ")}]` : "") +
+      (cleanedReply !== reply ? ` | reply cleaned` : ""),
+    );
+
+    return { cleanedReply, extraQuestions };
+  } catch (err) {
+    // Validator failure is non-fatal — use the original reply
+    console.warn("[network-chat] Validator failed, using original reply:", (err as Error).message);
+    return { cleanedReply: reply, extraQuestions: [] };
+  }
+}
+
+// ============================================================
+// Text Similarity (for enrichment dedup)
+// ============================================================
+
+/**
+ * Simple word-overlap similarity (Jaccard on word bigrams).
+ * Returns 0–1. Used to detect when enrichment produced the same reply.
+ */
+function computeTextSimilarity(a: string, b: string): number {
+  const bigrams = (s: string): Set<string> => {
+    const words = s.toLowerCase().split(/\s+/).filter(Boolean);
+    const set = new Set<string>();
+    for (let i = 0; i < words.length - 1; i++) {
+      set.add(`${words[i]} ${words[i + 1]}`);
+    }
+    return set;
+  };
+  const setA = bigrams(a);
+  const setB = bigrams(b);
+  if (setA.size === 0 && setB.size === 0) return 1;
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let intersection = 0;
+  for (const bg of setA) {
+    if (setB.has(bg)) intersection++;
+  }
+  return intersection / (setA.size + setB.size - intersection);
 }
 
 // ============================================================
@@ -114,6 +354,7 @@ const AUTHENTICATED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (authe
 const MAX_MESSAGES_PER_SESSION = 20;
 const MAX_MESSAGES_PER_IP_PER_HOUR = 60;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_EXTRACT_REGEX = /[^\s@,]+@[^\s@,]+\.[^\s@,]+/;
 
 // ============================================================
 // Conversation Stage Inference (Insight-170: token efficiency)
@@ -121,24 +362,35 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Infer the current conversation stage from session state.
- * Used for stage-gated prompt injection — only load instructions for
- * current + next stage, saving ~600-800 tokens per call.
+ *
+ * Uses the persisted `learned` context — NOT message count.
+ * Stages map to the front-door-conversation.yaml process steps:
+ *   gather-name / gather-context → "gather"
+ *   request-email → "gather" (reflect loads as next stage)
+ *   reflect-propose → "reflect"
+ *   activate → "activate"
  */
 function inferConversationStage(session: ChatSession): ConversationStage {
-  // Email already captured → gathering details or activating
+  const learned = session.learned;
+
+  // Email captured → reflect stage (propose approach, get consent)
   if (session.requestEmailFlagged) {
-    // Check if last assistant message indicated done
-    const lastAssistantMsg = [...session.messages].reverse().find((m) => m.role === "assistant");
-    if (lastAssistantMsg?.content.includes("[ACTIVATED]")) {
-      return "activate";
-    }
-    return "details";
+    return "reflect";
   }
 
-  // Heuristic based on message count
-  if (session.messageCount <= 3) return "gather";
-  if (session.messageCount <= 6) return "reflect";
-  return "deliver";
+  // No learned context yet → still gathering
+  if (!learned) return "gather";
+
+  const hasName = !!learned.name;
+  const hasBusiness = !!learned.business;
+  const hasTarget = !!learned.target || !!learned.problem;
+
+  // Need core context before advancing — stage-gated prompt loads
+  // current + next, so "gather" also loads "reflect" instructions.
+  if (!hasName || !hasBusiness || !hasTarget) return "gather";
+
+  // Have enough context but no email yet → still gather (reflect loads as next)
+  return "gather";
 }
 
 // ============================================================
@@ -212,6 +464,7 @@ interface ChatSession {
   requestEmailFlagged: boolean;
   messageCount: number;
   authenticatedEmail: string | null;
+  learned: Record<string, string | null> | null;
 }
 
 async function loadOrCreateSession(
@@ -240,6 +493,7 @@ async function loadOrCreateSession(
         requestEmailFlagged: existing.requestEmailFlagged ?? false,
         messageCount: existing.messageCount ?? 0,
         authenticatedEmail: existing.authenticatedEmail ?? null,
+        learned: (existing.learned as Record<string, string | null>) ?? null,
       };
     }
   }
@@ -254,6 +508,7 @@ async function loadOrCreateSession(
     requestEmailFlagged: false,
     messageCount: 0,
     authenticatedEmail: null,
+    learned: null,
   };
 
   await db.insert(schema.chatSessions).values({
@@ -277,6 +532,7 @@ async function saveSession(session: ChatSession): Promise<void> {
       messages: session.messages,
       requestEmailFlagged: session.requestEmailFlagged,
       messageCount: session.messageCount,
+      learned: session.learned,
       updatedAt: new Date(),
       // Rolling TTL: authenticated sessions extend to 30 days on each activity (Brief 123)
       ...(session.authenticatedEmail ? { expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS) } : {}),
@@ -387,12 +643,15 @@ function extractNeedFromConversation(messages: Array<{ role: string; content: st
 export interface ChatTurnResult {
   reply: string;
   sessionId: string;
+  requestName?: boolean;
+  requestLocation?: boolean;
   requestEmail?: boolean;
   emailCaptured?: boolean;
   done?: boolean;
   rateLimited?: boolean;
   suggestions?: string[];
   detectedMode?: DetectedMode;
+  extraQuestions?: string[];
   testMode?: boolean;
 }
 
@@ -460,8 +719,10 @@ export async function handleChatTurn(
   let knownEmail = (isTestMode() ? null : returningEmail) || null;
   let emailCaptured = false;
 
-  if (EMAIL_REGEX.test(trimmedMessage)) {
-    knownEmail = trimmedMessage;
+  // Extract email from anywhere in the message (e.g. "Tim, tim@company.com")
+  const emailMatch = trimmedMessage.match(EMAIL_EXTRACT_REGEX);
+  if (emailMatch) {
+    knownEmail = emailMatch[0];
     emailCaptured = true;
 
     // Trigger intake as side effect — creates person record + sends intro email
@@ -469,7 +730,7 @@ export async function handleChatTurn(
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
     // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
-    try { await startIntake(trimmedMessage, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
+    try { await startIntake(knownEmail, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -527,13 +788,14 @@ export async function handleChatTurn(
 
   // Infer conversation stage for stage-gated prompting (Insight-170: token efficiency)
   const conversationStage = inferConversationStage(session);
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage);
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage)
+    + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
-    maxTokens: 256,
+    maxTokens: 400,
     ...(model ? { model } : {}),
   };
   const response = await createCompletion(llmRequest);
@@ -541,8 +803,13 @@ export async function handleChatTurn(
   // Record spend for daily ceiling tracking
   recordFrontDoorSpend(response.costCents);
 
-  let { reply, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl } =
-    extractAlexResponse(response.content);
+  const rawExtracted = extractAlexResponse(response.content);
+  // Update session.learned BEFORE gate enforcement so gates see this turn's context
+  if (rawExtracted.learned) {
+    session.learned = { ...(session.learned || {}), ...rawExtracted.learned };
+  }
+  const extracted = enforceStageGates(rawExtracted, session);
+  let { reply, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
 
   // Record mode detection funnel event
   if (detectedMode) {
@@ -598,29 +865,43 @@ export async function handleChatTurn(
         content: m.content,
       })),
       tools: [ALEX_RESPONSE_TOOL],
-      maxTokens: 512,
+      maxTokens: 400,
       ...(model ? { model } : {}),
     };
 
     try {
       const followUp = await createCompletion(followUpRequest);
       recordFrontDoorSpend(followUp.costCents);
-      const followUpParsed = extractAlexResponse(followUp.content);
-      reply = followUpParsed.reply;
-      done = followUpParsed.done;
-      suggestions = followUpParsed.suggestions;
-      if (followUpParsed.detectedMode) detectedMode = followUpParsed.detectedMode;
+      const followUpRaw = extractAlexResponse(followUp.content);
+      if (followUpRaw.learned) {
+        session.learned = { ...(session.learned || {}), ...followUpRaw.learned };
+      }
+      const followUpGated = enforceStageGates(followUpRaw, session);
+      reply = followUpGated.reply;
+      requestName = followUpGated.requestName;
+      requestLocation = followUpGated.requestLocation;
+      requestEmail = followUpGated.requestEmail;
+      done = followUpGated.done;
+      suggestions = followUpGated.suggestions;
+      extraQuestions = followUpGated.extraQuestions;
+      if (followUpGated.detectedMode) detectedMode = followUpGated.detectedMode;
       session.messages.pop();
       session.messages.pop();
-      // Check if the follow-up wants another enrichment round
-      searchQuery = followUpParsed.searchQuery;
-      fetchUrl = followUpParsed.fetchUrl;
+      searchQuery = followUpGated.searchQuery;
+      fetchUrl = followUpGated.fetchUrl;
     } catch {
       session.messages.pop();
       session.messages.pop();
       break;
     }
   }
+
+  // ── Secondary LLM validation (Haiku) ──
+  // Catches compound questions, filler, and quality issues that the primary
+  // model missed. Runs in ~100-200ms on Haiku — acceptable latency.
+  const validated = await validateAndCleanResponse(reply);
+  reply = validated.cleanedReply;
+  extraQuestions = validated.extraQuestions;
 
   // Brief 126: Safety net — if email was captured in THIS turn (emailCaptured flag)
   // and the LLM's response + enrichment loop didn't set done, force it.
@@ -722,17 +1003,22 @@ export async function handleChatTurn(
     }
   }
 
+  // session.learned already updated before enforceStageGates (line 808) and in enrichment loops
+
   session.messages.push({ role: "assistant", content: reply });
   await saveSession(session);
 
   return {
     reply,
     sessionId: session.sessionId,
+    requestName,
+    requestLocation,
     requestEmail,
     emailCaptured,
     done,
     suggestions,
     detectedMode,
+    extraQuestions,
     ...(isTestMode() ? { testMode: true } : {}),
   };
 }
@@ -753,7 +1039,7 @@ export type ChatStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "text-replace"; text: string }
   | { type: "status"; message: string }
-  | { type: "metadata"; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean }
+  | { type: "metadata"; requestName: boolean; requestLocation: boolean; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean; plan: string | null; learned: LearnedContext | null; extraQuestions: string[] }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -778,7 +1064,7 @@ export async function* handleChatTurnStreaming(
   if (!ipAllowed) {
     yield { type: "session", sessionId: sessionId || randomUUID(), ...(isTestMode() ? { testMode: true } : {}) };
     yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
-    yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
+    yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
     return;
   }
@@ -792,7 +1078,7 @@ export async function* handleChatTurnStreaming(
   // Rate limit: per-session
   if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
     yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
-    yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
+    yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
     return;
   }
@@ -823,13 +1109,14 @@ export async function* handleChatTurnStreaming(
   let knownEmail = (isTestMode() ? null : returningEmail) || null;
   let emailCaptured = false;
 
-  if (EMAIL_REGEX.test(trimmedMessage)) {
-    knownEmail = trimmedMessage;
+  const streamEmailMatch = trimmedMessage.match(EMAIL_EXTRACT_REGEX);
+  if (streamEmailMatch) {
+    knownEmail = streamEmailMatch[0];
     emailCaptured = true;
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
     // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
-    try { await startIntake(trimmedMessage, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
+    try { await startIntake(knownEmail, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -862,7 +1149,7 @@ export async function* handleChatTurnStreaming(
   if (isSpendCeilingReached()) {
     await saveSession(session);
     yield { type: "text-delta", text: "I'm getting a lot of traffic right now — drop me your email and I'll follow up personally." };
-    yield { type: "metadata", requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false };
+    yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
     return;
   }
@@ -875,32 +1162,31 @@ export async function* handleChatTurnStreaming(
 
   // Stage-gated prompting (Insight-170: token efficiency)
   const streamConversationStage = inferConversationStage(session);
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage);
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage)
+    + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
-    maxTokens: 256,
+    maxTokens: 400,
     ...(model ? { model } : {}),
   };
 
-  // Stream the LLM response — no fallback, let errors propagate to the frontend
-  // which shows an email capture form
-  let fullContent: import("./llm").LlmContentBlock[] = [];
-  for await (const event of createStreamingCompletion(llmRequest)) {
-    if (event.type === "text-delta") {
-      yield { type: "text-delta", text: event.text };
-    }
-    if (event.type === "content-complete") {
-      fullContent = event.content;
-      recordFrontDoorSpend(event.costCents);
-    }
-  }
+  // Phase 1: Think — get the full response including enrichment signals.
+  // No text is streamed yet. The user sees "Considering…" from the flow checker above.
+  const thinkResponse = await createCompletion(llmRequest);
+  recordFrontDoorSpend(thinkResponse.costCents);
 
-  // Extract structured data from tool call
-  let { reply, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl } =
-    extractAlexResponse(fullContent);
+  // Phase 1: Think
+  yield { type: "status", message: "Considering…" };
+  const streamRawExtracted = extractAlexResponse(thinkResponse.content);
+  // Update session.learned BEFORE gate enforcement so gates see this turn's context
+  if (streamRawExtracted.learned) {
+    session.learned = { ...(session.learned || {}), ...streamRawExtracted.learned };
+  }
+  const streamExtracted = enforceStageGates(streamRawExtracted, session);
+  let { reply, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
 
   // Mode detection funnel event
   if (detectedMode) {
@@ -921,7 +1207,9 @@ export async function* handleChatTurnStreaming(
     } catch { /* non-fatal */ }
   }
 
-  // Enrichment loop — search or fetch, then re-prompt. Max 2 rounds to prevent runaway.
+  // Phase 2: Enrichment loop — fetch/search in background, re-prompt.
+  // The user sees status messages ("Reading that page…") while this runs.
+  // No text has been streamed yet, so there's nothing to contradict.
   for (let enrichRound = 0; enrichRound < 2; enrichRound++) {
     let enrichContent: string | null = null;
     let enrichLabel = "";
@@ -949,8 +1237,6 @@ export async function* handleChatTurnStreaming(
     session.messages.push({ role: "assistant", content: reply });
     session.messages.push({ role: "user", content: `${enrichLabel}\n${enrichContent}` });
 
-    yield { type: "status", message: "Thinking…" };
-
     const followUpRequest = {
       system: systemPrompt,
       messages: session.messages.map((m) => ({
@@ -958,28 +1244,59 @@ export async function* handleChatTurnStreaming(
         content: m.content,
       })),
       tools: [ALEX_RESPONSE_TOOL],
-      maxTokens: 512,
+      maxTokens: 400,
       ...(model ? { model } : {}),
     };
 
     try {
+      yield { type: "status", message: "Putting it together…" };
       const followUp = await createCompletion(followUpRequest);
       recordFrontDoorSpend(followUp.costCents);
-      const followUpParsed = extractAlexResponse(followUp.content);
-      // Replace the streamed text — don't append
-      yield { type: "text-replace", text: followUpParsed.reply };
-      reply = followUpParsed.reply;
-      done = followUpParsed.done;
-      suggestions = followUpParsed.suggestions;
-      if (followUpParsed.detectedMode) detectedMode = followUpParsed.detectedMode;
+      const followUpRaw = extractAlexResponse(followUp.content);
+      if (followUpRaw.learned) {
+        learned = followUpRaw.learned;
+        session.learned = { ...(session.learned || {}), ...learned };
+      }
+      const followUpGated = enforceStageGates(followUpRaw, session);
+      reply = followUpGated.reply;
+      requestName = followUpGated.requestName;
+      requestLocation = followUpGated.requestLocation;
+      requestEmail = followUpGated.requestEmail;
+      done = followUpGated.done;
+      suggestions = followUpGated.suggestions;
+      extraQuestions = followUpGated.extraQuestions;
+      if (followUpGated.detectedMode) detectedMode = followUpGated.detectedMode;
+      if (followUpGated.plan) plan = followUpGated.plan;
       session.messages.pop();
       session.messages.pop();
-      searchQuery = followUpParsed.searchQuery;
-      fetchUrl = followUpParsed.fetchUrl;
+      searchQuery = followUpGated.searchQuery;
+      fetchUrl = followUpGated.fetchUrl;
     } catch {
       session.messages.pop();
       session.messages.pop();
       break;
+    }
+  }
+
+  // ── Secondary LLM validation (Haiku) ──
+  // Runs BEFORE text emission so the user only sees the cleaned version.
+  yield { type: "status", message: "Checking…" };
+  const streamValidated = await validateAndCleanResponse(reply);
+  reply = streamValidated.cleanedReply;
+  extraQuestions = streamValidated.extraQuestions;
+
+  // Phase 3: Emit the final reply. All thinking and enrichment is done —
+  // this is the one and only response the user sees.
+  // Drip-feed in small chunks for a natural typing feel.
+  // Drip-feed text in small chunks with a delay for natural typing feel.
+  // Without the delay, the generator yields all chunks synchronously and
+  // the browser receives them in a single flush — appearing as a block.
+  const CHUNK_SIZE = 12; // ~2-3 words per chunk
+  const CHUNK_DELAY_MS = 20; // typing speed
+  for (let i = 0; i < reply.length; i += CHUNK_SIZE) {
+    yield { type: "text-delta", text: reply.slice(i, i + CHUNK_SIZE) };
+    if (i + CHUNK_SIZE < reply.length) {
+      await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
     }
   }
 
@@ -1066,10 +1383,12 @@ export async function* handleChatTurnStreaming(
     }
   }
 
+  // session.learned already updated before enforceStageGates (line 1185) and in enrichment loops
+
   session.messages.push({ role: "assistant", content: reply });
   await saveSession(session);
 
   // Send metadata and done
-  yield { type: "metadata", requestEmail, done, suggestions, detectedMode, emailCaptured };
+  yield { type: "metadata", requestName, requestLocation, requestEmail, done, suggestions, detectedMode, emailCaptured, plan, learned, extraQuestions };
   yield { type: "done" };
 }

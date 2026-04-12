@@ -18,7 +18,7 @@
 import cron from "node-cron";
 import type { ScheduledTask } from "node-cron";
 import { db, schema } from "../db";
-import type { RunStatus } from "../db/schema";
+import type { RunStatus, TrustTier } from "../db/schema";
 import { eq, and, notInArray, isNotNull, lte } from "drizzle-orm";
 import { startProcessRun, fullHeartbeat, resumeHumanStep } from "./heartbeat";
 import type { ProcessDefinition } from "./process-loader";
@@ -160,6 +160,7 @@ export async function triggerManually(processSlug: string): Promise<string | nul
 export async function fireEvent(
   eventName: string,
   inputs: Record<string, unknown> = {},
+  options?: { parentTrustTier?: TrustTier },
 ): Promise<string[]> {
   const listeners = eventListeners.get(eventName);
   if (!listeners || listeners.length === 0) return [];
@@ -175,7 +176,14 @@ export async function fireEvent(
     }
 
     try {
-      const runId = await startProcessRun(listener.processSlug, inputs, `event:${eventName}`);
+      // Brief 126 AC20: Pass parentTrustTier so chain-spawned processes
+      // inherit the more restrictive tier (098a AC9).
+      const runId = await startProcessRun(
+        listener.processSlug,
+        inputs,
+        `event:${eventName}`,
+        options?.parentTrustTier ? { parentTrustTier: options.parentTrustTier } : undefined,
+      );
       fullHeartbeat(runId).catch((err) => {
         console.error(`Event "${eventName}" heartbeat error for run ${runId}:`, err);
       });

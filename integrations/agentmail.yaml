@@ -11,12 +11,12 @@
 service: agentmail
 description: AgentMail — email infrastructure for AI agents
 interfaces:
-  sdk:
-    package: agentmail
+  rest:
+    base_url: https://api.agentmail.to
     auth: api_key
     env_vars:
       - AGENTMAIL_API_KEY
-preferred: sdk
+preferred: rest
 connection:
   auth_type: api_key
   provider_name: "AgentMail"
@@ -43,8 +43,9 @@ tools:
         required: false
         description: "Display name (e.g. 'Alex from Ditto')"
     execute:
-      protocol: sdk
-      method: "client.inboxes.create({ username, domain, displayName })"
+      protocol: rest
+      method: POST
+      endpoint: /inboxes
 
   - name: send_message
     description: Send an email from an inbox
@@ -66,8 +67,9 @@ tools:
         required: true
         description: "Email body text"
     execute:
-      protocol: sdk
-      method: "client.inboxes.messages.send(inboxId, { to: [to], subject, text })"
+      protocol: rest
+      method: POST
+      endpoint: /inboxes/{inboxId}/messages
 
   - name: list_messages
     description: List messages in an inbox
@@ -81,8 +83,9 @@ tools:
         required: false
         description: "Maximum number of messages to return"
     execute:
-      protocol: sdk
-      method: "client.inboxes.messages.list(inboxId, { limit })"
+      protocol: rest
+      method: GET
+      endpoint: /inboxes/{inboxId}/messages
 
   - name: reply_to_message
     description: Reply to a message (preserves threading)
@@ -100,5 +103,6 @@ tools:
         required: true
         description: "Reply body text"
     execute:
-      protocol: sdk
-      method: "client.inboxes.messages.reply(inboxId, messageId, { text })"
+      protocol: rest
+      method: POST
+      endpoint: /inboxes/{inboxId}/messages/{messageId}/reply

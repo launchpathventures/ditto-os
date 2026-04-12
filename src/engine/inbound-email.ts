@@ -14,7 +14,8 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, gte, desc } from "drizzle-orm";
+import { eq, and, gte, desc, notInArray } from "drizzle-orm";
+import type { TrustTier } from "../db/schema";
 import { isOptOutSignal } from "./channel";
 import { notifyUser } from "./notify-user";
 import { recordInteraction, optOutPerson, findPersonByEmailGlobal, createPerson } from "./people";
@@ -80,6 +81,44 @@ async function findWaitingRunForPerson(personId: string): Promise<{
     }
   }
 
+  return null;
+}
+
+/**
+ * Look up the trust tier of the most recent active process run associated
+ * with a person. Used by fireEvent to enforce trust inheritance (098a AC9).
+ * Returns null if no active run is found (chain will use target's default tier).
+ */
+async function getParentTrustTierForPerson(personId: string): Promise<TrustTier | null> {
+  const activeRuns = await db
+    .select({
+      id: schema.processRuns.id,
+      inputs: schema.processRuns.inputs,
+      trustTierOverride: schema.processRuns.trustTierOverride,
+    })
+    .from(schema.processRuns)
+    .where(
+      notInArray(schema.processRuns.status, ["approved", "rejected", "failed", "cancelled", "skipped"]),
+    )
+    .orderBy(desc(schema.processRuns.startedAt))
+    .limit(50);
+
+  for (const run of activeRuns) {
+    const inputs = run.inputs as Record<string, unknown> | null;
+    if (!inputs) continue;
+    if (Object.values(inputs).includes(personId)) {
+      // Use the override tier if present (chain-inherited), otherwise look up the process default
+      if (run.trustTierOverride) return run.trustTierOverride as TrustTier;
+      // Fall back to looking up the process trust tier
+      const [processInfo] = await db
+        .select({ trustTier: schema.processes.trustTier })
+        .from(schema.processes)
+        .innerJoin(schema.processRuns, eq(schema.processRuns.processId, schema.processes.id))
+        .where(eq(schema.processRuns.id, run.id))
+        .limit(1);
+      return (processInfo?.trustTier as TrustTier) ?? null;
+    }
+  }
   return null;
 }
 
@@ -397,12 +436,26 @@ async function handleUserEmail(
         });
 
         // Notify user: "Done — I've paused this."
+        // Brief 126 AC19: If mode was "both", inform user that CoS intake didn't start
+        // and can be restarted separately.
         try {
+          const [cancelledRun] = await db
+            .select({ inputs: schema.processRuns.inputs })
+            .from(schema.processRuns)
+            .where(eq(schema.processRuns.id, goalContext.processRunId))
+            .limit(1);
+          const runInputs = cancelledRun?.inputs as Record<string, unknown> | null;
+          const wasBothMode = runInputs?.detectedMode === "both";
+
+          const body = wasBothMode
+            ? `Done — I've paused ${goalContext.goalName}. Note: the chief-of-staff intake hadn't started yet (it was queued after outreach). Reply if you'd like me to restart either one separately.`
+            : `Done — I've paused ${goalContext.goalName}. Reply if you want me to pick it back up.`;
+
           await notifyUser({
             userId: networkUser.id,
             personId,
             subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
-            body: `Done — I've paused ${goalContext.goalName}. Reply if you want me to pick it back up.`,
+            body,
             inReplyToMessageId: message.message_id,
             includeOptOut: false,
           });
@@ -551,7 +604,10 @@ async function handleUserEmail(
     : replyText || subject || "";
 
   try {
-    const selfResult = await selfConverse(networkUser.id, messageText, "inbound");
+    const selfResult = await selfConverse(networkUser.id, messageText, "inbound", undefined, {
+      chatEscalationAvailable: true,
+      userEmail: senderEmail,
+    });
 
     // Send Self's response via notifyUser
     if (selfResult.response.trim()) {
@@ -819,15 +875,17 @@ export async function processInboundEmail(
       `[inbound] Positive reply from ${senderEmail} — firing positive-reply event`,
     );
 
-    // Brief 126: Fire the chain trigger event for connecting-introduction.
-    // Chain-spawned processes inherit the more restrictive trust tier (098a AC9).
+    // Brief 126 AC20: Fire the chain trigger event for connecting-introduction.
+    // Look up the parent process run's trust tier so chain-spawned processes
+    // inherit the more restrictive tier (098a AC9) — enforced, not just commented.
+    const parentRunTier = await getParentTrustTierForPerson(person.id);
     fireEvent("positive-reply", {
       personId: person.id,
       userId: person.userId,
       email: senderEmail,
       subject,
       replyText: replyText.slice(0, 500),
-    }).catch((err) => {
+    }, parentRunTier ? { parentTrustTier: parentRunTier } : undefined).catch((err) => {
       console.error(`[inbound] fireEvent("positive-reply") failed:`, err);
     });
 

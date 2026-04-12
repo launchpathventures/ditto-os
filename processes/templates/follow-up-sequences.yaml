@@ -1,14 +1,16 @@
 # Ditto — Template Process: Follow-Up Sequences
 #
-# Multi-touch follow-up cadences. Each touch adds value.
-# Never "just checking in." Auto-stops on opt-out or fatigue.
+# Value-driven follow-ups for prospects who haven't responded.
+# Each follow-up adds genuine value — never "just following up."
+# Auto-stops on opt-out or fatigue. Network-conscious even in persistence.
 #
 # Provenance: Brief 079/083, Insight-145 (relationship-first),
 # House Value 6 ("No spam, ever"), Insight-153 (three-layer persona)
+# Refactored: Brief 130, ADR-027 (cognitive orchestration — thin templates)
 
 name: Follow-Up Sequences
 id: follow-up-sequences
-version: 1
+version: 2
 status: active
 template: true
 callable_as: sub-process
@@ -16,11 +18,15 @@ callable_as: sub-process
 operator: user-agent
 
 description: >
-  Multi-touch follow-up cadences for prospects who haven't responded
-  to initial outreach. Each follow-up adds new value — a relevant
-  insight, a case study, a reframe of the value prop. Never "just
-  following up" or "bumping this to the top of your inbox." Respects
-  fatigue signals and auto-stops. Network-conscious even in persistence.
+  Value-driven follow-ups for prospects who haven't responded to initial
+  outreach. The agent determines what genuinely adds value for each person
+  at each point in time — not a fixed touch sequence. Never "just following
+  up" or "bumping this to the top of your inbox." Respects fatigue signals
+  and auto-stops. Network-conscious even in persistence.
+
+  Thin template: one cognitive step for value determination + one quality
+  gate. No touch numbering — the agent decides what adds value NOW.
+  (ADR-027, Insight-172)
 
 trigger:
   type: event
@@ -53,127 +59,67 @@ inputs:
       (default: 5-7), value-add strategy (insight, case study, reframe).
 
 steps:
-  - id: check-eligibility
-    name: Check Eligibility
-    executor: rules
-    description: >
-      Before drafting a follow-up, check:
-      - Person hasn't opted out
-      - Max touches not exceeded (default: 3 follow-ups after initial)
-      - Minimum interval since last contact (5+ days)
-      - Person hasn't replied to ANY message (including from other agents)
-      - No meeting already booked
-      If any check fails, end the sequence gracefully.
-    inputs:
-      - personId
-      - sequenceConfig
-    outputs:
-      - eligibility-result
-    route_to:
-      - condition: "eligibility-result.eligible === false"
-        goto: end-sequence
-    default_next: determine-value-add
-
-  - id: determine-value-add
-    name: Determine Value-Add
+  # Step 1: Follow up with value — broad cognitive step. The agent checks
+  # eligibility and determines what adds value, all in one step.
+  - id: follow-up-with-value
+    name: "Follow up with value"
     executor: ai-agent
     description: >
-      Choose what new value to bring in this follow-up:
-      - Touch 1: Different angle on the same problem
-      - Touch 2: Social proof (case study, testimonial, metric)
-      - Touch 3: Direct question or soft close ("Is this the right time?")
-      Never repeat the original pitch. Each touch must stand alone
-      as a worthwhile email even if they didn't see the original.
-      Can consult Alex/Mira: "What do we know about this person
-      that could inform the follow-up angle?"
+      Check eligibility first: not opted out, max touches not exceeded,
+      minimum interval since last contact (5+ days), no reply received,
+      no meeting already booked. If any check fails, end gracefully.
+
+      If eligible, determine what genuinely adds value for THIS person
+      NOW — a new angle, a relevant insight, social proof, a direct
+      question. Never repeat the original pitch. Never "just following up."
+      Each follow-up must stand alone as a worthwhile email even if they
+      didn't see the original.
+
+      Include a graceful exit if this is the final eligible touch:
+      "If this isn't relevant, no worries — I won't reach out again."
+
+      Draft the follow-up: short (3-5 sentences max), leads with new
+      value, easy to reply to (one clear question or CTA).
+
+      Your selling/connecting mode guides your judgment about angle,
+      tone, and whether to send at all.
     config:
       model_hint: capable
       person_id: "{personId}"
+    tools:
+      - crm.send_email
+      - crm.get_interactions
+      - web-search
     inputs:
       - originalOutreach
-      - eligibility-result
       - plan
-    outputs:
-      - value-add-strategy
-
-  - id: draft-follow-up
-    name: Draft Follow-Up
-    executor: ai-agent
-    description: >
-      Draft the follow-up in the User Agent's voice:
-      - Short (3-5 sentences max)
-      - Leads with the new value, not "following up on my last email"
-      - Easy to reply to (one clear question or CTA)
-      - Includes graceful exit option ("If this isn't relevant, no worries
-        — I won't reach out again")
-      The last touch in a sequence MUST include the exit option.
-    config:
-      model_hint: capable
-      person_id: "{personId}"
-    inputs:
-      - value-add-strategy
-      - originalOutreach
+      - sequenceConfig
     outputs:
       - follow-up-draft
 
+  # Step 2: Quality gate — non-negotiable, separate from cognitive step.
+  # Harness-enforced: if gate fails, sequence ends (no send).
   - id: quality-gate
-    name: Quality Gate
+    name: "Quality Gate"
     executor: rules
     description: >
-      Run through the shared quality gate. Additional checks:
+      Check the staged follow-up draft before sending:
       - Not repeating the original pitch
       - Value-add is genuinely new information
       - Contact frequency within limits
       - Final touch includes exit option
+      - Recipient not opted out
+      - No spam signals
+      If any check fails, end the sequence gracefully — do not send.
     inputs:
       - follow-up-draft
     outputs:
       - approved-draft
     route_to:
       - condition: "approved-draft.passed === false"
-        goto: end-sequence
-    default_next: send-follow-up
-
-  - id: send-follow-up
-    name: Send Follow-Up
-    executor: integration
-    description: >
-      Send as a reply to the original thread (preserves context).
-      Record as follow-up interaction with touch number.
-    config:
-      service: agentmail
-    tools:
-      - agentmail.reply_to_message
-    inputs:
-      - approved-draft
-    outputs:
-      - send-result
-
-  - id: schedule-next
-    name: Schedule Next Touch
-    executor: rules
-    description: >
-      If more touches remain in the cadence, schedule the next check.
-      If this was the final touch, end the sequence.
-      If a reply comes in at any point, cancel remaining touches
-      and route to reply-handling.
-    inputs:
-      - send-result
-      - sequenceConfig
-    outputs:
-      - schedule-result
-
-  - id: end-sequence
-    name: End Sequence
-    executor: rules
-    description: >
-      Sequence ended — either all touches exhausted, prospect replied,
-      opted out, or quality gate blocked. Record outcome and move
-      prospect to appropriate status (nurture, closed-lost, opted-out).
-    inputs:
-      - eligibility-result
-    outputs:
-      - sequence-result
+        goto: end
+    depends_on:
+      - follow-up-with-value
 
 outputs:
   - name: sequence-result

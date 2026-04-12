@@ -4,10 +4,11 @@
 # one email, one decision. If they reply, resume. If not, respect the silence.
 #
 # Provenance: Brief 126, HubSpot re-engagement workflow (pattern)
+# Refactored: Brief 130, ADR-027 (cognitive orchestration — thin templates)
 
 name: "User Re-engagement"
 id: user-reengagement
-version: 1
+version: 2
 status: active
 template: true
 callable_as: sub-process
@@ -16,9 +17,13 @@ operator: alex-or-mira
 
 description: >
   Triggered when a user was silent through the entire first week of nurture.
-  Sends one re-engagement email. If the user replies within 5 days, resume
-  normal operations. If silent, mark as passive and stop all automated outreach.
+  One warm, personal email referencing specifics from the original conversation.
+  If the user replies within 5 days, mark as re-engaged and resume normal
+  operations. If silent, mark as passive and stop all automated outreach.
   A real advisor tries once more then gives space.
+
+  Thin template: one cognitive step for the email, rules steps for outcome
+  routing. (ADR-027, Insight-172)
 
 trigger:
   type: event
@@ -44,21 +49,20 @@ inputs:
     description: Original conversation context for personalisation
 
 steps:
+  # Cognitive step — one email, wait for reply.
   - id: send-reengagement
-    name: "Send re-engagement email"
+    name: "Re-engage or let go"
     executor: ai-agent
     email_thread: "user-onboarding"
     description: >
-      Send one warm, personal email. NOT a template — reference specifics
-      from the original conversation. Acknowledge the silence naturally.
+      One warm, personal email. Reference their specific situation from
+      the original conversation. Acknowledge the silence naturally. Ask
+      one clear question: still interested?
 
-      "Hey — I put together some research for you last week based on our
-      conversation about [their specific topic]. Haven't heard back, so
-      just checking: still want me to keep working on this? If so, just
-      reply and I'll pick up where I left off. If not, no worries at all
-      — I'll stop here."
+      If not, respect the silence. No guilt. No urgency. Under 4 sentences.
 
-      Keep it under 4 sentences. No guilt. No urgency. One clear question.
+      Your connecting/chief-of-staff mode guides your tone — warm,
+      professional, respectful of their time.
     config:
       model_hint: fast
       person_id: "{personId}"
@@ -72,6 +76,7 @@ steps:
       event: reply
       timeout: "5d"
 
+  # Outcome routing — preserved from original for chain compatibility.
   - id: evaluate-response
     name: "Evaluate response"
     executor: rules

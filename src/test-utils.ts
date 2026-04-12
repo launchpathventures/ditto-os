@@ -606,6 +606,39 @@ function createTables(sqlite: Database.Database): void {
       stripe_payment_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     );
+
+    CREATE TABLE IF NOT EXISTS slm_training_exports (
+      id TEXT PRIMARY KEY,
+      process_slug TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      example_count INTEGER NOT NULL DEFAULT 0,
+      format TEXT NOT NULL DEFAULT 'jsonl',
+      export_path TEXT NOT NULL,
+      scrubber_used TEXT NOT NULL DEFAULT 'none',
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS slm_deployments (
+      id TEXT PRIMARY KEY,
+      process_slug TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'candidate',
+      training_export_id TEXT REFERENCES slm_training_exports(id),
+      eval_accuracy REAL,
+      eval_f1 REAL,
+      eval_examples INTEGER,
+      production_run_count INTEGER DEFAULT 0,
+      production_approval_rate REAL,
+      baseline_approval_rate REAL,
+      retired_reason TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      promoted_at INTEGER,
+      retired_at INTEGER
+    );
   `);
 }
 

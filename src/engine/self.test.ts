@@ -298,8 +298,8 @@ describe("loadSessionTurns", () => {
 // ============================================================
 
 describe("selfTools", () => {
-  it("defines all delegation, consultation, planning, workspace, proactive, onboarding, confidence, and knowledge tools", () => {
-    expect(selfTools).toHaveLength(26);
+  it("defines all delegation, consultation, planning, workspace, proactive, onboarding, confidence, knowledge, and orchestration tools", () => {
+    expect(selfTools).toHaveLength(28);
     const names = selfTools.map((t) => t.name);
     // Original 5
     expect(names).toContain("start_dev_role");
@@ -441,8 +441,8 @@ describe("assembleSelfContext", () => {
 // ============================================================
 
 describe("consult_role tool definition", () => {
-  it("selfTools contains 26 tools including consult_role and plan_with_role", () => {
-    expect(selfTools).toHaveLength(26);
+  it("selfTools contains 28 tools including consult_role and plan_with_role", () => {
+    expect(selfTools).toHaveLength(28);
     const names = selfTools.map((t) => t.name);
     expect(names).toContain("consult_role");
     expect(names).toContain("plan_with_role");

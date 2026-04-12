@@ -1,0 +1,154 @@
+# Ditto — Template Process: Front Door Conversation
+#
+# The conversational front door — Alex meets a visitor, learns about
+# their situation, proposes an approach, and gets consent before acting.
+#
+# This process governs the CONVERSATION, not the post-conversation work.
+# front-door-intake.yaml handles what happens after ACTIVATE.
+#
+# Each step is a conversation gate. The harness enforces transitions:
+# the LLM can't skip steps or set flags that violate gate conditions.
+#
+# Provenance: Brief 093, Brief 094, Consultative Protocol (cognitive/core.md)
+
+name: "Front Door Conversation"
+id: front-door-conversation
+version: 1
+status: active
+template: true
+
+operator: alex
+
+description: >
+  Real-time conversation process for the front door. Alex meets a visitor,
+  understands their situation through natural conversation, proposes an
+  approach with trust levels, gets explicit consent, then hands off to
+  front-door-intake for execution.
+
+  Follows the consultative protocol from cognitive/core.md:
+  Listen → Assess → Ask → Reflect → Hand off.
+
+# Conversation steps — each step is a gate with entry/exit conditions.
+# The network-chat handler reads these to enforce transitions.
+steps:
+  - id: gather-name
+    name: "Learn who they are"
+    description: >
+      React to what the visitor said with substance. Set requestName
+      to show the name input. Ask for their name naturally in text.
+    gate:
+      entry: true  # always allowed — first step
+      exit:
+        requires:
+          - learned.name
+    ui_flag: requestName
+
+  - id: gather-context
+    name: "Understand their situation"
+    description: >
+      Learn what they do, who they're trying to reach, what problem
+      they're solving. Invite them to share a website or LinkedIn.
+      Show capabilities by doing (fetch URLs, search).
+    gate:
+      entry:
+        requires:
+          - learned.name
+      exit:
+        requires:
+          - learned.business
+          - learned.target OR learned.problem
+    capabilities:
+      - fetchUrl
+      - searchQuery
+
+  - id: request-email
+    name: "Collect email for plan delivery"
+    description: >
+      Explain why email is needed — briefings, approvals, communication
+      channel. Set requestEmail to show the verification card.
+    gate:
+      entry:
+        requires:
+          - learned.name
+          - learned.business
+          - learned.target OR learned.problem
+      exit:
+        requires:
+          - email_verified
+    ui_flag: requestEmail
+
+  - id: reflect-propose
+    name: "Reflect back and propose approach"
+    description: >
+      Summarise what you've heard. Be honest about trust — you just met.
+      Explain how you'd help, present trust levels (L1/L2/L3 for sales,
+      simpler for connector). Get explicit consent before proceeding.
+
+      This step CANNOT be skipped. The consultative protocol requires
+      reflecting back before handing off.
+    gate:
+      entry:
+        requires:
+          - email_verified
+      exit:
+        requires:
+          - consent  # visitor agrees to approach
+    quality_criteria:
+      - "Reflected back specific details from the conversation"
+      - "Acknowledged this is a new relationship — no fake trust"
+      - "Explained trust levels and let visitor choose"
+      - "Got explicit consent ('yes', 'sounds good', 'let's do it')"
+
+  - id: activate
+    name: "Show immediate value and hand off"
+    description: >
+      Search for real targets. Show 2-3 specific examples. Close with
+      forward motion — 'check your inbox'. Set done to trigger
+      front-door-intake process.
+    gate:
+      entry:
+        requires:
+          - consent
+      exit:
+        sets:
+          - done
+    capabilities:
+      - searchQuery
+
+# Gate enforcement rules — read by network-chat.ts enforceStageGates()
+enforcement:
+  # done=true requires all prior gates to have been passed
+  done_requires:
+    - learned.name
+    - learned.business
+    - email_verified
+  # requestEmail requires name + business context
+  request_email_requires:
+    - learned.name
+    - learned.business
+  # requestName is forced if name is missing in early turns
+  force_request_name_until: learned.name
+
+quality_criteria:
+  - "Visitor felt heard — Alex reacted with substance, not filler"
+  - "One question per message — no compound questions"
+  - "Name collected via structured input, not buried in text"
+  - "Email verified before any plan proposed"
+  - "Approach explained with trust levels before activation"
+  - "Explicit consent captured before any outreach begins"
+  - "Capabilities demonstrated during conversation (URL fetch, search)"
+
+# After conversation completes, chain to the execution process
+chain:
+  - trigger: done
+    process: front-door-intake
+    inputs:
+      personId: "{personId}"
+      userId: "{userId}"
+      email: "{email}"
+      name: "{learned.name}"
+      need: "{learned.problem}"
+      targetType: "{learned.target}"
+      businessContext: "{conversationSummary}"
+      outreachMode: "{detectedMode}"
+      detectedMode: "{detectedMode}"

@@ -856,6 +856,12 @@ export function initLlm(): void {
     }
   }
 
+  // Load SLM providers (Brief 137): Neurometric, etc.
+  const neurometric = loadNeurometricProvider();
+  if (neurometric) {
+    loadedProviders.set("neurometric", neurometric);
+  }
+
   // If explicit LLM_PROVIDER is set (not ollama), use it as primary
   if (explicitProvider && explicitProvider !== "ollama") {
     const primary = loadedProviders.get(explicitProvider);
@@ -1002,6 +1008,90 @@ export function extractToolUse(content: LlmContentBlock[]): LlmToolUseBlock[] {
   return content.filter(
     (block): block is LlmToolUseBlock => block.type === "tool_use",
   );
+}
+
+// ============================================================
+// SLM Provider Factory (Brief 137)
+// ============================================================
+
+/**
+ * Configuration for an OpenAI-compatible SLM provider.
+ * Neurometric, Groq, Together AI, and self-hosted (vLLM, llama.cpp)
+ * all speak the OpenAI chat completions API.
+ */
+export interface SlmProviderConfig {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  defaultModel: string;
+  models: string[];
+  pricing?: { inputPerM: number; outputPerM: number };
+}
+
+/**
+ * Create an LlmProvider from an OpenAI-compatible SLM endpoint.
+ * Reuses OpenAI message/tool translation — only baseUrl and apiKey differ.
+ */
+export function createSlmProvider(config: SlmProviderConfig): LlmProvider {
+  const provider = new OpenAIProvider({
+    baseURL: config.baseUrl,
+    apiKey: config.apiKey,
+  });
+
+  // Register pricing for the SLM models
+  if (config.pricing) {
+    for (const model of config.models) {
+      MODEL_PRICING[model] = config.pricing;
+    }
+  } else {
+    // Flat-rate or free providers (e.g., Neurometric $2/mo unlimited)
+    for (const model of config.models) {
+      MODEL_PRICING[model] = { inputPerM: 0, outputPerM: 0 };
+    }
+  }
+
+  // Override the name and default model
+  const slmProvider: LlmProvider = {
+    name: config.name,
+    validateConfig: () => {
+      if (!config.apiKey) {
+        throw new Error(`API key not set for SLM provider "${config.name}".`);
+      }
+    },
+    createCompletion: async (request) => {
+      const result = await provider.createCompletion({
+        ...request,
+        model: request.model || config.defaultModel,
+      });
+      return { ...result, model: result.model || config.defaultModel };
+    },
+    createStreamingCompletion: async function* (request) {
+      yield* provider.createStreamingCompletion({
+        ...request,
+        model: request.model || config.defaultModel,
+      });
+    },
+  };
+
+  return slmProvider;
+}
+
+/**
+ * Load Neurometric provider from env vars if configured.
+ * Called during initLlm() if NEUROMETRIC_API_KEY is set.
+ */
+export function loadNeurometricProvider(): LlmProvider | null {
+  const apiKey = process.env.NEUROMETRIC_API_KEY;
+  const baseUrl = process.env.NEUROMETRIC_BASE_URL || "https://api.neurometric.ai";
+  if (!apiKey) return null;
+
+  return createSlmProvider({
+    name: "neurometric",
+    baseUrl,
+    apiKey,
+    defaultModel: "qwen2.5-1.5b",
+    models: ["qwen2.5-0.5b", "qwen2.5-1.5b", "qwen2.5-3b"],
+  });
 }
 
 // ============================================================

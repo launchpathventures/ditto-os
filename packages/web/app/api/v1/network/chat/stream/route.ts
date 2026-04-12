@@ -91,38 +91,38 @@ export async function POST(request: Request) {
       );
     }
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        const send = (data: unknown) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        };
+    // Use TransformStream so each write flushes independently to the client.
+    // The old ReadableStream.start() pattern batched enqueues because the
+    // consumer hadn't started reading when events were pumped in.
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
 
-        try {
-          for await (const event of handleChatTurnStreaming(
-            sessionId ?? null,
-            message.trim(),
-            chatContext,
-            ip,
-            returningEmail ?? null,
-            funnelMetadata,
-            visitorName?.trim() || undefined,
-          )) {
-            send(event);
-          }
-        } catch (error) {
-          console.error("[/api/v1/network/chat/stream] Stream error:", error);
-          send({
-            type: "error",
-            message: "Something went wrong. Please try again.",
-          });
-        } finally {
-          controller.close();
+    // Pump events in the background — don't await, let the response start immediately
+    (async () => {
+      try {
+        for await (const event of handleChatTurnStreaming(
+          sessionId ?? null,
+          message.trim(),
+          chatContext,
+          ip,
+          returningEmail ?? null,
+          funnelMetadata,
+          visitorName?.trim() || undefined,
+        )) {
+          await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         }
-      },
-    });
+      } catch (error) {
+        console.error("[/api/v1/network/chat/stream] Stream error:", error);
+        await writer.write(
+          encoder.encode(`data: ${JSON.stringify({ type: "error", message: "Something went wrong. Please try again." })}\n\n`),
+        );
+      } finally {
+        await writer.close();
+      }
+    })();
 
-    return new Response(stream, {
+    return new Response(readable, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",

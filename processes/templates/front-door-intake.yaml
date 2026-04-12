@@ -7,10 +7,11 @@
 #
 # Provenance: Brief 105, Insight-164 (professional consent model),
 # Insight-160 Context 2 (Alex as Ditto's network professional)
+# Refactored: Brief 130, ADR-027 (cognitive orchestration — thin templates)
 
 name: "Front Door Intake — Research & Outreach"
 id: front-door-intake
-version: 2
+version: 3
 status: active
 template: true
 callable_as: sub-process
@@ -19,14 +20,17 @@ operator: alex-or-mira
 
 description: >
   Triggered when Alex has gathered enough from a front door conversation to
-  start working. Alex researches targets, drafts personalised introductions,
-  runs them through a quality gate, sends outreach, and reports back to the
-  user on what was done.
+  start working. Alex uses cognitive judgment to research targets, draft and
+  send personalised introductions, then reports back to the user.
 
   The user gives consent to the approach during the front door conversation.
   Alex then acts as a professional — using Alex's own identity, social
   credibility, and judgment. No per-action approval. Quality gate is the
   safety net. (Insight-164, Insight-160 Context 2)
+
+  Thin template: declares capabilities and gates, not step sequences.
+  Alex's connecting/selling mode guides what to do and in what order.
+  (ADR-027, Insight-172)
 
 trigger:
   type: user-event
@@ -75,92 +79,49 @@ inputs:
     description: Full conversation context from front door chat
 
 steps:
-  # Step 1: Ask for details — the action email. This is the start of ONE
-  # email thread with the user. Everything else replies in this thread.
-  - id: gather-details
-    name: "Ask for details over email"
+  # Step 1: Work the lead — broad cognitive step. Alex decides what to do
+  # first based on context: ask for details, research, draft, send.
+  # Cognitive mode (connecting/selling) guides judgment.
+  - id: work-the-lead
+    name: "Work the lead"
     executor: ai-agent
     email_thread: "user-onboarding"
     description: >
-      Send the action email asking for their website and positioning details.
-      This is the first email in the thread. The user already saw a preview
-      of targets in the chat — now we need the details to do proper research.
+      Use your connecting/selling mode to research targets, draft
+      introductions, and prepare outreach. Decide what to do first based
+      on context. If the user replied with their website, use it. If not,
+      work with what you have.
 
-      [If connector outreachMode] Ask for website and how they want to be
-      positioned. Keep it to 2 questions max.
-      [If sales outreachMode] Ask for website, one-sentence value prop, and
-      tone preferences. Their brand is on the line — we need to get this right.
-    config:
-      model_hint: fast
-      person_id: "{personId}"
-    tools:
-      - crm.send_email
-    inputs:
-      - conversationSummary
-      - outreachMode
-    outputs:
-      - gather-email-sent
-    # Wait up to 48h for the user to reply with their details.
-    # If they reply, their response is available as input to the next step.
-    # If they time out, we proceed with what we have from the conversation.
-    wait_for:
-      event: reply
-      timeout: "48h"
+      You have access to web search, web fetch, email sending, interaction
+      recording, and person creation. Exercise judgment about sequence and
+      timing — research when it makes sense, draft when you have enough,
+      send when the quality is right.
 
-  # Step 2: Research — now with the user's website/details (if they replied)
-  - id: research-targets
-    name: "Research targets"
-    executor: ai-agent
-    description: >
-      Search the web for specific people/companies matching what the visitor
-      needs. Build a shortlist of 5-10 targets with names, companies,
-      and why they're a good fit.
-
-      If the user replied to gather-details, USE their website and details
-      to inform the research. If they timed out, work with what you have
-      from the conversation — don't let a non-reply block progress.
+      Start by emailing the user to ask for their website and positioning
+      details (this begins the user-onboarding email thread). Wait up to
+      48h for a reply, then proceed with whatever you have.
     config:
       model_hint: capable
       person_id: "{personId}"
     tools:
       - web-search
       - web-fetch
+      - crm.send_email
+      - crm.record_interaction
+      - crm.create_person
     inputs:
+      - conversationSummary
       - targetType
       - businessContext
-    outputs:
-      - target-shortlist
-    depends_on:
-      - gather-details
-
-  # Step 3: Draft introductions
-  - id: draft-intros
-    name: "Draft introductions"
-    executor: ai-agent
-    description: >
-      Draft personalised introduction messages for each target.
-      Match the outreach mode:
-      [connector] Use Alex's professional voice — "Hi, I'm Alex from Ditto.
-      I work with [company]..." Alex's identity, Alex's credibility.
-      [sales] Use the user's company voice — "Hi, I'm reaching out from
-      [Company]..." Match the tone the user approved in the front door chat.
-
-      Each intro should feel individually crafted, not templated.
-      Frame mutual value for both parties.
-    config:
-      model_hint: capable
-      person_id: "{personId}"
-    inputs:
-      - target-shortlist
-      - businessContext
-      - conversationSummary
       - outreachMode
     outputs:
-      - draft-messages
-    depends_on:
-      - research-targets
+      - outreach-results
+    wait_for:
+      event: reply
+      timeout: "48h"
 
-  # Step 4: Quality gate
+  # Step 2: Quality gate — non-negotiable, separate from cognitive step.
+  # Checks every staged draft before dispatch.
   - id: quality-gate
     name: "Pre-Send Quality Gate"
     executor: rules
@@ -172,39 +133,13 @@ steps:
       - Tone matches outreach mode (professional intro vs company voice)
       - No spam signals
     inputs:
-      - draft-messages
-    outputs:
-      - approved-messages
-    depends_on:
-      - draft-intros
-
-  # Step 5: Send outreach
-  - id: send-outreach
-    name: "Send outreach"
-    executor: ai-agent
-    description: >
-      Send the approved introductions. Track each send as an interaction.
-      Record each contact as a person in the network with initial trust
-      level "cold".
-
-      [connector] Send as Alex — Alex's professional identity and credibility.
-      [sales] Send as the user's company — match the approved tone.
-    config:
-      model_hint: fast
-      person_id: "{personId}"
-    tools:
-      - crm.send_email
-      - crm.record_interaction
-      - crm.create_person
-    inputs:
-      - approved-messages
-      - outreachMode
-    outputs:
       - outreach-results
+    outputs:
+      - approved-messages
     depends_on:
-      - quality-gate
+      - work-the-lead
 
-  # Step 6: Report back — in the SAME email thread as gather-details
+  # Step 3: Report back — in the SAME email thread as the initial email.
   - id: report-back
     name: "Report back to user"
     executor: ai-agent
@@ -229,11 +164,12 @@ steps:
     tools:
       - crm.send_email
     inputs:
+      - approved-messages
       - outreach-results
     outputs:
       - user-briefing
     depends_on:
-      - send-outreach
+      - quality-gate
 
 outputs:
   - name: outreach-results

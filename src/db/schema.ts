@@ -1371,7 +1371,7 @@ export const chatSessions = sqliteTable("chat_sessions", {
   id: text("id").primaryKey().$defaultFn(() => randomUUID()),
   sessionId: text("session_id").notNull().unique(),
   messages: text("messages", { mode: "json" }).notNull().$type<Array<{ role: string; content: string }>>(),
-  context: text("context").notNull(), // "front-door" | "referred"
+  context: text("context").notNull(), // "front-door" | "referred" | "escalated"
   ipHash: text("ip_hash").notNull(),
   requestEmailFlagged: integer("request_email_flagged", { mode: "boolean" }).notNull().default(false),
   messageCount: integer("message_count").notNull().default(0),
@@ -1384,8 +1384,31 @@ export const chatSessions = sqliteTable("chat_sessions", {
   expiresAt: integer("expires_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+  // Learned visitor context — persisted from LLM's `learned` output each turn.
+  // Used by inferConversationStage for state-based stage gating instead of message-count heuristic.
+  learned: text("learned", { mode: "json" }).$type<Record<string, string | null>>(),
   // Magic link auth (Brief 123): links session to authenticated user
   authenticatedEmail: text("authenticated_email"),
+});
+
+// ============================================================
+// Email Verification Codes (Front Door)
+// ============================================================
+
+/** Short-lived 6-digit codes sent to verify email ownership during front door chat. */
+export const emailVerificationCodes = sqliteTable("email_verification_codes", {
+  id: text("id").primaryKey().$defaultFn(() => randomUUID()),
+  sessionId: text("session_id").notNull(),
+  email: text("email").notNull(),
+  code: text("code").notNull(),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date(Date.now() + 10 * 60 * 1000)), // 10 minutes
 });
 
 // ============================================================
@@ -1626,6 +1649,70 @@ export const budgets = sqliteTable("budgets", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+// ============================================================
+// SLM Training Data Pipeline (Brief 135/136)
+// ============================================================
+
+export const slmTrainingExportStatusValues = [
+  "pending",
+  "exported",
+  "failed",
+] as const;
+export type SlmTrainingExportStatus = (typeof slmTrainingExportStatusValues)[number];
+
+/** SLM training data exports — tracks what was exported and when */
+export const slmTrainingExports = sqliteTable("slm_training_exports", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processSlug: text("process_slug").notNull(),
+  stepId: text("step_id").notNull(),
+  purpose: text("purpose").notNull(),
+  exampleCount: integer("example_count").notNull().default(0),
+  format: text("format").notNull().default("jsonl"),
+  exportPath: text("export_path").notNull(),
+  scrubberUsed: text("scrubber_used").notNull().default("none"),
+  status: text("status").notNull().$type<SlmTrainingExportStatus>().default("pending"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const slmDeploymentStatusValues = [
+  "candidate",
+  "evaluating",
+  "promoted",
+  "retired",
+] as const;
+export type SlmDeploymentStatus = (typeof slmDeploymentStatusValues)[number];
+
+/** SLM deployments — tracks candidate → evaluating → promoted → retired lifecycle (Brief 137) */
+export const slmDeployments = sqliteTable("slm_deployments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processSlug: text("process_slug").notNull(),
+  stepId: text("step_id").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  status: text("status").notNull().$type<SlmDeploymentStatus>().default("candidate"),
+  trainingExportId: text("training_export_id")
+    .references(() => slmTrainingExports.id),
+  evalAccuracy: real("eval_accuracy"),
+  evalF1: real("eval_f1"),
+  evalExamples: integer("eval_examples"),
+  productionRunCount: integer("production_run_count").default(0),
+  productionApprovalRate: real("production_approval_rate"),
+  /** Approval rate baseline before SLM was promoted — for drift detection */
+  baselineApprovalRate: real("baseline_approval_rate"),
+  retiredReason: text("retired_reason"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  promotedAt: integer("promoted_at", { mode: "timestamp_ms" }),
+  retiredAt: integer("retired_at", { mode: "timestamp_ms" }),
 });
 
 /**

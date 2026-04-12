@@ -446,11 +446,13 @@ describe("user email detection", () => {
     expect(result.networkUserId).toBe(userId);
     expect(result.details).toContain("Routed through Self");
 
-    // Verify selfConverse was called with inbound surface
+    // Verify selfConverse was called with inbound surface + escalation options (Brief 131)
     expect(mockSelfConverse).toHaveBeenCalledWith(
       userId,
       expect.stringContaining("accountants in Wellington"),
       "inbound",
+      undefined,
+      { chatEscalationAvailable: true, userEmail: "user@company.com" },
     );
   });
 
@@ -574,11 +576,13 @@ describe("Self routing for inbound (099a)", () => {
 
     await processInboundEmail(payload);
 
-    // Self should have been called with "inbound" surface
+    // Self should have been called with "inbound" surface + escalation options (Brief 131)
     expect(mockSelfConverse).toHaveBeenCalledWith(
       userId,
       expect.stringContaining("accountants in Wellington"),
       "inbound",
+      undefined,
+      { chatEscalationAvailable: true, userEmail: "user@biz.com" },
     );
 
     // Self's response should have been sent via notifyUser

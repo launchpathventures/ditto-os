@@ -533,43 +533,81 @@ export async function sendActionEmail(
     ? `\nHere's what I've got from our conversation:\n${conversationContext}`
     : "";
 
-  const body = outreachMode === "sales"
-    ? [
-        `${greeting},`,
+  // Generate the action email using LLM with full conversation context.
+  // This ensures Alex never asks for information already provided.
+  const { createCompletion, extractText } = await import("../llm");
+
+  let body: string;
+  try {
+    const emailResponse = await createCompletion({
+      system: [
+        `You are ${personaName} from Ditto, writing a follow-up email to ${name || "the visitor"} after a front door conversation.`,
+        `Mode: ${outreachMode}. Write as ${personaName} — warm, direct, Australian.`,
         "",
-        `${personaName} again. Good chat — I'm already working on this.`,
-        contextLine,
-        "",
-        "Quick question before I start reaching out — I want to get this right since I'll be representing your company:",
-        "",
-        "1. What's your website? (so prospects can see your work)",
-        "2. How would you describe what you do in one sentence — in your own words?",
-        "",
-        "Once I have that, here's the plan:",
-        "- Research prospects who'd be a great fit",
-        "- Reach out as your company, using the tone we discussed",
-        "- Send you a full report — who I contacted, what I said, any responses",
-        "",
-        "Just reply with those two things and I'll get moving. Your brand is on the line, so I want to nail the positioning.",
-      ].join("\n")
-    : [
-        `${greeting},`,
-        "",
-        `${personaName} again. Good chat — I'm already working on this.`,
-        contextLine,
-        "",
-        "Quick question — what's your website? When I introduce you, people are going to want to see your work.",
-        "",
-        "Here's what's happening:",
-        "- I'm researching the right people to connect you with",
-        "- I'll reach out as myself, using the framing we discussed",
-        "- You'll get a full report on who I contacted and how it went",
-        "",
-        "Reply with your website and anything else you want me to know. I'll be back in touch tomorrow with an update.",
-      ].join("\n");
+        "RULES:",
+        "- NEVER ask for information already in the conversation summary below (website, business name, target, location, etc.)",
+        "- Reference specific things from the conversation to show continuity",
+        "- Explain what you're going to do next — be specific",
+        "- If you already have their website, reference it: 'I've already had a look at your site'",
+        "- Keep it concise — 5-8 sentences max",
+        "- End with what you need from them (if anything) or what happens next",
+        outreachMode === "sales"
+          ? "- You're reaching out AS their company. Ask about tone/voice if not discussed. Ask for any info you're ACTUALLY missing."
+          : "- You're reaching out as yourself (connector mode). You introduce, they decide.",
+      ].join("\n"),
+      messages: [
+        {
+          role: "user",
+          content: `Write the follow-up email based on this conversation:\n\n${conversationContext || "No conversation context available."}`,
+        },
+      ],
+      maxTokens: 400,
+      purpose: "writing",
+    });
+    body = extractText(emailResponse.content).trim();
+  } catch (err) {
+    // Fallback to a safe generic email if LLM fails
+    console.warn("[intake] LLM email generation failed, using fallback:", (err as Error).message);
+    body = [
+      `${greeting},`,
+      "",
+      `${personaName} again. Good chat — I'm already working on this.`,
+      contextLine,
+      "",
+      "Here's what's happening:",
+      outreachMode === "sales"
+        ? "- I'm researching prospects who'd be a great fit for your service"
+        : "- I'm researching the right people to connect you with",
+      "- You'll get a full report on who I've reached out to and what's coming back",
+      "",
+      "I'll be in touch soon with an update. Reply here anytime if something changes.",
+    ].join("\n");
+  }
 
   if (!personId) {
-    console.error("[intake] No personId for action email — cannot send untracked email to", email);
+    // No person record yet (race condition with startIntake) — send directly via AgentMail
+    // so the user still gets the email, even if we can't track the interaction.
+    console.warn("[intake] No personId for action email — sending untracked via AgentMail to", email);
+    try {
+      const { AgentMailClient } = await import("agentmail");
+      const apiKey = process.env.AGENTMAIL_API_KEY;
+      const alexInbox = process.env.AGENTMAIL_ALEX_INBOX;
+      if (apiKey && alexInbox) {
+        const client = new AgentMailClient({ apiKey });
+        const { textToHtml } = await import("../channel");
+        await client.inboxes.messages.send(alexInbox, {
+          to: [email],
+          subject: "Here's the plan",
+          text: body,
+          html: textToHtml(body),
+        });
+        console.log(`[intake] Untracked action email sent to ${email} from ${personaName}`);
+      } else {
+        console.error("[intake] AGENTMAIL_API_KEY or AGENTMAIL_ALEX_INBOX not set");
+      }
+    } catch (err) {
+      console.error("[intake] Untracked action email error:", err);
+    }
     return;
   }
 
@@ -621,24 +659,71 @@ export async function sendCosActionEmail(
     ? `\nFrom our conversation, here's what I've picked up:\n${conversationContext}`
     : "";
 
-  const body = [
-    `${greeting},`,
-    "",
-    `${personaName} again. Good chat — I've got a clear picture of what you need.`,
-    contextLine,
-    "",
-    "Here's what I'll do:",
-    "1. Send you a priorities briefing every Monday — what to focus on, decisions pending, anything I've flagged",
-    "2. You reply when something needs adjusting — we work through email",
-    "3. As we build trust, I'll start handling more proactively — but you control the pace",
-    "",
-    "Your first briefing will arrive by Monday. I only act when you've approved — nothing happens without your say-so.",
-    "",
-    "Reply here anytime to update me on what's changed or what's on your mind.",
-  ].join("\n");
+  const { createCompletion, extractText } = await import("../llm");
+
+  let body: string;
+  try {
+    const emailResponse = await createCompletion({
+      system: [
+        `You are ${personaName} from Ditto, writing a follow-up email to ${name || "the visitor"} after a front door conversation about Chief of Staff / operational support.`,
+        `Write as ${personaName} — warm, direct, Australian.`,
+        "",
+        "RULES:",
+        "- NEVER ask for information already in the conversation summary below",
+        "- Reference specific things they told you — priorities, pain points, tools they mentioned",
+        "- Explain the CoS setup: weekly priorities briefings, decision tracking, you control the pace",
+        "- Be specific about what their first briefing will cover based on what you learned",
+        "- Keep it concise — 5-8 sentences max",
+      ].join("\n"),
+      messages: [
+        {
+          role: "user",
+          content: `Write the follow-up email based on this conversation:\n\n${conversationContext || "No conversation context available."}`,
+        },
+      ],
+      maxTokens: 400,
+      purpose: "writing",
+    });
+    body = extractText(emailResponse.content).trim();
+  } catch (err) {
+    console.warn("[intake] LLM CoS email generation failed, using fallback:", (err as Error).message);
+    body = [
+      `${greeting},`,
+      "",
+      `${personaName} again. Good chat — I've got a clear picture of what you need.`,
+      contextLine,
+      "",
+      "Here's what I'll do:",
+      "1. Send you a priorities briefing every Monday — what to focus on, decisions pending, anything I've flagged",
+      "2. You reply when something needs adjusting — we work through email",
+      "3. As we build trust, I'll start handling more proactively — but you control the pace",
+      "",
+      "Your first briefing will arrive by Monday. I only act when you've approved — nothing happens without your say-so.",
+      "",
+      "Reply here anytime to update me on what's changed or what's on your mind.",
+    ].join("\n");
+  }
 
   if (!personId) {
-    console.error("[intake] No personId for CoS action email — cannot send untracked email to", email);
+    console.warn("[intake] No personId for CoS action email — sending untracked via AgentMail to", email);
+    try {
+      const { AgentMailClient } = await import("agentmail");
+      const apiKey = process.env.AGENTMAIL_API_KEY;
+      const alexInbox = process.env.AGENTMAIL_ALEX_INBOX;
+      if (apiKey && alexInbox) {
+        const client = new AgentMailClient({ apiKey });
+        const { textToHtml } = await import("../channel");
+        await client.inboxes.messages.send(alexInbox, {
+          to: [email],
+          subject: "Your priorities briefing starts this week",
+          text: body,
+          html: textToHtml(body),
+        });
+        console.log(`[intake] Untracked CoS action email sent to ${email} from ${personaName}`);
+      }
+    } catch (err) {
+      console.error("[intake] Untracked CoS action email error:", err);
+    }
     return;
   }
 

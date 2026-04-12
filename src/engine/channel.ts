@@ -120,6 +120,46 @@ const PERSONA_SIGNOFFS: Record<PersonaId, string> = {
 
 const OPT_OUT_FOOTER = "\n\n---\nIf you'd prefer not to hear from me, just reply with 'unsubscribe' and I won't reach out again.";
 
+/** Escape HTML special characters to prevent injection/broken markup. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Convert a plain text email body to a clean HTML email.
+ *
+ * All emails should send both text and html to avoid spam filters.
+ * This function wraps the text in a minimal, branded HTML template.
+ * Handles markdown-style bold (**text**), line breaks, paragraphs,
+ * and horizontal rules (---). All text is HTML-escaped first.
+ */
+export function textToHtml(text: string): string {
+  const bodyHtml = text
+    .split(/\n{2,}/)
+    .map((para) => {
+      const trimmed = para.trim();
+      if (!trimmed) return "";
+      if (trimmed === "---") return '<hr style="border: none; border-top: 1px solid #e5e5e5; margin: 16px 0;" />';
+      // Escape HTML FIRST, then apply markdown-style bold, then line breaks
+      const escaped = escapeHtml(trimmed);
+      const formatted = escaped
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\n/g, "<br />");
+      return `<p style="margin: 0 0 12px;">${formatted}</p>`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; font-size: 15px; line-height: 1.6;">
+${bodyHtml}
+</div>`.trim();
+}
+
 function buildReferralFooter(userId: string): string {
   const baseUrl = process.env.NETWORK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "";
   return `\nKnow someone who'd benefit from an advisor like me? ${baseUrl}/welcome/referred?ref=${userId}`;
@@ -202,23 +242,21 @@ export class AgentMailAdapter implements ChannelAdapter {
     }
 
     const body = formatEmailBody(message);
+    const html = textToHtml(body);
 
     // Ghost mode (Brief 124): BCC the user on ghost sends.
-    // Note: display name is set at inbox level (inboxes.create/update), not per-message.
-    // v1 ghost emails send from the inbox's configured display name. Per-user display
-    // name requires a dedicated ghost inbox per user — future enhancement.
     const isGhostSend = message.sendingIdentity === "ghost";
     const ghostBcc = isGhostSend && message.bccAddress ? message.bccAddress : undefined;
 
     try {
       if (message.inReplyToMessageId) {
         // Use native reply (preserves threading)
-        // Ghost mode: BCC user even for replies
         const result = await this.client.inboxes.messages.reply(
           this.inboxId,
           message.inReplyToMessageId,
           {
             text: body,
+            html,
             ...(ghostBcc ? { bcc: ghostBcc } : {}),
           },
         );
@@ -233,6 +271,7 @@ export class AgentMailAdapter implements ChannelAdapter {
         to: [message.to],
         subject: message.subject,
         text: body,
+        html,
         ...(ghostBcc ? { bcc: ghostBcc } : {}),
       });
 

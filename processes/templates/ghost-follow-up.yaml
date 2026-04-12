@@ -69,8 +69,14 @@ steps:
       - userId
     outputs:
       - eligibility-result
+    config:
+      rules:
+        - check: prior_interaction
+          description: Person must have prior interactions with user (not cold outreach)
+        - check: voice_model_ready
+          description: User must have >= 5 voice model samples
     route_to:
-      - condition: "eligibility-result.eligible === false"
+      - condition: "not_eligible"
         goto: refuse-ghost
     default_next: draft-ghost-message
 
