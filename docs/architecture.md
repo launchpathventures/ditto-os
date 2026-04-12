@@ -368,7 +368,7 @@ Four review patterns, assigned per process based on criticality:
 | **Maker-Checker** | Agent A produces, Agent B reviews against spec | Standard processes |
 | **Adversarial Review** | Agent B prompted specifically to find flaws | Important outputs |
 | **Specification Testing** | Validation agent checks output against defined criteria | Established processes |
-| **Ensemble Consensus** | Multiple agents produce independently, compare for divergence | Critical / compliance |
+| **Deliberative Perspectives** | Dynamically composed cognitive lenses evaluate from different angles; anonymized peer review; Self synthesizes (ADR-028) | Complex/ambiguous decisions, goal framing, process design |
 
 **Trust tiers** (configured per process, earned over time):
 

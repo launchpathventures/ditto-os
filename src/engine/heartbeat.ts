@@ -39,6 +39,7 @@ import { routingHandler } from "./harness-handlers/routing";
 import { trustGateHandler } from "./harness-handlers/trust-gate";
 import { metacognitiveCheckHandler } from "./harness-handlers/metacognitive-check";
 import { feedbackRecorderHandler } from "./harness-handlers/feedback-recorder";
+import { deliberativePerspectivesHandler } from "./harness-handlers/deliberative-perspectives";
 import {
   identityRouterHandler,
   voiceCalibrationHandler,
@@ -91,10 +92,11 @@ const sharedPipeline = (() => {
   pipeline.register(broadcastDirectClassifierHandler); // 7. core — Brief 116
   pipeline.register(outboundQualityGateHandler);      // 8. core — Brief 116
   pipeline.register(reviewPatternHandler);            // 9. product layer
+  pipeline.register(deliberativePerspectivesHandler); // 10. product layer (ADR-028)
   // Decision
-  pipeline.register(routingHandler);                  // 10. core
-  pipeline.register(trustGateHandler);                // 11. product layer (modified — Brief 116)
-  pipeline.register(feedbackRecorderHandler);         // 12. product layer
+  pipeline.register(routingHandler);                  // 11. core
+  pipeline.register(trustGateHandler);                // 12. product layer (modified — Brief 116)
+  pipeline.register(feedbackRecorderHandler);         // 13. product layer
   return pipeline;
 })();
 
