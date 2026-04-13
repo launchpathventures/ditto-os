@@ -24,6 +24,8 @@ import { webSearch } from "./web-search";
 import { fetchUrlContent, type FetchResult } from "./web-fetch";
 import { geolocateIp } from "./geo";
 import type { LlmMessage } from "./llm";
+import type { ContentBlock } from "./content-blocks";
+import { buildFrontDoorBlocks } from "./network-chat-blocks";
 
 // ============================================================
 // Tool Call Extraction
@@ -31,7 +33,7 @@ import type { LlmMessage } from "./llm";
 
 const VALID_MODES = new Set(["connector", "sales", "cos", "both"]);
 
-interface LearnedContext {
+export interface LearnedContext {
   name?: string | null;
   business?: string | null;
   role?: string | null;
@@ -40,10 +42,12 @@ interface LearnedContext {
   target?: string | null;
   problem?: string | null;
   channel?: string | null;
+  phone?: string | null;
 }
 
 interface AlexToolArgs {
   reply: string;
+  question: string | null;
   suggestions: string[];
   requestName: boolean;
   requestLocation: boolean;
@@ -71,6 +75,7 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
     // Fallback: no tool call — treat text as reply with defaults
     return {
       reply,
+      question: null,
       suggestions: [],
       requestName: false,
       requestLocation: false,
@@ -89,6 +94,10 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
   const args = alexCall.input as Record<string, unknown>;
   const result: AlexToolArgs = {
     reply,
+    question:
+      typeof args.question === "string" && args.question.trim()
+        ? args.question.trim()
+        : null,
     suggestions: Array.isArray(args.suggestions)
       ? args.suggestions.filter((s): s is string => typeof s === "string")
       : [],
@@ -227,13 +236,17 @@ const VALIDATOR_TOOL: LlmToolDefinition = {
   input_schema: {
     type: "object",
     properties: {
+      has_no_question: {
+        type: "boolean",
+        description: "True if the reply does NOT ask any question at all. A reply that only makes statements or observations without inviting a response. Rhetorical questions count as questions. 'Isn't it?' or 'right?' tag questions count. But 'That's interesting.' with no question is has_no_question=true.",
+      },
       has_multiple_questions: {
         type: "boolean",
         description: "True if the reply asks MORE THAN ONE distinct question. Test: 'What's the business, and who are you trying to get in front of?' = TWO questions ('what's the business' + 'who are you trying to get in front of') joined by 'and' — even though there's only one question mark. 'B2B or B2C?' = ONE question (either/or choice). If the question contains 'and' or comma joining two DIFFERENT asks, it's multiple.",
       },
       primary_question: {
         type: "string",
-        description: "The FIRST question asked. For 'What's the business, and who are you trying to get in front of?' the primary question is 'What's the business?'",
+        description: "The FIRST question asked. For 'What's the business, and who are you trying to get in front of?' the primary question is 'What's the business?'. Empty string if has_no_question is true.",
       },
       extra_questions: {
         type: "array",
@@ -249,7 +262,7 @@ const VALIDATOR_TOOL: LlmToolDefinition = {
         description: "True if the reply starts with empty filler like 'Good starting point', 'Great question', 'Nice', 'Interesting', 'Absolutely', 'I'd love to help'. Substantive reactions about the user's situation are NOT filler.",
       },
     },
-    required: ["has_multiple_questions", "primary_question", "extra_questions", "cleaned_reply", "has_filler"],
+    required: ["has_no_question", "has_multiple_questions", "primary_question", "extra_questions", "cleaned_reply", "has_filler"],
   },
 };
 
@@ -265,7 +278,7 @@ const VALIDATOR_TOOL: LlmToolDefinition = {
  *
  * Falls back to the original reply if the validator fails.
  */
-async function validateAndCleanResponse(reply: string): Promise<{ cleanedReply: string; extraQuestions: string[] }> {
+async function validateAndCleanResponse(reply: string, declaredQuestion?: string | null): Promise<{ cleanedReply: string; extraQuestions: string[] }> {
   // Skip validation for very short replies (e.g. "Check your inbox")
   if (reply.length < 40 || isTestMode()) {
     return { cleanedReply: reply, extraQuestions: [] };
@@ -273,7 +286,7 @@ async function validateAndCleanResponse(reply: string): Promise<{ cleanedReply: 
 
   try {
     const response = await createCompletion({
-      system: "You are a quality checker for a conversational AI. Analyze the reply and detect ALL questions — including compound questions joined by 'and', comma, or 'who/what/where' within the same sentence. Example: 'What's the business, and who are you trying to reach?' is TWO questions even with one '?'. Split them. Be aggressive about detection — false positives are better than letting compound questions through.",
+      system: "You are a quality checker for a conversational AI. Analyze the reply and detect ALL questions — including compound questions joined by 'and', comma, or 'who/what/where' within the same sentence. Example: 'What's the business, and who are you trying to reach?' is TWO questions even with one '?'. Split them. Be aggressive about detection — false positives are better than letting compound questions through. ALSO check if the reply asks NO question at all — a reply that only states facts or observations without inviting the user to respond is a critical failure.",
       messages: [{ role: "user", content: `Validate this reply:\n\n${reply}` }],
       tools: [VALIDATOR_TOOL],
       maxTokens: 300,
@@ -295,8 +308,19 @@ async function validateAndCleanResponse(reply: string): Promise<{ cleanedReply: 
       cleanedReply = args.cleaned_reply.trim();
     }
 
+    // Zero-question enforcement: if the reply has no question, append the
+    // declared question from the alex_response tool call. This is the safety
+    // net — the LLM declared what it intended to ask but forgot to include it.
+    if (args.has_no_question && declaredQuestion) {
+      // Strip trailing punctuation from the reply so the appended question reads naturally
+      cleanedReply = cleanedReply.replace(/[.\s]+$/, "") + "\n\n" + declaredQuestion;
+      console.warn(`[network-chat] Zero-question detected — appended declared question: "${declaredQuestion}"`);
+    } else if (args.has_no_question) {
+      console.warn(`[network-chat] Zero-question detected but no declared question available — reply may stall conversation`);
+    }
+
     console.log(
-      `[network-chat] Validator result: multiQ=${args.has_multiple_questions}, filler=${args.has_filler}, extraQs=${extraQuestions.length}` +
+      `[network-chat] Validator result: noQ=${args.has_no_question}, multiQ=${args.has_multiple_questions}, filler=${args.has_filler}, extraQs=${extraQuestions.length}` +
       (extraQuestions.length > 0 ? ` [${extraQuestions.map((q: string) => q.slice(0, 50)).join(" | ")}]` : "") +
       (cleanedReply !== reply ? ` | reply cleaned` : ""),
     );
@@ -425,7 +449,7 @@ export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
 // Funnel Events
 // ============================================================
 
-async function recordFunnelEvent(
+export async function recordFunnelEvent(
   sessionId: string,
   event: string,
   surface: string,
@@ -465,6 +489,30 @@ interface ChatSession {
   messageCount: number;
   authenticatedEmail: string | null;
   learned: Record<string, string | null> | null;
+  /** One-shot flag: true after offerCall has been emitted for this session (Brief 142) */
+  callOffered?: boolean;
+  /** Session-bound token for voice endpoint authentication (Brief 142) */
+  voiceToken?: string | null;
+}
+
+/** Options for controlling pipeline behavior per-channel (Brief 142) */
+export interface ChatPipelineOptions {
+  /** Skip Haiku validation pass — saves ~100-200ms for voice */
+  skipValidation?: boolean;
+  /** Skip web search/fetch enrichment — saves 2-5s for voice */
+  skipEnrichment?: boolean;
+  /** Callback fired when enrichment loop starts — voice uses this for filler phrases */
+  onEnrichmentStart?: () => void;
+  /** Channel type — affects prompt style and event recording */
+  channel?: "text" | "voice";
+  /** Skip IP rate limiting — voice calls come from external servers, not the visitor's IP */
+  skipRateLimit?: boolean;
+  /** Pre-hashed IP — skip hashIp() when the caller already provides the hash */
+  ipPreHashed?: boolean;
+  /** Override max tokens for LLM response */
+  maxTokens?: number;
+  /** Override LLM model — use a faster model for voice */
+  model?: string;
 }
 
 async function loadOrCreateSession(
@@ -494,6 +542,8 @@ async function loadOrCreateSession(
         messageCount: existing.messageCount ?? 0,
         authenticatedEmail: existing.authenticatedEmail ?? null,
         learned: (existing.learned as Record<string, string | null>) ?? null,
+        callOffered: existing.callOffered ?? false,
+        voiceToken: existing.voiceToken ?? null,
       };
     }
   }
@@ -534,10 +584,204 @@ async function saveSession(session: ChatSession): Promise<void> {
       messageCount: session.messageCount,
       learned: session.learned,
       updatedAt: new Date(),
+      // Brief 142: persist voice channel state
+      callOffered: session.callOffered ?? false,
+      voiceToken: session.voiceToken ?? null,
       // Rolling TTL: authenticated sessions extend to 30 days on each activity (Brief 123)
       ...(session.authenticatedEmail ? { expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS) } : {}),
     })
     .where(eq(schema.chatSessions.sessionId, session.sessionId));
+}
+
+/**
+ * Voice conversation evaluator — runs the ACTUAL harness pipeline in shadow mode.
+ *
+ * Calls handleChatTurn (the same pipeline as text chat) with the voice transcript.
+ * The harness runs the full LLM call, extracts learned context, runs stage gates.
+ * We keep the structured outputs + the reply (as guidance). ElevenLabs generates
+ * the actual voice response — this is just for process intelligence.
+ */
+export interface VoiceEvaluation {
+  learned: LearnedContext;
+  guidance: string;
+  stage: string;
+}
+
+export async function evaluateVoiceConversation(
+  sessionId: string,
+): Promise<VoiceEvaluation | null> {
+  // Load the session directly — don't use handleChatTurn which has side effects
+  const [existing] = await db
+    .select()
+    .from(schema.chatSessions)
+    .where(eq(schema.chatSessions.sessionId, sessionId));
+  if (!existing) return null;
+
+  const session: ChatSession = {
+    id: existing.id,
+    sessionId: existing.sessionId,
+    messages: existing.messages as Array<{ role: string; content: string }>,
+    context: existing.context,
+    ipHash: existing.ipHash,
+    requestEmailFlagged: existing.requestEmailFlagged ?? false,
+    messageCount: existing.messageCount ?? 0,
+    authenticatedEmail: existing.authenticatedEmail ?? null,
+    learned: (existing.learned as Record<string, string | null>) ?? null,
+    callOffered: existing.callOffered ?? false,
+    voiceToken: existing.voiceToken ?? null,
+  };
+
+  if (session.messages.length === 0) return null;
+
+  try {
+    // Build the SAME prompt + tools as text chat
+    const conversationStage = inferConversationStage(session);
+    const systemPrompt = buildFrontDoorPrompt(
+      session.context as ChatContext,
+      undefined,
+      conversationStage,
+      "voice",
+    ) + buildStateDirective(session);
+
+    const llmMessages: LlmMessage[] = session.messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+
+    // Run the SAME LLM call as text chat — same model, same tool schema
+    const response = await createCompletion({
+      system: systemPrompt,
+      messages: llmMessages,
+      tools: [ALEX_RESPONSE_TOOL],
+      maxTokens: 400,
+    });
+
+    // Extract using the SAME extraction as text chat
+    const rawExtracted = extractAlexResponse(response.content);
+
+    // Merge learned into session — SAME as text chat
+    if (rawExtracted.learned) {
+      session.learned = { ...(session.learned || {}), ...rawExtracted.learned };
+    }
+
+    // Run stage gates — SAME as text chat
+    const gated = enforceStageGates(rawExtracted, session);
+
+    // Save updated learned context
+    await db
+      .update(schema.chatSessions)
+      .set({ learned: session.learned, updatedAt: new Date() })
+      .where(eq(schema.chatSessions.sessionId, sessionId));
+
+    // The harness reply IS the guidance
+    const guidance = gated.reply || "Continue the conversation.";
+
+    let stage = "gathering";
+    if (gated.done) stage = "complete";
+    else if (gated.requestEmail) stage = "activating";
+    else if (rawExtracted.detectedMode) stage = "proposing";
+
+    console.log(`[evaluateVoice] Stage: ${stage}, mode: ${rawExtracted.detectedMode || "?"}, learned: ${JSON.stringify(session.learned)}`);
+
+    return {
+      learned: (session.learned as LearnedContext) || {},
+      stage,
+      guidance,
+    };
+  } catch (err) {
+    console.warn("[evaluateVoice] Failed:", (err as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Append a text message to a session during an active voice call.
+ * Treated as regular user input — the voice agent picks it up on the next turn.
+ *
+ * If the text contains a URL, kicks off async enrichment (web fetch) so
+ * the results appear in the chat UI and are available to the voice agent.
+ */
+export async function appendTextContext(session: ChatSession, text: string): Promise<void> {
+  session.messages.push({
+    role: "user",
+    content: text,
+  });
+  session.messageCount += 1;
+  await saveSession(session);
+
+  // Async enrichment: if the text looks like a URL, fetch it in the background
+  // and append the results to the session for the voice agent to use.
+  const urlMatch = text.match(/https?:\/\/[^\s]+/);
+  if (urlMatch) {
+    // Fire and forget — don't block the response
+    enrichSessionWithUrl(session.sessionId, urlMatch[0]).catch((err) => {
+      console.warn("[appendTextContext] Background enrichment failed:", (err as Error).message);
+    });
+  }
+}
+
+/**
+ * Fetch a URL and append the content to the session as assistant context.
+ * Runs async — the voice agent sees the results on its next turn.
+ */
+async function enrichSessionWithUrl(sessionId: string, url: string): Promise<void> {
+  const { fetchUrlContent } = await import("./web-fetch");
+  const result = await fetchUrlContent(url);
+  if (!result.content) return;
+
+  // Reload the session (may have changed since we started)
+  const [existing] = await db
+    .select()
+    .from(schema.chatSessions)
+    .where(eq(schema.chatSessions.sessionId, sessionId));
+  if (!existing) return;
+
+  const messages = existing.messages as Array<{ role: string; content: string }>;
+  messages.push({
+    role: "assistant",
+    content: `I've looked at ${url} — here's what I found:\n\n${result.content.slice(0, 2000)}`,
+  });
+
+  await db
+    .update(schema.chatSessions)
+    .set({ messages, updatedAt: new Date() })
+    .where(eq(schema.chatSessions.sessionId, sessionId));
+}
+
+/**
+ * Load a session by sessionId, validating a voice token for security (Brief 142).
+ * Returns null if session not found, expired, or token doesn't match.
+ */
+export async function loadSessionForVoice(
+  sessionId: string,
+  voiceToken: string,
+): Promise<ChatSession | null> {
+  const [existing] = await db
+    .select()
+    .from(schema.chatSessions)
+    .where(
+      and(
+        eq(schema.chatSessions.sessionId, sessionId),
+        sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
+      ),
+    );
+
+  if (!existing) return null;
+  if (existing.voiceToken !== voiceToken) return null;
+
+  return {
+    id: existing.id,
+    sessionId: existing.sessionId,
+    messages: existing.messages as Array<{ role: string; content: string }>,
+    context: existing.context,
+    ipHash: existing.ipHash,
+    requestEmailFlagged: existing.requestEmailFlagged ?? false,
+    messageCount: existing.messageCount ?? 0,
+    authenticatedEmail: existing.authenticatedEmail ?? null,
+    learned: (existing.learned as Record<string, string | null>) ?? null,
+    callOffered: existing.callOffered ?? false,
+    voiceToken: existing.voiceToken ?? null,
+  };
 }
 
 // ============================================================
@@ -809,7 +1053,7 @@ export async function handleChatTurn(
     session.learned = { ...(session.learned || {}), ...rawExtracted.learned };
   }
   const extracted = enforceStageGates(rawExtracted, session);
-  let { reply, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
+  let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
 
   // Record mode detection funnel event
   if (detectedMode) {
@@ -878,6 +1122,7 @@ export async function handleChatTurn(
       }
       const followUpGated = enforceStageGates(followUpRaw, session);
       reply = followUpGated.reply;
+      declaredQuestion = followUpGated.question ?? declaredQuestion;
       requestName = followUpGated.requestName;
       requestLocation = followUpGated.requestLocation;
       requestEmail = followUpGated.requestEmail;
@@ -898,8 +1143,9 @@ export async function handleChatTurn(
 
   // ── Secondary LLM validation (Haiku) ──
   // Catches compound questions, filler, and quality issues that the primary
-  // model missed. Runs in ~100-200ms on Haiku — acceptable latency.
-  const validated = await validateAndCleanResponse(reply);
+  // model missed. Also catches zero-question replies that would stall the
+  // conversation — appends the declared question from the tool call if available.
+  const validated = await validateAndCleanResponse(reply, declaredQuestion);
   reply = validated.cleanedReply;
   extraQuestions = validated.extraQuestions;
 
@@ -1039,7 +1285,8 @@ export type ChatStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "text-replace"; text: string }
   | { type: "status"; message: string }
-  | { type: "metadata"; requestName: boolean; requestLocation: boolean; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean; plan: string | null; learned: LearnedContext | null; extraQuestions: string[] }
+  | { type: "content-block"; block: ContentBlock }
+  | { type: "metadata"; requestName: boolean; requestLocation: boolean; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean; plan: string | null; learned: LearnedContext | null; extraQuestions: string[]; voiceReady?: boolean; voiceToken?: string }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -1056,17 +1303,20 @@ export async function* handleChatTurnStreaming(
   returningEmail?: string | null,
   funnelMetadata?: Record<string, unknown>,
   visitorName?: string,
+  options?: ChatPipelineOptions,
 ): AsyncGenerator<ChatStreamEvent> {
-  const ipHash = hashIp(ip);
+  const ipHash = options?.ipPreHashed ? ip : hashIp(ip);
 
-  // Rate limit: IP
-  const ipAllowed = await checkIpRateLimit(ipHash);
-  if (!ipAllowed) {
-    yield { type: "session", sessionId: sessionId || randomUUID(), ...(isTestMode() ? { testMode: true } : {}) };
-    yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
-    yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
-    yield { type: "done" };
-    return;
+  // Rate limit: IP (skip for voice channel)
+  if (!options?.skipRateLimit) {
+    const ipAllowed = await checkIpRateLimit(ipHash);
+    if (!ipAllowed) {
+      yield { type: "session", sessionId: sessionId || randomUUID(), ...(isTestMode() ? { testMode: true } : {}) };
+      yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
+      yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
+      yield { type: "done" };
+      return;
+    }
   }
 
   // Load or create session
@@ -1085,7 +1335,7 @@ export async function* handleChatTurnStreaming(
 
   // Resolve model
   let model: string | undefined;
-  try { model = getConfiguredModel(); } catch { /* mock mode */ }
+  try { model = options?.model || getConfiguredModel(); } catch { /* mock mode */ }
 
   // Intercept bracket-tagged funnel events
   const funnelEventMatch = message.trim().match(/^\[(\w+)\]$/);
@@ -1162,14 +1412,14 @@ export async function* handleChatTurnStreaming(
 
   // Stage-gated prompting (Insight-170: token efficiency)
   const streamConversationStage = inferConversationStage(session);
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage)
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel)
     + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
-    maxTokens: 400,
+    maxTokens: options?.maxTokens || 400,
     ...(model ? { model } : {}),
   };
 
@@ -1186,7 +1436,7 @@ export async function* handleChatTurnStreaming(
     session.learned = { ...(session.learned || {}), ...streamRawExtracted.learned };
   }
   const streamExtracted = enforceStageGates(streamRawExtracted, session);
-  let { reply, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
+  let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
 
   // Mode detection funnel event
   if (detectedMode) {
@@ -1210,15 +1460,21 @@ export async function* handleChatTurnStreaming(
   // Phase 2: Enrichment loop — fetch/search in background, re-prompt.
   // The user sees status messages ("Reading that page…") while this runs.
   // No text has been streamed yet, so there's nothing to contradict.
-  for (let enrichRound = 0; enrichRound < 2; enrichRound++) {
+  // Brief 142: skip enrichment for voice channel — saves 2-5s latency.
+  let lastEnrichmentText: string | null = null; // Brief 137: track for block construction
+  for (let enrichRound = 0; enrichRound < (options?.skipEnrichment ? 0 : 2); enrichRound++) {
     let enrichContent: string | null = null;
     let enrichLabel = "";
 
     if (searchQuery) {
+      // Brief 142: notify voice endpoint before enrichment starts (filler phrase)
+      if (enrichRound === 0) options?.onEnrichmentStart?.();
       yield { type: "status", message: "Searching…" };
       enrichContent = await webSearch(searchQuery);
       enrichLabel = `[SEARCH_RESULTS for "${searchQuery}"]`;
     } else if (fetchUrl) {
+      // Brief 142: notify voice endpoint before enrichment starts (filler phrase)
+      if (enrichRound === 0) options?.onEnrichmentStart?.();
       yield { type: "status", message: "Reading that page…" };
       const result: FetchResult = await fetchUrlContent(fetchUrl);
       if (result.content) {
@@ -1233,6 +1489,7 @@ export async function* handleChatTurnStreaming(
     }
 
     if (!enrichContent) break;
+    lastEnrichmentText = enrichContent; // Brief 137: capture for block construction
 
     session.messages.push({ role: "assistant", content: reply });
     session.messages.push({ role: "user", content: `${enrichLabel}\n${enrichContent}` });
@@ -1249,7 +1506,7 @@ export async function* handleChatTurnStreaming(
     };
 
     try {
-      yield { type: "status", message: "Putting it together…" };
+      yield { type: "status" as const, message: "Putting it together…" };
       const followUp = await createCompletion(followUpRequest);
       recordFrontDoorSpend(followUp.costCents);
       const followUpRaw = extractAlexResponse(followUp.content);
@@ -1259,6 +1516,7 @@ export async function* handleChatTurnStreaming(
       }
       const followUpGated = enforceStageGates(followUpRaw, session);
       reply = followUpGated.reply;
+      streamDeclaredQuestion = followUpGated.question ?? streamDeclaredQuestion;
       requestName = followUpGated.requestName;
       requestLocation = followUpGated.requestLocation;
       requestEmail = followUpGated.requestEmail;
@@ -1280,10 +1538,13 @@ export async function* handleChatTurnStreaming(
 
   // ── Secondary LLM validation (Haiku) ──
   // Runs BEFORE text emission so the user only sees the cleaned version.
-  yield { type: "status", message: "Checking…" };
-  const streamValidated = await validateAndCleanResponse(reply);
-  reply = streamValidated.cleanedReply;
-  extraQuestions = streamValidated.extraQuestions;
+  // Brief 142: skip for voice channel — saves ~100-200ms latency
+  if (!options?.skipValidation) {
+    yield { type: "status", message: "Checking…" };
+    const streamValidated = await validateAndCleanResponse(reply, streamDeclaredQuestion);
+    reply = streamValidated.cleanedReply;
+    extraQuestions = streamValidated.extraQuestions;
+  }
 
   // Phase 3: Emit the final reply. All thinking and enrichment is done —
   // this is the one and only response the user sees.
@@ -1298,6 +1559,18 @@ export async function* handleChatTurnStreaming(
     if (i + CHUNK_SIZE < reply.length) {
       await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
     }
+  }
+
+  // Brief 137: Emit content blocks after text, before metadata (Insight-110 boundary)
+  const frontDoorBlocks = buildFrontDoorBlocks({
+    plan,
+    detectedMode,
+    learned,
+    stage: streamConversationStage,
+    enrichmentText: lastEnrichmentText,
+  });
+  for (const block of frontDoorBlocks) {
+    yield { type: "content-block", block };
   }
 
   // Brief 126: Safety net — if email was captured but enrichment didn't set done
@@ -1388,7 +1661,32 @@ export async function* handleChatTurnStreaming(
   session.messages.push({ role: "assistant", content: reply });
   await saveSession(session);
 
+  // Brief 142b: Voice — persistent CTA once we know the visitor's name.
+  // voiceReady is emitted on EVERY turn (not one-shot) so the frontend
+  // keeps the "Talk to Alex" button visible. Just needs
+  // a voiceToken for session auth.
+  let voiceReady: boolean | undefined;
+  let voiceTokenOut: string | undefined;
+  if (session.learned?.name && options?.channel !== "voice") {
+    voiceReady = true;
+    // Reuse existing voiceToken or generate a new one
+    if (!session.voiceToken) {
+      session.voiceToken = randomUUID();
+      await saveSession(session);
+    }
+    voiceTokenOut = session.voiceToken;
+    // Record first offer for analytics (one-shot)
+    if (!session.callOffered) {
+      session.callOffered = true;
+      await saveSession(session);
+      await recordFunnelEvent(session.sessionId, "call_offered", context, {
+        messageCount: session.messageCount,
+        channel: options?.channel || "text",
+      });
+    }
+  }
+
   // Send metadata and done
-  yield { type: "metadata", requestName, requestLocation, requestEmail, done, suggestions, detectedMode, emailCaptured, plan, learned, extraQuestions };
+  yield { type: "metadata", requestName, requestLocation, requestEmail, done, suggestions, detectedMode, emailCaptured, plan, learned, extraQuestions, voiceReady, voiceToken: voiceTokenOut };
   yield { type: "done" };
 }

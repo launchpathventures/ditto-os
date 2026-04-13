@@ -22,7 +22,10 @@ import { QuickReplyPills } from "./quick-reply-pills";
 import { TypingIndicator } from "./typing-indicator";
 import { ValueCards } from "./value-cards";
 import { TrustRow } from "./trust-row";
+import type { ContentBlock } from "@/lib/engine";
 import { LearnedContext, LearnedContextCompact } from "./learned-context";
+import { VoiceCall, type VoiceCallHandle } from "./voice-call";
+import { ConversationProvider } from "@elevenlabs/react";
 
 // ============================================================
 // Types
@@ -31,6 +34,7 @@ import { LearnedContext, LearnedContextCompact } from "./learned-context";
 interface Message {
   role: "alex" | "user";
   text: string;
+  blocks?: ContentBlock[];
 }
 
 const INTRO_MESSAGES: Message[] = [
@@ -69,10 +73,14 @@ export function DittoConversation() {
   const [detectedMode, setDetectedMode] = useState<"connector" | "sales" | "cos" | "both" | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [learned, setLearned] = useState<Record<string, string | null> | null>(null);
-  const [plan, setPlan] = useState<string | null>(null);
   // Multi-question structured input
   const [extraQuestions, setExtraQuestions] = useState<string[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
+  // Brief 142b: Voice call state — persistent CTA once name is known
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [voiceToken, setVoiceToken] = useState<string | null>(null);
+  const [callActive, setCallActive] = useState(false);
+
   // Email verification flow
   const [verifyStep, setVerifyStep] = useState<"email" | "code" | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
@@ -88,6 +96,7 @@ export function DittoConversation() {
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
+  const voiceCallRef = useRef<VoiceCallHandle>(null);
   // Long text pasted into the input — shown as an attachment chip
   const [pastedText, setPastedText] = useState<string | null>(null);
 
@@ -242,6 +251,44 @@ export function DittoConversation() {
   }, [showIntro, done, requestEmail, loading]);
 
   // ============================================================
+  // Voice call: poll for live session updates (messages + learned)
+  // ============================================================
+  // Voice call: harness-driven process guidance.
+  // Two mechanisms working together:
+  // 1. Poll every 3s for learned context (updates the UI card)
+  // 2. On every agent message, fetch fresh guidance and push it
+  //    via sendContextualUpdate (steers the next response)
+  const lastGuidanceRef = useRef("");
+
+  // Fetch guidance from harness and push to voice agent
+  const pushGuidance = useCallback(async () => {
+    if (!sessionId || !voiceToken || !voiceCallRef.current) return;
+    try {
+      const res = await fetch(
+        `/api/v1/network/chat/session-updates?sessionId=${sessionId}&voiceToken=${voiceToken}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.learned) setLearned(data.learned);
+
+      if (data.guidance && data.guidance !== lastGuidanceRef.current) {
+        lastGuidanceRef.current = data.guidance;
+        voiceCallRef.current.sendContextualUpdate(
+          `SYSTEM INSTRUCTION: ${data.guidance}`,
+        );
+      }
+    } catch { /* non-fatal */ }
+  }, [sessionId, voiceToken]);
+
+  // Poll for learned context updates (UI card)
+  useEffect(() => {
+    if (!callActive || !sessionId || !voiceToken) return;
+    const interval = setInterval(pushGuidance, 3000);
+    return () => clearInterval(interval);
+  }, [callActive, sessionId, voiceToken, pushGuidance]);
+
+  // ============================================================
   // Chat API — single function, LLM controls the flow
   // ============================================================
 
@@ -252,6 +299,29 @@ export function DittoConversation() {
     const userMsg: Message = { role: "user", text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+
+    // During a voice call: send text directly to the ElevenLabs agent.
+    // URLs go as contextual updates (no response triggered — agent picks it up naturally).
+    // Other text goes as user messages (triggers agent response).
+    if (callActive && voiceCallRef.current) {
+      const isUrl = /^https?:\/\//.test(text.trim());
+      if (isUrl) {
+        voiceCallRef.current.sendContextualUpdate(`The user shared a link: ${text}`);
+      } else {
+        voiceCallRef.current.sendUserMessage(text);
+      }
+      // Also save to session for persistence
+      if (sessionId && voiceToken) {
+        fetch(`/api/v1/network/chat/session-updates`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, voiceToken, message: text }),
+        }).catch(() => {});
+      }
+      sendingRef.current = false;
+      return;
+    }
+
     setLoading(true);
     setStatusMessage(null);
 
@@ -362,6 +432,22 @@ export function DittoConversation() {
               }
             }
 
+            // Brief 137: content blocks arrive atomically after text, before metadata
+            if (event.type === "content-block" && event.block) {
+              setMessages((prev) => {
+                if (prev.length === 0) return prev;
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "alex") {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    blocks: [...(last.blocks || []), event.block],
+                  };
+                }
+                return updated;
+              });
+            }
+
             if (event.type === "metadata") {
               setSuggestions(Array.isArray(event.suggestions) ? event.suggestions : []);
               if (event.detectedMode) setDetectedMode(event.detectedMode);
@@ -399,11 +485,15 @@ export function DittoConversation() {
                   ...event.learned,
                 }));
               }
-              setPlan(event.plan || null);
               // Multi-question structured input
               if (event.extraQuestions?.length > 0) {
                 setExtraQuestions(event.extraQuestions);
                 setQuestionAnswers({});
+              }
+              // Brief 142b: Voice — persistent CTA (ElevenLabs)
+              if (event.voiceReady && event.voiceToken) {
+                setVoiceReady(true);
+                setVoiceToken(event.voiceToken);
               }
             }
 
@@ -604,6 +694,7 @@ export function DittoConversation() {
   // ============================================================
 
   return (
+    <ConversationProvider>
     <div className="flex h-screen flex-col overflow-hidden bg-white">
       {/* Turnstile invisible widget container */}
       <div ref={turnstileRef} style={{ display: "none" }} />
@@ -721,7 +812,7 @@ export function DittoConversation() {
                   <ChatMessage
                     role={msg.role}
                     text={msg.text}
-                    plan={msg.role === "alex" && i === messages.length - 1 ? plan : null}
+                    blocks={msg.blocks}
                     animate={i >= messages.length - 2}
                     variant={
                       msg.role === "alex" && i === 0
@@ -848,7 +939,7 @@ export function DittoConversation() {
 
               {/* Input area — always visible so the user can always talk to Alex */}
               {showInput && (
-                <div className="shrink-0 bg-white pb-4 pt-3 space-y-3">
+                <div className="shrink-0 bg-white pb-2 pt-2 md:pb-4 md:pt-3 space-y-2 md:space-y-3">
                   {/* Pasted text attachment chip */}
                   {pastedText && (
                     <div className="flex items-center gap-2 rounded-xl bg-vivid-subtle/50 px-4 py-2.5">
@@ -873,29 +964,86 @@ export function DittoConversation() {
                       </button>
                     </div>
                   )}
-                  <form onSubmit={handleSubmit} className="relative">
+                  {/* Brief 142b: Voice call card — ElevenLabs, persistent once voiceReady */}
+                  {voiceReady && !done && sessionId && voiceToken && (
+                    <div className="shrink-0 bg-white pb-1 pt-2 md:pb-2 md:pt-3">
+                      <div className={`rounded-xl md:rounded-2xl border-2 px-3 py-2.5 md:p-4 flex items-center justify-between ${
+                        callActive
+                          ? "border-vivid/40 bg-vivid/5"
+                          : "border-vivid/20 bg-vivid-subtle/30"
+                      }`}>
+                        <div className="flex-1">
+                          <p className="text-xs md:text-sm font-medium text-text-primary">
+                            {callActive ? "Talking with Alex" : "Prefer to talk?"}
+                          </p>
+                          {!callActive && (
+                            <p className="hidden md:block text-xs text-text-muted mt-0.5">
+                              Switch to a live voice conversation
+                            </p>
+                          )}
+                        </div>
+                        <VoiceCall
+                          ref={voiceCallRef}
+                          sessionId={sessionId}
+                          voiceToken={voiceToken}
+                          learned={learned}
+                          visitorName={name}
+                          recentMessages={messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))}
+                          onCallStart={() => setCallActive(true)}
+                          onCallEnd={() => setCallActive(false)}
+                          onCallError={(error) => {
+                            setCallActive(false);
+                            setMessages((prev) => [...prev, { role: "alex", text: error }]);
+                          }}
+                          onMessage={(role, text) => {
+                            setMessages((prev) => [...prev, { role: role === "alex" ? "alex" : "user", text }]);
+                            // User message: send to harness for learning extraction
+                            if (role === "user" && sessionId && voiceToken) {
+                              fetch("/api/v1/network/chat/session-updates", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ sessionId, voiceToken, message: text }),
+                              }).catch(() => {});
+                            }
+                            // Agent message: push fresh guidance for the next turn
+                            if (role === "alex") pushGuidance();
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <form onSubmit={handleSubmit} className="relative flex items-end">
                     <textarea
                       ref={textareaRef}
                       rows={1}
-                      placeholder={done ? "Add context, ask a question, or share a link" : "Ask me anything, or tell me what you need"}
+                      placeholder={
+                        callActive
+                          ? "Type while talking..."
+                          : done
+                            ? "Ask a question or share a link"
+                            : "Ask me anything..."
+                      }
                       value={input}
                       onChange={handleTextareaChange}
                       onKeyDown={handleTextareaKeyDown}
                       disabled={loading || !!statusMessage}
-                      className="w-full resize-none rounded-2xl border-2 border-border bg-white pl-5 pr-14 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0 disabled:opacity-50"
+                      className={`w-full resize-none rounded-xl md:rounded-2xl border-2 bg-white pl-4 pr-11 py-2 md:pl-5 md:pr-14 md:py-3 text-sm md:text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0 disabled:opacity-50 ${
+                        callActive ? "border-vivid/20" : "border-border"
+                      }`}
                       style={{ maxHeight: "8rem" }}
                     />
                     <button
                       type="submit"
                       disabled={(!input.trim() && !pastedText) || loading || !!statusMessage}
                       aria-label="Send message"
-                      className="absolute right-2 bottom-2 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-vivid text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      className="absolute right-2.5 bottom-2 md:right-3 md:bottom-auto md:top-1/2 md:-translate-y-1/2 inline-flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg bg-vivid text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                     >
-                      <ArrowRight size={16} />
+                      <ArrowRight size={14} className="md:hidden" />
+                      <ArrowRight size={16} className="hidden md:block" />
                     </button>
                   </form>
                   {/* Pills — only when no structured card is showing */}
-                  <div className={showInitialPills || showSuggestions ? "min-h-[2.5rem]" : ""}>
+                  <div className={showInitialPills || showSuggestions ? "min-h-[2rem] md:min-h-[2.5rem]" : ""}>
                     {showInitialPills && (
                       <QuickReplyPills
                         pills={FRONT_DOOR_PILLS}
@@ -1070,5 +1218,6 @@ export function DittoConversation() {
         </div>
       </footer>
     </div>
+    </ConversationProvider>
   );
 }

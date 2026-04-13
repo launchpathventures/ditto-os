@@ -34,8 +34,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
     "@apidevtools/swagger-parser": "^12.1.0",
+    "@browserbasehq/stagehand": "^3.2.1",
     "@clack/prompts": "^1.1.0",
     "@ditto/core": "workspace:*",
+    "@elevenlabs/elevenlabs-js": "^2.42.0",
     "@google/generative-ai": "^0.24.1",
     "@lancedb/lancedb": "^0.27.2",
     "agentmail": "^0.4.17",
@@ -53,6 +55,7 @@
     "pdf-parse": "^2.4.5",
     "stripe": "^22.0.0",
     "typescript": "^5.9.3",
+    "unipile-node-sdk": "^1.9.3",
     "xlsx": "^0.18.5",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"

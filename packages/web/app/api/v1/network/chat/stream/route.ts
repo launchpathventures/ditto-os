@@ -64,14 +64,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Load env vars from root .env
-    if (!process.env.ANTHROPIC_API_KEY && !process.env.MOCK_LLM) {
-      try {
-        const { config } = await import("dotenv");
-        const path = await import("path");
-        config({ path: path.resolve(process.cwd(), "../../.env") });
-      } catch { /* env vars may be set via platform */ }
-    }
+    // Load env vars from root .env (override: false ensures platform vars take precedence)
+    try {
+      const { config } = await import("dotenv");
+      const path = await import("path");
+      config({ path: path.resolve(process.cwd(), "../../.env") });
+    } catch { /* env vars may be set via platform */ }
 
     const [{ handleChatTurnStreaming, checkIpRateLimit, hashIp }, llm] = await Promise.all([
       import("../../../../../../../../src/engine/network-chat"),

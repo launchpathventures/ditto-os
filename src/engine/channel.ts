@@ -15,7 +15,14 @@
  */
 
 import { AgentMailClient } from "agentmail";
+import { UnipileClient } from "unipile-node-sdk";
 import type { PersonaId } from "../db/schema";
+
+// ============================================================
+// Social Platform Types
+// ============================================================
+
+export type SocialPlatform = "linkedin" | "whatsapp" | "instagram" | "telegram" | "x";
 
 // ============================================================
 // Channel Abstraction Interface
@@ -23,7 +30,8 @@ import type { PersonaId } from "../db/schema";
 
 export interface OutboundMessage {
   to: string;
-  subject: string;
+  /** Subject line. Required for email, optional/ignored for social DMs. */
+  subject?: string;
   body: string;
   personaId: PersonaId;
   mode: "selling" | "connecting" | "nurture" | "ghost";
@@ -44,6 +52,11 @@ export interface OutboundMessage {
    * configured display name. Per-user ghost inbox is a future enhancement.
    */
   bccAddress?: string;
+  /**
+   * Social platform for routing (Brief 133). Only used when channel is "social".
+   * `to` becomes a platform-specific identifier (Unipile attendee ID or handle).
+   */
+  platform?: SocialPlatform;
 }
 
 export interface SendResult {
@@ -65,7 +78,7 @@ export interface InboundMessage {
 }
 
 export interface ChannelAdapter {
-  readonly channel: "email" | "voice" | "sms";
+  readonly channel: "email" | "voice" | "sms" | "social";
   send(message: OutboundMessage): Promise<SendResult>;
   search(query: string): Promise<InboundMessage[]>;
   /** List recent messages in the inbox */
@@ -106,6 +119,31 @@ function isTestModeSuppressed(toAddress: string): boolean {
   }
 
   console.log(`[channel] TEST MODE: suppressed email to ${toAddress} (not in DITTO_TEST_EMAILS)`);
+  return true;
+}
+
+/**
+ * Social channel test mode gate (Brief 133).
+ * Uses DITTO_TEST_SOCIAL_IDS allowlist (Unipile attendee IDs or handles).
+ */
+function isSocialTestModeSuppressed(recipientId: string): boolean {
+  if (process.env.DITTO_TEST_MODE !== "true") return false;
+
+  const allowlist = (process.env.DITTO_TEST_SOCIAL_IDS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (allowlist.length === 0) {
+    console.log(`[channel] TEST MODE: suppressed social send to ${recipientId} (no DITTO_TEST_SOCIAL_IDS set)`);
+    return true;
+  }
+
+  if (allowlist.includes(recipientId.toLowerCase())) {
+    return false;
+  }
+
+  console.log(`[channel] TEST MODE: suppressed social send to ${recipientId} (not in DITTO_TEST_SOCIAL_IDS)`);
   return true;
 }
 
@@ -269,7 +307,7 @@ export class AgentMailAdapter implements ChannelAdapter {
 
       const result = await this.client.inboxes.messages.send(this.inboxId, {
         to: [message.to],
-        subject: message.subject,
+        subject: message.subject ?? "",
         text: body,
         html,
         ...(ghostBcc ? { bcc: ghostBcc } : {}),
@@ -422,7 +460,7 @@ export class GmailChannelAdapter implements ChannelAdapter {
     try {
       const result = await this.executeToolFn("send_message", {
         to: message.to,
-        subject: message.subject,
+        subject: message.subject ?? "",
         body,
       });
 
@@ -479,6 +517,218 @@ function parseSearchResults(result: string): InboundMessage[] {
 }
 
 // ============================================================
+// Unipile Social Channel Adapter (Brief 133)
+// ============================================================
+
+/** Platform-specific daily send limits to avoid account restriction. */
+const PLATFORM_DAILY_LIMITS: Record<SocialPlatform, number> = {
+  linkedin: 50,
+  whatsapp: 200,
+  instagram: 100,
+  telegram: 500,
+  x: 300,
+};
+
+/**
+ * In-memory daily send counter per platform. Resets at midnight UTC.
+ * Simple approach for v1 — database-backed tracking is a future enhancement.
+ */
+const dailySendCounts: Record<string, { count: number; date: string }> = {};
+
+function getDailyKey(accountId: string, platform: SocialPlatform): string {
+  return `${accountId}:${platform}`;
+}
+
+function getTodayUTC(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function checkRateLimit(accountId: string, platform: SocialPlatform): { allowed: boolean; remaining: number } {
+  const key = getDailyKey(accountId, platform);
+  const today = getTodayUTC();
+  const entry = dailySendCounts[key];
+  const limit = PLATFORM_DAILY_LIMITS[platform];
+
+  if (!entry || entry.date !== today) {
+    return { allowed: true, remaining: limit };
+  }
+
+  const remaining = Math.max(0, limit - entry.count);
+  return { allowed: remaining > 0, remaining };
+}
+
+function recordSend(accountId: string, platform: SocialPlatform): void {
+  const key = getDailyKey(accountId, platform);
+  const today = getTodayUTC();
+  const entry = dailySendCounts[key];
+
+  if (!entry || entry.date !== today) {
+    dailySendCounts[key] = { count: 1, date: today };
+  } else {
+    entry.count++;
+  }
+}
+
+/** Reset rate limit counters (for testing). */
+export function _resetRateLimits(): void {
+  for (const key of Object.keys(dailySendCounts)) {
+    delete dailySendCounts[key];
+  }
+}
+
+/**
+ * Unipile adapter — unified messaging API for social channels.
+ *
+ * Sends LinkedIn DMs, WhatsApp, Instagram, Telegram messages via the
+ * Unipile REST API. Session management and anti-detection handled by Unipile.
+ *
+ * Provenance: Brief 133, unipile-node-sdk (depend level — ISC, v1.9.x)
+ */
+export class UnipileAdapter implements ChannelAdapter {
+  readonly channel = "social" as const;
+
+  private client: UnipileClient;
+  private accountId: string;
+  private platform: SocialPlatform;
+
+  constructor(dsn: string, apiKey: string, accountId: string, platform: SocialPlatform) {
+    this.client = new UnipileClient(dsn, apiKey);
+    this.accountId = accountId;
+    this.platform = platform;
+  }
+
+  async send(message: OutboundMessage): Promise<SendResult> {
+    const platform = message.platform || this.platform;
+
+    if (isSocialTestModeSuppressed(message.to)) {
+      return { success: true, messageId: `test-suppressed-social-${Date.now()}` };
+    }
+
+    // Rate limit check
+    const { allowed, remaining } = checkRateLimit(this.accountId, platform);
+    if (!allowed) {
+      return {
+        success: false,
+        error: `Daily ${platform} message limit reached (${PLATFORM_DAILY_LIMITS[platform]}). Remaining: ${remaining}. Will reset tomorrow.`,
+      };
+    }
+
+    // Ghost mode: no Ditto branding — body is used as-is
+    const body = message.sendingIdentity === "ghost" ? message.body : formatEmailBody(message);
+
+    try {
+      if (message.inReplyToMessageId) {
+        // Send to existing chat
+        const result = await this.client.messaging.sendMessage({
+          chat_id: message.inReplyToMessageId,
+          text: body,
+        });
+        recordSend(this.accountId, platform);
+        return {
+          success: true,
+          messageId: result.message_id ?? undefined,
+          threadId: message.inReplyToMessageId,
+        };
+      }
+
+      // Start new chat with the recipient
+      const result = await this.client.messaging.startNewChat({
+        account_id: this.accountId,
+        text: body,
+        attendees_ids: [message.to],
+      });
+      recordSend(this.accountId, platform);
+      return {
+        success: true,
+        messageId: result.message_id ?? undefined,
+        threadId: result.chat_id ?? undefined,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /** v1 stub — search not implemented for social channels. */
+  async search(_query: string): Promise<InboundMessage[]> {
+    return [];
+  }
+
+  /** v1 stub — reply via send() with inReplyToMessageId (chat_id). */
+  async reply?(_messageId: string, _body: string, _personaId: PersonaId): Promise<SendResult> {
+    throw new Error("UnipileAdapter.reply() not implemented — use send() with inReplyToMessageId");
+  }
+}
+
+// ============================================================
+// Unipile Configuration
+// ============================================================
+
+export interface UnipileConfig {
+  /** Unipile API base URL (e.g. https://api1.unipile.com:13111) */
+  dsn: string;
+  /** Unipile API access token */
+  apiKey: string;
+}
+
+/**
+ * Load Unipile config from environment variables.
+ */
+export function getUnipileConfig(): UnipileConfig | null {
+  const dsn = process.env.UNIPILE_DSN;
+  const apiKey = process.env.UNIPILE_API_KEY;
+
+  if (!dsn || !apiKey) return null;
+
+  return { dsn, apiKey };
+}
+
+/**
+ * Create a Unipile adapter for a specific connected account and platform.
+ * Returns null if Unipile is not configured.
+ */
+export function createUnipileAdapter(
+  accountId: string,
+  platform: SocialPlatform,
+): UnipileAdapter | null {
+  const config = getUnipileConfig();
+  if (!config) return null;
+
+  return new UnipileAdapter(config.dsn, config.apiKey, accountId, platform);
+}
+
+// ============================================================
+// Voice Channel Adapter (Brief 142)
+// ============================================================
+
+/**
+ * Voice channel adapter — v1 is web embed only via ElevenLabs.
+ * `send()` is a no-op for v1 (outbound phone calls are v2).
+ * `search()` queries stored transcripts from interactions table.
+ */
+export class VoiceChannelAdapter implements ChannelAdapter {
+  readonly channel = "voice" as const;
+
+  async send(_message: OutboundMessage): Promise<SendResult> {
+    // v1: web embed only — outbound calls are v2
+    return { success: false, error: "Outbound voice calls not supported in v1" };
+  }
+
+  async search(_query: string): Promise<InboundMessage[]> {
+    // v1: transcript search not implemented
+    return [];
+  }
+}
+
+export function createVoiceAdapter(): VoiceChannelAdapter | null {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return null;
+  return new VoiceChannelAdapter();
+}
+
+// ============================================================
 // Factory: Create the right adapter from environment
 // ============================================================
 
@@ -525,7 +775,8 @@ export function createAgentMailAdapterForPersona(
 
 export interface SendAndRecordInput {
   to: string;
-  subject: string;
+  /** Subject line. Required for email, optional for social DMs. */
+  subject?: string;
   body: string;
   personaId: PersonaId;
   mode: "selling" | "connecting" | "nurture" | "ghost";
@@ -544,6 +795,10 @@ export interface SendAndRecordInput {
   userEmail?: string;
   /** Additional metadata to store on the interaction record (never exposed in email headers/body — Brief 126 AC18) */
   metadata?: Record<string, unknown>;
+  /** Social platform for routing (Brief 133). When set, routes to UnipileAdapter. */
+  platform?: SocialPlatform;
+  /** Unipile account ID for the connected social account (Brief 133). Required when platform is set. */
+  unipileAccountId?: string;
 }
 
 export interface SendAndRecordResult {
@@ -563,6 +818,80 @@ export interface SendAndRecordResult {
 export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndRecordResult> {
   const { recordInteraction } = await import("./people");
 
+  // Ghost mode (Brief 124): map "ghost" to "connecting" for interaction records
+  const interactionMode = input.mode === "ghost" ? "connecting" as const : input.mode;
+  const isGhost = input.sendingIdentity === "ghost";
+
+  // Route to social adapter when platform is specified (Brief 133)
+  const isSocial = !!input.platform && !!input.unipileAccountId;
+  const channelType = isSocial ? "social" : "email";
+
+  if (isSocial) {
+    const socialAdapter = createUnipileAdapter(input.unipileAccountId!, input.platform!);
+    if (!socialAdapter) {
+      console.warn("[channel] Unipile not configured — recording interaction without sending to", input.to);
+      const interaction = await recordInteraction({
+        personId: input.personId,
+        userId: input.userId,
+        type: "outreach_sent",
+        channel: channelType,
+        mode: interactionMode,
+        subject: input.subject ?? `${input.platform} DM`,
+        summary: input.body.slice(0, 500),
+        outcome: undefined,
+        processRunId: input.processRunId,
+        metadata: { sendFailed: true, reason: "unipile_not_configured", platform: input.platform, body: input.body, ...(input.metadata || {}) },
+      });
+      return { success: false, interactionId: interaction.id, error: "Unipile not configured" };
+    }
+
+    const sendResult = await socialAdapter.send({
+      to: input.to,
+      body: input.body,
+      personaId: input.personaId,
+      mode: input.mode === "ghost" ? "connecting" : input.mode,
+      sendingIdentity: input.sendingIdentity,
+      platform: input.platform,
+      inReplyToMessageId: input.inReplyToMessageId,
+    });
+
+    const interaction = await recordInteraction({
+      personId: input.personId,
+      userId: input.userId,
+      type: "outreach_sent",
+      channel: channelType,
+      mode: interactionMode,
+      subject: input.subject ?? `${input.platform} DM`,
+      summary: input.body.slice(0, 500),
+      outcome: undefined,
+      processRunId: input.processRunId,
+      metadata: {
+        messageId: sendResult.messageId,
+        threadId: sendResult.threadId,
+        platform: input.platform,
+        body: input.body,
+        ...(isGhost ? { sendingIdentity: "ghost" } : {}),
+        ...(sendResult.error ? { sendError: sendResult.error } : {}),
+        ...(input.metadata || {}),
+      },
+    });
+
+    if (sendResult.success) {
+      console.log(`[channel] sendAndRecord: ${input.platform} DM sent to ${input.to}, interaction ${interaction.id}`);
+    } else {
+      console.error(`[channel] sendAndRecord: ${input.platform} send failed for ${input.to}:`, sendResult.error);
+    }
+
+    return {
+      success: sendResult.success,
+      interactionId: interaction.id,
+      messageId: sendResult.messageId,
+      ...(sendResult.error ? { error: sendResult.error } : {}),
+    };
+  }
+
+  // Email path (existing behavior)
+
   // Auto-generate magic link for "Continue in chat" footer (Brief 123)
   // Best-effort: if magic link generation fails, email sends without it
   let magicLinkUrl = input.magicLinkUrl;
@@ -578,18 +907,13 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
   const adapter = createAgentMailAdapterForPersona(input.personaId);
   if (!adapter) {
     console.warn("[channel] AgentMail not configured — recording interaction without sending to", input.to);
-    // Still record the interaction even if we can't send
-    // Ghost mode (Brief 124): map "ghost" to "connecting" for interaction records
-    // (InteractionMode doesn't include "ghost" — ghost is a sending identity, not a mode)
-    const interactionMode = input.mode === "ghost" ? "connecting" as const : input.mode;
-
     const interaction = await recordInteraction({
       personId: input.personId,
       userId: input.userId,
       type: "outreach_sent",
       channel: "email",
       mode: interactionMode,
-      subject: input.subject,
+      subject: input.subject ?? "(no subject)",
       summary: input.body.slice(0, 500),
       outcome: undefined,
       processRunId: input.processRunId,
@@ -598,16 +922,10 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     return { success: false, interactionId: interaction.id, error: "AgentMail not configured" };
   }
 
-  // Ghost mode (Brief 124): skip magic link, referral, and opt-out
-  const isGhost = input.sendingIdentity === "ghost";
-
-  // Ghost mode (Brief 124): map "ghost" to "connecting" for interaction records
-  const interactionMode = input.mode === "ghost" ? "connecting" as const : input.mode;
-
   // Send the email (with referral footer — Brief 109, ghost mode skips all footers)
   const sendResult = await adapter.send({
     to: input.to,
-    subject: input.subject,
+    subject: input.subject ?? "(no subject)",
     body: input.body,
     personaId: input.personaId,
     mode: input.mode === "ghost" ? "connecting" : input.mode,
@@ -620,14 +938,13 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
   });
 
   // Record the interaction regardless of send success
-  // (test mode suppression still returns success: true with a test-suppressed messageId)
   const interaction = await recordInteraction({
     personId: input.personId,
     userId: input.userId,
     type: "outreach_sent",
     channel: "email",
     mode: interactionMode,
-    subject: input.subject,
+    subject: input.subject ?? "(no subject)",
     summary: input.body.slice(0, 500),
     outcome: undefined,
     processRunId: input.processRunId,
@@ -653,6 +970,362 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     messageId: sendResult.messageId,
     ...(sendResult.error ? { error: sendResult.error } : {}),
   };
+}
+
+// ============================================================
+// Content Publishing — LinkedIn (Unipile) + X (API v2)
+// ============================================================
+// ADR-029: publishPost() is invoked from within land-content step
+// execution. It traverses the full harness pipeline including
+// outbound-quality-gate. Must NOT be callable outside step execution.
+
+export interface PublishResult {
+  success: boolean;
+  postId?: string;
+  postUrl?: string;
+  platform: SocialPlatform;
+  /** For X threads: array of individual tweet results */
+  threadResults?: Array<{
+    postId: string;
+    postUrl: string;
+    index: number;
+  }>;
+  error?: string;
+}
+
+// ── X API v2 Client ──────────────────────────────────────────
+
+export interface XApiConfig {
+  apiKey: string;
+  apiSecret: string;
+  accessToken: string;
+  accessTokenSecret: string;
+}
+
+/**
+ * Load X API credentials from environment variables.
+ * Returns null if not configured.
+ */
+export function getXApiConfig(): XApiConfig | null {
+  const apiKey = process.env.X_API_KEY;
+  const apiSecret = process.env.X_API_SECRET;
+  const accessToken = process.env.X_ACCESS_TOKEN;
+  const accessTokenSecret = process.env.X_ACCESS_TOKEN_SECRET;
+
+  if (!apiKey || !apiSecret || !accessToken || !accessTokenSecret) return null;
+
+  return { apiKey, apiSecret, accessToken, accessTokenSecret };
+}
+
+/**
+ * Generate OAuth 1.0a signature for X API v2.
+ *
+ * Implements the OAuth 1.0a signing process:
+ * 1. Build parameter string (sorted alphabetically)
+ * 2. Build signature base string
+ * 3. HMAC-SHA1 with composite signing key
+ * 4. Return Authorization header value
+ */
+function buildOAuth1Header(
+  method: string,
+  url: string,
+  config: XApiConfig,
+): string {
+  // Dynamic import avoided — crypto is a Node.js built-in
+  const crypto = require("crypto") as typeof import("crypto");
+
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = crypto.randomBytes(16).toString("hex");
+
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: config.apiKey,
+    oauth_nonce: nonce,
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: timestamp,
+    oauth_token: config.accessToken,
+    oauth_version: "1.0",
+  };
+
+  // Build parameter string (sorted).
+  // NOTE: POST body parameters are intentionally excluded from the signature.
+  // Per OAuth 1.0a spec (RFC 5849 §3.4.1.3), only form-encoded body params
+  // are included. X API v2 uses JSON bodies, which are not signed.
+  const paramString = Object.keys(oauthParams)
+    .sort()
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(oauthParams[k])}`)
+    .join("&");
+
+  // Build signature base string
+  const baseString = [
+    method.toUpperCase(),
+    encodeURIComponent(url),
+    encodeURIComponent(paramString),
+  ].join("&");
+
+  // Sign with composite key
+  const signingKey = `${encodeURIComponent(config.apiSecret)}&${encodeURIComponent(config.accessTokenSecret)}`;
+  const signature = crypto
+    .createHmac("sha1", signingKey)
+    .update(baseString)
+    .digest("base64");
+
+  // Build Authorization header
+  const authParams: Record<string, string> = {
+    ...oauthParams,
+    oauth_signature: signature,
+  };
+
+  const header = Object.keys(authParams)
+    .sort()
+    .map((k) => `${encodeURIComponent(k)}="${encodeURIComponent(authParams[k])}"`)
+    .join(", ");
+
+  return `OAuth ${header}`;
+}
+
+/**
+ * X API v2 client — posts tweets and threads.
+ *
+ * Uses OAuth 1.0a for single-user posting (app key + user access token).
+ * No external SDK — direct fetch to api.x.com/2/tweets.
+ *
+ * Provenance: ADR-029, X API v2 docs (depend level — official REST API)
+ */
+export class XApiClient {
+  private config: XApiConfig;
+  private baseUrl = "https://api.x.com/2";
+
+  constructor(config: XApiConfig) {
+    this.config = config;
+  }
+
+  /**
+   * Post a single tweet. Returns tweet ID and URL.
+   */
+  async postTweet(
+    text: string,
+    replyToTweetId?: string,
+  ): Promise<{ tweetId: string; tweetUrl: string }> {
+    const url = `${this.baseUrl}/tweets`;
+    const body: Record<string, unknown> = { text };
+
+    if (replyToTweetId) {
+      body.reply = { in_reply_to_tweet_id: replyToTweetId };
+    }
+
+    const authHeader = buildOAuth1Header("POST", url, this.config);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`X API error ${response.status}: ${errorText}`);
+    }
+
+    const data = (await response.json()) as { data: { id: string; text: string } };
+    const tweetId = data.data.id;
+
+    return {
+      tweetId,
+      tweetUrl: `https://x.com/i/status/${tweetId}`,
+    };
+  }
+
+  /**
+   * Post a thread (array of tweet texts). Each tweet replies to the previous.
+   * Returns results for all successfully posted tweets.
+   * On partial failure, returns what was posted + error for the rest.
+   */
+  async postThread(
+    tweets: string[],
+  ): Promise<{
+    results: Array<{ postId: string; postUrl: string; index: number }>;
+    error?: string;
+  }> {
+    const results: Array<{ postId: string; postUrl: string; index: number }> = [];
+    let previousTweetId: string | undefined;
+
+    for (let i = 0; i < tweets.length; i++) {
+      try {
+        const { tweetId, tweetUrl } = await this.postTweet(tweets[i], previousTweetId);
+        results.push({ postId: tweetId, postUrl: tweetUrl, index: i });
+        previousTweetId = tweetId;
+      } catch (err) {
+        // Partial failure: record what we got so far + error
+        return {
+          results,
+          error: `Thread failed at tweet ${i + 1}/${tweets.length}: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
+
+    return { results };
+  }
+}
+
+/**
+ * Publish content to a social platform.
+ *
+ * Routes to Unipile Posts API (LinkedIn) or X API v2 (X).
+ * This is for PUBLIC content publishing (feed posts, tweets),
+ * NOT for DMs (use sendAndRecord() for DMs).
+ *
+ * DITTO_TEST_MODE suppresses publishing.
+ *
+ * @param platform - Target platform ("linkedin" or "x")
+ * @param content - Text content to publish
+ * @param options - Platform-specific options (stepRunId required as invocation guard)
+ */
+export async function publishPost(
+  platform: "linkedin" | "x",
+  content: string,
+  options?: {
+    /**
+     * Step run ID — proves this call originates from within step execution.
+     * Callers must provide this; publishPost() is not meant to be called
+     * outside the harness pipeline (ADR-029, Brief 141).
+     */
+    stepRunId?: string;
+    /** Unipile account ID (required for LinkedIn) */
+    unipileAccountId?: string;
+    /** Image URLs to attach (LinkedIn only, via Unipile) */
+    attachments?: string[];
+    /** If content is an array of strings, post as X thread */
+    threadTweets?: string[];
+  },
+): Promise<PublishResult> {
+  // Invocation guard: publishPost() must be called from within step execution.
+  // The stepRunId proves the call originates from the harness pipeline.
+  if (!options?.stepRunId && process.env.DITTO_TEST_MODE !== "true") {
+    return {
+      success: false,
+      platform,
+      error: "publishPost() requires stepRunId — must be called from within step execution (see ADR-029)",
+    };
+  }
+
+  // Test mode suppression (same pattern as Brief 133)
+  if (process.env.DITTO_TEST_MODE === "true") {
+    console.log(`[channel] TEST MODE: suppressed ${platform} publish (${content.slice(0, 80)}...)`);
+    return {
+      success: true,
+      postId: `test-suppressed-publish-${Date.now()}`,
+      postUrl: `https://${platform}.com/test-suppressed`,
+      platform,
+    };
+  }
+
+  if (platform === "linkedin") {
+    return publishToLinkedIn(content, options?.unipileAccountId, options?.attachments);
+  }
+
+  if (platform === "x") {
+    return publishToX(content, options?.threadTweets);
+  }
+
+  return { success: false, platform, error: `Unsupported publish platform: ${platform}` };
+}
+
+async function publishToLinkedIn(
+  content: string,
+  unipileAccountId?: string,
+  attachments?: string[],
+): Promise<PublishResult> {
+  const config = getUnipileConfig();
+  if (!config) {
+    return { success: false, platform: "linkedin", error: "Unipile not configured" };
+  }
+  if (!unipileAccountId) {
+    return { success: false, platform: "linkedin", error: "Unipile account ID required for LinkedIn publishing" };
+  }
+
+  try {
+    const client = new UnipileClient(config.dsn, config.apiKey);
+    const postParams: Record<string, unknown> = {
+      account_id: unipileAccountId,
+      text: content,
+    };
+    if (attachments && attachments.length > 0) {
+      postParams.attachments = attachments;
+    }
+
+    // Unipile SDK's TypeScript types don't include the Posts API (UsersResource).
+    // Type the method signature explicitly so changes to the SDK surface a compile error.
+    type UnipilePostsClient = { users: { createPost: (params: { account_id: string; text: string; attachments?: string[] }) => Promise<{ id?: string; post_id?: string; url?: string }> } };
+    const postsClient = client as unknown as UnipilePostsClient;
+    const result = await postsClient.users.createPost(postParams as Parameters<UnipilePostsClient["users"]["createPost"]>[0]);
+
+    const postId = String(result.id ?? result.post_id ?? "");
+    const postUrl = typeof result.url === "string" ? result.url : `https://www.linkedin.com/feed/update/${postId}`;
+
+    return {
+      success: true,
+      postId,
+      postUrl,
+      platform: "linkedin",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      platform: "linkedin",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function publishToX(
+  content: string,
+  threadTweets?: string[],
+): Promise<PublishResult> {
+  const config = getXApiConfig();
+  if (!config) {
+    return { success: false, platform: "x", error: "X API not configured (missing X_API_KEY/X_API_SECRET/X_ACCESS_TOKEN/X_ACCESS_TOKEN_SECRET)" };
+  }
+
+  const client = new XApiClient(config);
+
+  try {
+    // Thread mode: array of tweets
+    if (threadTweets && threadTweets.length > 1) {
+      const { results, error } = await client.postThread(threadTweets);
+
+      if (results.length === 0) {
+        return { success: false, platform: "x", error: error ?? "Thread posting failed" };
+      }
+
+      // First tweet is the "head" of the thread
+      return {
+        success: !error,
+        postId: results[0].postId,
+        postUrl: results[0].postUrl,
+        platform: "x",
+        threadResults: results,
+        error,
+      };
+    }
+
+    // Single tweet
+    const { tweetId, tweetUrl } = await client.postTweet(content);
+    return {
+      success: true,
+      postId: tweetId,
+      postUrl: tweetUrl,
+      platform: "x",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      platform: "x",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**
