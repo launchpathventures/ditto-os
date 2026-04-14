@@ -3,10 +3,10 @@
  *
  * Checks for `ditto_workspace_session` cookie on workspace routes.
  * Redirects to /login if missing. Allows public routes through:
- * - /welcome, /welcome/* — public front door
+ * - /welcome, /welcome/* — public front door (public mode only)
  * - /chat, /chat/* — has its own auth (Brief 123)
  * - /login, /login/* — login flow itself
- * - /admin, /admin/* — has its own auth (Brief 090)
+ * - /admin, /admin/* — has its own auth (Brief 090), public mode only
  * - /api/v1/network/* — Bearer token auth (Brief 088)
  * - /api/v1/chat/* — cookie auth (Brief 123)
  * - /api/v1/workspace/request-link — must be accessible to send magic link
@@ -15,10 +15,17 @@
  *
  * When WORKSPACE_OWNER_EMAIL is not set (local dev), all routes pass through
  * without auth (AC11).
+ *
+ * Deployment mode (see ../lib/deployment.ts):
+ * - `public`    — `/welcome` and `/admin` are publicly routable; `/` (root)
+ *                 bypasses auth so the front door can render.
+ * - `workspace` — `/welcome` and `/admin` are hard-404'd at the edge and are
+ *                 not in the public list; `/` falls through to the auth check.
  */
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getDeploymentMode } from "./lib/deployment";
 
 const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
 
@@ -43,12 +50,10 @@ async function verifySessionCookie(cookieValue: string, ownerEmail: string): Pro
   return sig === expectedSig;
 }
 
-/** Routes that are always accessible without workspace auth. */
-const PUBLIC_PREFIXES = [
-  "/welcome",
+/** Routes that are always accessible without workspace auth (all modes). */
+const BASE_PUBLIC_PREFIXES = [
   "/chat",
   "/login",
-  "/admin",
   "/setup",
   "/api/v1/network",
   "/api/v1/chat",
@@ -60,16 +65,49 @@ const PUBLIC_PREFIXES = [
   "/review",
 ];
 
+/** Additional public prefixes enabled only in `public` deployment mode. */
+const PUBLIC_MODE_PREFIXES = ["/welcome", "/admin"];
+
+/**
+ * Prefixes that are hard-404'd in `workspace` mode — these surfaces are
+ * not shipped on client deployments, not merely auth-gated.
+ */
+const WORKSPACE_MODE_BLOCKED_PREFIXES = ["/welcome", "/admin"];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const mode = getDeploymentMode();
 
-  // AC11: No WORKSPACE_OWNER_EMAIL = local dev, skip auth entirely
+  // AC11: No WORKSPACE_OWNER_EMAIL = local dev, skip auth entirely.
+  // Deployment-mode blocking still applies so local runs match prod shape:
+  // if you're running locally with DITTO_DEPLOYMENT=workspace (the default),
+  // /welcome and /admin will 404 even without WORKSPACE_OWNER_EMAIL set.
+  // To exercise those surfaces locally, set DITTO_DEPLOYMENT=public.
   if (!process.env.WORKSPACE_OWNER_EMAIL) {
+    if (mode === "workspace" && isBlockedInWorkspaceMode(pathname)) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    return NextResponse.next();
+  }
+
+  // Hard-block surfaces that aren't shipped in workspace mode.
+  if (mode === "workspace" && isBlockedInWorkspaceMode(pathname)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
+  // Root ("/") is public in public mode so the front door can render to
+  // unauthenticated visitors. Exact-match only — `startsWith("/")` would
+  // match everything.
+  if (mode === "public" && pathname === "/") {
     return NextResponse.next();
   }
 
   // Allow public routes through
-  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+  const publicPrefixes =
+    mode === "public"
+      ? [...BASE_PUBLIC_PREFIXES, ...PUBLIC_MODE_PREFIXES]
+      : BASE_PUBLIC_PREFIXES;
+  if (publicPrefixes.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
 
@@ -91,6 +129,13 @@ export async function middleware(request: NextRequest) {
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("redirect", pathname);
   return NextResponse.redirect(loginUrl);
+}
+
+/** True if the path is a surface we refuse to ship in workspace mode. */
+function isBlockedInWorkspaceMode(pathname: string): boolean {
+  return WORKSPACE_MODE_BLOCKED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
+  );
 }
 
 export const config = {
