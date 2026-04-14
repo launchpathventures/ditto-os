@@ -50,7 +50,7 @@ export type InteractionChannel = (typeof interactionChannelValues)[number];
 export const interactionModeValues = ["selling", "connecting", "nurture"] as const;
 export type InteractionMode = (typeof interactionModeValues)[number];
 
-export const interactionOutcomeValues = ["positive", "neutral", "negative", "no_response"] as const;
+export const interactionOutcomeValues = ["positive", "neutral", "negative", "no_response", "deferred", "question", "auto_reply"] as const;
 export type InteractionOutcome = (typeof interactionOutcomeValues)[number];
 
 export const networkUserStatusValues = ["active", "workspace", "churned"] as const;
@@ -191,6 +191,9 @@ export const networkUsers = sqliteTable("network_users", {
   workspaceSuggestedAt: integer("workspace_suggested_at", { mode: "timestamp_ms" }),
   wantsVisibility: integer("wants_visibility", { mode: "boolean" }).notNull().default(false),
   pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
+  /** When Alex last sent a notification email to this user (status, pulse, completion).
+   *  Updated by notifyUser() on successful send. Used for recency gating. */
+  lastNotifiedAt: integer("last_notified_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

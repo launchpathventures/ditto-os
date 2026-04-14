@@ -88,6 +88,7 @@ vi.mock("./self", () => ({
 import { processInboundEmail, type InboundEmailPayload } from "./inbound-email";
 import { resumeHumanStep } from "./heartbeat";
 import { createHmac } from "crypto";
+import { Webhook } from "svix";
 
 beforeEach(() => {
   const result = createTestDb();
@@ -175,7 +176,7 @@ async function createWaitingRun(personId: string) {
 describe("processInboundEmail", () => {
   it("returns unknown_sender for unmatched email", async () => {
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "nobody@nowhere.com",
         subject: "Hello",
@@ -193,7 +194,7 @@ describe("processInboundEmail", () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Hello",
@@ -221,7 +222,7 @@ describe("processInboundEmail", () => {
     const { runId } = await createWaitingRun(personId);
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Review needed",
@@ -245,7 +246,7 @@ describe("processInboundEmail", () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Introduction",
@@ -278,7 +279,7 @@ describe("processInboundEmail", () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Introduction",
@@ -304,7 +305,7 @@ describe("processInboundEmail", () => {
     await createPersonAndUser({ email: "sender@example.com", name: "Jane" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Introduction",
@@ -319,7 +320,7 @@ describe("processInboundEmail", () => {
     const positiveCall = mockNotifyUser.mock.calls.find(
       (call: unknown[]) => {
         const arg = call[0] as Record<string, string>;
-        return arg.subject?.includes("replied positively");
+        return arg.subject?.includes("replied") && arg.subject?.includes("positive");
       },
     );
     expect(positiveCall).toBeDefined();
@@ -329,7 +330,7 @@ describe("processInboundEmail", () => {
     await createPersonAndUser({ email: "sender@example.com", name: "Jane" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Hello",
@@ -349,29 +350,29 @@ describe("processInboundEmail", () => {
     expect(optOutCall).toBeDefined();
   });
 
-  it("uses extracted_text when available", async () => {
+  it("uses extractedText when available", async () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Hello",
         text: "Yes please\n\nOn Mon, Apr 7...\n> Original message",
-        extracted_text: "Yes please",
+        extractedText: "Yes please",
       },
     };
 
     const result = await processInboundEmail(payload);
 
-    // Should use extracted_text (shorter, cleaner) for classification
+    // Should use extractedText (shorter, cleaner) for classification
     // "Yes please" is a positive signal
     expect(result.action).toBe("positive_reply");
   });
 
   it("returns unknown_sender when no sender email in payload", async () => {
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "",
         subject: "Hello",
@@ -389,7 +390,7 @@ describe("processInboundEmail", () => {
 
     // Send with mixed case — should still match
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "User@Example.COM",
         subject: "Hello",
@@ -402,6 +403,174 @@ describe("processInboundEmail", () => {
     // Should match because we lowercase the input
     expect(result.action).toBe("interaction_recorded");
     expect(result.personId).toBeDefined();
+  });
+});
+
+// ============================================================
+// Reply Classification Expansion (Brief 146)
+// ============================================================
+
+describe("expanded reply classification (Brief 146)", () => {
+  it("classifies question replies with outcome 'question'", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Introduction",
+        text: "What's your pricing? How much does it cost?",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("interaction_recorded");
+    expect(result.personId).toBe(personId);
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0].outcome).toBe("question");
+    expect((interactions[0].metadata as Record<string, unknown>)?.classification).toBe("question");
+  });
+
+  it("classifies deferral replies with outcome 'deferred'", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Introduction",
+        text: "Not right now, maybe later. Circle back next month.",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("interaction_recorded");
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0].outcome).toBe("deferred");
+  });
+
+  it("classifies auto-reply and skips recording (no side effects)", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Out of Office: Re: Introduction",
+        text: "I am currently out of the office and will return on April 20.",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("auto_reply_ignored");
+    expect(result.personId).toBe(personId);
+    // No interactionId — nothing was recorded
+    expect(result.interactionId).toBeUndefined();
+
+    // Verify NO interaction was recorded
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions).toHaveLength(0);
+  });
+
+  it("positive check takes priority over question (ordering)", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Introduction",
+        text: "Sounds great, when works for you?",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("positive_reply");
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions[0].outcome).toBe("positive");
+  });
+
+  it("opt-out takes priority over auto-reply", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Automatic reply",
+        text: "unsubscribe",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("opt_out");
+  });
+
+  it("question detection requires ? and interrogative word", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    // Has ? but no interrogative word — should be general
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Hello",
+        text: "OK?",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("interaction_recorded");
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions[0].outcome).toBe("neutral");
+  });
+
+  it("deferral detection catches temporal signals", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Introduction",
+        text: "Not a good time right now. Please reach out again in January.",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions[0].outcome).toBe("deferred");
   });
 });
 
@@ -432,7 +601,7 @@ describe("user email detection", () => {
     });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "user@company.com",
         subject: "Can you find me accountants in Wellington?",
@@ -480,7 +649,7 @@ describe("user email detection", () => {
     await createWaitingRun(personId);
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "user@company.com",
         subject: "Re: Review needed",
@@ -499,44 +668,51 @@ describe("user email detection", () => {
 // Webhook signature validation (AC2)
 // ============================================================
 
-describe("webhook signature validation", () => {
-  const secret = "whsec_test_secret_12345";
+describe("webhook signature validation (Svix)", () => {
+  // Svix test secret — must start with whsec_ followed by base64
+  const secret = "whsec_" + Buffer.from("test-secret-key-1234567890ab").toString("base64");
 
-  function sign(payload: string): string {
-    return createHmac("sha256", secret).update(payload).digest("hex");
+  function signSvix(payload: string): { "svix-id": string; "svix-timestamp": string; "svix-signature": string } {
+    const msgId = "msg_" + randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const toSign = `${msgId}.${timestamp}.${payload}`;
+    const secretBytes = Buffer.from(secret.replace("whsec_", ""), "base64");
+    const sig = createHmac("sha256", secretBytes).update(toSign).digest("base64");
+    return {
+      "svix-id": msgId,
+      "svix-timestamp": timestamp,
+      "svix-signature": `v1,${sig}`,
+    };
   }
 
-  it("accepts valid HMAC-SHA256 signature", () => {
+  it("accepts valid Svix signature", () => {
     const payload = '{"event_type":"message.received"}';
-    const signature = sign(payload);
-
-    // Validate by recomputing — this tests the same algorithm used in the route
-    const expected = createHmac("sha256", secret).update(payload).digest("hex");
-    expect(signature).toBe(expected);
+    const headers = signSvix(payload);
+    const wh = new Webhook(secret);
+    // Should not throw
+    expect(() => wh.verify(payload, headers)).not.toThrow();
   });
 
-  it("rejects wrong signature", () => {
+  it("rejects wrong secret", () => {
     const payload = '{"event_type":"message.received"}';
-    const wrongSignature = createHmac("sha256", "wrong_secret").update(payload).digest("hex");
-    const correctSignature = sign(payload);
-
-    expect(wrongSignature).not.toBe(correctSignature);
+    const headers = signSvix(payload);
+    const wrongSecret = "whsec_" + Buffer.from("wrong-secret-key-1234567890ab").toString("base64");
+    const wh = new Webhook(wrongSecret);
+    expect(() => wh.verify(payload, headers)).toThrow();
   });
 
-  it("rejects missing signature (null)", () => {
-    // The route returns 401 when signature is null
-    // This validates the invariant that null signature = rejected
-    expect(null).toBeFalsy();
+  it("rejects missing signature headers", () => {
+    const payload = '{"event_type":"message.received"}';
+    const wh = new Webhook(secret);
+    expect(() => wh.verify(payload, { "svix-id": "", "svix-timestamp": "", "svix-signature": "" })).toThrow();
   });
 
   it("rejects tampered payload", () => {
     const originalPayload = '{"event_type":"message.received"}';
+    const headers = signSvix(originalPayload);
     const tamperedPayload = '{"event_type":"message.received","injected":true}';
-    const signature = sign(originalPayload);
-
-    // Signature computed for original won't match tampered
-    const tamperedExpected = createHmac("sha256", secret).update(tamperedPayload).digest("hex");
-    expect(signature).not.toBe(tamperedExpected);
+    const wh = new Webhook(secret);
+    expect(() => wh.verify(tamperedPayload, headers)).toThrow();
   });
 });
 
@@ -566,7 +742,7 @@ describe("Self routing for inbound (099a)", () => {
     });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "user@biz.com",
         subject: "Find me accountants",
@@ -609,7 +785,7 @@ describe("Self routing for inbound (099a)", () => {
     });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "newuser@biz.com",
         subject: "Hello",
@@ -662,7 +838,7 @@ describe("Self routing for inbound (099a)", () => {
     mockSelfConverse.mockRejectedValueOnce(new Error("LLM not initialized"));
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "user@fail.com",
         subject: "Help",
@@ -702,7 +878,7 @@ describe("Self routing for inbound (099a)", () => {
     // No networkUsers entry — this is a contact, not a user
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "contact@external.com",
         subject: "Re: Introduction",
@@ -738,12 +914,12 @@ describe("Self routing for inbound (099a)", () => {
     });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "wiring@test.com",
         subject: "Urgent: new hire",
         text: "Need to hire a project manager ASAP",
-        message_id: "msg-123",
+        messageId: "msg-123",
       },
     };
 
@@ -796,7 +972,7 @@ describe("Self routing for inbound (099a)", () => {
     });
 
     const payload: InboundEmailPayload = {
-      event_type: "message.received",
+      eventType: "message.received",
       message: {
         from: "empty@test.com",
         subject: "Test",

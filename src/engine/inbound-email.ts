@@ -28,22 +28,22 @@ import { fireEvent } from "./scheduler";
 // ============================================================
 
 export interface InboundEmailPayload {
-  /** AgentMail event type */
-  event_type: string;
+  /** AgentMail event type (camelCase from AgentMail API) */
+  eventType: string;
   message: {
     from: string;
-    to?: string;
+    to?: string | string[];
     subject?: string;
     text?: string;
     /** AgentMail extracted reply text (without quoted history) */
-    extracted_text?: string;
-    message_id?: string;
-    thread_id?: string;
+    extractedText?: string;
+    messageId?: string;
+    threadId?: string;
   };
 }
 
 export interface InboundProcessingResult {
-  action: "resumed_step" | "opt_out" | "positive_reply" | "interaction_recorded" | "unknown_sender" | "user_request" | "cancellation";
+  action: "resumed_step" | "opt_out" | "positive_reply" | "interaction_recorded" | "unknown_sender" | "user_request" | "cancellation" | "auto_reply_ignored";
   personId?: string;
   processRunId?: string;
   interactionId?: string;
@@ -127,16 +127,93 @@ async function getParentTrustTierForPerson(personId: string): Promise<TrustTier 
 // ============================================================
 
 /**
- * Classify an inbound reply. Basic classification for 098b:
- * - opt-out: triggers opt-out management
- * - positive: fires event for chain triggers (connecting-introduction)
- * - general: default — just record the interaction
- *
- * Full intent classification (new requests, mode switching) deferred to Brief 099.
+ * Detect out-of-office and other auto-replies.
+ * Conservative: false negatives (treating OOO as general) are acceptable,
+ * false positives (treating a real reply as OOO) are not.
  */
-function classifyReply(text: string): "opt_out" | "positive" | "general" {
+function isAutoReply(subject: string, body: string): boolean {
+  const lowerSubject = subject.toLowerCase();
+  const subjectPatterns = [
+    "out of office",
+    "automatic reply",
+    "auto:",
+    "autoreply",
+    "auto-reply",
+  ];
+  if (subjectPatterns.some((p) => lowerSubject.includes(p))) {
+    return true;
+  }
+
+  const lowerBody = body.toLowerCase();
+  const bodyPatterns = [
+    "i am currently out of the office",
+    "i'm currently out of the office",
+    "i will be back on",
+    "i'll be back on",
+    "limited access to email",
+    "i am out of the office",
+    "i'm out of the office",
+  ];
+  return bodyPatterns.some((p) => lowerBody.includes(p));
+}
+
+/**
+ * Detect question intent. Only called on messages that already failed
+ * the positive check, so "Sounds great, when works?" never reaches here.
+ */
+function isQuestion(text: string): boolean {
+  if (!text.includes("?")) return false;
+
+  const lower = text.toLowerCase();
+  const interrogatives = [
+    "what", "how much", "how", "when", "where", "who",
+    "can you", "do you", "is there", "are you", "could you",
+    "would you", "will you", "does", "did",
+  ];
+  return interrogatives.some((w) => lower.includes(w));
+}
+
+/**
+ * Detect temporal deferral signals — "not now, but maybe later."
+ */
+function isDeferral(text: string): boolean {
+  const lower = text.toLowerCase();
+  const deferrals = [
+    "next month",
+    "next quarter",
+    "next year",
+    "after the",
+    "not right now",
+    "maybe later",
+    "circle back",
+    "reach out again in",
+    "not a good time",
+    "check back",
+    "revisit",
+    "get back to you",
+    "touch base later",
+  ];
+  return deferrals.some((d) => lower.includes(d));
+}
+
+export type ReplyClassification = "opt_out" | "positive" | "question" | "deferred" | "auto_reply" | "general";
+
+/**
+ * Classify an inbound reply into 6 categories (Brief 146).
+ *
+ * Classification ordering is safety-critical:
+ * opt_out → auto_reply → positive → question → deferred → general
+ *
+ * This ordering prevents false positives: positive is checked before question,
+ * so "Sounds great, when works?" matches positive (not question).
+ */
+function classifyReply(text: string, subject: string = ""): ReplyClassification {
   if (isOptOutSignal(text)) {
     return "opt_out";
+  }
+
+  if (isAutoReply(subject, text)) {
+    return "auto_reply";
   }
 
   // Positive reply signals
@@ -165,6 +242,14 @@ function classifyReply(text: string): "opt_out" | "positive" | "general" {
 
   if (positiveSignals.some((signal) => lower.includes(signal))) {
     return "positive";
+  }
+
+  if (isQuestion(text)) {
+    return "question";
+  }
+
+  if (isDeferral(text)) {
+    return "deferred";
   }
 
   return "general";
@@ -346,6 +431,67 @@ async function resolveGoalFromThread(
 }
 
 // ============================================================
+// Thread Context (Brief 146)
+// ============================================================
+
+export interface ThreadContext {
+  originalSubject: string | null;
+  originalBody: string | null;
+  priorReplies: Array<{ summary: string; createdAt: Date }>;
+}
+
+/**
+ * Load thread context for response generation — retrieves the original
+ * outreach email body from interaction metadata so the agent maintains
+ * conversational continuity.
+ *
+ * Query is scoped to userId to prevent cross-user thread leakage.
+ */
+async function loadThreadContext(
+  threadId: string,
+  userId: string,
+): Promise<ThreadContext | null> {
+  const interactions = await db
+    .select({
+      type: schema.interactions.type,
+      subject: schema.interactions.subject,
+      summary: schema.interactions.summary,
+      metadata: schema.interactions.metadata,
+      createdAt: schema.interactions.createdAt,
+    })
+    .from(schema.interactions)
+    .where(eq(schema.interactions.userId, userId))
+    .orderBy(schema.interactions.createdAt)
+    .limit(200);
+
+  // Filter to interactions in this thread
+  const threadInteractions = interactions.filter((i) => {
+    const metadata = i.metadata as Record<string, unknown> | null;
+    return metadata?.threadId === threadId;
+  });
+
+  if (threadInteractions.length === 0) return null;
+
+  // Find the original outreach
+  const outreach = threadInteractions.find((i) => i.type === "outreach_sent");
+  const outreachMetadata = outreach?.metadata as Record<string, unknown> | null;
+
+  // Collect prior replies (excluding the current one — caller handles that)
+  const priorReplies = threadInteractions
+    .filter((i) => i.type === "reply_received")
+    .map((i) => ({
+      summary: i.summary || "",
+      createdAt: i.createdAt!,
+    }));
+
+  return {
+    originalSubject: outreach?.subject || null,
+    originalBody: (outreachMetadata?.emailBody as string) || null,
+    priorReplies,
+  };
+}
+
+// ============================================================
 // User Email Detection (Insight-162)
 // ============================================================
 
@@ -373,7 +519,7 @@ async function handleUserEmail(
 
   if (!networkUser) return null; // Not a user — fall through to contact handling
 
-  const replyText = message.extracted_text || message.text || "";
+  const replyText = message.extractedText || message.text || "";
   const subject = message.subject || "";
 
   console.log(`[inbound] User email from ${senderEmail} (${networkUser.name || "unnamed"}): "${subject}"`);
@@ -384,7 +530,7 @@ async function handleUserEmail(
   // Clear cancellation signals are handled immediately (no LLM roundtrip).
   // Ambiguous cases fall through to Self for judgment.
   if (isCancellationSignal(replyText)) {
-    const threadId = message.thread_id;
+    const threadId = message.threadId;
     if (threadId) {
       const goalContext = await resolveGoalFromThread(threadId, networkUser.id);
       if (goalContext) {
@@ -428,8 +574,8 @@ async function handleUserEmail(
           outcome: "negative",
           processRunId: goalContext.processRunId,
           metadata: {
-            messageId: message.message_id,
-            threadId: message.thread_id,
+            messageId: message.messageId,
+            threadId: message.threadId,
             cancellation: true,
             goalWorkItemId: goalContext.goalWorkItemId,
           },
@@ -456,7 +602,7 @@ async function handleUserEmail(
             personId,
             subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
             body,
-            inReplyToMessageId: message.message_id,
+            inReplyToMessageId: message.messageId,
             includeOptOut: false,
           });
         } catch {
@@ -591,8 +737,8 @@ async function handleUserEmail(
     summary: replyText.slice(0, 500),
     outcome: "neutral",
     metadata: {
-      messageId: message.message_id,
-      threadId: message.thread_id,
+      messageId: message.messageId,
+      threadId: message.threadId,
       userInitiated: true,
     },
   });
@@ -616,7 +762,7 @@ async function handleUserEmail(
         personId,
         subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
         body: selfResult.response,
-        inReplyToMessageId: message.message_id,
+        inReplyToMessageId: message.messageId,
       });
     }
   } catch (err) {
@@ -627,8 +773,8 @@ async function handleUserEmail(
         userId: networkUser.id,
         personId,
         subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
-        body: "Got it. I'm working on this — I'll follow up shortly.",
-        inReplyToMessageId: message.message_id,
+        body: "Got it — I'm on it. I'll come back to you shortly.",
+        inReplyToMessageId: message.messageId,
       });
     } catch {
       // Double failure — notification is non-fatal
@@ -666,36 +812,36 @@ async function notifyUserImmediately(
   let subject: string;
   let body: string;
 
-  // Compose the notification content (channel-agnostic)
+  // Compose the notification content — Alex's voice: warm, direct, specific (Brief 144 AC26)
   switch (event) {
     case "positive_reply":
-      subject = `${context.personName} replied positively`;
+      subject = `${context.personName} replied — looks positive`;
       body = [
-        `Good news — ${context.personName} (${context.personEmail}) replied to "${context.subject}":`,
+        `${context.personName} (${context.personEmail}) got back to us on "${context.subject}":`,
         "",
         `> ${context.summary}`,
         "",
-        "I'll keep the conversation going. Reply if you want me to handle it differently.",
+        "I'll keep the conversation moving. Reply if you want me to change tack.",
       ].join("\n");
       break;
 
     case "opt_out":
       subject = `${context.personName} opted out`;
       body = [
-        `${context.personName} (${context.personEmail}) asked not to be contacted further. I've stopped all outreach to them immediately.`,
+        `Heads up — ${context.personName} (${context.personEmail}) asked not to be contacted. I've stopped all outreach to them straight away.`,
         "",
-        "No action needed — just keeping you in the loop.",
+        "Nothing you need to do. Just keeping you posted.",
       ].join("\n");
       break;
 
     case "step_resumed":
-      subject = `${context.personName} replied — process advancing`;
+      subject = `${context.personName} replied — things are moving`;
       body = [
-        `${context.personName} (${context.personEmail}) replied to "${context.subject}". Their response has been fed into the process and it's advancing now.`,
+        `${context.personName} (${context.personEmail}) replied to "${context.subject}" — I've fed their response into the process and it's advancing.`,
         "",
         `> ${context.summary}`,
         "",
-        "I'll let you know when the next step is ready.",
+        "I'll let you know when the next step lands.",
       ].join("\n");
       break;
   }
@@ -751,7 +897,7 @@ export async function processInboundEmail(
     return { action: "unknown_sender", details: `No person record for ${senderEmail}` };
   }
 
-  const replyText = message.extracted_text || message.text || "";
+  const replyText = message.extractedText || message.text || "";
   const subject = message.subject || "";
 
   // 2. Check for waiting_human step
@@ -783,8 +929,8 @@ export async function processInboundEmail(
       outcome: "positive",
       processRunId: waitingRun.processRunId,
       metadata: {
-        messageId: message.message_id,
-        threadId: message.thread_id,
+        messageId: message.messageId,
+        threadId: message.threadId,
         resumedStep: true,
       },
     });
@@ -806,7 +952,7 @@ export async function processInboundEmail(
   }
 
   // 3. Classify the reply
-  const classification = classifyReply(replyText);
+  const classification = classifyReply(replyText, subject);
 
   // 4. Handle opt-out
   if (classification === "opt_out") {
@@ -833,8 +979,8 @@ export async function processInboundEmail(
       subject,
       summary: replyText.slice(0, 500),
       metadata: {
-        messageId: message.message_id,
-        threadId: message.thread_id,
+        messageId: message.messageId,
+        threadId: message.threadId,
       },
     });
 
@@ -853,7 +999,30 @@ export async function processInboundEmail(
     };
   }
 
-  // 5. Record interaction (positive or general)
+  // 5. Handle auto-reply — skip recording entirely (Brief 146: no side effects)
+  if (classification === "auto_reply") {
+    console.log(`[inbound] Auto-reply detected from ${senderEmail} — ignoring (no interaction recorded)`);
+    return {
+      action: "auto_reply_ignored",
+      personId: person.id,
+    };
+  }
+
+  // 6. Map classification to interaction outcome
+  const outcomeMap: Record<string, string> = {
+    positive: "positive",
+    question: "question",
+    deferred: "deferred",
+    general: "neutral",
+  };
+
+  // 7. Load thread context for positive/question replies (Brief 146: conversational continuity)
+  let threadContext: ThreadContext | null = null;
+  if ((classification === "positive" || classification === "question") && message.threadId) {
+    threadContext = await loadThreadContext(message.threadId, person.userId);
+  }
+
+  // 8. Record interaction
   const interaction = await recordInteraction({
     personId: person.id,
     userId: person.userId,
@@ -862,11 +1031,12 @@ export async function processInboundEmail(
     mode: "connecting",
     subject,
     summary: replyText.slice(0, 500),
-    outcome: classification === "positive" ? "positive" : "neutral",
+    outcome: outcomeMap[classification] as "positive" | "neutral" | "question" | "deferred",
     metadata: {
-      messageId: message.message_id,
-      threadId: message.thread_id,
+      messageId: message.messageId,
+      threadId: message.threadId,
       classification,
+      ...(threadContext ? { threadContext } : {}),
     },
   });
 
