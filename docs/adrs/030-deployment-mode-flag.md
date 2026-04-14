@@ -70,10 +70,15 @@ compatible module: only reads `process.env.DITTO_DEPLOYMENT`, no node imports.
 
 ## Provenance
 
-Original — no existing framework implements this. Pattern is borrowed from
-12-factor app config (env-based runtime selection) and Next.js multi-tenant
-middleware patterns, but the specific shape (one flag governing a fixed set
-of surfaces) is Ditto-specific.
+Pattern adopted from 12-factor app config (env-based runtime selection) and
+SaaS template repos that gate "marketing" vs "app" surfaces off a single
+mode flag (e.g. Rails `RAILS_ENV` shaping which controllers mount, Next.js
+templates that branch on a `NEXT_PUBLIC_*` tenant flag). The general idea —
+one env var governing which surfaces ship — is widespread.
+
+What's specific to Ditto is the surface contract: which prefixes belong to
+each mode, and the defense-in-depth split between middleware-level hard
+404s and server-component layout guards.
 
 ## Consequences
 
