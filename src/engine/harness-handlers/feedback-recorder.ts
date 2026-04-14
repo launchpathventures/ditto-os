@@ -13,7 +13,7 @@
  */
 
 import { db, schema } from "../../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, like } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { classifyEdit } from "../trust-diff";
 import { evaluateTrust } from "../trust-evaluator";
@@ -164,17 +164,24 @@ export async function createMemoryFromFeedback(
     .limit(1);
 
   if (existing) {
-    // Reinforce existing memory
+    const metadata = (existing.metadata as Record<string, unknown>) ?? {};
+
+    // Locked memories (promoted via "Teach this") keep their confidence — only increment count
+    const isLocked = metadata.locked === true;
+
     await db
       .update(schema.memories)
       .set({
         reinforcementCount: existing.reinforcementCount + 1,
         lastReinforcedAt: new Date(),
         // Confidence grows with reinforcement: 0.3 → 0.5 → 0.7 → 0.8 → 0.9 (capped)
-        confidence: Math.min(
-          0.9,
-          0.3 + (existing.reinforcementCount) * 0.15
-        ),
+        // Locked memories retain their promoted confidence (0.95)
+        ...(isLocked ? {} : {
+          confidence: Math.min(
+            0.9,
+            0.3 + (existing.reinforcementCount) * 0.15
+          ),
+        }),
         updatedAt: new Date(),
       })
       .where(eq(schema.memories.id, existing.id));
@@ -530,4 +537,184 @@ async function triggerKnowledgeExtraction(params: {
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+/**
+ * Accept a correction pattern — promotes all matching process-scoped correction
+ * memories to high confidence (0.95) and locks them against future reduction.
+ *
+ * Idempotent: calling twice for the same pattern returns success without duplicating.
+ *
+ * Brief 147: "Teach this?" action — learning loop closure.
+ */
+export async function acceptCorrectionPattern(
+  processId: string,
+  pattern: string,
+): Promise<{ promoted: number }> {
+  // Find all process-scoped correction memories whose content relates to this pattern.
+  // Correction memories created by createMemoryFromFeedback use the pattern as part of content,
+  // but we also match feedback records with this correctionPattern to find their linked memories.
+  const feedbackRecords = await db
+    .select({ id: schema.feedback.id })
+    .from(schema.feedback)
+    .where(
+      and(
+        eq(schema.feedback.processId, processId),
+        eq(schema.feedback.correctionPattern, pattern),
+      ),
+    );
+
+  const feedbackIds = feedbackRecords.map((f) => f.id);
+
+  // Find memories created from these feedback records (sourceId = feedbackId)
+  // plus any process-scoped correction memories that match the pattern content
+  const matchingMemories = await db
+    .select()
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        eq(schema.memories.scopeId, processId),
+        eq(schema.memories.type, "correction"),
+        eq(schema.memories.active, true),
+      ),
+    );
+
+  // Filter to memories linked to the pattern's feedback records or content-matching
+  const toPromote = matchingMemories.filter(
+    (m) =>
+      (m.sourceId && feedbackIds.includes(m.sourceId)) ||
+      (m.content && m.content.toLowerCase().includes(pattern.replace(/_/g, " "))),
+  );
+
+  let promoted = 0;
+  for (const memory of toPromote) {
+    const metadata = (memory.metadata as Record<string, unknown>) ?? {};
+    // Skip if already locked (idempotent)
+    if (metadata.locked === true && memory.confidence === 0.95) {
+      continue;
+    }
+    await db
+      .update(schema.memories)
+      .set({
+        confidence: 0.95,
+        metadata: { ...metadata, locked: true },
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.memories.id, memory.id));
+    promoted++;
+  }
+
+  return { promoted };
+}
+
+/**
+ * Promote a correction pattern to a durable quality criterion on the process.
+ *
+ * Appends a human-readable `[learned]` string to the process's qualityCriteria array.
+ * Idempotent: won't duplicate if a `[learned]` entry with the same pattern already exists.
+ *
+ * Brief 147: "Teach this?" action — learning loop closure.
+ */
+export async function promoteToQualityCriteria(
+  processId: string,
+  pattern: string,
+): Promise<{ criterion: string; alreadyExists: boolean }> {
+  // Build human-readable description from the pattern before the transaction
+  // e.g. "bathroom_labour_hours" → "bathroom labour hours"
+  const humanReadable = pattern.replace(/_/g, " ");
+  const patternTag = `(pattern: ${pattern})`;
+
+  // Get the most recent correction memory content for richer description
+  const [recentMemory] = await db
+    .select({ content: schema.memories.content })
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        eq(schema.memories.scopeId, processId),
+        eq(schema.memories.type, "correction"),
+        eq(schema.memories.active, true),
+        like(schema.memories.content, `%${humanReadable}%`),
+      ),
+    )
+    .limit(1);
+
+  const description = recentMemory
+    ? recentMemory.content
+    : `Correction pattern: ${humanReadable}`;
+
+  const criterion = `[learned] ${description} ${patternTag}`;
+
+  // Transaction: read definition + append criterion atomically (prevents concurrent overwrites)
+  return db.transaction((tx) => {
+    const [proc] = tx
+      .select({ definition: schema.processes.definition })
+      .from(schema.processes)
+      .where(eq(schema.processes.id, processId))
+      .limit(1)
+      .all();
+
+    if (!proc) {
+      throw new Error(`Process not found: ${processId}`);
+    }
+
+    const definition = proc.definition as Record<string, unknown>;
+    const criteria: string[] = (definition.quality_criteria as string[] | undefined) ?? [];
+
+    // Check for existing [learned] entry with same pattern (idempotency)
+    const existing = criteria.find((c) => c.includes("[learned]") && c.includes(patternTag));
+    if (existing) {
+      return { criterion: existing, alreadyExists: true };
+    }
+
+    // Append to quality_criteria inside the definition JSON
+    tx
+      .update(schema.processes)
+      .set({
+        definition: { ...definition, quality_criteria: [...criteria, criterion] },
+      })
+      .where(eq(schema.processes.id, processId))
+      .run();
+
+    return { criterion, alreadyExists: false };
+  });
+}
+
+/**
+ * Log a "teach" action to the activities table.
+ * Records who taught what pattern on which process.
+ *
+ * Brief 147: AC-8 — teach action logs to activities.
+ */
+export async function logTeachAction(
+  processId: string,
+  pattern: string,
+  criterion: string,
+): Promise<void> {
+  await db.insert(schema.activities).values({
+    action: "learning.teach",
+    actorType: "user",
+    entityType: "process",
+    entityId: processId,
+    metadata: {
+      pattern,
+      criterion,
+    },
+  });
+}
+
+/**
+ * Dismiss an insight pattern so it doesn't resurface in the feed.
+ * Uses the existing suggestionDismissals table (30-day cooldown).
+ *
+ * Brief 147: persistent "No" dismissal.
+ */
+export async function dismissInsightPattern(
+  processId: string,
+  pattern: string,
+): Promise<void> {
+  const { recordDismissal } = await import("../suggestion-dismissals");
+  // userId "workspace" for single-workspace architecture
+  await recordDismissal("workspace", "insight_pattern", `${processId}:${pattern}`);
 }

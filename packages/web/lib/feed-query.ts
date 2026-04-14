@@ -103,3 +103,70 @@ export function useReviewAction() {
     },
   });
 }
+
+/**
+ * Teach action params for "Teach this?" insight acceptance.
+ * Brief 147: Learning loop closure.
+ */
+interface TeachActionParams {
+  processId: string;
+  pattern: string;
+}
+
+interface TeachActionResult {
+  success: boolean;
+  message: string;
+  promoted: number;
+  criterion: string;
+}
+
+/**
+ * Hook: perform "Teach this" action on an insight pattern.
+ */
+/**
+ * Hook: dismiss an insight pattern so it doesn't resurface (30-day cooldown).
+ * Brief 147: persistent "No" dismissal.
+ */
+export function useDismissInsight() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: TeachActionParams): Promise<{ success: boolean; message: string }> => {
+      const res = await fetch("/api/feed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss-insight", ...params }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(error.error || `Dismiss failed: ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FEED_QUERY_KEY });
+    },
+  });
+}
+
+export function useTeachAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: TeachActionParams): Promise<TeachActionResult> => {
+      const res = await fetch("/api/feed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "teach", ...params }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(error.error || `Teach action failed: ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FEED_QUERY_KEY });
+    },
+  });
+}

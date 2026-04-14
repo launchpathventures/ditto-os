@@ -10,6 +10,7 @@
 import { db, schema } from "../db";
 import { eq, desc, and, or, inArray } from "drizzle-orm";
 import { checkCorrectionPattern } from "./harness-handlers/feedback-recorder";
+import { isDismissed } from "./suggestion-dismissals";
 import type { ContentBlock, ReviewCardBlock, AlertBlock, DataBlock } from "./content-blocks";
 
 // Feed item types are defined in packages/web/lib/feed-types.ts
@@ -481,6 +482,10 @@ async function assembleInsights(): Promise<InsightItem[]> {
   for (const proc of processes) {
     const pattern = await checkCorrectionPattern(proc.id);
     if (pattern) {
+      // Skip dismissed insights (30-day cooldown via suggestionDismissals)
+      const dismissed = await isDismissed("workspace", `${proc.id}:${pattern.pattern}`);
+      if (dismissed) continue;
+
       items.push({
         itemType: "insight",
         id: `insight-${proc.id}-${pattern.pattern}`,

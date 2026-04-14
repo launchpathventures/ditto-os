@@ -31,19 +31,74 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, processRunId, editedText, reason } = body as Record<string, unknown>;
+    const { action, processRunId, processId, pattern, editedText, reason } = body as Record<string, unknown>;
 
-    // Validate required fields
-    const validActions = ["approve", "edit", "reject"] as const;
+    // Validate action
+    const validActions = ["approve", "edit", "reject", "teach", "dismiss-insight"] as const;
     if (
       typeof action !== "string" ||
       !validActions.includes(action as typeof validActions[number])
     ) {
       return Response.json(
-        { error: "Invalid action. Must be: approve, edit, or reject" },
+        { error: "Invalid action. Must be: approve, edit, reject, teach, or dismiss-insight" },
         { status: 400 },
       );
     }
+
+    // Dismiss-insight action persists "No" so the pattern doesn't resurface
+    if (action === "dismiss-insight") {
+      if (typeof processId !== "string" || processId.length === 0) {
+        return Response.json(
+          { error: "Missing or invalid processId for dismiss-insight action" },
+          { status: 400 },
+        );
+      }
+      if (typeof pattern !== "string" || pattern.length === 0) {
+        return Response.json(
+          { error: "Missing or invalid pattern for dismiss-insight action" },
+          { status: 400 },
+        );
+      }
+
+      const { dismissInsightPattern } = await getEngine();
+      await dismissInsightPattern(processId as string, pattern as string);
+
+      return Response.json({ success: true, message: "Insight dismissed" });
+    }
+
+    // Teach action has different required fields
+    if (action === "teach") {
+      if (typeof processId !== "string" || processId.length === 0) {
+        return Response.json(
+          { error: "Missing or invalid processId for teach action" },
+          { status: 400 },
+        );
+      }
+      if (typeof pattern !== "string" || pattern.length === 0) {
+        return Response.json(
+          { error: "Missing or invalid pattern for teach action" },
+          { status: 400 },
+        );
+      }
+
+      const { acceptCorrectionPattern, promoteToQualityCriteria, logTeachAction } = await getEngine();
+      const { promoted } = await acceptCorrectionPattern(processId as string, pattern as string);
+      const { criterion, alreadyExists } = await promoteToQualityCriteria(processId as string, pattern as string);
+
+      // Log the teach action to activities
+      await logTeachAction(processId as string, pattern as string, criterion);
+
+      return Response.json({
+        success: true,
+        message: alreadyExists
+          ? `Already learned: ${criterion}`
+          : `Learned: ${criterion}`,
+        promoted,
+        criterion,
+      });
+    }
+
+    // Review actions require processRunId
     if (typeof processRunId !== "string" || processRunId.length === 0) {
       return Response.json(
         { error: "Missing or invalid processRunId" },

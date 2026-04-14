@@ -64,13 +64,14 @@ export type {
  * skipped — the streaming adapter spawns CLI tools directly.
  */
 export async function getEngine() {
-  const [selfStream, events, llm, feedAssembler, reviewActions, surfaceActions] = await Promise.all([
+  const [selfStream, events, llm, feedAssembler, reviewActions, surfaceActions, feedbackRecorder] = await Promise.all([
     import("../../../src/engine/self-stream"),
     import("../../../src/engine/events"),
     import("../../../src/engine/llm"),
     import("../../../src/engine/feed-assembler"),
     import("../../../src/engine/review-actions"),
     import("../../../src/engine/surface-actions"),
+    import("../../../src/engine/harness-handlers/feedback-recorder"),
   ]);
 
   // Initialize LLM providers. Both streaming and non-streaming paths
@@ -95,5 +96,9 @@ export async function getEngine() {
     rejectRun: reviewActions.rejectRun,
     handleSurfaceAction: surfaceActions.handleSurfaceAction,
     registerBlockActions: surfaceActions.registerBlockActions,
+    acceptCorrectionPattern: feedbackRecorder.acceptCorrectionPattern,
+    promoteToQualityCriteria: feedbackRecorder.promoteToQualityCriteria,
+    logTeachAction: feedbackRecorder.logTeachAction,
+    dismissInsightPattern: feedbackRecorder.dismissInsightPattern,
   };
 }
