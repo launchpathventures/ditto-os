@@ -31,7 +31,7 @@ export function InsightCard({ item }: InsightCardProps) {
     try {
       await dismissAction.mutateAsync({ processId, pattern });
     } catch {
-      // Dismissal is best-effort — local state already hides the card
+      setDismissed(false); // Revert so the card reappears on failure
     }
   };
 
@@ -78,7 +78,11 @@ export function InsightCard({ item }: InsightCardProps) {
                 No
               </button>
             )}
-            <button className="text-xs text-text-muted hover:text-text-primary transition-colors">
+            <button
+              className="text-xs text-text-muted transition-colors opacity-50 cursor-default"
+              disabled
+              title="Coming soon"
+            >
               Tell me more
             </button>
           </div>

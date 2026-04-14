@@ -635,7 +635,7 @@ export async function promoteToQualityCriteria(
         eq(schema.memories.scopeId, processId),
         eq(schema.memories.type, "correction"),
         eq(schema.memories.active, true),
-        like(schema.memories.content, `%${humanReadable}%`),
+        like(schema.memories.content, `%${humanReadable.replace(/%/g, "\\%")}%`),
       ),
     )
     .limit(1);
@@ -695,6 +695,7 @@ export async function logTeachAction(
   await db.insert(schema.activities).values({
     action: "learning.teach",
     actorType: "user",
+    actorId: "workspace",
     entityType: "process",
     entityId: processId,
     metadata: {
