@@ -528,16 +528,40 @@ describe("expanded reply classification (Brief 146)", () => {
     expect(result.action).toBe("opt_out");
   });
 
-  it("question detection requires ? and interrogative word", async () => {
+  it("short standalone questions are classified as question", async () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
-    // Has ? but no interrogative word — should be general
+    // Short message ending with ? — classified as question (standalone noun question)
     const payload: InboundEmailPayload = {
       eventType: "message.received",
       message: {
         from: "sender@example.com",
         subject: "Re: Hello",
         text: "OK?",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("interaction_recorded");
+
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions[0].outcome).toBe("question");
+  });
+
+  it("long messages with ? but no interrogative word are general", async () => {
+    const { personId } = await createPersonAndUser({ email: "sender@example.com" });
+
+    // Long message with ? but no interrogative word — should be general
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "sender@example.com",
+        subject: "Re: Hello",
+        text: "I saw your note about the project timeline shifting again? I think the team will figure it out eventually, no big deal on my end.",
       },
     };
 

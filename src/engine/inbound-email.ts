@@ -14,7 +14,7 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, gte, desc, notInArray } from "drizzle-orm";
+import { eq, and, gte, desc, notInArray, sql } from "drizzle-orm";
 import type { TrustTier } from "../db/schema";
 import { isOptOutSignal } from "./channel";
 import { notifyUser } from "./notify-user";
@@ -170,7 +170,14 @@ function isQuestion(text: string): boolean {
     "can you", "do you", "is there", "are you", "could you",
     "would you", "will you", "does", "did",
   ];
-  return interrogatives.some((w) => lower.includes(w));
+  if (interrogatives.some((w) => lower.includes(w))) return true;
+
+  // Standalone noun questions: "Pricing?" / "Availability?" / "Rates?"
+  // Short messages (under 40 chars) ending with ? that are likely single-topic questions
+  const trimmed = text.trim();
+  if (trimmed.length <= 40 && trimmed.endsWith("?")) return true;
+
+  return false;
 }
 
 /**
@@ -451,7 +458,7 @@ async function loadThreadContext(
   threadId: string,
   userId: string,
 ): Promise<ThreadContext | null> {
-  const interactions = await db
+  const threadInteractions = await db
     .select({
       type: schema.interactions.type,
       subject: schema.interactions.subject,
@@ -460,15 +467,13 @@ async function loadThreadContext(
       createdAt: schema.interactions.createdAt,
     })
     .from(schema.interactions)
-    .where(eq(schema.interactions.userId, userId))
-    .orderBy(schema.interactions.createdAt)
-    .limit(200);
-
-  // Filter to interactions in this thread
-  const threadInteractions = interactions.filter((i) => {
-    const metadata = i.metadata as Record<string, unknown> | null;
-    return metadata?.threadId === threadId;
-  });
+    .where(
+      and(
+        eq(schema.interactions.userId, userId),
+        sql`json_extract(${schema.interactions.metadata}, '$.threadId') = ${threadId}`,
+      ),
+    )
+    .orderBy(schema.interactions.createdAt);
 
   if (threadInteractions.length === 0) return null;
 
@@ -1016,9 +1021,9 @@ export async function processInboundEmail(
     general: "neutral",
   };
 
-  // 7. Load thread context for positive/question replies (Brief 146: conversational continuity)
+  // 7. Load thread context for positive/question/deferred replies (Brief 146: conversational continuity)
   let threadContext: ThreadContext | null = null;
-  if ((classification === "positive" || classification === "question") && message.threadId) {
+  if ((classification === "positive" || classification === "question" || classification === "deferred") && message.threadId) {
     threadContext = await loadThreadContext(message.threadId, person.userId);
   }
 
