@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { isConfigured, loadConfig, applyConfigToEnv } from "@/lib/config";
+import { isPublicDeployment } from "@/lib/deployment";
 import { EntryPoint } from "./entry-point";
 import WelcomePage from "./welcome/page";
 
@@ -7,8 +7,11 @@ import WelcomePage from "./welcome/page";
  * Ditto Entry Point
  *
  * State-based routing:
- * - No config → Welcome marketing page (front door)
- * - Configured → EntryPoint (Day Zero check, then workspace)
+ * - `public` mode + no config → Welcome marketing page (front door)
+ * - `public` mode + configured → EntryPoint (Day Zero check, then workspace)
+ * - `workspace` mode → EntryPoint only; the front door is not shipped and
+ *   unauthenticated visitors are redirected to /login by middleware before
+ *   this component ever renders.
  *
  * Brief 057: Workspace always shown for all users. Day Zero welcome
  * appears once after setup, then workspace from then on.
@@ -17,7 +20,10 @@ import WelcomePage from "./welcome/page";
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  if (!isConfigured()) {
+  // In public deployments, render the marketing front door when the app
+  // hasn't been configured yet. In workspace deployments we never show it —
+  // the front door is simply not part of the product surface.
+  if (isPublicDeployment() && !isConfigured()) {
     return <WelcomePage />;
   }
 
