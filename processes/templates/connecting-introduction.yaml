@@ -76,13 +76,15 @@ steps:
 
   - id: send-introduction
     name: Send Introduction
-    executor: integration
+    executor: ai-agent
     description: >
-      Send the introduction email. Record as introduction_made interaction.
+      Send the introduction email via crm.send_email. Record as interaction.
+      Dedup and daily caps are enforced automatically.
     config:
-      service: google-workspace
+      model_hint: fast
     tools:
-      - google-workspace.send_message
+      - crm.send_email
+      - crm.create_person
     inputs:
       - approved-draft
     outputs:

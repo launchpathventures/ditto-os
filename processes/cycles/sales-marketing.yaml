@@ -33,42 +33,61 @@ steps:
   - id: sense
     name: "SENSE: Pipeline Review"
     executor: ai-agent
-    description: >
-      Review inbound signals, new leads, pipeline changes since last cycle.
+    description: Review pipeline signals. Skip anyone in inputs.recentOutreach.
     config:
       model_hint: fast
       cyclePhase: sense
+    tools:
+      - crm.get_pipeline
+      - crm.get_interactions
+      - browse-web
+      - web-search
     inputs: [userId]
     outputs: [pipeline-signals]
 
   - id: assess
     name: "ASSESS: Qualify & Prioritise"
     executor: ai-agent
-    description: >
-      Qualify leads against ICP. Prioritise outreach targets.
+    description: Qualify leads against ICP. Research prospects before qualifying.
     config:
       model_hint: capable
       cyclePhase: assess
+    tools:
+      - crm.get_interactions
+      - browse-web
+      - web-search
     inputs: [pipeline-signals]
     outputs: [prioritised-targets]
+
+  - id: strategy
+    name: "STRATEGY: Plan Approval"
+    executor: sub-process
+    description: User approves target list before outreach.
+    config:
+      cyclePhase: assess
+      process_id: outreach-strategy
+    inputs: [prioritised-targets]
+    outputs: [approved-targets]
 
   - id: act
     name: "ACT: Draft Outreach"
     executor: ai-agent
-    description: >
-      Draft personalised outreach for prioritised targets. Selling mode.
+    description: Draft personalised outreach. Research each recipient first.
     config:
       model_hint: capable
       cyclePhase: act
       mode: selling
-    inputs: [prioritised-targets]
+    tools:
+      - browse-web
+      - web-search
+      - crm.get_interactions
+    inputs: [approved-targets]
     outputs: [outreach-drafts]
 
   - id: gate
-    name: "GATE: Outbound Quality Check"
+    name: "GATE: Quality Check"
     executor: ai-agent
-    description: >
-      Quality gate on all outbound. Broadcast = critical. Direct = trust tier.
+    description: Quality gate on outbound. Broadcast critical, direct trust tier.
     config:
       cyclePhase: gate
     trustOverride: critical
@@ -99,20 +118,21 @@ steps:
   - id: learn
     name: "LEARN: Retrospective"
     executor: ai-agent
-    description: >
-      Review outcomes. Update prospect scores, adjust approach.
+    description: Review outcomes, update scores, compute response metrics.
     config:
       model_hint: fast
       cyclePhase: learn
+    tools:
+      - crm.get_pipeline
+      - crm.get_interactions
     trustOverride: autonomous
     inputs: [outreach-results, publishing-results]
-    outputs: [cycle-learnings]
+    outputs: [cycle-learnings, response-metrics]
 
   - id: brief
     name: "BRIEF: User Digest"
     executor: ai-agent
-    description: >
-      Compile digest: pipeline status, outreach metrics, next actions.
+    description: Compile digest with pipeline status and next actions.
     config:
       model_hint: fast
       cyclePhase: brief

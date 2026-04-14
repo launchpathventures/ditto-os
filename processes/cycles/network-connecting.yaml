@@ -29,16 +29,27 @@ inputs:
     source: system
     required: true
     description: The user whose network to scan
+  - name: volumeBudget
+    type: number
+    source: cycle-config
+    required: false
+    description: >
+      Maximum introductions per cycle. Defaults to 5 for first cycle,
+      scales with demonstrated connection rate. (Brief 149)
 
 steps:
   - id: sense
     name: "SENSE: Relationship Scan"
     executor: ai-agent
-    description: >
-      Scan relationship graph for match opportunities.
+    description: Scan relationship graph for matches. Skip anyone in inputs.recentOutreach.
     config:
       model_hint: fast
       cyclePhase: sense
+    tools:
+      - crm.get_pipeline
+      - crm.get_interactions
+      - browse-web
+      - web-search
     trustOverride: autonomous
     inputs: [userId]
     outputs: [match-opportunities]
@@ -48,12 +59,14 @@ steps:
     executor: ai-agent
     description: >
       Evaluate each match against three litmus tests:
-      1. Reverse — would recipient thank Alex even with no deal?
-      2. Reputation — if commercial motive discovered, would they feel deceived?
-      3. Network — does this strengthen the network or extract value?
+      Reverse, Reputation, Network. Research before qualifying.
     config:
       model_hint: capable
       cyclePhase: assess
+    tools:
+      - crm.get_interactions
+      - browse-web
+      - web-search
     inputs: [match-opportunities]
     outputs: [qualified-matches]
 
@@ -62,10 +75,15 @@ steps:
     executor: ai-agent
     description: >
       Draft introductions framing mutual value. Connection first, commerce follows.
+      Research each person before drafting.
     config:
       model_hint: capable
       cyclePhase: act
       mode: connecting
+    tools:
+      - browse-web
+      - web-search
+      - crm.get_interactions
     inputs: [qualified-matches]
     outputs: [introduction-drafts]
 
@@ -95,13 +113,17 @@ steps:
     name: "LEARN: Outcome Tracking"
     executor: ai-agent
     description: >
-      Track outcomes. Update reciprocity scores, match quality model.
+      Track outcomes. Update reciprocity scores, match quality.
+      Compute response metrics for next cycle volume.
     config:
       model_hint: fast
       cyclePhase: learn
+    tools:
+      - crm.get_pipeline
+      - crm.get_interactions
     trustOverride: autonomous
     inputs: [introduction-results]
-    outputs: [connection-learnings]
+    outputs: [connection-learnings, response-metrics]
 
   - id: brief
     name: "BRIEF: Connection Report"

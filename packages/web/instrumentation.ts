@@ -40,6 +40,23 @@ export async function register() {
       console.error("[instrumentation] LLM init failed (chat will use mock fallback):", error);
     }
 
+    // Sync process YAML definitions to DB so scheduler can register cron jobs.
+    // Without this, cycles exist on disk but never execute (Brief 151 spike).
+    try {
+      const { loadAllProcesses, syncProcessesToDb } = await import("../../src/engine/process-loader");
+      const { PROJECT_ROOT } = await import("../../src/paths");
+      const path = await import("path");
+      const processDir = path.join(PROJECT_ROOT, "processes");
+      const templateDir = path.join(PROJECT_ROOT, "processes", "templates");
+      const cycleDir = path.join(PROJECT_ROOT, "processes", "cycles");
+      const definitions = loadAllProcesses(processDir, templateDir, cycleDir);
+      await syncProcessesToDb(definitions);
+      console.log(`[instrumentation] Synced ${definitions.length} process definitions to DB.`);
+    } catch (error) {
+      console.error("[instrumentation] Process sync failed:", error);
+      // Non-fatal — processes may already be synced, or scheduler will start with existing DB state
+    }
+
     try {
       // Auto-start the nurture scheduler
       const { start } = await import("../../src/engine/scheduler");

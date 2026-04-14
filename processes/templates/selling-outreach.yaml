@@ -96,14 +96,15 @@ steps:
 
   - id: send-outreach
     name: Send Outreach
-    executor: integration
+    executor: ai-agent
     description: >
-      Send approved drafts via the email channel adapter.
-      Record each send as an interaction on the person record.
+      Send approved drafts via crm.send_email. Each send is tracked as
+      an interaction. Dedup and daily caps are enforced automatically.
     config:
-      service: google-workspace
+      model_hint: fast
     tools:
-      - google-workspace.send_message
+      - crm.send_email
+      - crm.create_person
     inputs:
       - approved-drafts
     outputs:
@@ -119,8 +120,8 @@ steps:
     config:
       model_hint: capable
     tools:
-      - google-workspace.search_messages
-      - google-workspace.read_message
+      - crm.get_interactions
+      - crm.get_pipeline
     inputs:
       - send-results
     outputs:
