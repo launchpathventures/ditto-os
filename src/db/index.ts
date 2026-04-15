@@ -113,6 +113,25 @@ export function ensureSchema(): void {
 function applyMissingSchemaObjects(db: Database.Database): void {
   // Tables that were in the Drizzle schema but missing from old ensureSchema()
   const missingTableStatements = [
+    `CREATE TABLE IF NOT EXISTS delayed_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      process_slug TEXT NOT NULL,
+      inputs TEXT DEFAULT '{}' NOT NULL,
+      execute_at INTEGER NOT NULL,
+      status TEXT DEFAULT 'pending' NOT NULL,
+      created_by_run_id TEXT,
+      parent_trust_tier TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (created_by_run_id) REFERENCES process_runs(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS funnel_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      session_id TEXT NOT NULL,
+      event TEXT NOT NULL,
+      surface TEXT NOT NULL,
+      metadata TEXT,
+      created_at INTEGER NOT NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS documents (
       id TEXT PRIMARY KEY NOT NULL,
       file_path TEXT NOT NULL,
