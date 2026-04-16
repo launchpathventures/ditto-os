@@ -1,8 +1,18 @@
 # Brief: Budget Spend-Check Ordering (P0 safety)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
 **Depends on:** Brief 169 (parent), Brief 107 (budget infrastructure)
+
+> **Scope adjustment (2026-04-16):** On implementation the audit premise was
+> found to be subtly different from the reality: `recordSpend` is not yet
+> called from any production path — budgets are currently decorative. The
+> brief's original reservation design is still the right target once LLM
+> step-costs get wired to `recordSpend`. For now, this brief delivered a
+> focused subset: a pre-dispatch budget guard that prevents staged outbound
+> actions from shipping on a goal whose budget is already marked exhausted.
+> Full reserve/commit/release lifecycle deferred to when spend recording
+> gets wired.
 **Unlocks:** Budget can be trusted as a hard stop on outbound action spend.
 
 ## Goal

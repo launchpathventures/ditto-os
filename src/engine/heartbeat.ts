@@ -14,7 +14,7 @@
 
 import { db, schema } from "../db";
 import type { StepExecutor, TrustTier, RunStatus } from "../db/schema";
-import { eq, and, inArray, notInArray } from "drizzle-orm";
+import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
 import { parseDuration } from "@ditto/core";
 import type {
   ProcessDefinition,
@@ -734,6 +734,52 @@ async function executeSingleStep(
     trustTier,
     stepRunId: stepRunRecord[0].id,
   });
+
+  // Brief 172: Pre-dispatch budget guard. Block outbound actions when the
+  // goal's budget is already exhausted, so nothing ships on an over-budget
+  // goal even though content rules passed. Looks up the goal work item by
+  // matching this run's ID inside `workItems.executionIds` (JSON array).
+  harnessContext.checkBudgetBeforeDispatch = async () => {
+    try {
+      // Filter to goals whose executionIds JSON array contains this run id.
+      // SQLite's json_each + EXISTS would be cleaner, but drizzle's sqlite
+      // dialect lacks a first-class helper; the LIKE on the stringified
+      // JSON is exact because run IDs are quoted UUIDs.
+      const idPattern = `%"${processRunId}"%`;
+      const candidateItems = await db
+        .select({
+          id: schema.workItems.id,
+          executionIds: schema.workItems.executionIds,
+        })
+        .from(schema.workItems)
+        .where(
+          and(
+            eq(schema.workItems.type, "goal"),
+            sql`${schema.workItems.executionIds} LIKE ${idPattern}`,
+          ),
+        );
+      const goalItem = candidateItems.find(
+        (wi) =>
+          Array.isArray(wi.executionIds) &&
+          (wi.executionIds as string[]).includes(processRunId),
+      );
+      if (!goalItem) return { blocked: false };
+      const exhausted = await checkBudgetExhausted(goalItem.id);
+      if (exhausted) {
+        return {
+          blocked: true,
+          reason: `budget exhausted for goal (${formatBudgetForLlm(exhausted)})`,
+        };
+      }
+      return { blocked: false };
+    } catch (err) {
+      console.warn(
+        `[heartbeat] budget pre-dispatch check failed for run ${processRunId}:`,
+        err,
+      );
+      return { blocked: false };
+    }
+  };
 
   // Brief 151 AC6: Wire dispatchStagedAction so approved staged outbound
   // actions (crm.send_email etc.) actually dispatch via sendAndRecord

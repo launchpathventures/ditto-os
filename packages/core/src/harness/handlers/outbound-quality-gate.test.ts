@@ -232,4 +232,112 @@ describe("outbound-quality-gate (staged actions — Brief 129)", () => {
     await outboundQualityGateHandler.execute(ctx);
     expect(staged.approved).toBe(true);
   });
+
+  describe("pre-dispatch budget guard (Brief 172)", () => {
+    it("blocks dispatch when checkBudgetBeforeDispatch returns blocked", async () => {
+      const staged = makeStagedAction({ content: "Professional outreach" });
+      const dispatch = vi.fn(async () => "dispatched");
+      const budgetCheck = vi.fn(async () => ({
+        blocked: true,
+        reason: "budget exhausted",
+      }));
+
+      const ctx = makeContext({
+        stagedOutboundActions: [staged],
+        dispatchStagedAction: dispatch,
+        checkBudgetBeforeDispatch: budgetCheck,
+      });
+
+      const result = await outboundQualityGateHandler.execute(ctx);
+
+      expect(budgetCheck).toHaveBeenCalledOnce();
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(staged.approved).toBe(false);
+      expect(result.reviewResult).toBe("flag");
+      expect(
+        (result.reviewDetails.outboundQualityViolations as string[]).some((v) =>
+          v.includes("budget"),
+        ),
+      ).toBe(true);
+    });
+
+    it("records blocked action with budget-reason via recordOutboundAction", async () => {
+      const staged = makeStagedAction();
+      const recorder = vi.fn(async () => {});
+      const budgetCheck = vi.fn(async () => ({
+        blocked: true,
+        reason: "budget exhausted for goal",
+      }));
+
+      const ctx = makeContext({
+        stagedOutboundActions: [staged],
+        recordOutboundAction: recorder,
+        checkBudgetBeforeDispatch: budgetCheck,
+      });
+
+      await outboundQualityGateHandler.execute(ctx);
+
+      expect(recorder).toHaveBeenCalledOnce();
+      const recorded = recorder.mock.calls[0]![0];
+      expect(recorded.blocked).toBe(true);
+      expect(recorded.blockReason).toContain("budget");
+    });
+
+    it("allows dispatch when checkBudgetBeforeDispatch returns not blocked", async () => {
+      const staged = makeStagedAction({ content: "fine content" });
+      const dispatch = vi.fn(async () => "dispatched");
+      const budgetCheck = vi.fn(async () => ({ blocked: false }));
+
+      const ctx = makeContext({
+        stagedOutboundActions: [staged],
+        dispatchStagedAction: dispatch,
+        checkBudgetBeforeDispatch: budgetCheck,
+      });
+
+      await outboundQualityGateHandler.execute(ctx);
+
+      expect(budgetCheck).toHaveBeenCalledOnce();
+      expect(dispatch).toHaveBeenCalledOnce();
+      expect(staged.approved).toBe(true);
+    });
+
+    it("skips budget check when staged action failed content rules", async () => {
+      const staged = makeStagedAction({ content: "BUY NOW CHEAP" });
+      const budgetCheck = vi.fn(async () => ({ blocked: false }));
+
+      const ctx = makeContext({
+        stagedOutboundActions: [staged],
+        outboundQualityRules: [
+          {
+            id: "no-spam",
+            description: "no spam",
+            check: (c) => (c.includes("BUY NOW") ? "Spam detected" : null),
+          },
+        ],
+        checkBudgetBeforeDispatch: budgetCheck,
+      });
+
+      await outboundQualityGateHandler.execute(ctx);
+
+      // Already flagged by content rule — budget check skipped.
+      expect(budgetCheck).not.toHaveBeenCalled();
+      expect(staged.approved).toBe(false);
+    });
+
+    it("works when no budget check is registered (backward compat)", async () => {
+      const staged = makeStagedAction();
+      const dispatch = vi.fn(async () => "dispatched");
+
+      const ctx = makeContext({
+        stagedOutboundActions: [staged],
+        dispatchStagedAction: dispatch,
+        // checkBudgetBeforeDispatch: null (default)
+      });
+
+      await outboundQualityGateHandler.execute(ctx);
+
+      expect(staged.approved).toBe(true);
+      expect(dispatch).toHaveBeenCalledOnce();
+    });
+  });
 });

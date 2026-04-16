@@ -61,8 +61,22 @@ export const outboundQualityGateHandler: HarnessHandler = {
           staged.recipientId,
           context.outboundQualityRules,
         );
-        const blocked = violations.length > 0;
+        let blocked = violations.length > 0;
         staged.approved = !blocked;
+
+        // Brief 172: pre-dispatch budget guard. Runs only for actions that
+        // passed content rules — an exhausted budget blocks the dispatch
+        // and flags the action as a quality violation, so nothing ships
+        // against a goal that can't afford it.
+        if (staged.approved && context.checkBudgetBeforeDispatch) {
+          const decision = await context.checkBudgetBeforeDispatch(staged);
+          if (decision.blocked) {
+            const reason = decision.reason ?? "budget exhausted";
+            violations.push(`[budget] ${reason}`);
+            blocked = true;
+            staged.approved = false;
+          }
+        }
 
         if (blocked) {
           allViolations.push(...violations);
