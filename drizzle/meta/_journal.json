@@ -22,6 +22,13 @@
       "when": 1776339219701,
       "tag": "0003_pm_triage_migrations",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1776381485052,
+      "tag": "0004_yummy_inhumans",
+      "breakpoints": true
     }
   ]
 }

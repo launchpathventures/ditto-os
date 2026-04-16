@@ -191,13 +191,25 @@ export async function handleAdaptProcess(
     })();
     const afterStepIds = adaptedSteps.map((s) => s.id);
 
-    // 7. Write the override (AC2)
+    // 7. Write the override (AC2) + summary (Brief 174 — preserved across
+    // terminal cleanup so the activity feed / debug tooling can still show
+    // "this run was adapted" after the override body itself is nulled).
     const newVersion = run.definitionOverrideVersion + 1;
+    const added = afterStepIds.filter((id) => !beforeStepIds.includes(id));
+    const removed = beforeStepIds.filter((id) => !afterStepIds.includes(id as string));
+    const summary = `v${newVersion}: ${
+      added.length > 0 ? `added ${added.join(",")}` : ""
+    }${added.length > 0 && removed.length > 0 ? "; " : ""}${
+      removed.length > 0 ? `removed ${removed.join(",")}` : ""
+    }${added.length === 0 && removed.length === 0 ? "definition refined" : ""}${
+      reasoning ? ` — ${reasoning.slice(0, 120)}` : ""
+    }`;
     await db
       .update(schema.processRuns)
       .set({
         definitionOverride: adaptedDefinition,
         definitionOverrideVersion: newVersion,
+        definitionOverrideSummary: summary,
       })
       .where(eq(schema.processRuns.id, runId));
 

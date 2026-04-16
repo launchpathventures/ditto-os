@@ -287,6 +287,11 @@ export const processRuns = sqliteTable("process_runs", {
   definitionOverrideVersion: integer("definition_override_version")
     .notNull()
     .default(0),
+  /** One-line summary of the last definition override applied (Brief 174).
+   * Preserved across run completion so the activity feed can still show
+   * "this run was adapted to skip step X" even after the override body is
+   * cleared at terminal status. */
+  definitionOverrideSummary: text("definition_override_summary"),
   // Chain processing flag (Brief 098a) — prevents duplicate chain execution
   chainsProcessed: integer("chains_processed", { mode: "boolean" })
     .notNull()

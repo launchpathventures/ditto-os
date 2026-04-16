@@ -1181,7 +1181,9 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   if (nextWork.type === "complete") {
     await db
       .update(schema.processRuns)
-      .set({ status: "approved", completedAt: new Date() })
+      // Brief 174: null definitionOverride on terminal completion. Keep
+      // definitionOverrideSummary + definitionOverrideVersion for audit.
+      .set({ status: "approved", completedAt: new Date(), definitionOverride: null })
       .where(eq(schema.processRuns.id, processRunId));
 
     await logActivity("process.run.completed", processRunId, "process_run");
@@ -1460,7 +1462,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
       }
 
       await db.update(schema.processRuns)
-        .set({ status: "failed" })
+        // Brief 174: null override at terminal failed state.
+        .set({ status: "failed", definitionOverride: null })
         .where(eq(schema.processRuns.id, processRunId));
 
       harnessEvents.emit({
@@ -1519,7 +1522,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   if (anyFailed) {
     // Group fails if any step fails
     await db.update(schema.processRuns)
-      .set({ status: "failed" })
+      // Brief 174: null override at terminal failed state.
+      .set({ status: "failed", definitionOverride: null })
       .where(eq(schema.processRuns.id, processRunId));
     return {
       processRunId,
@@ -2362,7 +2366,8 @@ export async function pauseGoal(goalWorkItemId: string): Promise<void> {
         for (const runId of executionIds) {
           await db
             .update(schema.processRuns)
-            .set({ status: "cancelled" })
+            // Brief 174: null override at terminal cancelled state.
+            .set({ status: "cancelled", definitionOverride: null })
             .where(eq(schema.processRuns.id, runId));
         }
       }
