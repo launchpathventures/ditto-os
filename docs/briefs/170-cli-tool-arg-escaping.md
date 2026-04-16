@@ -1,7 +1,7 @@
 # Brief: CLI Tool Arg Escaping (P0 security)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
 **Depends on:** Brief 169 (parent)
 **Unlocks:** Safe use of CLI-protocol integration tools with LLM-controlled arguments.
 

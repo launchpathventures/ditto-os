@@ -21,6 +21,10 @@ import type {
 import { getIntegration } from "./integration-registry";
 import { executeCli } from "./integration-handlers/cli";
 import { executeRest } from "./integration-handlers/rest";
+import {
+  tokenizeCommandTemplate,
+  substituteArgv,
+} from "./integration-handlers/shell-tokenizer";
 // Dynamic import to avoid pulling LanceDB native binary into webpack bundle
 // import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
@@ -1010,6 +1014,8 @@ const builtInTools: Record<string, BuiltInTool> = {
 /**
  * Interpolate template strings with parameter values.
  * Replaces {param} with the value. No eval() — simple string replacement.
+ * Used for REST endpoints/bodies/queries where the target is a URL or JSON
+ * value, not a shell command. For CLI commands see buildCliCommand.
  */
 function interpolate(template: string, params: Record<string, unknown>): string {
   let result = template;
@@ -1022,24 +1028,37 @@ function interpolate(template: string, params: Record<string, unknown>): string 
 }
 
 /**
- * Build a CLI command from a tool's execute config and input parameters.
+ * Build a CLI command's argv from a tool's execute config and input parameters.
+ * Brief 170: returns `{ executable, args }` instead of a shell string. The
+ * caller (executeCli) invokes `execFile` with this argv, so no shell
+ * interpretation occurs — LLM-supplied parameter values cannot inject
+ * arbitrary commands via `;`, `&&`, `$(...)`, backticks, etc.
  */
 function buildCliCommand(
   config: CliExecuteConfig,
   input: Record<string, unknown>,
-): string {
-  let command = interpolate(config.command_template, input);
+): { executable: string; args: string[] } {
+  const baseTokens = tokenizeCommandTemplate(config.command_template);
+  const argv = substituteArgv(baseTokens, input);
+  if (argv.length === 0) {
+    throw new Error(
+      `CLI command_template '${config.command_template}' tokenised to empty argv`,
+    );
+  }
 
   // Append optional arg templates when their parameters are provided
   if (config.args) {
     for (const [paramName, argTemplate] of Object.entries(config.args)) {
-      if (input[paramName] !== undefined && input[paramName] !== null && input[paramName] !== "") {
-        command += " " + interpolate(argTemplate, input);
+      const v = input[paramName];
+      if (v !== undefined && v !== null && v !== "") {
+        const optTokens = tokenizeCommandTemplate(argTemplate);
+        const optArgv = substituteArgv(optTokens, input);
+        argv.push(...optArgv);
       }
     }
   }
 
-  return command;
+  return { executable: argv[0]!, args: argv.slice(1) };
 }
 
 /**
@@ -1090,10 +1109,11 @@ async function executeCliTool(
     return `Error: service '${service}' has no CLI interface`;
   }
 
-  const command = buildCliCommand(config, input);
+  const { executable, args } = buildCliCommand(config, input);
   const result = await executeCli({
     service,
-    command,
+    executable,
+    args,
     cliInterface,
     processId,
   });
