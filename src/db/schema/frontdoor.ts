@@ -10,6 +10,12 @@
 
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { randomUUID } from "crypto";
+import type { PersonaId } from "./network";
+
+/** Front-door conversation stage. `picker` = persona not chosen yet.
+ *  `interview` = user is getting a feel for one persona. `main` = committed. */
+export const chatSessionStageValues = ["picker", "interview", "main"] as const;
+export type ChatSessionStage = (typeof chatSessionStageValues)[number];
 
 // ============================================================
 // Front Door Chat Sessions (Brief 093)
@@ -39,6 +45,15 @@ export const chatSessions = sqliteTable("chat_sessions", {
   // Brief 142: voice channel
   callOffered: integer("call_offered", { mode: "boolean" }).default(false),
   voiceToken: text("voice_token"),
+  // Persona selection flow (Brief 152): visitor picks Alex or Mira before the main
+  // front-door chat begins. `stage` tracks where they are in the flow; `personaId`
+  // locks in once they commit. `interviewTranscripts` retains what they said to
+  // each persona so switching back doesn't restart, and so the committed persona
+  // can reference the interview conversation.
+  personaId: text("persona_id").$type<PersonaId>(),
+  stage: text("stage").$type<ChatSessionStage>().notNull().default("picker"),
+  interviewTranscripts: text("interview_transcripts", { mode: "json" })
+    .$type<Partial<Record<PersonaId, Array<{ role: string; content: string }>>>>(),
 });
 
 // ============================================================

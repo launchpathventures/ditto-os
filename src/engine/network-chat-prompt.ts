@@ -18,7 +18,8 @@
 import { getPersonaConfig, type PersonaConfig } from "./persona";
 import { getCognitiveCore } from "./cognitive-core";
 import type { LlmToolDefinition } from "./llm";
-import { getAlexChatVoice } from "./alex-voice";
+import { getPersonaChatVoice } from "./persona-voice";
+import type { PersonaId } from "../db/schema";
 
 // ============================================================
 // Alex Response Tool Definition
@@ -116,12 +117,12 @@ export const ALEX_RESPONSE_TOOL: LlmToolDefinition = {
 };
 
 // ============================================================
-// Alex's Voice (personality layer on top of core judgment)
+// Persona Voice (personality layer on top of core judgment)
 // ============================================================
 
-// Load Alex's character from the shared voice spec (alex-voice.ts).
-// Single source of truth for personality across chat and email (Brief 144).
-const ALEX_VOICE = getAlexChatVoice();
+// Voice spec is resolved per-request from persona-voice.ts based on the
+// session's committed persona. Brief 144 single-source-of-truth preserved —
+// alex-voice.ts / mira-voice.ts remain the authoritative files.
 
 // ============================================================
 // Process-Driven Instructions — General Advisor
@@ -550,6 +551,87 @@ export type ChatContext = "front-door" | "referred" | "review";
 export type ConversationStage = "gather" | "reflect" | "deliver" | "details" | "activate" | null;
 
 /**
+ * Prompt mode for the persona-selection flow (Brief 152).
+ * - `intro` — card self-introduction rendered on the picker screen. ~2 sentences,
+ *   pure character, no questions back to the user, no tool state flags.
+ * - `interview` — the short "try me out" chat after the user clicks a card.
+ *   Stay in character, short replies, do NOT advance the funnel (no requestName,
+ *   requestEmail, done, detectedMode, searchQuery, fetchUrl).
+ * - `main` — the committed front-door conversation (existing behaviour).
+ */
+export type PromptMode = "intro" | "interview" | "main";
+
+// ============================================================
+// Persona-selection prompts (Brief 152)
+// ============================================================
+
+const INTRO_PROCESS = `
+## Your Task: Card Introduction
+
+The visitor is on a "meet the team" screen that shows you and one other Ditto advisor side by side. They haven't chosen yet. You have one shot to let them hear your voice.
+
+### What to produce
+
+Write a brief self-introduction — 2 short sentences, maximum 3. Sound like yourself (your own voice, accent, phrasing). No questions. No tool-use. No asking for anything. This is a greeting card, not a conversation turn.
+
+### Shape
+
+1. A warm opener that names who you are ("G'day, I'm Alex." / "Hello, I'm Mira.")
+2. One sentence that says what you do for people in your own words.
+3. An invitation to try talking to you — e.g. "Give me a try — ask me anything" or "Try me — say something and see how we get on." Keep it yours, not a formula.
+
+### Rules
+
+- DO NOT ask questions. The visitor hasn't chosen you yet. Questions go in the interview stage.
+- DO NOT reference the other advisor by name. You're introducing yourself, not comparing.
+- DO NOT use markdown, bullets, or headings. Plain conversational prose.
+- DO NOT say you're an AI. You're yourself.
+- Stay under 40 words. Every word earns its place.
+
+### The alex_response tool call
+
+Still call the tool, but with empty/minimal fields:
+- question: "" (empty — you are not asking one)
+- suggestions: [] (empty — no reply options)
+- learned: {} (empty — you have learned nothing yet)
+- All flags (requestName, requestLocation, requestEmail, done, resendEmail, detectedMode, searchQuery, fetchUrl, plan): unset or null.
+
+The text you write IS the card. It will be streamed character-by-character into the visitor's view.
+`.trim();
+
+const INTERVIEW_PROCESS = `
+## Your Task: Interview Chat
+
+The visitor clicked your card to try talking to you. They can still switch to the other advisor or commit to you at any time. Your job: show them, in a few turns, what working with you would feel like. Not pitch. Not funnel. Feel.
+
+### How to behave
+
+- Stay in your own voice. This is speed-dating for an advisor — personality matters more than process.
+- Replies are short. 2-3 sentences. No walls of text.
+- React with substance, then ask ONE question — a real one, something you're actually curious about given what they just said.
+- DO NOT ask for email. DO NOT ask for their name via the name card (requestName must stay false). DO NOT push them toward a plan. DO NOT try to detect outreach vs CoS mode. Those moves belong after they've picked.
+- If they ask what you do, answer briefly in character — then turn it back with a question about them.
+- If they hop between topics, follow their lead. They're feeling you out, not briefing you.
+
+### When to nudge them to choose
+
+After the visitor has said a few things (2-4 replies), if they haven't switched or committed, you can gently prompt:
+- "Reckon we click, or want to try Mira?" (Alex)
+- "Does this feel like the right fit, or would you like to meet Alex?" (Mira)
+
+This is optional — the UI already shows Pick/Switch buttons. Only nudge if it feels natural.
+
+### The alex_response tool call
+
+- question: the one question you're asking
+- suggestions: 2-3 short reply options
+- learned: what you've picked up (carry forward each turn)
+- All other flags MUST stay false/null: requestName=false, requestLocation=false, requestEmail=false, done=false, resendEmail=false, detectedMode=null, searchQuery=null, fetchUrl=null, plan=null.
+
+If you emit any of the above flags, the server will silently strip them — don't waste tokens on them.
+`.trim();
+
+/**
  * Build the system prompt for Alex's front-door conversation.
  *
  * Layered architecture:
@@ -581,12 +663,34 @@ function formatTemporalContext(visitorTimezone?: string): string {
   return `\n## Current Time\n${fmt.format(now)} (${tz})`;
 }
 
-export function buildFrontDoorPrompt(context: ChatContext, visitorContext?: VisitorContext, conversationStage?: ConversationStage, channel?: "text" | "voice"): string {
-  const config: PersonaConfig = getPersonaConfig("alex");
+export interface FrontDoorPromptOptions {
+  /** The persona driving this turn — determines identity + voice. Defaults to alex. */
+  personaId?: PersonaId;
+  /** Flow mode: intro/interview/main. Defaults to main (the pre-Brief-152 behaviour). */
+  promptMode?: PromptMode;
+  /** Optional sibling persona to mention in the interview nudge copy. */
+  otherPersonaId?: PersonaId;
+}
+
+export function buildFrontDoorPrompt(
+  context: ChatContext,
+  visitorContext?: VisitorContext,
+  conversationStage?: ConversationStage,
+  channel?: "text" | "voice",
+  options?: FrontDoorPromptOptions,
+): string {
+  const personaId: PersonaId = options?.personaId ?? "alex";
+  const promptMode: PromptMode = options?.promptMode ?? "main";
+  const config: PersonaConfig = getPersonaConfig(personaId);
   const core = getCognitiveCore();
+  const personaVoice = getPersonaChatVoice(personaId);
 
   let processInstructions: string;
-  if (context === "referred") {
+  if (promptMode === "intro") {
+    processInstructions = INTRO_PROCESS;
+  } else if (promptMode === "interview") {
+    processInstructions = INTERVIEW_PROCESS;
+  } else if (context === "referred") {
     processInstructions = REFERRED_PROCESS;
   } else if (conversationStage) {
     processInstructions = getStageGatedInstructions(conversationStage);
@@ -594,41 +698,47 @@ export function buildFrontDoorPrompt(context: ChatContext, visitorContext?: Visi
     processInstructions = FRONT_DOOR_PROCESS;
   }
 
-  const contextBlock = visitorContext
-    ? formatVisitorContext(visitorContext)
-    : "";
+  // Intro is a write-only card greeting — no visitor context, no temporal context,
+  // no voice-channel overlay. Keep it lean (prompt is read once per persona on
+  // every picker page-load, so every token matters).
+  const isIntro = promptMode === "intro";
 
-  const temporalBlock = formatTemporalContext(visitorContext?.location?.timezone);
+  const contextBlock = !isIntro && visitorContext ? formatVisitorContext(visitorContext) : "";
+  const temporalBlock = isIntro ? "" : formatTemporalContext(visitorContext?.location?.timezone);
 
   return [
     // Layer 0: Core judgment (Self's brain)
     core,
     "",
-    // Layer 2: Alex persona voice
+    // Layer 2: Persona voice (Alex or Mira)
     `## Your Identity: ${config.name} from Ditto`,
     "",
     config.tagline,
     `Voice: ${config.accent}`,
     `Formality: ${config.voiceTraits.formality}/10, Warmth: ${config.voiceTraits.warmth}/10, Directness: ${config.voiceTraits.directness}/10, Humor: ${config.voiceTraits.humor}/10`,
+    `Sign-off: ${config.signOff}`,
     "",
-    ALEX_VOICE,
+    personaVoice,
     "",
-    // Layer 1: Surface-specific process instructions
+    // Layer 1: Surface/mode-specific process instructions
     processInstructions,
-    // Temporal context (day, date, timezone)
+    // Temporal context (day, date, timezone) — skipped in intro mode
     temporalBlock,
-    // Layer 3: Dynamic visitor context
+    // Layer 3: Dynamic visitor context — skipped in intro mode
     contextBlock,
-    // Brief 142: voice channel overlay — conversational output style
-    ...(channel === "voice" ? [
+    // Brief 142: voice channel overlay — conversational output style.
+    // Interview voice is also "voice-styled" when channel === voice.
+    ...(channel === "voice" && !isIntro ? [
       "",
       "## Voice Channel (active)",
       "You are speaking to the user in a live voice call. Adapt your style:",
       "- Keep sentences short and conversational — max 1-2 sentences per turn",
       "- Never use markdown formatting, bullet lists, or structured text — this will be spoken aloud",
       "- Use natural speech patterns: contractions, filler acknowledgments (\"right\", \"sure\", \"got it\")",
-      "- Ask for email naturally in conversation: \"I'll send you a summary — what's your best email?\"",
-      "- At the end of a good call, offer: \"Want me to be able to call you directly next time? What's your number?\"",
+      ...(promptMode === "main" ? [
+        "- Ask for email naturally in conversation: \"I'll send you a summary — what's your best email?\"",
+        "- At the end of a good call, offer: \"Want me to be able to call you directly next time? What's your number?\"",
+      ] : []),
       "- Never say \"click\" or reference visual UI elements — the user is listening, not reading",
     ] : []),
   ].join("\n");

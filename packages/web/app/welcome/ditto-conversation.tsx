@@ -16,7 +16,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, FileText, X } from "lucide-react";
+import { ArrowRight, FileText, X, ArrowLeft, Check } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { QuickReplyPills } from "./quick-reply-pills";
 import { TypingIndicator } from "./typing-indicator";
@@ -26,6 +26,9 @@ import type { ContentBlock } from "@/lib/engine";
 import { LearnedContext, LearnedContextCompact } from "./learned-context";
 import { VoiceCall, type VoiceCallHandle } from "./voice-call";
 import { ConversationProvider } from "@elevenlabs/react";
+import { PersonaPicker } from "./persona-picker";
+import { PersonaPortrait } from "./persona-portrait";
+import { PERSONAS, otherPersona, type PersonaId } from "@/lib/persona";
 
 // ============================================================
 // Types
@@ -37,10 +40,21 @@ interface Message {
   blocks?: ContentBlock[];
 }
 
-const INTRO_MESSAGES: Message[] = [
-  { role: "alex", text: "Hey, I\u2019m Alex." },
-  { role: "alex", text: "Tell me what you do and I\u2019ll get to work \u2014 finding clients, making introductions, running your operations, or all three. You approve everything until you trust me." },
-];
+/** Brief 152: persona-parameterised intro greeting used for returning visitors
+ *  where the picker is skipped. The non-returning flow runs the picker which
+ *  streams the real greeting from the backend in the persona's own voice. */
+function introMessagesFor(personaId: PersonaId): Message[] {
+  if (personaId === "mira") {
+    return [
+      { role: "alex", text: "Hello \u2014 Mira here." },
+      { role: "alex", text: "Tell me what you\u2019re working on and I\u2019ll get moving \u2014 opening the right doors, selling on your behalf, or keeping the wheels turning. You approve everything until you trust me." },
+    ];
+  }
+  return [
+    { role: "alex", text: "Hey, I\u2019m Alex." },
+    { role: "alex", text: "Tell me what you do and I\u2019ll get to work \u2014 finding clients, making introductions, running your operations, or all three. You approve everything until you trust me." },
+  ];
+}
 
 const FRONT_DOOR_PILLS = [
   "I run a small business",
@@ -52,6 +66,10 @@ const FRONT_DOOR_PILLS = [
 
 const SESSION_KEY = "ditto-chat-session";
 const EMAIL_KEY = "ditto-email-captured";
+/** Brief 152: persistent persona selection across reloads. Cleared in test mode. */
+const PERSONA_KEY = "ditto-persona-chosen";
+
+type Phase = "preamble" | "picker" | "interview" | "main";
 
 // ============================================================
 // Component
@@ -61,6 +79,13 @@ export function DittoConversation() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [introCount, setIntroCount] = useState(1);
   const [showIntro, setShowIntro] = useState(true);
+  // Brief 152: persona selection flow.
+  const [phase, setPhase] = useState<Phase>("preamble");
+  const [personaId, setPersonaId] = useState<PersonaId>("alex");
+  const personaMeta = PERSONAS[personaId];
+  const otherId = otherPersona(personaId);
+  const otherMeta = PERSONAS[otherId];
+  const [personaBusy, setPersonaBusy] = useState(false);
   // Preamble: pain-point lines before Alex intro
   // 0=cursor+dots, 1=line1, 2=line2, 3=line3, 4=fading out, 5=done (show Alex)
   const [preamble, setPreamble] = useState(0);
@@ -168,17 +193,25 @@ export function DittoConversation() {
           setTestMode(true);
           localStorage.removeItem(SESSION_KEY);
           localStorage.removeItem(EMAIL_KEY);
+          localStorage.removeItem(PERSONA_KEY);
           return; // Fresh start — skip returning user flow
         }
         // Normal mode — restore returning user state
         const savedEmail = localStorage.getItem(EMAIL_KEY);
         const savedSession = localStorage.getItem(SESSION_KEY);
+        const savedPersona = localStorage.getItem(PERSONA_KEY) as PersonaId | null;
+        if (savedPersona === "alex" || savedPersona === "mira") {
+          setPersonaId(savedPersona);
+        }
         if (savedEmail) {
           setEmailCaptured(true);
           setShowIntro(false);
+          setPhase("main");
           if (savedSession) setSessionId(savedSession);
+          const persona = (savedPersona === "alex" || savedPersona === "mira") ? savedPersona : "alex";
+          const returnerName = PERSONAS[persona].name;
           setMessages([
-            { role: "alex", text: "Hey again." },
+            { role: "alex", text: `Hey again \u2014 ${returnerName} here.` },
             { role: "alex", text: "I\u2019m still working for you \u2014 check your inbox for anything that needs your sign-off. Want to change anything?" },
           ]);
           return;
@@ -191,12 +224,19 @@ export function DittoConversation() {
         // Config endpoint unavailable — use normal flow
         const savedEmail = localStorage.getItem(EMAIL_KEY);
         const savedSession = localStorage.getItem(SESSION_KEY);
+        const savedPersona = localStorage.getItem(PERSONA_KEY) as PersonaId | null;
+        if (savedPersona === "alex" || savedPersona === "mira") {
+          setPersonaId(savedPersona);
+        }
         if (savedEmail) {
           setEmailCaptured(true);
           setShowIntro(false);
+          setPhase("main");
           if (savedSession) setSessionId(savedSession);
+          const persona = (savedPersona === "alex" || savedPersona === "mira") ? savedPersona : "alex";
+          const returnerName = PERSONAS[persona].name;
           setMessages([
-            { role: "alex", text: "Hey again." },
+            { role: "alex", text: `Hey again \u2014 ${returnerName} here.` },
             { role: "alex", text: "I\u2019m still working for you \u2014 check your inbox for anything that needs your sign-off. Want to change anything?" },
           ]);
           return;
@@ -207,22 +247,25 @@ export function DittoConversation() {
       });
   }, []);
 
-  // Staged intro: preamble pain points → Alex intro → input
-  // Preamble: 0→1→2→3 (lines fade in) → 4 (fade out) → 5 (done, show Alex)
-  // Then introCount: 1=title → 2=body → 3=input+pills+cards
+  // Staged intro: preamble pain points → persona picker.
+  // Preamble: 0→1→2→3 (lines fade in) → 4 (fade out) → 5 (handoff to picker).
+  // Brief 152: picker replaces the old hard-coded Alex "Hey I'm Alex…" intro.
   useEffect(() => {
+    if (phase !== "preamble") return;
     if (!showIntro) return;
     const timers = [
       setTimeout(() => setPreamble(1), 1600),       // "AI can do more for you and your business than it currently does."
       setTimeout(() => setPreamble(2), 5200),       // "You know it. You just don't have time to figure it out."
       setTimeout(() => setPreamble(3), 8000),       // "What if AI just worked?"
       setTimeout(() => setPreamble(4), 11400),      // Fade out all
-      setTimeout(() => setPreamble(5), 12200),      // Show Alex
-      setTimeout(() => setIntroCount(2), 13000),    // Body text
-      setTimeout(() => setIntroCount(3), 14200),    // Input appears
+      setTimeout(() => {
+        setPreamble(5);
+        setShowIntro(false);
+        setPhase("picker");
+      }, 12200),
     ];
     return () => timers.forEach(clearTimeout);
-  }, [showIntro]);
+  }, [showIntro, phase]);
 
   // Scroll behaviour: keep messages scrolled to bottom.
   // The messages live in an overflow-y-auto container; we scroll THAT container,
@@ -295,15 +338,131 @@ export function DittoConversation() {
   }, [callActive, sessionId, voiceToken, pushGuidance]);
 
   // ============================================================
+  // Persona selection flow (Brief 152)
+  // ============================================================
+
+  type PersonaMessages = { alex: Message[]; mira: Message[] };
+  const [personaTranscripts, setPersonaTranscripts] = useState<PersonaMessages>({ alex: [], mira: [] });
+
+  /** Persist the chosen persona so a refresh mid-interview survives. */
+  function persistPersonaChoice(next: PersonaId) {
+    if (!testMode) {
+      try { localStorage.setItem(PERSONA_KEY, next); } catch { /* ignore */ }
+    }
+  }
+
+  /** Stash the current messages under the given persona's transcript slot. */
+  function archiveMessagesFor(persona: PersonaId) {
+    setPersonaTranscripts((prev) => ({ ...prev, [persona]: messages }));
+  }
+
+  /** Handle the picker → interview transition for a persona. */
+  async function handlePersonaPicked(picked: PersonaId) {
+    if (personaBusy) return;
+    setPersonaBusy(true);
+    // If we already have an interview in flight for the other persona,
+    // stash those messages so switching back is non-destructive.
+    archiveMessagesFor(personaId);
+    setPersonaId(picked);
+    persistPersonaChoice(picked);
+    try {
+      const res = await fetch("/api/v1/network/chat/persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, personaId: picked, action: "interview-start" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+          if (!testMode) localStorage.setItem(SESSION_KEY, data.sessionId);
+        }
+      }
+    } catch { /* non-fatal — the UI proceeds either way */ }
+    // Restore any prior transcript we have for this persona (so revisiting resumes).
+    const resumed = personaTranscripts[picked];
+    setMessages(resumed);
+    setPhase("interview");
+    setPersonaBusy(false);
+    // If there are no prior turns with this persona, prompt the agent to open
+    // the conversation (interview mode, no user message).
+    if (resumed.length === 0) {
+      setTimeout(() => kickoffInterview(picked), 50);
+    }
+  }
+
+  /** Switch from interview-with-X to interview-with-Y without committing. */
+  async function handleSwitchPersona() {
+    await handlePersonaPicked(otherId);
+  }
+
+  /** User pressed "Continue with <Persona>" — commit the session to this persona
+   *  and fall through to the main front-door chat. */
+  async function handleCommitPersona() {
+    if (personaBusy) return;
+    setPersonaBusy(true);
+    try {
+      await fetch("/api/v1/network/chat/persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, personaId, action: "commit" }),
+      });
+    } catch { /* non-fatal */ }
+    persistPersonaChoice(personaId);
+    setPhase("main");
+    setPersonaBusy(false);
+    // Nudge the committed persona to acknowledge the handoff in their own voice
+    // and move into the main front-door flow. Synthetic user message is silent
+    // (not rendered) so the transcript reads as a natural agent continuation.
+    setTimeout(() => {
+      sendMessageInMode(
+        "[PERSONA_COMMITTED] The visitor just chose you over the other advisor. Warmly acknowledge it in one sentence in your own voice, then continue gathering: ask one specific follow-up question about their business or what they're trying to do.",
+        { personaId, promptMode: "main", silentUserMessage: true },
+      );
+    }, 50);
+  }
+
+  /** Fire the first interview turn — no user message; the agent opens. */
+  async function kickoffInterview(persona: PersonaId) {
+    // Send a synthetic prompt that tells the LLM to open the conversation
+    // naturally. The `promptMode: "interview"` gate ensures it stays in
+    // interview mode, no funnel flags.
+    await sendMessageInMode(
+      "[INTERVIEW_START] Say hi in your own voice and ask one light opening question.",
+      { personaId: persona, promptMode: "interview", silentUserMessage: true },
+    );
+  }
+
+  // ============================================================
   // Chat API — single function, LLM controls the flow
   // ============================================================
 
+  interface SendMessageOptions {
+    personaId?: PersonaId;
+    promptMode?: "interview" | "main";
+    /** Don't render the user message bubble — used for synthetic kickoff prompts
+     *  ([INTERVIEW_START], [PERSONA_COMMITTED]). The server still sees it. */
+    silentUserMessage?: boolean;
+  }
+
   async function sendMessage(text: string) {
+    return sendMessageInMode(text, {});
+  }
+
+  async function sendMessageInMode(text: string, opts: SendMessageOptions) {
     if (sendingRef.current) return; // Prevent concurrent sends
     sendingRef.current = true;
 
-    const userMsg: Message = { role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    // Resolve effective persona + mode for this turn.
+    const turnPersonaId = opts.personaId ?? personaId;
+    // If no explicit promptMode given, derive from phase: picker → interview, main → main.
+    const turnPromptMode: "interview" | "main" = opts.promptMode
+      ?? (phase === "interview" ? "interview" : "main");
+
+    if (!opts.silentUserMessage) {
+      const userMsg: Message = { role: "user", text };
+      setMessages((prev) => [...prev, userMsg]);
+    }
     setInput("");
 
     // During a voice call: send text directly to the ElevenLabs agent.
@@ -345,6 +504,10 @@ export function DittoConversation() {
           ...(savedEmail ? { returningEmail: savedEmail } : {}),
           ...(name.trim() ? { visitorName: name.trim() } : {}),
           ...(token ? { turnstileToken: token } : {}),
+          // Brief 152: thread persona + mode so the server picks the right voice
+          // and gates interview turns.
+          personaId: turnPersonaId,
+          promptMode: turnPromptMode,
         }),
       });
 
@@ -770,77 +933,63 @@ export function DittoConversation() {
                 </div>
               )}
 
-              {/* Alex intro — appears after preamble exits */}
-              {preamble >= 5 && (
-                <>
-                  <div className="flex-1 space-y-5 md:space-y-6">
-                    {introCount >= 1 && (
-                      <p className="animate-fade-in-slow text-2xl font-bold tracking-tight text-text-primary md:text-3xl md:leading-[1.15]">
-                        {INTRO_MESSAGES[0].text}
-                      </p>
-                    )}
-                    {introCount === 1 && (
-                      <TypingIndicator />
-                    )}
-                    {introCount >= 2 && (
-                      <p className="animate-fade-in-slow text-xl font-semibold tracking-tight text-text-primary md:text-2xl md:leading-[1.2]">
-                        {INTRO_MESSAGES[1].text}
-                      </p>
-                    )}
-                  </div>
-                  {introCount >= 3 && (
-                    <div className="animate-fade-in-slow shrink-0 space-y-3 pb-4 pt-3">
-                      <form onSubmit={(e) => {
-                        e.preventDefault();
-                        const trimmed = input.trim();
-                        if (!trimmed) return;
-                        setMessages(INTRO_MESSAGES);
-                        setShowIntro(false);
-                        setTimeout(() => sendMessage(trimmed), 50);
-                      }} className="flex gap-2">
-                        <input
-                          ref={inputRef}
-                          type="text"
-                          placeholder="I'm a mortgage broker in Sydney..."
-                          value={input}
-                          onChange={(e) => setInput(e.target.value)}
-                          className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!input.trim()}
-                          aria-label="Send message"
-                          className="inline-flex items-center rounded-2xl bg-vivid px-4 py-3 text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
-                        >
-                          <ArrowRight size={18} />
-                        </button>
-                      </form>
-                      <QuickReplyPills
-                        pills={FRONT_DOOR_PILLS}
-                        onSelect={(pill) => {
-                          setMessages(INTRO_MESSAGES);
-                          setShowIntro(false);
-                          setTimeout(() => sendMessage(pill), 50);
-                        }}
-                        disabled={false}
-                      />
-                    </div>
-                  )}
-                  {introCount >= 3 && (
-                    <div className="animate-fade-in-slow space-y-10 pb-16 pt-8">
-                      <ValueCards />
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           )}
 
+          {/* Brief 152: Persona picker phase — replaces the old Alex-hardcoded intro. */}
+          {phase === "picker" && (
+            <PersonaPicker
+              sessionId={sessionId}
+              onSessionId={(id) => {
+                setSessionId(id);
+                if (!testMode) localStorage.setItem(SESSION_KEY, id);
+              }}
+              onSelect={(picked) => handlePersonaPicked(picked)}
+              turnstileToken={getTurnstileToken()}
+            />
+          )}
+
           {/* Conversation — flex column: scrollable messages + fixed input at bottom */}
-          {!showIntro && (
+          {(phase === "interview" || phase === "main") && (
             <div className="flex min-h-0 flex-1 flex-col">
-              {/* Mobile sticky memory bar — appears after a few exchanges */}
-              {learned && messages.length >= 4 && (
+              {/* Brief 152: Interview strip — visible only during the pre-commit interview.
+                  Tells the visitor who they're with and gives Pick / Switch actions. */}
+              {phase === "interview" && (
+                <div className="shrink-0 mb-3 flex items-center justify-between gap-3 rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 px-3 py-2.5 md:px-4 md:py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <PersonaPortrait personaId={personaId} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-text-muted">You&apos;re with</p>
+                      <p className="text-sm font-semibold text-text-primary truncate">
+                        {personaMeta.name} <span className="font-normal text-text-muted">· {personaMeta.tagline.split(".")[0].toLowerCase()}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSwitchPersona}
+                      disabled={personaBusy}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-vivid/40 hover:text-text-primary disabled:opacity-40 md:text-sm"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Try {otherMeta.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCommitPersona}
+                      disabled={personaBusy}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-vivid px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40 md:text-sm"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      Continue with {personaMeta.name}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Mobile sticky memory bar — appears after a few exchanges (main only) */}
+              {learned && messages.length >= 4 && phase === "main" && (
                 <div className="shrink-0 pb-2 md:hidden">
                   <LearnedContextCompact learned={learned} />
                 </div>
@@ -1025,7 +1174,7 @@ export function DittoConversation() {
                       }`}>
                         <div className="flex-1">
                           <p className="text-xs md:text-sm font-medium text-text-primary">
-                            {callActive ? "Talking with Alex" : "Prefer to talk?"}
+                            {callActive ? `Talking with ${personaMeta.name}` : "Prefer to talk?"}
                           </p>
                           {!callActive && (
                             <p className="hidden md:block text-xs text-text-muted mt-0.5">
@@ -1039,6 +1188,7 @@ export function DittoConversation() {
                           voiceToken={voiceToken}
                           learned={learned}
                           visitorName={name}
+                          personaName={personaMeta.name}
                           recentMessages={messages.slice(-6).map((m) => ({ role: m.role, text: m.text }))}
                           onCallStart={() => setCallActive(true)}
                           onCallEnd={() => setCallActive(false)}

@@ -15,6 +15,13 @@
       "when": 1776119895010,
       "tag": "0002_lucky_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776377217198,
+      "tag": "0003_persona_selection",
+      "breakpoints": true
     }
   ]
 }

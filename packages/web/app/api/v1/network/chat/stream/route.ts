@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken } = body as {
+    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken, personaId, promptMode } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
@@ -30,16 +30,27 @@ export async function POST(request: Request) {
       funnelMetadata?: Record<string, unknown>;
       visitorName?: string;
       turnstileToken?: string;
+      personaId?: string;
+      promptMode?: string;
     };
 
-    if (!message || typeof message !== "string" || message.trim().length === 0) {
+    // Brief 152: intro mode sends an empty string (the card just wants the LLM
+    // to produce a greeting — there's no user message yet). Everything else
+    // requires a real message.
+    const isIntroRequest = promptMode === "intro";
+    if (!isIntroRequest && (!message || typeof message !== "string" || message.trim().length === 0)) {
       return NextResponse.json(
         { error: "A message is required." },
         { status: 400 },
       );
     }
+    // Validate persona + mode (accept only known values; silently drop others).
+    const validPersonaIds = new Set(["alex", "mira"]);
+    const validPromptModes = new Set(["intro", "interview", "main"]);
+    const safePersonaId = personaId && validPersonaIds.has(personaId) ? (personaId as "alex" | "mira") : undefined;
+    const safePromptMode = promptMode && validPromptModes.has(promptMode) ? (promptMode as "intro" | "interview" | "main") : undefined;
 
-    if (message.trim().length > 2000) {
+    if (!isIntroRequest && message!.trim().length > 2000) {
       return NextResponse.json(
         { error: "Message too long. Keep it under 2000 characters." },
         { status: 400 },
@@ -99,14 +110,24 @@ export async function POST(request: Request) {
     // Pump events in the background — don't await, let the response start immediately
     (async () => {
       try {
+        // Brief 152: intro mode has no real user message — the LLM is just
+        // generating its own greeting for the picker card. Send a synthetic
+        // prompt that tells the model what to produce.
+        const turnMessage = isIntroRequest
+          ? "[INTRO_CARD] Produce your self-introduction for the persona-selection card."
+          : message!.trim();
         for await (const event of handleChatTurnStreaming(
           sessionId ?? null,
-          message.trim(),
+          turnMessage,
           chatContext,
           ip,
           returningEmail ?? null,
           funnelMetadata,
           visitorName?.trim() || undefined,
+          {
+            personaId: safePersonaId,
+            promptMode: safePromptMode,
+          },
         )) {
           await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         }

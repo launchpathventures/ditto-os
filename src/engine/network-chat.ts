@@ -17,7 +17,7 @@ import { createHash } from "crypto";
 import { createCompletion, extractText, extractToolUse, getConfiguredModel, type LlmToolDefinition } from "./llm";
 import { createStreamingCompletion, type StreamEvent } from "./llm-stream";
 import { isSpendCeilingReached, recordFrontDoorSpend } from "./spend-ceiling";
-import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage } from "./network-chat-prompt";
+import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage, type PromptMode } from "./network-chat-prompt";
 import { startIntake, sendActionEmail, sendCosActionEmail } from "./self-tools/network-tools";
 import { getPersonByEmail, findPersonByEmailGlobal, getPersonMemories } from "./people";
 import { webSearch } from "./web-search";
@@ -26,6 +26,8 @@ import { geolocateIp } from "./geo";
 import type { LlmMessage } from "./llm";
 import type { ContentBlock } from "./content-blocks";
 import { buildFrontDoorBlocks } from "./network-chat-blocks";
+import type { PersonaId } from "../db/schema";
+import type { ChatSessionStage } from "../db/schema/frontdoor";
 
 // ============================================================
 // Tool Call Extraction
@@ -517,6 +519,13 @@ interface ChatSession {
   callOffered?: boolean;
   /** Session-bound token for voice endpoint authentication (Brief 142) */
   voiceToken?: string | null;
+  /** Persona selection flow (Brief 152). `personaId` locks in on commit;
+   *  `stage` gates what the chat handlers will do and emit. */
+  personaId?: PersonaId | null;
+  stage?: ChatSessionStage;
+  /** Per-persona message history collected during the interview stage.
+   *  Preserved across persona switches so returning to a persona resumes. */
+  interviewTranscripts?: Partial<Record<PersonaId, Array<{ role: string; content: string }>>> | null;
 }
 
 /** Options for controlling pipeline behavior per-channel (Brief 142) */
@@ -537,6 +546,14 @@ export interface ChatPipelineOptions {
   maxTokens?: number;
   /** Override LLM model — use a faster model for voice */
   model?: string;
+  /** Persona driving this turn (Brief 152). When omitted, falls back to
+   *  session.personaId or "alex". The intro-mode card-streaming path sets
+   *  this explicitly (the session isn't committed to a persona yet). */
+  personaId?: PersonaId;
+  /** Prompt mode (Brief 152): `intro` for card greeting, `interview` for the
+   *  pre-commit mini-chat, `main` for the committed front door. When omitted,
+   *  derived from session.stage. */
+  promptMode?: PromptMode;
 }
 
 async function loadOrCreateSession(
@@ -568,6 +585,9 @@ async function loadOrCreateSession(
         learned: (existing.learned as Record<string, string | null>) ?? null,
         callOffered: existing.callOffered ?? false,
         voiceToken: existing.voiceToken ?? null,
+        personaId: existing.personaId ?? null,
+        stage: existing.stage ?? "picker",
+        interviewTranscripts: existing.interviewTranscripts ?? null,
       };
     }
   }
@@ -583,6 +603,9 @@ async function loadOrCreateSession(
     messageCount: 0,
     authenticatedEmail: null,
     learned: null,
+    personaId: null,
+    stage: "picker",
+    interviewTranscripts: null,
   };
 
   await db.insert(schema.chatSessions).values({
@@ -593,6 +616,7 @@ async function loadOrCreateSession(
     ipHash: session.ipHash,
     requestEmailFlagged: false,
     messageCount: 0,
+    stage: "picker",
     expiresAt: new Date(Date.now() + SESSION_TTL_MS),
   });
 
@@ -611,6 +635,12 @@ async function saveSession(session: ChatSession): Promise<void> {
       // Brief 142: persist voice channel state
       callOffered: session.callOffered ?? false,
       voiceToken: session.voiceToken ?? null,
+      // Brief 152: persona selection flow state
+      ...(session.personaId !== undefined ? { personaId: session.personaId } : {}),
+      ...(session.stage ? { stage: session.stage } : {}),
+      ...(session.interviewTranscripts !== undefined
+        ? { interviewTranscripts: session.interviewTranscripts }
+        : {}),
       // Rolling TTL: authenticated sessions extend to 30 days on each activity (Brief 123)
       ...(session.authenticatedEmail ? { expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS) } : {}),
     })
@@ -660,6 +690,9 @@ async function evaluateVoiceCore(
     learned: (existing.learned as Record<string, string | null>) ?? null,
     callOffered: existing.callOffered ?? false,
     voiceToken: existing.voiceToken ?? null,
+    personaId: existing.personaId ?? null,
+    stage: existing.stage ?? "picker",
+    interviewTranscripts: existing.interviewTranscripts ?? null,
   };
 
   if (session.messages.length === 0) return null;
@@ -667,11 +700,13 @@ async function evaluateVoiceCore(
   try {
     // Build the SAME prompt + tools as text chat
     const conversationStage = inferConversationStage(session);
+    const evalPromptMode: PromptMode = session.stage === "interview" ? "interview" : "main";
     const systemPrompt = buildFrontDoorPrompt(
       session.context as ChatContext,
       undefined,
       conversationStage,
       "voice",
+      { personaId: session.personaId ?? "alex", promptMode: evalPromptMode },
     ) + buildStateDirective(session);
 
     let llmMessages: LlmMessage[] = session.messages.map((m) => ({
@@ -876,6 +911,9 @@ export async function loadSessionForVoice(
     learned: (existing.learned as Record<string, string | null>) ?? null,
     callOffered: existing.callOffered ?? false,
     voiceToken: existing.voiceToken ?? null,
+    personaId: existing.personaId ?? null,
+    stage: existing.stage ?? "picker",
+    interviewTranscripts: existing.interviewTranscripts ?? null,
   };
 }
 
@@ -1002,6 +1040,7 @@ export async function handleChatTurn(
   returningEmail?: string | null,
   funnelMetadata?: Record<string, unknown>,
   visitorName?: string,
+  options?: Pick<ChatPipelineOptions, "personaId" | "promptMode">,
 ): Promise<ChatTurnResult> {
   const ipHash = hashIp(ip);
 
@@ -1053,13 +1092,18 @@ export async function handleChatTurn(
   // Assemble visitor context from Ditto's data layer
   // ============================================================
 
+  // Brief 152: resolve prompt mode here so email capture is skipped in interview/intro.
+  const nonStreamPromptMode: PromptMode = options?.promptMode
+    ?? (session.stage === "interview" ? "interview" : "main");
+  const nonStreamIsInterview = nonStreamPromptMode === "intro" || nonStreamPromptMode === "interview";
+
   // Determine the visitor's email from: returning cookie, email in message, or conversation history
   // In test mode, ignore returningEmail so every visit feels like a new user
-  let knownEmail = (isTestMode() ? null : returningEmail) || null;
+  let knownEmail = (isTestMode() || nonStreamIsInterview ? null : returningEmail) || null;
   let emailCaptured = false;
 
-  // Extract email from anywhere in the message (e.g. "Tim, tim@company.com")
-  const emailMatch = trimmedMessage.match(EMAIL_EXTRACT_REGEX);
+  // Extract email from anywhere in the message (e.g. "Tim, tim@company.com") — skipped in interview.
+  const emailMatch = !nonStreamIsInterview && trimmedMessage.match(EMAIL_EXTRACT_REGEX);
   if (emailMatch) {
     knownEmail = emailMatch[0];
     emailCaptured = true;
@@ -1069,7 +1113,7 @@ export async function handleChatTurn(
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
     // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
-    try { await startIntake(knownEmail, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
+    try { await startIntake(knownEmail, name, need, undefined, session.personaId ?? "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -1127,8 +1171,11 @@ export async function handleChatTurn(
 
   // Infer conversation stage for stage-gated prompting (Insight-170: token efficiency)
   const conversationStage = inferConversationStage(session);
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage)
-    + buildStateDirective(session);
+  const nonStreamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
+    personaId: nonStreamPersonaId,
+    promptMode: nonStreamPromptMode,
+  }) + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
@@ -1150,6 +1197,19 @@ export async function handleChatTurn(
   const extracted = enforceStageGates(rawExtracted, session);
   let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
 
+  // Brief 152: strip all funnel flags in interview/intro mode.
+  if (nonStreamIsInterview) {
+    requestName = false;
+    requestLocation = false;
+    requestEmail = false;
+    done = false;
+    resendEmail = false;
+    detectedMode = null;
+    searchQuery = null;
+    fetchUrl = null;
+    extraQuestions = [];
+  }
+
   // Record mode detection funnel event
   if (detectedMode) {
     await recordFunnelEvent(session.sessionId, "mode_detected", context, {
@@ -1165,7 +1225,7 @@ export async function handleChatTurn(
   // Resend email if LLM requested it (returning user didn't get the first one)
   if (resendEmail && knownEmail) {
     try {
-      await startIntake(knownEmail, undefined, undefined, undefined, "alex");
+      await startIntake(knownEmail, undefined, undefined, undefined, session.personaId ?? "alex");
       console.log(`[network-chat] Resent welcome email to ${knownEmail}`);
     } catch { /* non-fatal */ }
   }
@@ -1260,7 +1320,8 @@ export async function handleChatTurn(
   // This prevents the limbo state where ACTIVATE never fires after EMAIL_CAPTURED.
   // Only applies when emailCaptured was set THIS turn (from regex match) — not
   // for returning visitors where knownEmail comes from the cookie.
-  if (!done && emailCaptured && knownEmail) {
+  // Brief 152: never force done during interview/intro stage.
+  if (!done && emailCaptured && knownEmail && !nonStreamIsInterview) {
     console.warn(`[network-chat] Forced done=true after EMAIL_CAPTURED — enrichment did not set done (session ${session.sessionId})`);
     done = true;
     await recordFunnelEvent(session.sessionId, "forced_done", context, {
@@ -1303,10 +1364,10 @@ export async function handleChatTurn(
     const outreachStyle: "connector" | "sales" = effectiveMode === "sales" ? "sales" : "connector";
     try {
       if (effectiveMode === "cos") {
-        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId);
+        await sendCosActionEmail(knownEmail, session.personaId ?? "alex", personName, conversationSummary, activatePersonId);
       } else {
         // "both" and single outreach modes both send the outreach action email
-        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, activatePersonId, outreachStyle);
+        await sendActionEmail(knownEmail, session.personaId ?? "alex", personName, conversationSummary, activatePersonId, outreachStyle);
       }
     } catch { /* non-fatal */ }
 
@@ -1460,19 +1521,26 @@ export async function* handleChatTurnStreaming(
 
   const trimmedMessage = message.trim();
 
+  // Brief 152: interview/intro turns MUST NOT trigger intake — even if the
+  // visitor happens to paste an email in the interview. Resolve the prompt
+  // mode here (early) so we can short-circuit email capture below.
+  const earlyPromptMode: PromptMode = options?.promptMode
+    ?? (session.stage === "interview" ? "interview" : "main");
+  const isPreCommitTurn = earlyPromptMode === "intro" || earlyPromptMode === "interview";
+
   // Email detection (same as non-streaming)
   // In test mode, ignore returningEmail so every visit feels like a new user
-  let knownEmail = (isTestMode() ? null : returningEmail) || null;
+  let knownEmail = (isTestMode() || isPreCommitTurn ? null : returningEmail) || null;
   let emailCaptured = false;
 
-  const streamEmailMatch = trimmedMessage.match(EMAIL_EXTRACT_REGEX);
+  const streamEmailMatch = !isPreCommitTurn && trimmedMessage.match(EMAIL_EXTRACT_REGEX);
   if (streamEmailMatch) {
     knownEmail = streamEmailMatch[0];
     emailCaptured = true;
     const name = visitorName || extractNameFromConversation(session.messages);
     const need = extractNeedFromConversation(session.messages);
     // Brief 126 AC4: pass sessionId so intro email metadata can trace replies
-    try { await startIntake(knownEmail, name, need, undefined, "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
+    try { await startIntake(knownEmail, name, need, undefined, session.personaId ?? "alex", undefined, session.sessionId); } catch { /* non-fatal */ }
     await recordFunnelEvent(session.sessionId, "email_captured", context, {
       hasName: !!name, hasNeed: !!need,
     });
@@ -1514,8 +1582,15 @@ export async function* handleChatTurnStreaming(
 
   // Stage-gated prompting (Insight-170: token efficiency)
   const streamConversationStage = inferConversationStage(session);
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel)
-    + buildStateDirective(session);
+  // Brief 152: resolve persona + mode. Explicit options override session state,
+  // which lets the picker stream intros for a persona before the session commits.
+  const streamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
+  const streamPromptMode: PromptMode = earlyPromptMode;
+  const isInterviewTurn = isPreCommitTurn;
+  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel, {
+    personaId: streamPersonaId,
+    promptMode: streamPromptMode,
+  }) + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
@@ -1556,6 +1631,23 @@ export async function* handleChatTurnStreaming(
   const streamExtracted = enforceStageGates(streamRawExtracted, session);
   let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
 
+  // Brief 152: interview/intro mode strips all funnel-advancement flags.
+  // The user hasn't picked a persona yet — we must not ask for email, mark
+  // the conversation done, or kick off intake. Defensive: even if the LLM
+  // emits these flags, the server refuses to act on them.
+  if (isInterviewTurn) {
+    requestName = false;
+    requestLocation = false;
+    requestEmail = false;
+    done = false;
+    resendEmail = false;
+    detectedMode = null;
+    searchQuery = null;
+    fetchUrl = null;
+    plan = null;
+    extraQuestions = [];
+  }
+
   // Mode detection funnel event
   if (detectedMode) {
     recordFunnelEvent(session.sessionId, "mode_detected", context, {
@@ -1568,10 +1660,10 @@ export async function* handleChatTurnStreaming(
     session.requestEmailFlagged = true;
   }
 
-  // Resend email
+  // Resend email — respects the session's committed persona, not hardcoded Alex
   if (resendEmail && knownEmail) {
     try {
-      await startIntake(knownEmail, undefined, undefined, undefined, "alex");
+      await startIntake(knownEmail, undefined, undefined, undefined, session.personaId ?? "alex");
     } catch { /* non-fatal */ }
   }
 
@@ -1693,8 +1785,9 @@ export async function* handleChatTurnStreaming(
     yield { type: "content-block", block };
   }
 
-  // Brief 126: Safety net — if email was captured but enrichment didn't set done
-  if (!done && emailCaptured && knownEmail) {
+  // Brief 126: Safety net — if email was captured but enrichment didn't set done.
+  // Brief 152: never force done during interview/intro stage.
+  if (!done && emailCaptured && knownEmail && !isInterviewTurn) {
     console.warn(`[network-chat] Forced done=true after EMAIL_CAPTURED — enrichment did not set done (session ${session.sessionId})`);
     done = true;
     await recordFunnelEvent(session.sessionId, "forced_done", context, {
@@ -1703,7 +1796,8 @@ export async function* handleChatTurnStreaming(
     });
   }
 
-  // ACTIVATE (same as non-streaming)
+  // ACTIVATE (same as non-streaming) — guarded by done+knownEmail, both of which
+  // are false in interview/intro mode.
   if (done && knownEmail) {
     // Authenticate this session for magic link access (Brief 123)
     try {
@@ -1730,11 +1824,13 @@ export async function* handleChatTurnStreaming(
 
     // Brief 126: "both" sends ONE action email, CoS chains from report-back
     const streamOutreachStyle: "connector" | "sales" = effectiveMode === "sales" ? "sales" : "connector";
+    // Brief 152: action emails now come from the session's committed persona
+    const streamActivatePersona: PersonaId = session.personaId ?? "alex";
     try {
       if (effectiveMode === "cos") {
-        await sendCosActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId);
+        await sendCosActionEmail(knownEmail, streamActivatePersona, personName, conversationSummary, streamActivatePersonId);
       } else {
-        await sendActionEmail(knownEmail, "alex", personName, conversationSummary, streamActivatePersonId, streamOutreachStyle);
+        await sendActionEmail(knownEmail, streamActivatePersona, personName, conversationSummary, streamActivatePersonId, streamOutreachStyle);
       }
     } catch { /* non-fatal */ }
 
@@ -1781,13 +1877,17 @@ export async function* handleChatTurnStreaming(
   session.messages.push({ role: "assistant", content: reply });
   await saveSession(session);
 
-  // Brief 142b: Voice — persistent CTA once we know the visitor's name.
+  // Brief 142b: Voice — persistent CTA.
   // voiceReady is emitted on EVERY turn (not one-shot) so the frontend
-  // keeps the "Talk to Alex" button visible. Just needs
-  // a voiceToken for session auth.
+  // keeps the "Talk to Alex/Mira" button visible. Just needs a voiceToken
+  // for session auth.
+  // Brief 152: during the interview stage we surface voice immediately — the
+  // whole point of the picker is to let the visitor try the voice. In main
+  // stage we keep the pre-existing gate (wait until we've learned a name).
   let voiceReady: boolean | undefined;
   let voiceTokenOut: string | undefined;
-  if (session.learned?.name && options?.channel !== "voice") {
+  const voiceEligible = isInterviewTurn ? true : !!session.learned?.name;
+  if (voiceEligible && options?.channel !== "voice") {
     voiceReady = true;
     // Reuse existing voiceToken or generate a new one
     if (!session.voiceToken) {

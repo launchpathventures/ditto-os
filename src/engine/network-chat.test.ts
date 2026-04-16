@@ -865,4 +865,92 @@ describe("network-chat integration", () => {
       await expect(persistLearnedContext(sessionId)).resolves.toBeUndefined();
     });
   });
+
+  // ============================================================
+  // Brief 152 — persona selection flow integration
+  // ============================================================
+
+  describe("persona selection (interview mode)", () => {
+    it("interview mode does NOT trigger intake even if the message contains an email", async () => {
+      // Seed a session that's in interview stage, locked to Mira.
+      const sessionId = `test-session-interview-${Date.now()}`;
+      await testDb.insert(schema.chatSessions).values({
+        sessionId,
+        messages: [],
+        context: "front-door",
+        ipHash: "testhash",
+        personaId: "mira",
+        stage: "interview",
+        expiresAt: new Date(Date.now() + 86400000),
+      });
+
+      // Mock the LLM to emit an exuberant reply that SETS the funnel flags
+      // — we want to verify the server strips them in interview mode.
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Nice — let me send you something.", {
+          requestEmail: true,
+          done: true,
+          detectedMode: "sales",
+          learned: { name: "Tim" },
+        }),
+      );
+
+      // Message contains an email — would normally trigger intake.
+      const result = await handleChatTurn(
+        sessionId,
+        "I'm tim@example.com, just feeling you out",
+        "front-door",
+        "127.0.0.1",
+        null,
+        undefined,
+        undefined,
+        { promptMode: "interview" },
+      );
+
+      // Flags are stripped by the interview gate.
+      expect(result.requestEmail).toBe(false);
+      expect(result.done).toBe(false);
+      expect(result.detectedMode).toBeFalsy();
+      expect(result.emailCaptured).toBe(false);
+
+      // Intake was NOT called.
+      expect(mockStartIntake).not.toHaveBeenCalled();
+      expect(mockSendActionEmail).not.toHaveBeenCalled();
+      expect(mockSendCosActionEmail).not.toHaveBeenCalled();
+    });
+
+    it("main mode with persona=mira uses Mira's voice and uses Mira for intake", async () => {
+      const sessionId = `test-session-main-mira-${Date.now()}`;
+      await testDb.insert(schema.chatSessions).values({
+        sessionId,
+        messages: [],
+        context: "front-door",
+        ipHash: "testhash",
+        personaId: "mira",
+        stage: "main",
+        expiresAt: new Date(Date.now() + 86400000),
+      });
+
+      mockCreateCompletion.mockResolvedValueOnce(
+        mockAlexResponse("Noted.", {
+          requestEmail: false,
+          done: true,
+          detectedMode: "connector",
+        }),
+      );
+
+      await handleChatTurn(
+        sessionId,
+        "tim@example.com",
+        "front-door",
+        "127.0.0.1",
+      );
+
+      // startIntake should receive "mira" as the persona argument
+      expect(mockStartIntake).toHaveBeenCalled();
+      const firstCall = mockStartIntake.mock.calls[0] as unknown[];
+      // signature: (email, name, need, _, persona, _, sessionId)
+      expect(firstCall[4]).toBe("mira");
+    });
+  });
 });

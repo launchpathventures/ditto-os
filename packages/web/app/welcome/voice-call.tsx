@@ -23,6 +23,8 @@ interface VoiceCallProps {
   learned?: Record<string, string | null> | null;
   visitorName?: string;
   recentMessages?: Array<{ role: string; text: string }>;
+  /** Brief 152: controls the button label ("Talk to Alex" / "Talk to Mira"). */
+  personaName?: string;
   onCallStart?: () => void;
   onCallEnd?: () => void;
   onCallError?: (error: string) => void;
@@ -77,6 +79,7 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
   learned,
   visitorName,
   recentMessages,
+  personaName,
   onCallStart,
   onCallEnd,
   onCallError,
@@ -371,7 +374,7 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
         className="flex items-center gap-2 rounded-full bg-vivid px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-vivid/90 hover:shadow-md active:scale-95"
       >
         <Phone className="h-4 w-4" />
-        Talk to Alex
+        Talk to {personaName || "Alex"}
       </button>
     );
   }

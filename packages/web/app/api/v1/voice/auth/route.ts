@@ -50,15 +50,18 @@ export async function POST(request: Request) {
       "../../../../../../../src/engine/elevenlabs-agent"
     );
 
-    // Ensure agent exists first (single call to avoid race condition on cold start),
-    // then run signed URL + harness evaluation in parallel
-    const agentId = await ensureAgent();
+    // Brief 152: pick the agent for the session's persona. Falls back to Alex
+    // when the session hasn't committed yet (shouldn't happen — the voice CTA
+    // only shows after the visitor has entered the interview or main stage
+    // with a selected persona).
+    const sessionPersona = (session.personaId ?? "alex") as "alex" | "mira";
+    const agentId = await ensureAgent(sessionPersona);
     const [signedUrl, evaluation] = await Promise.all([
-      getSignedUrl(),
+      getSignedUrl(sessionPersona),
       evaluateVoiceConversationReadOnly(session.sessionId),
     ]);
 
-    console.log(`[voice/auth] agentId: ${agentId}, eval stage: ${evaluation?.stage || "none"}`);
+    console.log(`[voice/auth] persona: ${sessionPersona}, agentId: ${agentId}, eval stage: ${evaluation?.stage || "none"}`);
 
     if (!agentId) {
       return NextResponse.json({ error: "Voice agent not configured" }, { status: 503 });
@@ -67,6 +70,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...(signedUrl ? { signedUrl } : {}),
       agentId,
+      personaId: sessionPersona,
       // Harness evaluation — used to set initial guidance before the call starts
       evaluation: evaluation ? {
         guidance: evaluation.guidance,
