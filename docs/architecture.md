@@ -110,6 +110,20 @@ Fourteen system agents drive the framework (see ADR-008 + ADR-010 + Brief 079 + 
 
 The system that governs user work is itself governed by the same system. This is what makes Ditto a living system, not a platform.
 
+### Three-Layer Persona Architecture (Insight-153)
+
+The system presents itself through three distinct persona layers. Each layer has a different relationship to the user, a different scope of authority, and a different trust posture. This is how Ditto scales from "one AI advisor" to "an AI workforce" without collapsing into a single undifferentiated chatbot.
+
+| Layer | Who they are | What they do | Trust posture |
+|-------|-------------|-------------|---------------|
+| **Ditto** | The firm / chief of staff. The platform persona. | Coordinates work across user's processes, presents briefings, owns the workspace experience. | Quality-gate-safety-net autonomous (Insight-160). |
+| **Alex / Mira** | Senior advisors at Ditto. Network connectors. | Run the user's network — introductions, nurture, relationship intelligence. Never sell on behalf of the user. | Critical on outbound introductions; autonomous on internal reasoning. |
+| **User Agent** | The user's branded agent. One per user. | Direct selling, marketing, outreach in the user's voice. Two gears: Gear 1 (digital acquisition — content, social, SEO) and Gear 2 (direct outreach — sales calls, DMs, email). | Supervised at first, earns spot-checked/autonomous per process. |
+
+**Operator field on processes:** Every process declares which persona layer runs it via the `operator` field on `ProcessDefinition`. The cognitive mode (ADR-013) resolves from operator + processId + persona guard — `selling` mode is blocked for `alex-or-mira` operators regardless of process. Alex/Mira never sell; they only connect. The User Agent sells on the user's behalf. This separation prevents Alex's reputation from being collateral in any user's commercial activity, and it prevents a single persona from having to hold contradictory allegiances.
+
+**Scaling property:** Because Alex/Mira are shared across users (one network persona) while each User Agent is user-scoped (one per user), the network layer compounds (more users → richer relationship graph for Alex) without creating conflicts of interest (each user's agent has a single boss). See Insight-153 for the full rationale, cognitive mode sections (`cognitive/modes/{connecting,nurturing,selling,chief-of-staff}.md`) for per-mode calibration, and ADR-008 section 2 for the operator routing integration.
+
 ### The Network Is the Front Door (ADR-025, Insight-151)
 
 The Ditto journey doesn't start with installing software. It starts with a conversation — someone gets an email from Alex, visits the website, or gets introduced. Three layers of relationship:
@@ -289,6 +303,26 @@ Current adapters:
 
 The `integration` executor (Phase 6) resolves a service and protocol from the integration registry, executes the external call (CLI, MCP, or REST), and returns structured output — subject to the full harness pipeline like any other executor.
 
+**Channel routing — `notifyUser()` and `resolveChannel()`** (Brief 099a-c): Outbound messages to users traverse a resolver that picks the right delivery channel based on the user's deployment state. `notifyUser({ userId, body, urgent? })` calls `resolveChannel(userId)` → returns `"email"` for users in the `active` state and `"workspace"` for users in the `workspace` state. Workspace delivery emits via `emitNetworkEvent()` (SSE) with email fallback on SSE failure. `urgent: true` always sends email regardless of channel — workspace users get both SSE and email. All channels record an interaction (workspace case added in 099c reviewer F1). A three-layer throttle (caller gating → 1h minimum gap → 5/day cap) bounds outbound volume, with `lastNotifiedAt` on `networkUsers` as the single source of truth. This is the Layer 2 equivalent of "tell the user something" regardless of whether they're embedded in a workspace or arms-length on email.
+
+**Inbound session scoping** (Brief 099a): Inbound email sessions are scoped separately from workspace sessions. `sessionSurfaceValues` includes `"inbound"`; `getOrCreateSession()` filters by `ne(surface, "inbound")` when resolving workspace sessions. Email content never leaks into workspace conversation history and vice versa. Inbound sessions carry a 24-hour timeout vs 30-minute for workspace — async email threads maintain context across hours of back-and-forth.
+
+**Two composition patterns** (Brief 099b, Insight-162): The system composes outbound messages two ways:
+- **Conversational composition** — `selfConverse(surface, input)` runs the full Self pipeline (tool use, delegation, reasoning). Used when the system is responding to a user message. Creates sessions, records turns, burns session context.
+- **Proactive composition** — direct `createCompletion(...)` with the cognitive core prompt. Used by `relationship-pulse.ts`, `status-composer.ts`, and other proactive outreach modules. NO session created. No tools. No delegation. Pure LLM call producing a message.
+
+The distinction matters: proactive outreach must not pollute the Self's session history (Reviewer Flag B2 in Brief 099b). The same cognitive core governs both paths; the session lifecycle differs.
+
+**Relationship pulse** (Brief 099b): Proactive relationship building runs as step 4 of `pulseTick()`. For each active user, assembles a context snapshot (days since signup, last contact, user model density, active processes, pending deliverables, correction history) and asks an LLM (via proactive composition) whether to reach out. The LLM can decline ("stay silent"). 1-hour minimum gap between proactive outreaches; early-relationship bias (first 7 days raises outreach propensity). Co-ordinates with `status-composer.ts` — users who received status this tick are skipped.
+
+**Action boundaries** (Brief 102): System-enforced tool sets, not prompt-derived. `determineActionContext(state)` returns one of three contexts based on workspace/session state: `front_door` (research-only: search, assess_confidence, web_search, person_research, draft_plan), `workspace` (full 21-tool set), `workspace_budgeted` (workspace + budget-ledger tools). `getToolSetForContext(context)` returns the tool set; `filterToolsForContext()` applies it. This is the security boundary between a front-door visitor (who cannot spend money or send real email) and an authenticated workspace user (who can). Boundaries derived from state, not prompts — a compromised Self cannot escalate its own permissions.
+
+**Orchestrator — dual decomposition paths** (Brief 102): The orchestrator has two decomposition paths. (1) **Step-based decomposition** (original): goal has a `processSlug` → decompose into the process's steps. Used when the routing already has a process. (2) **LLM-powered goal decomposition** (Brief 102): goal has no `processSlug` → `decomposeGoalWithLLM()` gathers process inventory + industry patterns + optional web search, calls LLM, parses structured `GoalDecompositionResult` (sub-goals tagged `find`/`build`, optional phase grouping). Gated by `DimensionMap` clarity assessment — vague goals trigger clarifying questions before decomposition.
+
+**Orchestrator — find-or-build routing** (Brief 103): `routeSubGoal()` routes each sub-goal through three tiers: (1) **Process Model Library** — `findProcessModel()` matches against published models in `processModels` table (keyword-based). (2) **Existing process match** — `matchTaskToProcess()` with confidence ≥ 0.6. (3) **Build meta-process** — `triggerBuild()` researches, generates, saves, and first-run validates a new process. Build depth enforced via explicit counter (max 1 to prevent recursion). First-run gate: generated processes start `draft`, promote to `active` on successful first run. Concurrent-build dedup: keyword-based dedup key, in-flight builds tracked. `resolveSubGoalTrust()` enforces effective tier = more restrictive of goal trust and process trust. `bundled-review.ts` presents review at phase boundaries (all-find-complete or all-build-complete), not per-step. All routing decisions logged with cost category (free/cheap/expensive).
+
+**Goal auto-wiring** (Brief 074): `goalHeartbeatLoop(goalId, trustOverrides?)` continuously orchestrates: decomposeGoal → routeDecomposedTasks → fullHeartbeat per task → chain to next. `matchTaskToProcess()` uses slug exact match (confidence 1.0) or keyword match (token overlap ≥ 0.6 with word-boundary regex). Low confidence escalates to `waiting_human`. `checkAndResumeGoal()` after `approve_review()` on child runs continues the loop. `pauseGoal()`/`resumeGoal()` control lifecycle. Dependency ordering enforced. Goal status tracks completed/paused/failed/pending. Trust overrides stored on child run inputs (trust-gate enforcement at run level remains a follow-up design — stored and logged today, not yet read by the gate).
+
 **Agent harness** (the babushka model): Each agent operates within its own persistent operating context — the **agent harness** — which sits between the adapter (runtime) and the process harness (Layer 3). The agent harness is assembled before each invocation and includes:
 
 ```
@@ -360,6 +394,36 @@ Durable scopes stored in the `memories` table with `scope_type` (`agent`, `proce
 **Budget controls**: Per-agent, per-process cost tracking with soft alerts (80%) and hard stops (100%).
 
 ### Layer 3: Harness Layer (Quality Assurance)
+
+**Harness pipeline — 13 handlers** (Brief 116 extended the original 7 to 11; Brief 128 added `model-purpose-resolver`; ADR-028 added `deliberative-perspectives`). Ordered chain-of-responsibility, pre-execution and post-execution handlers interleaved. Registration order in `src/engine/heartbeat.ts`:
+
+| Order | Handler | Phase | Purpose |
+|-------|---------|-------|---------|
+| 1 | memory-assembly | pre | Loads relevant memories (agent/process/self/person/intra-run) within token budget |
+| 2 | identity-router | pre | Resolves `sendingIdentity` (principal/user) from step/process definition (Brief 116) |
+| 3 | voice-calibration | pre | Loads voice model when identity is user-scoped (ghost mode collapsed into user identity per Brief 152) |
+| 4 | model-purpose-resolver | pre | Reads step-definition signals → sets `resolvedModelPurpose` on context (Brief 128, core layer) |
+| 5 | step-execution | mid | Invokes the adapter to execute the step |
+| 6 | metacognitive-check | post | LLM self-review for unsupported assumptions, missing edges, scope creep (opt-in below critical) |
+| 7 | broadcast-direct-classifier | post | Deterministic audience-size lookup → sets `audienceClassification` on context |
+| 8 | outbound-quality-gate | post | `alwaysRun: true`. Checks outbound actions against configurable house value rules. Non-bypassable — flags violations regardless of trust tier. Per-draft independent processing for staged actions (Brief 129). |
+| 9 | review-pattern | post | Maker-checker / adversarial / spec-testing per process config |
+| 10 | deliberative-perspectives | post | Dynamic lens composition + anonymized peer review + Self synthesis for complex/ambiguous decisions (ADR-028) |
+| 11 | routing | post | Evaluates `route_to` conditions, marks skipped siblings |
+| 12 | trust-gate | post | Decides pause vs auto-advance based on tier, confidence, broadcast forcing, session overrides, step-category overrides |
+| 13 | feedback-recorder | post | Records every decision as an activity for learning |
+
+**Pipeline order deviation from Brief 116 spec:** Brief 116 proposed voice-calibration at position 2 and identity-router at position 3. Implementation reversed this — identity-router runs first because voice-calibration needs `sendingIdentity` to know whether to load a voice model. The doc table reflects actual registration order in heartbeat.ts.
+
+**Broadcast forcing** (Brief 116, security invariant): When `audienceClassification === "broadcast"`, the trust gate forces critical tier — absolute precedence. This cannot be overridden by session trust, goal trust, or step-category overrides. Rationale: a broadcast action is durable and hard to reverse; the Ditto principle is "earn trust in creation, require approval for destruction and broadcast."
+
+**Step-category trust overrides** (Brief 116): `stepDefinition.trustOverride` relaxes within process tier bounds. Enforcement rule: overrides can only relax (supervised → spot_checked), never tighten; builder/reviewer roles and critical-tier steps cannot be relaxed. Enables fine-grained trust on operating cycle internal steps while keeping the gate step at critical.
+
+**Session trust overrides** (Brief 053): In-memory store keyed by runId. `session-trust.ts` lets a `start_pipeline` call carry `sessionTrust` overrides for a specific run. Overrides can only relax, never tighten. Critical tier steps and builder/reviewer roles cannot be relaxed. Auto-cleared on run-complete/run-failed. This is the Self's mechanism for "just let this one run without checking every step" without changing the process's durable trust tier.
+
+**Outbound quality gate** (Brief 116, 129): Configurable house value rules check every outbound action (email, DM, broadcast, social post). Rules evaluated per-draft, independently. Non-bypassable — the gate runs `alwaysRun: true` and flags violations without short-circuiting execution. Flags surface in review rather than silently dropping messages. Staged dispatch pattern (Brief 129): tools can queue drafts via `stagedOutboundActions` during execution; the gate processes each draft post-execution. Prevents mega-step tools from bundling multiple drafts into a single quality decision.
+
+**Operating cycle archetype** (Brief 115-118, Insight-168): A process pattern for continuous operation across days/weeks. Seven archetype phases: SENSE → ASSESS → ACT → GATE → LAND → LEARN → BRIEF. A cycle is a long-running process (status `running` → `paused` → `running`) that spawns short-running sub-process runs per iteration. Four cycle types exist in `processes/cycles/`: `sales-marketing`, `network-connecting`, `relationship-nurture`, `gtm-pipeline`. Cycles declare `callable_as: cycle` and a `defaultIdentity`; sub-processes in `processes/templates/` declare `callable_as: sub-process` and can be invoked by `executor: sub-process` steps. Heartbeat auto-restart re-enters the cycle after iteration completion (overlap guard + fire-and-forget). This is the L1/L2/L3 pattern that lets Alex "operate continuously" rather than "run once."
 
 Four review patterns, assigned per process based on criticality:
 
@@ -492,6 +556,19 @@ Every process tracks three feedback signals:
 **7. Explicit knowledge extraction** (Brief 060) — When a significant correction occurs (edit severity ≥ moderate, rejection, retry, first 10 runs, or correction pattern count ≥ 3), the `knowledge-extraction` system process fires. Three parallel extractors classify the correction (context-analyzer: category, tags, severity), extract solution knowledge (solution-extractor: root cause, failed approaches, prevention), and find related existing solutions (related-finder: SQL-based metadata matching, not LLM). An assembly step merges results: high overlap → reinforce existing memory; moderate → create with cross-reference; low/none → create new. Trust-tier-aware scaling: supervised extracts on every significant correction, spot-checked samples ~50%, autonomous only on degradation (rejections), critical on every correction. Solution memories start at confidence 0.5 (higher than corrections at 0.3), decay by 0.1 after 50 runs without retrieval, and are pruned when confidence drops below 0.2. Newer solutions supersede older low-confidence ones in the same category. This complements implicit feedback — the system now learns structured knowledge (root cause, prevention, what failed) not just that something was edited.
 
 **Reactive-to-repetitive lifecycle (ADR-010):** Beyond improving existing processes, Layer 5 also watches for patterns in ad-hoc work. When the system notices the user creating similar work items repeatedly (e.g., Rob keeps manually entering bathroom reno quotes), it proposes formalising the pattern as a new process. The user confirms, refines, and activates — the ad-hoc work becomes a governed, trust-earning process. This is how the system grows its capabilities from user behaviour.
+
+### Cross-Cutting: Admin Oversight (Brief 108)
+
+Admin oversight is an operational layer spanning Layers 2 (Agent), 3 (Harness), and 6 (Human). The Ditto team has controls over Alex for every user on the managed network — pause/resume, feedback, act-as-Alex, and downgrade notifications. This is distinct from user-level trust (the user's ability to set trust tiers on their own processes). Admin controls operate on the network scope and carry `actorType: "admin"` in activity logs.
+
+**Mechanisms:**
+- `pauseUserProcesses(userId)` / `resumeUserProcesses(userId)` — sets/clears `pausedAt` on `networkUsers`. `status-composer.ts` and `relationship-pulse.ts` per-user loops check the flag and skip paused users. No outreach, no status email, no proactive pulse for paused users.
+- `adminFeedback` table — admin-scoped guidance. Admin writes a feedback entry; memory-assembly surfaces it as context when Self operates on behalf of that user. This is how the Ditto team corrects Alex's behaviour without touching the user's own trust state.
+- `sendAsAlex(userId, recipient, body)` — Ditto team composes via `sendAndRecord()` with `personaId: "alex"`. Interaction is recorded normally; the activity log marks it admin-sent.
+- `notifyAdmin()` / `notifyAdminOfDowngrade()` — trust downgrades (Insight-160: "who reviews on downgrade?") fire an email to `ADMIN_EMAIL`. The answer to the open question: the Ditto team does, via the admin dashboard at `/admin/users/[userId]`.
+- Admin routes (`/admin/users`, `/admin/users/[userId]`, `/admin/provision`, `/admin/fleet`, etc.) authenticated via `authenticateAdminRequest()`. Deployment mode flag (ADR-030) hard-404s admin routes in `workspace` mode — admin surfaces ship only on public Ditto Network, not on client installs.
+
+**Why operational, not architectural:** Admin oversight does not change how the harness operates. It adds a parallel control plane for the Ditto team to act on any user's system without becoming that user. The user's trust state, process definitions, and memory are untouched by admin actions (except adminFeedback, which is read-only context from Alex's perspective).
 
 ### Cross-Cutting: Governance and Agent Authentication
 
@@ -694,23 +771,44 @@ Three activity contexts coexist (not hard mode switches):
 
 **Workspace architecture:** Three-panel layout — sidebar (navigation to composition intents + process list) + center column (composed canvas + conversation + prompt input) + right panel (context-reactive: feed, process detail, briefing). Artifact mode for deep review: conversation (compact) + artifact host (ContentBlock[] via BlockList) + context panel. See `human-layer.md` for full workspace specification.
 
+**Surface-aware Self** (Brief 099a): `selfConverse(surface, input)` takes a surface type — `"web" | "cli" | "telegram" | "inbound"`. Same 26-tool Self brain; different session scoping and delegation guidance. When `surface === "inbound"`, the workspace-specific `<delegation_guidance>` block (panels, artifact mode, process builder references) is replaced with async-appropriate instructions (bias toward action, mention timelines, no workspace UI references). The Self is one identity across surfaces; the surface is a hint that shapes framing, not a fork.
+
+**Composition engine** (Briefs 073, 154): Every sidebar destination is a `CompositionIntent`, not a page. The composition engine in `packages/web/lib/compositions/` contains one pure function per intent (`composeToday(context)`, `composeInbox(context)`, etc.) returning `ContentBlock[]`. Deterministic and synchronous — no LLM in the hot path. Phase 10 MVP pattern (ADR-024): Self-driven composition deferred to Phase 11+; current functions encode reference compositions as defaults. Fallback composition renders on error (conversation input + TextBlock apology).
+
+**Composition intents — 8 destinations** (Briefs 073, 138, 140, 154, 166-168):
+
+| Intent | Purpose | Empty state | Composition module |
+|--------|---------|-------------|-------------------|
+| **Today** | What needs me right now | "Nothing needs your attention. Your processes are running smoothly." (deterministic, no LLM) | `compositions/today.ts` |
+| **Inbox** | Reviews, exceptions, suggestions | Context-aware suggestion blocks | `compositions/inbox.ts` |
+| **Work** | Active work items + pipelines | Suggestion blocks | `compositions/work.ts` |
+| **Projects** | Goal-level items with decomposition | Suggestion blocks | `compositions/projects.ts` |
+| **Routines** | Recurring processes + health | Suggestion blocks | `compositions/routines.ts` |
+| **Growth** | GTM pipeline plans, experiments, published content (Brief 140) | "Tell me about an audience you want to reach" | `compositions/growth.ts` |
+| **Library** | Process capability catalog (Brief 138) + recommended-for-you (Brief 168) | Personalised recommendations from user model | `compositions/library.ts` |
+| **Adaptive views** | Data-driven compositions registered at runtime (Brief 154) | — | `compositions/adaptive.ts` + `workspaceViews` table |
+
+**Intent context injection** (Brief 073): `selfConverseStream()` accepts `intentContext` — when the user starts a conversation from a specific sidebar destination, the composition intent is injected into the system prompt as `<intent_context>`. Routines → "focus on recurring cadence." Projects → "group work by parent goal." Inbox → "focus on pending reviews." This shapes Self's framing without routing to a different agent — one Self, context-aware per intent.
+
+**Adaptive workspace views** (Brief 154, Insight-189): Network agents push blocks to the workspace live. `workspaceViews` table (core schema, opaque JSON `CompositionSchema`). `pushBlocksToWorkspace()` / `refreshWorkspaceView()` / `registerWorkspaceView()` with 20/min rate limit. `workspace.push_blocks` + `workspace.register_view` tools with `stepRunId` guards (Insight-180). Companion view registration available via `generate_process`. This closes the loop between long-running network processes and the living workspace — the agent doesn't just send an email, it materialises a dashboard.
+
 ---
 
 ## Rendering Architecture
 
 ### ContentBlocks: The Universal Unit
 
-Everything the user sees flows through **ContentBlocks** — typed, structured data units defined in the engine (`src/engine/content-blocks.ts`) and rendered by the block registry (`packages/web/components/blocks/block-registry.tsx`). 22 ContentBlock types form a discriminated union with compile-time exhaustiveness checking.
+Everything the user sees flows through **ContentBlocks** — typed, structured data units defined in `packages/core/src/content-blocks.ts` (re-exported from `src/engine/content-blocks.ts`) and rendered by the block registry (`packages/web/components/blocks/block-registry.tsx`). **26 ContentBlock types** form a discriminated union with compile-time exhaustiveness checking. See ADR-021 addendums for the lineage; the engine source is authoritative.
 
 **Design rule:** ALL rendering flows through ContentBlocks. No bespoke viewers. Artifact mode renders BlockList. The composition engine produces BlockList. Self responses contain BlockList. This is the most critical architecture principle. (Insight-107)
 
-**Exception: Response-level metadata** (Insight-129). Not everything the engine produces is content. Some structured data describes the *response itself* — metadata about how confident the engine is, not a discrete content unit. `ConfidenceAssessment` is the first example: exported from `content-blocks.ts` for type co-location but NOT a member of the `ContentBlock` discriminated union. It flows via custom data parts (`data-confidence`) and is rendered by the Message component as conversation chrome, not by the block registry. The 22 ContentBlock count is unchanged. Litmus test: "Can this appear independently in a Today briefing?" If yes → ContentBlock. If no → response metadata.
+**Exception: Response-level metadata** (Insight-129). Not everything the engine produces is content. Some structured data describes the *response itself* — metadata about how confident the engine is, not a discrete content unit. `ConfidenceAssessment` is the first example: exported from `content-blocks.ts` for type co-location but NOT a member of the `ContentBlock` discriminated union. It flows via custom data parts (`data-confidence`) and is rendered by the Message component as conversation chrome, not by the block registry. The 26 ContentBlock count is unchanged. Litmus test: "Can this appear independently in a Today briefing?" If yes → ContentBlock. If no → response metadata.
 
 ### Two-Layer UI Architecture
 
 | Layer | Concern | Location |
 |-------|---------|----------|
-| **ContentBlock types** | WHAT to render (engine data model) | `src/engine/content-blocks.ts` — 22 types |
+| **ContentBlock types** | WHAT to render (engine data model) | `packages/core/src/content-blocks.ts` — 26 types |
 | **Response metadata types** | Metadata ABOUT the response (not portable content) | `src/engine/content-blocks.ts` — `ConfidenceAssessment` |
 | **AI Elements** | HOW to render (React components) | `packages/web/components/ai-elements/` — 16 components |
 | **Block renderers** | Block → AI Element mapping | `packages/web/components/blocks/` — 22 renderers |

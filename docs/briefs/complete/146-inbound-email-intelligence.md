@@ -1,7 +1,7 @@
 # Brief 146: Inbound Email Intelligence
 
 **Date:** 2026-04-14
-**Status:** draft
+**Status:** complete
 **Depends on:** none
 **Unlocks:** MP-6.5 (question fast-path — depends on expanded classification + thread context)
 

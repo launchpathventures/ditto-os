@@ -7,6 +7,9 @@
  * BlockRegistry dispatch. Same streaming backend as the front door,
  * but with richer message rendering.
  *
+ * Brief 157 MP-2.4: Subscribes to SSE harness events so ProgressBlock
+ * appears during first process execution without page refresh.
+ *
  * Provenance: ditto-conversation.tsx (front door), ai-elements/message.tsx (workspace)
  */
 
@@ -14,6 +17,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
 import { Message } from "@/components/ai-elements/message";
 import { ArrowRight } from "lucide-react";
+import { useHarnessEvents, type HarnessEventData } from "@/hooks/use-harness-events";
+import { ProgressBlockComponent } from "@/components/blocks/progress-block";
+import type { ProgressBlock } from "@/lib/engine";
 
 interface ChatConversationProps {
   initialMessages: Array<{ role: string; content: string }>;
@@ -48,11 +54,117 @@ export function ChatConversation({
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [activeProgress, setActiveProgress] = useState<Map<string, ProgressBlock>>(new Map());
+  // Brief 157 AC6: Progressive reveal — show workspace prompt after first process is created
+  const [firstProcessCreated, setFirstProcessCreated] = useState<{ name: string; slug: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const sendingRef = useRef(false);
   const msgIdCounter = useRef(initialMessages.length);
+
+  // Brief 157 MP-2.4: Subscribe to SSE harness events for real-time progress
+  const onHarnessEvent = useCallback((event: HarnessEventData) => {
+    // Brief 157 AC6: Progressive reveal — detect first process creation
+    // Checked before runId guard since build-process-created may lack processRunId (F2 fix)
+    if (event.type === "build-process-created") {
+      setFirstProcessCreated({
+        name: event.processName as string,
+        slug: event.processSlug as string,
+      });
+    }
+
+    const runId = event.processRunId as string | undefined;
+    if (!runId) return;
+
+    switch (event.type) {
+      case "step-start": {
+        const stepLabel = (event.processName as string)
+          ? `${event.processName}: ${event.roleName as string || event.stepId as string || "starting"}`
+          : (event.roleName as string || event.stepId as string || "Working...");
+        setActiveProgress((prev) => {
+          const next = new Map(prev);
+          // Use completedSteps+1 as totalSteps to show indeterminate progress (F3 fix)
+          const existing = next.get(runId);
+          const completed = existing?.completedSteps ?? 0;
+          next.set(runId, {
+            type: "progress",
+            entityType: "process_run",
+            entityId: runId,
+            currentStep: stepLabel,
+            totalSteps: completed + 1,
+            completedSteps: completed,
+            status: "running",
+          });
+          return next;
+        });
+        break;
+      }
+      case "step-complete": {
+        setActiveProgress((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(runId);
+          if (existing) {
+            const newCompleted = existing.completedSteps + 1;
+            next.set(runId, {
+              ...existing,
+              currentStep: event.summary as string || existing.currentStep,
+              completedSteps: newCompleted,
+              // Keep totalSteps at least 1 ahead so bar never shows 100% until run-complete
+              totalSteps: Math.max(existing.totalSteps, newCompleted + 1),
+            });
+          }
+          return next;
+        });
+        break;
+      }
+      case "run-complete": {
+        setActiveProgress((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(runId);
+          if (existing) {
+            next.set(runId, {
+              ...existing,
+              status: "complete",
+              completedSteps: existing.completedSteps,
+              totalSteps: existing.completedSteps,
+            });
+          }
+          // Auto-clear after 5s
+          setTimeout(() => {
+            setActiveProgress((p) => {
+              const n = new Map(p);
+              n.delete(runId);
+              return n;
+            });
+          }, 5_000);
+          return next;
+        });
+        break;
+      }
+      case "run-failed": {
+        setActiveProgress((prev) => {
+          const next = new Map(prev);
+          next.delete(runId);
+          return next;
+        });
+        break;
+      }
+      case "gate-pause": {
+        setActiveProgress((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(runId);
+          if (existing) {
+            next.set(runId, { ...existing, status: "paused" });
+          }
+          return next;
+        });
+        break;
+      }
+    }
+  }, []);
+
+  useHarnessEvents({ onEvent: onHarnessEvent, enabled: true });
 
   // Turnstile bot verification
   const turnstileRef = useRef<HTMLDivElement>(null);
@@ -240,6 +352,28 @@ export function ChatConversation({
               onAction={handleAction}
             />
           ))}
+          {/* Brief 157 MP-2.4: Real-time progress blocks from SSE */}
+          {activeProgress.size > 0 && (
+            <div className="space-y-2 py-2">
+              {Array.from(activeProgress.values()).map((block) => (
+                <ProgressBlockComponent key={block.entityId} block={block} />
+              ))}
+            </div>
+          )}
+          {/* Brief 157 AC6: Progressive reveal — workspace prompt after first process */}
+          {firstProcessCreated && (
+            <div className="my-4 p-4 rounded-lg border border-vivid/20 bg-vivid/5">
+              <p className="text-sm text-text-primary">
+                Your first process <strong>{firstProcessCreated.name}</strong> is ready.
+              </p>
+              <a
+                href="/"
+                className="mt-2 inline-block text-sm font-medium text-vivid hover:underline"
+              >
+                Open your workspace to see it in action &rarr;
+              </a>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>

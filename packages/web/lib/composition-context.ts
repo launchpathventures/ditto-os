@@ -27,9 +27,10 @@ async function fetchGrowthPlans(): Promise<GrowthPlanSummary[]> {
   return res.json();
 }
 
-/** Fetch process capabilities from the API (library view) */
-async function fetchCapabilities(): Promise<ProcessCapability[]> {
-  const res = await fetch("/api/capabilities");
+/** Fetch process capabilities from the API (library + today views) */
+async function fetchCapabilities(userId?: string): Promise<ProcessCapability[]> {
+  const url = userId ? `/api/capabilities?userId=${encodeURIComponent(userId)}` : "/api/capabilities";
+  const res = await fetch(url);
   if (!res.ok) return [];
   return res.json();
 }
@@ -82,11 +83,11 @@ export function useCompositionContext(intent?: string): CompositionContext {
     staleTime: 10_000,
   });
 
-  // Lazy capabilities data — only fetched when library intent is active
+  // Brief 168: Fetch capabilities for library and today intents (recommendations)
   const { data: capabilitiesData } = useQuery({
-    queryKey: ["capabilities"],
-    queryFn: fetchCapabilities,
-    enabled: intent === "library",
+    queryKey: ["capabilities", "default"],
+    queryFn: () => fetchCapabilities("default"),
+    enabled: intent === "library" || intent === "today",
     staleTime: 30_000,
   });
 
@@ -108,6 +109,16 @@ export function useCompositionContext(intent?: string): CompositionContext {
   );
   const activeRuns = activeRunsData?.activeRuns ?? [];
 
+  // Brief 168: Derive recommended subset from scored capabilities
+  const recommended = useMemo(() => {
+    if (!capabilitiesData) return undefined;
+    const recs = capabilitiesData
+      .filter((c) => !c.active && c.relevanceScore !== undefined && c.relevanceScore > 0.5)
+      .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
+      .slice(0, 3);
+    return recs.length > 0 ? recs : undefined;
+  }, [capabilitiesData]);
+
   return useMemo(
     () => ({
       processes,
@@ -118,8 +129,9 @@ export function useCompositionContext(intent?: string): CompositionContext {
       roadmap: roadmapData,
       growthPlans: growthPlansData,
       capabilities: capabilitiesData,
+      recommended,
       now: new Date(),
     }),
-    [processes, workItems, feedItems, pendingReviews, activeRuns, roadmapData, growthPlansData, capabilitiesData],
+    [processes, workItems, feedItems, pendingReviews, activeRuns, roadmapData, growthPlansData, capabilitiesData, recommended],
   );
 }

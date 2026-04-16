@@ -631,3 +631,195 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 **Work Surface** — The primary gravitational center of the Ditto app. Where running processes, their current state, and their outputs live. Not a dashboard reporting on work — it IS the work: living, interactive, evolving. Process outputs (static and dynamic) manifest here. Distinct from the conversation surface, which is where the user and the Self align, decide, and steer. Insight-067, ADR-009 v2.
 - Layer: 6 (Human)
 - Related: Output Viewer, Conversation Surface, Output Schema, Conversational Self
+
+---
+
+## Terms added 2026-04-16 (drift batch)
+
+The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115-118, 143, 151-154, and Insights 153 / 180 / 184. Next maintenance pass should fold them into alphabetical order.
+
+### Three-Layer Persona Architecture (Insight-153)
+
+**User Agent** — The user's branded agent, one per user. Does direct selling, marketing, and outreach in the user's voice. Two gears: Gear 1 (digital acquisition — content, social, SEO) and Gear 2 (direct outreach — sales calls, DMs, email). Scoped to a single user's commercial activity. Contrast with Alex/Mira (network connectors, never sell).
+- Layer: 2 (Agent), persona
+- Related: Persona Layer, Operator, Gear, Alex / Mira
+
+**Persona Layer** — One of three presentation layers: Ditto (firm/chief of staff), Alex/Mira (senior advisors, network connectors), User Agent (user-branded seller). Each layer has a different scope of authority and trust posture. Scaling property: Alex/Mira are shared across users; each User Agent is user-scoped.
+- Layer: 2 (Agent)
+- Related: User Agent, Operator, Three-Layer Persona Architecture
+
+**Operator (process field)** — The persona layer that runs a process. Declared on `ProcessDefinition.operator`. Cognitive mode resolver uses operator + processId + persona guard to select the mode file (`cognitive/modes/{connecting,nurturing,selling,chief-of-staff}.md`). Selling mode is blocked for `alex-or-mira` operators.
+- Layer: 1 (Process)
+- Related: User Agent, Persona Layer, Cognitive Mode
+
+**Gear** — A User Agent posture. Gear 1 is digital acquisition (content creation, social publishing, SEO). Gear 2 is direct outreach (sales calls, DMs, email). A single User Agent runs both gears across different processes.
+- Layer: 2 (Agent)
+- Related: User Agent, GTM Pipeline
+
+### Surface-Aware Self (Brief 099)
+
+**Inbound Session** — A session scoped to email-based conversation with the Self. `sessionSurfaceValues` includes `"inbound"`. Scoped separately from workspace sessions (`ne(surface, "inbound")` filter) to prevent cross-contamination. 24-hour timeout (vs 30-minute workspace) for async email continuity.
+- Layer: 2 (Agent)
+- Related: Conversational Self, selfConverse, Surface
+
+**notifyUser** — `notifyUser({ userId, body, urgent? })` — channel-aware outbound delivery. Calls `resolveChannel(userId)` → returns `"email"` or `"workspace"`. Workspace delivery via SSE with email fallback. Urgent flag always sends email regardless of channel. Three-layer throttle (caller gating + 1h minimum gap + 5/day cap). `lastNotifiedAt` on `networkUsers` is the single source of truth for "when did Alex last email this user."
+- Layer: 2 (Agent)
+- Related: resolveChannel, workspaceSuggestedAt, ComplexitySignals
+
+**resolveChannel** — Returns `"email"` for users in `active` state, `"workspace"` for users in `workspace` state. The channel selector underneath `notifyUser`. Brief 099c added the workspace case on top of the original email-only path.
+- Layer: 2 (Agent)
+- Related: notifyUser, Workspace Graduation
+
+**Relationship Pulse** — Proactive relationship building module. Runs as step 4 of `pulseTick()`. Per active user, assembles a context snapshot and asks an LLM (via proactive composition, not selfConverse) whether to reach out. Can decline. Early-relationship bias (first 7 days). 4h minimum gap (tightened from 24h in Brief 151). Coordinates with status-composer to avoid double-notify.
+- Layer: 2 (Agent)
+- Related: Pulse, Status Composer, Proactive Composition
+
+**Proactive Composition** — Composition pattern for outbound messages via direct `createCompletion(...)` with the cognitive core prompt — no session, no tools, no delegation. Contrast with conversational composition (full `selfConverse()` pipeline). Used by relationship-pulse, status-composer. Reason: proactive outreach must not pollute session history.
+- Layer: 2 (Agent)
+- Related: Conversational Composition, Relationship Pulse, Status Composer
+
+**ComplexitySignals** — Four signals tracked per user to identify workspace-readiness: concurrent active processes (≥3), batch reviews (≥2), correction frequency (≥3), `wantsVisibility` flag. When 2+ signals are met and `workspaceSuggestedAt` is null, Alex weaves a one-time workspace suggestion into proactive outreach.
+- Layer: 2 (Agent) / Learning
+- Related: Workspace Graduation, workspaceSuggestedAt
+
+**workspaceSuggestedAt** — Timestamp on `networkUsers`. Set once when Alex suggests a workspace. Never cleared. Prevents nag.
+- Layer: 2 (Agent), schema
+- Related: ComplexitySignals, Workspace Graduation
+
+### Interactive Blocks + Composition (Briefs 072, 073, 074)
+
+**InteractiveField** — Field definition for interactive ContentBlocks. `type: "text" | "select" | "number" | "toggle"` with label, placeholder, options, required flag. Used by WorkItemFormBlock, ConnectionSetupBlock, and interactive-mode ProcessProposalBlock.
+- Layer: 1 (Process) / 6 (Human)
+- Related: WorkItemFormBlock, ConnectionSetupBlock, FormSubmitAction
+
+**WorkItemFormBlock** — ContentBlock for in-conversation work item creation. Fields (title, description, etc.) are InteractiveFields. Submit routes via form-submit action namespace.
+- Layer: 6 (Human)
+- Related: InteractiveField, FormSubmitAction, create_work_item
+
+**ConnectionSetupBlock** — ContentBlock for in-conversation integration connection setup (e.g., "Connect GitHub"). Fields are InteractiveFields for the credential handshake. Submit routes via form-submit action namespace.
+- Layer: 6 (Human) / Integration
+- Related: InteractiveField, FormSubmitAction, connect_service
+
+**FormSubmitAction** — Action type for form-submit routing on interactive blocks. Validated via block-type-scoped registry tokens (Brief 072 Reviewer F1 fix — no action-registry bypass). Routes through `handleSurfaceAction` to block-specific handlers.
+- Layer: 6 (Human)
+- Related: InteractiveField, WorkItemFormBlock, ConnectionSetupBlock, handleSurfaceAction
+
+**goalHeartbeatLoop** — `goalHeartbeatLoop(goalId, trustOverrides?)` — continuous goal orchestration. Loops decomposeGoal → routeDecomposedTasks → fullHeartbeat per task → checkAndResumeGoal. Auto-resume after `approve_review()` on child runs. Status tracks completed/paused/failed/pending.
+- Layer: 2 (Agent)
+- Related: orchestrator, matchTaskToProcess, pauseGoal, resumeGoal
+
+**matchTaskToProcess** — Routing function in `router.ts`. Returns `{ processSlug, confidence }` via slug exact match (confidence 1.0) or keyword match (word-boundary regex, token overlap). Confidence ≥ 0.6 auto-routes; below → `waiting_human`.
+- Layer: 2 (Agent)
+- Related: router, goalHeartbeatLoop
+
+**pauseGoal / resumeGoal** — Self tools (pause_goal is the 20th tool). Pause sets goal status to paused; heartbeat loop stops. Resume restarts the loop from the current dependency-ordered position.
+- Layer: 2 (Agent), Self tools
+- Related: goalHeartbeatLoop, start_pipeline
+
+**intentContext** — Context injected into `selfConverseStream()` when the user starts a conversation from a specific sidebar destination. Rendered into the system prompt as `<intent_context>`. One Self, context-aware per intent.
+- Layer: 6 (Human)
+- Related: Composition Intent, selfConverseStream
+
+### Goal Decomposition + Action Boundaries (Brief 102)
+
+**DimensionMap** — Six-dimension clarity assessment: outcome, assets, constraints, context, infrastructure, risk_tolerance. `assessClarity()` evaluates via heuristic signal matching. `isDecompositionReady()` gates on outcome dimension. Vague dimensions trigger clarifying questions before decomposition.
+- Layer: 2 (Agent)
+- Related: GoalDecomposition, Goal Framing
+
+**GoalDecomposition** — Engine primitive (`packages/core/src/goal-decomposition.ts`) — `SubGoal`, `GoalPhase`, `GoalDecompositionResult` discriminated union. Sub-goals tagged `find` (existing process matches) or `build` (requires new process). Optional phase grouping when >8 sub-goals.
+- Layer: 1 (Process), engine primitive
+- Related: DimensionMap, orchestrator, Find-or-Build Routing
+
+**ActionBoundary / ActionContext** — System-enforced tool sets keyed by state. Three contexts: `front_door` (research-only), `workspace` (full tools), `workspace_budgeted` (workspace + budget ledger). `determineActionContext(state)` derives from workspace/session state, not from prompts. Prevents prompt-based privilege escalation.
+- Layer: 2 (Agent)
+- Related: Tool Resolver, System-enforced boundaries
+
+**SubGoalRouting** — Three-tier routing performed by `routeSubGoal()`: (1) Process Model Library → (2) existing process match → (3) Build meta-process. Each sub-goal routed independently.
+- Layer: 2 (Agent)
+- Related: Find-or-Build Routing, ProcessModelMatch, triggerBuild
+
+### Find-or-Build Routing (Brief 103)
+
+**ProcessModelMatch** — Match result from `findProcessModel()` against published process models. Keyword-based scoring. Preferred over live process match when model library has a better fit.
+- Layer: 2 (Agent)
+- Related: Process Model Library, library-curation
+
+**GoalTrust** — Effective trust tier for a sub-goal = more restrictive of goal trust and process trust. `resolveSubGoalTrust()` enforces. Critical tier and builder/reviewer roles cannot be relaxed. Parent trust inherited via `parentTrustTier` on `delayedRuns` and chain-spawned runs.
+- Layer: 3 (Harness)
+- Related: Trust Tier, SubGoalRouting
+
+**BuildResult** — Output of `triggerBuild()` — research → generate → save → first-run validate. Generated processes start `draft`, promote to `active` on successful first run, archive on failure (max 1 retry). Build depth enforced via explicit counter.
+- Layer: 2 (Agent)
+- Related: Build Meta-Process, Find-or-Build Routing
+
+**BundledReview** — Review at phase boundaries (all-find complete, or all-build complete in a dependency tier), not per-step. `collectForBundledReview()` + `isReviewBoundary()` + `presentBundledReview()`. Individual approve/edit/reject per sub-goal output within the bundle.
+- Layer: 3 (Harness)
+- Related: review-pattern, Find-or-Build Routing
+
+**RoutingPath** — The chosen tier for a sub-goal (`model | find | build`). Logged on the decision with cost category (free/cheap/expensive) for observability.
+- Layer: 2 (Agent)
+- Related: SubGoalRouting, Cost Observability
+
+### Operating Cycle Archetype (Briefs 115-118, Insight-168)
+
+**OperatingCycle** — A long-running process archetype for continuous operation. Seven phases: SENSE → ASSESS → ACT → GATE → LAND → LEARN → BRIEF. Lives in `processes/cycles/` with `callable_as: cycle`. Spawns sub-process runs per iteration via `executor: sub-process`.
+- Layer: 1 (Process) / 2 (Agent)
+- Related: Sub-Process Executor, Cycle Briefing, sendingIdentity
+
+**SendingIdentity** — Identity-aware delivery: `principal` (Alex sends as Alex → always AgentMail) or `user` (Alex sends on user's behalf → Gmail API when connected, AgentMail fallback). Declared at process or step level; identity-router handler resolves before execution. Legacy `agent-of-user` and `ghost` collapse into `user` per Brief 152.
+- Layer: 2 (Agent)
+- Related: Channel Resolver, Identity Router, Ghost Mode
+
+**AudienceClassification** — Post-execution result of the broadcast-direct-classifier: `broadcast` or `direct`. Deterministic from configurable audience-size lookup. Forces critical tier when `broadcast`.
+- Layer: 3 (Harness)
+- Related: broadcast-direct-classifier, Broadcast Forcing
+
+**VoiceModel** — Structured voice capture (tone, diction, patterns, samples). Loaded by the voice-calibration handler when sending identity is user-scoped. Persisted as a `voice_model` memory type.
+- Layer: 2 (Agent)
+- Related: voice-calibration, SendingIdentity
+
+**TrustOverride (step-category)** — `stepDefinition.trustOverride` relaxes trust within the process tier bounds. Relaxation-only (supervised → spot_checked). Builder/reviewer roles and critical-tier steps cannot be relaxed. Enables fine-grained trust on cycle internal steps.
+- Layer: 3 (Harness)
+- Related: Trust Tier, Session Trust Override
+
+**BroadcastForcing** — Security invariant. When `audienceClassification === "broadcast"`, the trust gate forces critical tier — absolute precedence, cannot be overridden by session trust, goal trust, or step-category overrides.
+- Layer: 3 (Harness)
+- Related: AudienceClassification, broadcast-direct-classifier
+
+**OutboundQualityRule** — Configurable house value rule evaluated by the outbound-quality-gate. Non-bypassable (`alwaysRun: true`). Runs per-draft for staged actions.
+- Layer: 3 (Harness)
+- Related: outbound-quality-gate, OutboundActionRecord, StagedOutboundAction
+
+**OutboundActionRecord** — Structured record of an outbound action (email, DM, broadcast, social post). Persisted in `outboundActions` table. Used by the quality gate for per-draft evaluation and by Insight-184 dedup logic.
+- Layer: 3 (Harness), schema
+- Related: outbound-quality-gate, OutboundQualityRule
+
+### Admin Oversight (Brief 108)
+
+**adminFeedback** — Table storing admin-scoped guidance for Alex. Memory-assembly surfaces entries as context when Self operates on behalf of a user. Admin corrects Alex without touching the user's trust state.
+- Layer: 2 (Agent) / Admin
+- Related: pausedAt, notifyAdmin, Admin Oversight
+
+**pausedAt** — Column on `networkUsers`. When non-null, status-composer and relationship-pulse skip the user. Admin pause/resume mechanism.
+- Layer: 2 (Agent), schema
+- Related: pauseUserProcesses, resumeUserProcesses
+
+**notifyAdmin / notifyAdminOfDowngrade** — Fire-and-forget email to `ADMIN_EMAIL` on trust downgrades and critical events. Resolves Insight-160's "who reviews on downgrade?" open question: the Ditto team, via `/admin/users/[userId]`.
+- Layer: 2 (Agent) / Admin
+- Related: Trust Downgrade, Insight-160
+
+**sendAsAlex** — Admin composes an email via `sendAndRecord()` with `personaId: "alex"`. Activity logged as admin-sent (`actorType: "admin"`). Does not modify user trust state.
+- Layer: 2 (Agent) / Admin
+- Related: sendAndRecord, adminFeedback
+
+### Session Trust Override (Brief 053)
+
+**Session Trust Override** — In-memory store keyed by `runId`. `start_pipeline` can carry `sessionTrust` overrides for a specific run. Relaxation-only, never tighten. Auto-cleared on run-complete/run-failed. The Self's "just let this run without checking every step" mechanism.
+- Layer: 3 (Harness)
+- Related: Trust Tier, start_pipeline, TrustOverride (step-category)
+
+### Step-Run Invocation Guard (Insight-180)
+
+**Step-Run Guard** — Functions that produce external side effects (social publishing, payments, webhooks, `sendAndRecord`) must require a `stepRunId` parameter as proof the call originates from within harness pipeline step execution. Programmatic guard — the function rejects calls without a valid step-run context (except in test mode).
+- Layer: 2 (Agent) / Cross-cutting
+- Related: Invocation Guard, Tool Resolver, stepRunId

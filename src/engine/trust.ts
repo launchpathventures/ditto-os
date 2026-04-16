@@ -19,6 +19,8 @@ import { db, schema } from "../db";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import type { TrustTier, TrustSuggestionStatus } from "../db/schema";
 import { SPOT_CHECK_RATE } from "./trust-constants";
+import type { TrustMilestoneBlock, ActionDef } from "./content-blocks";
+import { computeCorrectionRates, formatCorrectionEvidence } from "./harness-handlers/feedback-recorder";
 
 // ============================================================
 // Types
@@ -856,7 +858,31 @@ export async function executeTierChange(params: {
     metadata: params.metadata ?? {},
   });
 
-  // Activity log
+  // Determine direction
+  const tierRank: Record<string, number> = { critical: 0, supervised: 1, spot_checked: 2, autonomous: 3 };
+  const isDowngrade = (tierRank[params.toTier] ?? 0) < (tierRank[params.fromTier] ?? 0);
+
+  // Brief 160 MP-5.2: Generate downgrade explanation milestone block
+  let milestoneBlock: TrustMilestoneBlock | undefined;
+  if (params.actor === "system" && isDowngrade) {
+    const [process] = await db
+      .select({ name: schema.processes.name })
+      .from(schema.processes)
+      .where(eq(schema.processes.id, params.processId))
+      .limit(1);
+
+    const triggers = (params.metadata?.triggers as DowngradeTrigger[]) ?? [];
+
+    milestoneBlock = generateDowngradeExplanation({
+      processName: process?.name ?? params.processId,
+      fromTier: params.fromTier,
+      toTier: params.toTier,
+      triggers,
+      processId: params.processId,
+    });
+  }
+
+  // Activity log — include milestone block for briefing retrieval (Brief 160)
   await db.insert(schema.activities).values({
     action: "trust.tier_change",
     actorType: params.actor,
@@ -866,6 +892,7 @@ export async function executeTierChange(params: {
       fromTier: params.fromTier,
       toTier: params.toTier,
       reason: params.reason,
+      ...(milestoneBlock ? { milestoneBlock } : {}),
     },
   });
 
@@ -873,10 +900,7 @@ export async function executeTierChange(params: {
   await computeAndCacheTrustState(params.processId);
 
   // Brief 108 AC8: Notify admin on system-initiated downgrades
-  const tierRank: Record<string, number> = { critical: 0, supervised: 1, spot_checked: 2, autonomous: 3 };
-  const isDowngrade = (tierRank[params.toTier] ?? 0) < (tierRank[params.fromTier] ?? 0);
   if (params.actor === "system" && isDowngrade) {
-    // Look up process name for the notification
     const [process] = await db
       .select({ name: schema.processes.name })
       .from(schema.processes)
@@ -1291,6 +1315,149 @@ function wouldBeReviewedAtTier(
   }
 }
 
+// ============================================================
+// Trust Milestone Blocks (Brief 160 MP-5.1 + MP-5.2)
+// ============================================================
+
+/**
+ * Generate a trust upgrade celebration block.
+ *
+ * MP-5.1: Dedicated ContentBlock for trust milestone with evidence narrative,
+ * distinct from regular suggestions. Includes accept/reject actions.
+ *
+ * Provenance: Discourse TL3 milestone notifications (pattern).
+ */
+export function generateUpgradeCelebration(params: {
+  processName: string;
+  currentTier: TrustTier;
+  suggestedTier: TrustTier;
+  state: TrustState;
+  suggestionId: string;
+}): TrustMilestoneBlock {
+  const { processName, currentTier, suggestedTier, state, suggestionId } = params;
+
+  // Build evidence narrative from concrete metrics
+  const evidenceParts: string[] = [];
+  evidenceParts.push(
+    `${Math.round(state.approvalRate * 100)}% accurate over ${state.runsInWindow} runs`,
+  );
+  if (state.correctionRate > 0) {
+    evidenceParts.push(`correction rate dropped to ${Math.round(state.correctionRate * 100)}%`);
+  } else {
+    evidenceParts.push("zero corrections needed");
+  }
+  if (state.consecutiveCleanRuns > 0) {
+    evidenceParts.push(`${state.consecutiveCleanRuns} clean runs in a row`);
+  }
+
+  const tierLabels: Record<string, string> = {
+    supervised: "supervised",
+    spot_checked: "spot-checked",
+    autonomous: "autonomous",
+    critical: "critical",
+  };
+
+  const whatChanges = suggestedTier === "spot_checked"
+    ? "I'd check in on about 1 in 5 outputs instead of every one."
+    : "Only flagged outputs would come to you — everything else flows automatically.";
+
+  const evidence = `${evidenceParts.join(", ")}. ${whatChanges}`;
+
+  const actions: ActionDef[] = [
+    {
+      id: `trust-accept-${suggestionId}`,
+      label: "Sounds good, let's do it",
+      style: "primary",
+      payload: { action: "trust_accept", suggestionId },
+    },
+    {
+      id: `trust-reject-${suggestionId}`,
+      label: "Not yet, keep checking everything",
+      style: "secondary",
+      payload: { action: "trust_reject", suggestionId },
+    },
+  ];
+
+  return {
+    type: "trust_milestone",
+    milestoneType: "upgrade",
+    processName,
+    fromTier: tierLabels[currentTier] ?? currentTier,
+    toTier: tierLabels[suggestedTier] ?? suggestedTier,
+    evidence,
+    actions,
+  };
+}
+
+/**
+ * Generate a trust downgrade explanation block.
+ *
+ * MP-5.2: Human-readable explanation with specific patterns that triggered
+ * the downgrade. Warm tone, not punitive.
+ *
+ * Provenance: Discourse TL3 milestone notifications (pattern).
+ */
+export function generateDowngradeExplanation(params: {
+  processName: string;
+  fromTier: TrustTier;
+  toTier: TrustTier;
+  triggers: DowngradeTrigger[];
+  processId: string;
+}): TrustMilestoneBlock {
+  const { processName, fromTier, toTier, triggers, processId } = params;
+
+  const tierLabels: Record<string, string> = {
+    supervised: "supervised",
+    spot_checked: "spot-checked",
+    autonomous: "autonomous",
+    critical: "critical",
+  };
+
+  // Build warm explanation from triggers
+  const explanationParts: string[] = [];
+  for (const trigger of triggers) {
+    if (trigger.name.includes("Correction rate")) {
+      explanationParts.push("the last few outputs needed more corrections than usual");
+    } else if (trigger.name.includes("Rejection")) {
+      explanationParts.push("a recent output needed to be redone");
+    } else if (trigger.name.includes("Auto-check")) {
+      explanationParts.push("automated checks flagged some quality issues");
+    } else {
+      explanationParts.push(trigger.name.toLowerCase());
+    }
+  }
+
+  const explanation = explanationParts.length > 0
+    ? `I noticed ${explanationParts.join(" and ")} — so I'll check in more often until things settle back down.`
+    : "I'll check in more often until things settle back down.";
+
+  // Build evidence from trigger details
+  const evidenceParts = triggers.map(
+    (t) => `${t.name}: ${t.actual} (threshold: ${t.threshold})`,
+  );
+  const evidence = evidenceParts.join("; ");
+
+  const actions: ActionDef[] = [
+    {
+      id: `trust-override-${processId}`,
+      label: "These were edge cases — keep the previous level",
+      style: "secondary",
+      payload: { action: "trust_override", processId },
+    },
+  ];
+
+  return {
+    type: "trust_milestone",
+    milestoneType: "downgrade",
+    processName,
+    fromTier: tierLabels[fromTier] ?? fromTier,
+    toTier: tierLabels[toTier] ?? toTier,
+    evidence,
+    explanation,
+    actions,
+  };
+}
+
 function emptySimulation(tier: TrustTier): SimulationResult {
   return {
     tier,
@@ -1314,6 +1481,8 @@ export function formatUpgradeSuggestion(
     evidence: Array<{ name: string; threshold: string; actual: string; passed: boolean }>;
   },
   state: TrustState,
+  /** Brief 159 MP-4.4: Optional correction rate evidence narrative */
+  correctionEvidence?: string | null,
 ): string {
   const lines: string[] = [];
   lines.push("");
@@ -1327,6 +1496,25 @@ export function formatUpgradeSuggestion(
     const mark = cond.passed ? "✓" : "✗";
     const line = `   ${mark} ${cond.name}: ${cond.actual} (${cond.threshold})`;
     lines.push(`  │${line.padEnd(45)}│`);
+  }
+  // Brief 159 MP-4.4: Correction rate evidence narrative
+  if (correctionEvidence) {
+    lines.push("  │                                             │");
+    lines.push("  │  Learning effect:                           │");
+    // Wrap long evidence lines
+    const words = correctionEvidence.split(" ");
+    let currentLine = "   ";
+    for (const word of words) {
+      if ((currentLine + word).length > 43) {
+        lines.push(`  │${currentLine.padEnd(45)}│`);
+        currentLine = "   " + word + " ";
+      } else {
+        currentLine += word + " ";
+      }
+    }
+    if (currentLine.trim().length > 0) {
+      lines.push(`  │${currentLine.padEnd(45)}│`);
+    }
   }
   lines.push("  │                                             │");
   lines.push("  │  What changes:                              │");
@@ -1346,6 +1534,20 @@ export function formatUpgradeSuggestion(
   lines.push(`  │  Or:  pnpm cli trust ${processName.slice(0, 10)} --simulate  │`);
   lines.push("  └─────────────────────────────────────────────┘");
   return lines.join("\n");
+}
+
+/**
+ * Fetch correction rate evidence for a process.
+ * Brief 159 MP-4.4: Used by trust CLI and suggestion display.
+ * Non-blocking — returns null on error.
+ */
+export async function getCorrectionEvidence(processId: string): Promise<string | null> {
+  try {
+    const rates = await computeCorrectionRates(processId);
+    return formatCorrectionEvidence(rates);
+  } catch {
+    return null;
+  }
 }
 
 export function formatDowngradeAlert(

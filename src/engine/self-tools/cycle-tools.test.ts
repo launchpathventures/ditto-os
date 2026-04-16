@@ -146,6 +146,7 @@ describe("activate_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Fill pipeline with 10 qualified leads per month",
       icp: "B2B SaaS companies, 50-200 employees",
+      sendingIdentity: "principal",
     });
 
     expect(result.success).toBe(true);
@@ -166,6 +167,7 @@ describe("activate_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Grow revenue",
       icp: "SMBs",
+      sendingIdentity: "principal",
     });
 
     expect(result.success).toBe(true);
@@ -200,6 +202,7 @@ describe("activate_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Test heartbeat",
       icp: "Tech companies",
+      sendingIdentity: "principal",
     });
 
     expect(result.success).toBe(true);
@@ -216,6 +219,7 @@ describe("activate_cycle", () => {
       cycleType: "sales-marketing",
       goals: "First goal",
       icp: "Tech companies",
+      sendingIdentity: "principal",
     });
     expect(first.success).toBe(true);
 
@@ -232,6 +236,7 @@ describe("activate_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Second goal",
       icp: "Different companies",
+      sendingIdentity: "principal",
     });
 
     expect(second.success).toBe(false);
@@ -249,6 +254,7 @@ describe("pause_cycle and resume_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Test",
       icp: "Test",
+      sendingIdentity: "principal",
     });
     const runId = activate.metadata?.runId as string;
 
@@ -273,6 +279,7 @@ describe("pause_cycle and resume_cycle", () => {
       cycleType: "sales-marketing",
       goals: "Test",
       icp: "Test",
+      sendingIdentity: "principal",
     });
     const runId = activate.metadata?.runId as string;
 
@@ -309,6 +316,7 @@ describe("cycle_briefing", () => {
       cycleType: "sales-marketing",
       goals: "Fill pipeline",
       icp: "B2B SaaS",
+      sendingIdentity: "principal",
     });
     const runId = activate.metadata?.runId as string;
 
@@ -364,6 +372,7 @@ describe("cycle_status", () => {
       cycleType: "sales-marketing",
       goals: "Sales goal",
       icp: "Tech",
+      sendingIdentity: "principal",
     });
     testDb.update(schema.processRuns)
       .set({
@@ -378,6 +387,7 @@ describe("cycle_status", () => {
       cycleType: "network-connecting",
       goals: "Connect goal",
       icp: "People",
+      sendingIdentity: "principal",
     });
     testDb.update(schema.processRuns)
       .set({
@@ -522,6 +532,7 @@ describe("gtm-pipeline cycle type", () => {
       cycleType: "sales-marketing",
       goals: "Sales goal",
       icp: "Tech companies",
+      sendingIdentity: "principal",
     });
     expect(result.success).toBe(true);
 
@@ -556,6 +567,409 @@ describe("gtm-pipeline cycle type", () => {
     expect(result.output).toContain("gtm-pipeline");
     expect(result.output).toContain("Dev audience");
     expect(result.output).toContain("Enterprise outbound");
+  });
+});
+
+// ============================================================
+// Brief 163: MP-8.2 — Aggregate Metrics
+// ============================================================
+
+describe("cycle aggregate metrics (MP-8.2)", () => {
+  it("computes KPIs from interactions linked to cycle runs", async () => {
+    const { computeCycleMetrics } = await import("./cycle-tools");
+
+    // Create a sales cycle run
+    const activate = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Metrics test",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({ status: "running", cycleType: "sales-marketing" })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    // Seed a person
+    const personId = randomUUID();
+    testDb.insert(schema.people).values({
+      id: personId,
+      userId: "default",
+      name: "Test Contact",
+    }).run();
+
+    // Seed interactions: 3 outreach, 1 reply, 1 meeting
+    for (let i = 0; i < 3; i++) {
+      testDb.insert(schema.interactions).values({
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+      }).run();
+    }
+    testDb.insert(schema.interactions).values({
+      personId,
+      userId: "default",
+      type: "reply_received",
+      channel: "email",
+      mode: "selling",
+      processRunId: runId,
+    }).run();
+    testDb.insert(schema.interactions).values({
+      personId,
+      userId: "default",
+      type: "meeting_booked",
+      channel: "email",
+      mode: "selling",
+      processRunId: runId,
+    }).run();
+
+    const metrics = await computeCycleMetrics("sales-marketing");
+
+    expect(metrics.outreachVolume).toBe(3);
+    expect(metrics.replyCount).toBe(1);
+    expect(metrics.meetingCount).toBe(1);
+    expect(metrics.responseRate).toBeCloseTo(1 / 3, 2);
+    expect(metrics.conversionRate).toBeCloseTo(1 / 3, 2);
+  });
+
+  it("returns empty metrics when no cycle runs exist", async () => {
+    const { computeCycleMetrics } = await import("./cycle-tools");
+    const metrics = await computeCycleMetrics("sales-marketing");
+
+    expect(metrics.outreachVolume).toBe(0);
+    expect(metrics.replyCount).toBe(0);
+    expect(metrics.trends.responseRate).toBe("flat");
+  });
+
+  it("cycle_briefing includes performance section", async () => {
+    const activate = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Briefing metrics test",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({
+        status: "running",
+        cycleType: "sales-marketing",
+        cycleConfig: { goals: "Briefing metrics test", icp: "Tech" } as Record<string, unknown>,
+        startedAt: new Date(),
+      })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    const result = await handleCycleBriefing({ cycleType: "sales-marketing" });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("**Performance (last 30 days)**");
+    expect(result.output).toContain("outreach sent");
+    expect(result.output).toContain("response rate");
+    expect(result.metadata?.metrics).toBeDefined();
+  });
+
+  it("computes trend indicators vs previous period", async () => {
+    const { computeCycleMetrics } = await import("./cycle-tools");
+
+    // Create a cycle run
+    const activate = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Trend test",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({ status: "running", cycleType: "sales-marketing" })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    // Seed a person
+    const personId = randomUUID();
+    testDb.insert(schema.people).values({
+      id: personId,
+      userId: "default",
+      name: "Trend Contact",
+    }).run();
+
+    // Seed previous period interactions (35 days ago): 10 outreach, 5 replies
+    const prevDate = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 10; i++) {
+      testDb.insert(schema.interactions).values({
+        id: randomUUID(),
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+        createdAt: prevDate,
+      }).run();
+    }
+    for (let i = 0; i < 5; i++) {
+      testDb.insert(schema.interactions).values({
+        id: randomUUID(),
+        personId,
+        userId: "default",
+        type: "reply_received",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+        createdAt: prevDate,
+      }).run();
+    }
+
+    // Current period: 10 outreach, 1 reply (declining)
+    for (let i = 0; i < 10; i++) {
+      testDb.insert(schema.interactions).values({
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+      }).run();
+    }
+    testDb.insert(schema.interactions).values({
+      personId,
+      userId: "default",
+      type: "reply_received",
+      channel: "email",
+      mode: "selling",
+      processRunId: runId,
+    }).run();
+
+    const metrics = await computeCycleMetrics("sales-marketing");
+
+    expect(metrics.outreachVolume).toBe(10);
+    expect(metrics.replyCount).toBe(1);
+    expect(metrics.previousPeriod.outreachVolume).toBe(10);
+    expect(metrics.previousPeriod.replyCount).toBe(5);
+    expect(metrics.trends.responseRate).toBe("down"); // 10% vs 50%
+    expect(metrics.trends.volume).toBe("flat"); // same volume
+  });
+});
+
+// ============================================================
+// Brief 163: MP-8.4 — Health Signals
+// ============================================================
+
+describe("cycle health signals (MP-8.4)", () => {
+  it("detects declining response rate", async () => {
+    const { computeCycleMetrics, detectHealthSignals } = await import("./cycle-tools");
+
+    // Create a cycle with declining metrics scenario
+    const activate = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Health test",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({ status: "running", cycleType: "sales-marketing" })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    const personId = randomUUID();
+    testDb.insert(schema.people).values({
+      id: personId,
+      userId: "default",
+      name: "Health Contact",
+    }).run();
+
+    // Previous period: 10 outreach, 5 replies (50% rate)
+    const prevDate = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 10; i++) {
+      testDb.insert(schema.interactions).values({
+        id: randomUUID(),
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+        createdAt: prevDate,
+      }).run();
+    }
+    for (let i = 0; i < 5; i++) {
+      testDb.insert(schema.interactions).values({
+        id: randomUUID(),
+        personId,
+        userId: "default",
+        type: "reply_received",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+        createdAt: prevDate,
+      }).run();
+    }
+
+    // Current period: 10 outreach, 1 reply (10% rate — dropped 40 points)
+    for (let i = 0; i < 10; i++) {
+      testDb.insert(schema.interactions).values({
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+      }).run();
+    }
+    testDb.insert(schema.interactions).values({
+      personId,
+      userId: "default",
+      type: "reply_received",
+      channel: "email",
+      mode: "selling",
+      processRunId: runId,
+    }).run();
+
+    const metrics = await computeCycleMetrics("sales-marketing");
+    const signals = await detectHealthSignals("sales-marketing", metrics);
+
+    expect(signals.length).toBeGreaterThan(0);
+    const declining = signals.find((s) => s.type === "declining_response_rate");
+    expect(declining).toBeDefined();
+    expect(declining!.severity).toBe("alert");
+    expect(declining!.message).toContain("dropped");
+  });
+
+  it("detects zero responses with meaningful volume", async () => {
+    const { computeCycleMetrics, detectHealthSignals } = await import("./cycle-tools");
+
+    const activate = await handleActivateCycle({
+      cycleType: "network-connecting",
+      goals: "Zero test",
+      icp: "People",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({ status: "running", cycleType: "network-connecting" })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    const personId = randomUUID();
+    testDb.insert(schema.people).values({
+      id: personId,
+      userId: "default",
+      name: "Ghost Contact",
+    }).run();
+
+    // 6 outreach, zero replies
+    for (let i = 0; i < 6; i++) {
+      testDb.insert(schema.interactions).values({
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "connecting",
+        processRunId: runId,
+      }).run();
+    }
+
+    const metrics = await computeCycleMetrics("network-connecting");
+    const signals = await detectHealthSignals("network-connecting", metrics);
+
+    const zeroSignal = signals.find((s) => s.type === "zero_responses");
+    expect(zeroSignal).toBeDefined();
+    expect(zeroSignal!.message).toContain("zero responses");
+  });
+
+  it("detects stalled cycles with no completed steps", async () => {
+    const { computeCycleMetrics, detectHealthSignals } = await import("./cycle-tools");
+
+    // Create 2 cycle runs with no completed steps
+    const run1 = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Stall test 1",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId1 = run1.metadata?.runId as string;
+    testDb.update(schema.processRuns)
+      .set({ status: "approved", cycleType: "sales-marketing" })
+      .where(eq(schema.processRuns.id, runId1))
+      .run();
+
+    // Need a second run — manually insert since overlap prevention blocks it
+    const runId2 = randomUUID();
+    const [proc] = testDb
+      .select({ id: schema.processes.id })
+      .from(schema.processes)
+      .where(eq(schema.processes.slug, "sales-marketing-cycle"))
+      .all();
+    testDb.insert(schema.processRuns).values({
+      id: runId2,
+      processId: proc.id,
+      status: "approved",
+      triggeredBy: "test",
+      cycleType: "sales-marketing",
+    }).run();
+
+    const metrics = await computeCycleMetrics("sales-marketing");
+    const signals = await detectHealthSignals("sales-marketing", metrics);
+
+    const stalled = signals.find((s) => s.type === "stalled_cycle");
+    expect(stalled).toBeDefined();
+    expect(stalled!.message).toContain("stalled");
+  });
+
+  it("cycle_briefing includes health alerts when signals present", async () => {
+    const activate = await handleActivateCycle({
+      cycleType: "sales-marketing",
+      goals: "Health briefing test",
+      icp: "Tech",
+      sendingIdentity: "principal",
+    });
+    const runId = activate.metadata?.runId as string;
+
+    testDb.update(schema.processRuns)
+      .set({
+        status: "running",
+        cycleType: "sales-marketing",
+        cycleConfig: { goals: "Health briefing test", icp: "Tech" } as Record<string, unknown>,
+        startedAt: new Date(),
+      })
+      .where(eq(schema.processRuns.id, runId))
+      .run();
+
+    const personId = randomUUID();
+    testDb.insert(schema.people).values({
+      id: personId,
+      userId: "default",
+      name: "Health Briefing Contact",
+    }).run();
+
+    // 6 outreach, zero replies → zero_responses signal
+    for (let i = 0; i < 6; i++) {
+      testDb.insert(schema.interactions).values({
+        personId,
+        userId: "default",
+        type: "outreach_sent",
+        channel: "email",
+        mode: "selling",
+        processRunId: runId,
+      }).run();
+    }
+
+    const result = await handleCycleBriefing({ cycleType: "sales-marketing" });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("**Health Alerts**");
+    expect(result.output).toContain("zero responses");
+    expect(result.metadata?.healthSignals).toBeDefined();
+    expect((result.metadata?.healthSignals as unknown[]).length).toBeGreaterThan(0);
   });
 });
 

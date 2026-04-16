@@ -101,14 +101,35 @@ export interface KnowledgeCitationBlock {
   }>;
 }
 
-/** ProgressBlock — Execution progress */
+/** ProgressBlock — Execution progress
+ *
+ *  Entity-agnostic progress tracking (Brief 155). Follows the same
+ *  `entityType` + `entityId` pattern as StatusCardBlock.
+ *
+ *  Entity types:
+ *  - process_run: tracks steps within a single process run
+ *  - goal_decomposition: tracks subtask identification + routing during orchestrator decomposition
+ */
 export interface ProgressBlock {
   type: "progress";
-  processRunId: string;
+  entityType: "process_run" | "goal_decomposition";
+  entityId: string;
   currentStep: string;
   totalSteps: number;
   completedSteps: number;
-  status: "running" | "paused" | "complete";
+  status: "running" | "paused" | "complete" | "waiting";
+  /** Present when status is "waiting" — describes what the process is waiting for (Brief 158 MP-3.2) */
+  waitFor?: {
+    event: string;
+    description: string;
+    since?: string; // ISO timestamp when the wait began
+  };
+  /** Present when blocked on another process's output (Brief 162 MP-7.4) */
+  blockedBy?: {
+    processName: string;
+    status: string;
+    since?: string; // ISO timestamp when the blockage began
+  };
 }
 
 /** FieldAnnotation — per-field metadata for data display (provenance, flags, format hints) */
@@ -219,6 +240,35 @@ export interface ConnectionSetupBlock {
   fields?: InteractiveField[];  // for credential-based connections
 }
 
+/** SendingIdentityChoiceBlock — identity choice for outreach (Brief 152) */
+export interface SendingIdentityChoiceBlock {
+  type: "sending_identity_choice";
+  options: Array<{
+    identity: "principal" | "user";
+    label: string;
+    description: string;
+    requiresSetup?: boolean;
+  }>;
+}
+
+/** TrustMilestoneBlock — Trust tier change celebration or explanation (Brief 160 MP-5.1/5.2)
+ *  Provenance: Discourse TL3 milestone notifications (pattern), ADR-007 trust earning.
+ *  Upgrades are celebrations with accept/reject actions. Downgrades are warm explanations.
+ */
+export interface TrustMilestoneBlock {
+  type: "trust_milestone";
+  milestoneType: "upgrade" | "downgrade";
+  processName: string;
+  fromTier: string;
+  toTier: string;
+  /** Evidence narrative: "95% accurate over 25 runs, correction rate dropped to 5%" */
+  evidence: string;
+  /** Warm explanation for downgrades: "the last few invoices had formatting issues" */
+  explanation?: string;
+  /** Accept/reject actions for upgrades; override action for downgrades */
+  actions?: ActionDef[];
+}
+
 /** FormSubmitAction — action type for form submissions (Brief 072) */
 export interface FormSubmitAction {
   type: "form-submit";
@@ -302,7 +352,7 @@ export interface RecordBlock {
   subtitle?: string;
   status?: {
     label: string;
-    variant: "positive" | "caution" | "negative" | "neutral" | "info";
+    variant: "positive" | "caution" | "negative" | "neutral" | "info" | "vivid";
   };
   confidence?: "high" | "medium" | "low" | null;
   fields?: AnnotatedField[];
@@ -421,7 +471,9 @@ export type ContentBlock =
   | InteractiveTableBlock
   | ArtifactBlock
   | WorkItemFormBlock
-  | ConnectionSetupBlock;
+  | ConnectionSetupBlock
+  | SendingIdentityChoiceBlock
+  | TrustMilestoneBlock;
 
 /** All possible content block type strings */
 export type ContentBlockType = ContentBlock["type"];
@@ -486,7 +538,14 @@ export function renderBlockToText(block: ContentBlock): string {
       const pct = block.totalSteps > 0
         ? Math.round((block.completedSteps / block.totalSteps) * 100)
         : 0;
-      return `${block.currentStep} (${block.completedSteps}/${block.totalSteps} — ${pct}%) [${block.status}]`;
+      const base = `${block.currentStep} (${block.completedSteps}/${block.totalSteps} — ${pct}%) [${block.status}]`;
+      if (block.blockedBy) {
+        return `${base}\n  Blocked: waiting on ${block.blockedBy.processName} (${block.blockedBy.status})`;
+      }
+      if (block.status === "waiting" && block.waitFor) {
+        return `${base}\n  Waiting: ${block.waitFor.description}`;
+      }
+      return base;
     }
 
     case "data": {
@@ -677,6 +736,30 @@ export function renderBlockToText(block: ContentBlock): string {
         }
       }
       return parts.join("\n");
+    }
+
+    case "sending_identity_choice": {
+      const lines = ["How should outreach go out?"];
+      for (const opt of block.options) {
+        lines.push(`  [${opt.label}] — ${opt.description}${opt.requiresSetup ? " (requires setup)" : ""}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "trust_milestone": {
+      const parts: string[] = [];
+      if (block.milestoneType === "upgrade") {
+        parts.push(`Trust Milestone: ${block.processName} is ready for ${block.toTier}`);
+        parts.push(block.evidence);
+      } else {
+        parts.push(`Trust Update: ${block.processName} moved from ${block.fromTier} to ${block.toTier}`);
+        if (block.explanation) parts.push(block.explanation);
+        parts.push(block.evidence);
+      }
+      if (block.actions) {
+        parts.push(block.actions.map((a) => `[${a.label}]`).join(" "));
+      }
+      return parts.filter(Boolean).join("\n");
     }
 
     default: {

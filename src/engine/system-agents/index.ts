@@ -19,6 +19,7 @@ import {
   executeRelatedFinder,
   executeKnowledgeAssembler,
 } from "./knowledge-extractor";
+import { executeCoverageAgent } from "./coverage-agent";
 
 export type SystemAgentHandler = (
   inputs: Record<string, unknown>,
@@ -34,6 +35,7 @@ const registry = new Map<string, SystemAgentHandler>([
   ["knowledge-solution-extractor", executeSolutionExtractor],
   ["knowledge-related-finder", executeRelatedFinder],
   ["knowledge-assembler", executeKnowledgeAssembler],
+  ["coverage-agent", executeCoverageAgent],
 ]);
 
 /**

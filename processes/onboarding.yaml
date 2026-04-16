@@ -86,9 +86,22 @@ steps:
     name: Propose First Process
     executor: ai-agent
     description: >
-      Based on gathered context, propose a concrete first process.
-      Present as a process-proposal-card with plain language steps.
-      Wait for user approval before creating.
+      Based on gathered context, propose a concrete first process using
+      generate_process(save=false) for preview. Use frontdoor context
+      (business type, pain point) to pre-fill the description so template
+      matching (MP-1.1) finds the best library match. Present the preview
+      as a process-proposal-card with plain language steps. Wait for user
+      approval before creating.
+
+      After the first process proposal, present 2-3 additional matched
+      capabilities as a package using existing content blocks:
+      - TextBlock header: "What I'd set up for your business"
+      - RecordBlock per capability with status: { label: "Recommended", variant: "info" }
+        for recommended items, { label: "Running", variant: "positive" } for active,
+        { label: "Available", variant: "neutral" } for available
+      - ActionBlock with primary action "Set up [top match]"
+      Use the user's own words as match reasons from the capability matcher.
+      Keep to 2-3 recommendations max. (Brief 167)
     config:
       model_hint: capable
       role_contract: cognitive/self.md
@@ -99,9 +112,10 @@ steps:
     name: First Real Work
     executor: ai-agent
     description: >
-      Create the approved process, help the user submit their first
-      work item to it, and deliver the first output. This is the
-      moment Ditto proves value.
+      On user approval, call generate_process(save=true) to persist the
+      process. Then help the user submit their first work item to it via
+      create_work_item and deliver the first output. ProgressBlock will
+      appear via SSE during execution. This is the moment Ditto proves value.
     config:
       model_hint: capable
       role_contract: cognitive/self.md

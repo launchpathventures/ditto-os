@@ -38,8 +38,12 @@ export async function verifyTurnstileToken(
 ): Promise<{ ok: boolean; error?: string }> {
   const secretKey = process.env.TURNSTILE_SECRET_KEY;
 
+  // Skip Turnstile entirely in development — local dev should never block on bot verification.
+  if (process.env.NODE_ENV === "development") {
+    return { ok: true };
+  }
+
   // Graceful degradation: if Turnstile isn't configured, allow all requests.
-  // This lets local dev and staging work without Turnstile keys.
   // Also skip when using Cloudflare's testing secret key.
   if (!secretKey || secretKey.startsWith("1x000000000000000000000000000000")) {
     return { ok: true };

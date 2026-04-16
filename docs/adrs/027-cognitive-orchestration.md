@@ -39,7 +39,7 @@ The architecture says: "The process is not a workflow — it is a governance dec
 
 ### What Does NOT Change
 
-- The harness pipeline (11 handlers, same order)
+- The harness pipeline (13 handlers as of 2026-04-16, same order — see architecture.md L3)
 - Trust tier enforcement (per-process, per-step)
 - Opt-out enforcement (permanent, non-bypassable)
 - Feedback recording (every decision captured)

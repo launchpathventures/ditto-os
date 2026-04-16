@@ -189,6 +189,10 @@ export const networkUsers = sqliteTable("network_users", {
   workspaceId: text("workspace_id"),
   personId: text("person_id").references(() => people.id),
   workspaceSuggestedAt: integer("workspace_suggested_at", { mode: "timestamp_ms" }),
+  /** AgentMail threadId of the status email containing the workspace suggestion (Brief 153) */
+  suggestionThreadId: text("suggestion_thread_id"),
+  /** When the user accepted the workspace suggestion (Brief 153) */
+  workspaceAcceptedAt: integer("workspace_accepted_at", { mode: "timestamp_ms" }),
   wantsVisibility: integer("wants_visibility", { mode: "boolean" }).notNull().default(false),
   pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
   /** When Alex last sent a notification email to this user (status, pulse, completion).

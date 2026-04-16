@@ -449,6 +449,95 @@ type ContentBlock =
   | ChecklistBlock | ChartBlock | MetricBlock;
 ```
 
+## Addendum: Interactive Blocks + Data Blocks (2026-04-16, covers Briefs 045+050, 072, 149, 152, 160)
+
+**Context:** Brief 045+050 added `RecordBlock`, `InteractiveTableBlock`, and `ArtifactBlock` (ADR-023) to the union. Brief 072 (complete 2026-04-01) introduced three interactive patterns: `WorkItemFormBlock`, `ConnectionSetupBlock`, and an interactive mode on existing `ProcessProposalBlock`. Brief 149 used the existing `InteractiveTableBlock` for outreach batch summaries. Brief 152 added `SendingIdentityChoiceBlock`. Brief 160 added `TrustMilestoneBlock` for trust upgrade/downgrade celebrations. Brief 168 added the `"vivid"` status variant on RecordBlock. Total ContentBlock count is now **26** (engine source `packages/core/src/content-blocks.ts` is authoritative).
+
+### InteractiveField, FormSubmitAction, and form-submit routing
+
+**InteractiveField** — Form field definition used by interactive blocks:
+```typescript
+interface InteractiveField {
+  name: string;
+  label: string;
+  type: "text" | "select" | "number" | "toggle";
+  options?: string[];           // For select
+  required?: boolean;
+  placeholder?: string;
+}
+```
+
+**FormSubmitAction** — An ActionDef variant carrying form values back to the engine:
+```typescript
+interface FormSubmitAction extends ActionDef {
+  type: "form-submit";
+  values: Record<string, string | number | boolean>;
+}
+```
+
+**Action ID routing (form-submit namespace):** Interactive blocks route submissions through the `form-submit.*` action namespace. Example: `form-submit.work-item.create`, `form-submit.connection.setup`, `form-submit.identity.choose`. **Routing is validated via block-type-scoped registry tokens** — not bypassed (Brief 072 Reviewer F1 fix). The action registry binds each token to a specific block type; a WorkItemFormBlock submit cannot invoke a ConnectionSetupBlock handler.
+
+### Added block types
+
+**WorkItemFormBlock** — In-conversation work item creation:
+```typescript
+interface WorkItemFormBlock {
+  type: "work_item_form";
+  title: string;
+  fields: InteractiveField[];
+  submitAction: FormSubmitAction;
+}
+```
+- **Web:** Form component, submit triggers routed `handleSurfaceAction`
+- **Telegram:** Sequential prompts or Web App
+- **CLI:** `@clack/prompts` form
+
+**ConnectionSetupBlock** — In-conversation integration credential handshake:
+```typescript
+interface ConnectionSetupBlock {
+  type: "connection_setup";
+  service: string;                   // e.g., "github", "slack"
+  fields: InteractiveField[];        // Typically masked credential input
+  submitAction: FormSubmitAction;
+}
+```
+- **Web:** Masked credential input (via existing `/api/credential` endpoint)
+- Credential values never round-trip through LLM context — the handshake writes direct to the credential vault
+
+**RecordBlock** — Structured record (inbox item, person, task snapshot). Supports a `"vivid"` status variant (Brief 168) for recommended/featured items.
+
+**InteractiveTableBlock** — Tables with row actions, selection, sorting. Used by Brief 149 outreach batch summaries.
+
+**SendingIdentityChoiceBlock** (Brief 152) — Two-card choice (principal / user) with trade-off descriptions. Gated by `activate_cycle` for outreach cycles when `sendingIdentity` isn't provided upfront.
+
+**ArtifactBlock** (ADR-023) — Compact reference card in conversation with "Open" button → artifact mode. Renders the linked artifact via BlockList in the artifact host.
+
+### Updated ContentBlock union (26 types — matches engine source as of 2026-04-16)
+
+```typescript
+type ContentBlock =
+  // Original 13 (ADR-021 base)
+  | TextBlock | ReviewCardBlock | StatusCardBlock | ActionBlock
+  | InputRequestBlock | KnowledgeCitationBlock | ProgressBlock | DataBlock
+  | ImageBlock | CodeBlock | ReasoningTraceBlock | SuggestionBlock | AlertBlock
+  // +3 onboarding (Brief 044)
+  | KnowledgeSynthesisBlock | ProcessProposalBlock | GatheringIndicatorBlock
+  // +3 visual (2026-03-27 addendum)
+  | ChecklistBlock | ChartBlock | MetricBlock
+  // +3 data/meta (Brief 045+050 / ADR-023)
+  | RecordBlock | InteractiveTableBlock | ArtifactBlock
+  // +3 interactive (Brief 072, 152)
+  | WorkItemFormBlock | ConnectionSetupBlock | SendingIdentityChoiceBlock
+  // +1 trust (Brief 160)
+  | TrustMilestoneBlock;
+```
+
+**Count reconciliation note:** The architecture.md and human-layer.md report 26 ContentBlock types as of 2026-04-16. The engine source (`packages/core/src/content-blocks.ts`) is authoritative; this ADR lists the lineage and cross-references briefs.
+
+### Response-level metadata (Insight-129)
+
+`ConfidenceAssessment` and related metadata types are co-located in `content-blocks.ts` but are NOT members of the `ContentBlock` discriminated union. They flow via custom data parts (e.g., `data-confidence`) and render as conversation chrome (ConfidenceCard AI Element), not via the block registry. Litmus test: "Can this appear independently in a Today briefing?" If yes → ContentBlock. If no → response metadata. The 22-block count is unchanged by these additions.
+
 ### Right Panel Composition Surface
 
 The right panel (`right-panel.tsx`) gains a new `PanelContext` type:

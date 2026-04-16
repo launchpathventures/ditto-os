@@ -1,0 +1,76 @@
+# Ditto — System Agent Process Definition
+# Process: Coverage Analysis
+# Periodic gap analysis: compares active processes against industry patterns.
+#
+# Provenance: ADR-008 (system agent category), Brief 165, Insight-142.
+
+name: Coverage Analysis
+id: coverage-analysis
+version: 1
+status: active
+system: true
+
+description: >
+  System agent that periodically analyzes coverage gaps between the user's
+  active processes and industry-standard process patterns. Produces structured
+  CoverageSuggestion objects consumed by suggest_next for proactive guidance.
+
+trigger:
+  type: schedule
+  schedule: "0 6 * * 1"
+  description: Runs weekly on Monday at 6am. Can also be triggered manually.
+
+inputs:
+  - name: userId
+    type: text
+    source: system
+    required: false
+    description: User ID for user model lookup (defaults to "default")
+
+steps:
+  - id: analyze-coverage
+    name: Analyze Process Coverage Gaps
+    executor: script
+    description: >
+      Compare active processes against industry patterns from the template
+      library. Identify gaps, deduplicate against existing processes, and
+      produce actionable suggestions with rationale and template matches.
+    config:
+      systemAgent: coverage-agent
+    inputs:
+      - userId
+    outputs:
+      - coverage-suggestions
+      - analysis-summary
+
+outputs:
+  - name: coverage-suggestions
+    type: data
+    destination: system
+    description: Array of CoverageSuggestion objects for suggest_next to consume
+  - name: analysis-summary
+    type: text
+    destination: system
+    description: Human-readable summary of the analysis
+
+quality_criteria:
+  - Suggestions never duplicate existing active processes
+  - Gap importance levels match industry pattern definitions
+  - Template matches are valid when present
+
+feedback:
+  metrics:
+    - name: suggestion_acceptance_rate
+      description: How often users accept coverage suggestions
+      target: ">30%"
+    - name: false_positive_rate
+      description: Suggestions that duplicate existing processes
+      target: "0%"
+  capture:
+    - Suggestion acceptance/dismissal via suggestion-dismissals system
+
+trust:
+  initial_tier: autonomous
+  upgrade_path: []
+  downgrade_triggers:
+    - "repeated false positive suggestions (duplicating existing processes)"

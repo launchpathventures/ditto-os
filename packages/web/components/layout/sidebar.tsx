@@ -17,7 +17,14 @@ import React, { useMemo } from "react";
 import type { ProcessSummary, WorkItemSummary } from "@/lib/process-query";
 import type { CompositionIntent } from "@/lib/compositions";
 
-export type NavigationDestination = CompositionIntent | "settings";
+export type NavigationDestination = CompositionIntent | "settings" | (string & {});
+
+/** Adaptive view metadata for sidebar rendering (Brief 154) */
+export interface AdaptiveViewNavItem {
+  slug: string;
+  label: string;
+  icon?: string | null;
+}
 
 interface SidebarProps {
   processes: ProcessSummary[];
@@ -26,6 +33,8 @@ interface SidebarProps {
   onNavigate: (destination: NavigationDestination) => void;
   onSelectProcess: (processId: string) => void;
   collapsed?: boolean;
+  /** Registered adaptive workspace views (Brief 154) */
+  adaptiveViews?: AdaptiveViewNavItem[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,6 +141,18 @@ function IconChevronsRight() {
   );
 }
 
+/** Default icon for adaptive views (Brief 154) — grid/squares */
+function IconGrid() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+    </svg>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Nav item definitions                                                        */
 /* -------------------------------------------------------------------------- */
@@ -164,6 +185,7 @@ export function Sidebar({
   onNavigate,
   onSelectProcess,
   collapsed,
+  adaptiveViews,
 }: SidebarProps) {
   // Inbox badge count — action-required items
   const inboxCount = useMemo(
@@ -231,6 +253,36 @@ export function Sidebar({
             </button>
           );
         })}
+
+        {/* Adaptive views — below built-in nav, after divider (Brief 154) */}
+        {adaptiveViews && adaptiveViews.length > 0 && (
+          <>
+            <div className="w-8 border-t border-border my-2" />
+            {adaptiveViews.map((view) => {
+              const isActive = activeDestination === view.slug;
+              return (
+                <button
+                  key={view.slug}
+                  onClick={() => onNavigate(view.slug)}
+                  title={view.label}
+                  className={`relative flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? "text-text-primary opacity-100"
+                      : "text-text-muted opacity-60 hover:opacity-100 hover:bg-surface-raised hover:text-text-primary"
+                  }`}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: isActive ? 0 : "var(--radius-md)",
+                    borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
+                  }}
+                >
+                  <IconGrid />
+                </button>
+              );
+            })}
+          </>
+        )}
 
         {/* Settings — at bottom */}
         <div className="mt-auto flex flex-col items-center pt-3 w-full border-t border-border">
@@ -396,6 +448,39 @@ export function Sidebar({
                   </button>
                 );
               })}
+          </div>
+        )}
+
+        {/* Adaptive views — below built-in nav, after divider (Brief 154) */}
+        {adaptiveViews && adaptiveViews.length > 0 && (
+          <div className="pt-2 pb-1 mt-1 border-t border-border">
+            {adaptiveViews.map((view) => {
+              const isActive = activeDestination === view.slug;
+              return (
+                <button
+                  key={view.slug}
+                  onClick={() => onNavigate(view.slug)}
+                  className={`w-full flex items-center text-left transition-colors ${
+                    isActive
+                      ? "text-text-primary"
+                      : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
+                  }`}
+                  style={{
+                    gap: 12,
+                    padding: isActive ? "8px 12px 8px 10px" : "8px 12px",
+                    borderRadius: isActive ? 0 : "var(--radius-md)",
+                    fontWeight: isActive ? 500 : 400,
+                    fontSize: 14,
+                    lineHeight: "20px",
+                    borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
+                    marginBottom: 2,
+                  }}
+                >
+                  <span className="flex-shrink-0"><IconGrid /></span>
+                  <span className="flex-1 truncate">{view.label}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </nav>

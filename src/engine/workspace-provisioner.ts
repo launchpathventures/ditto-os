@@ -218,6 +218,8 @@ export interface ProvisionerConfigBase {
 export interface ProvisionerConfig extends ProvisionerConfigBase {
   imageRef: string;
   networkUrl: string;
+  /** Owner email — injected as WORKSPACE_OWNER_EMAIL env var for magic-link auth (Brief 153) */
+  ownerEmail?: string;
   /** Health check timeout in ms (default: 120000) */
   healthCheckTimeoutMs?: number;
   /** Health check poll interval in ms (default: 5000) */
@@ -346,12 +348,16 @@ export async function provisionWorkspace(
 
     // Step 7: Upsert env vars (skipDeploys-equivalent: we deploy separately)
     progress("Setting environment variables...");
-    await config.railwayClient.upsertVariables(service.id, environmentId, {
+    const envVars: Record<string, string> = {
       DITTO_NETWORK_URL: config.networkUrl,
       DITTO_NETWORK_TOKEN: token,
       DATABASE_PATH: "/app/data/ditto.db",
       NETWORK_AUTH_SECRET: authSecret,
-    });
+    };
+    if (config.ownerEmail) {
+      envVars.WORKSPACE_OWNER_EMAIL = config.ownerEmail;
+    }
+    await config.railwayClient.upsertVariables(service.id, environmentId, envVars);
     progress("Setting environment variables... done");
 
     // Step 8: Deploy the service
@@ -413,6 +419,16 @@ export async function provisionWorkspace(
       })
       .returning({ id: schema.managedWorkspaces.id });
     created.dbRecordId = record.id;
+
+    // Brief 153: Update networkUsers status to "workspace" and link workspaceId
+    await database
+      .update(schema.networkUsers)
+      .set({
+        status: "workspace",
+        workspaceId: record.id,
+        workspaceAcceptedAt: new Date(),
+      })
+      .where(eq(schema.networkUsers.id, userId));
 
     return {
       workspaceUrl,

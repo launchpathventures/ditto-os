@@ -82,6 +82,10 @@ export interface NotifyResult {
   success: boolean;
   channel: "email" | "voice" | "sms" | "workspace";
   interactionId?: string;
+  /** AgentMail messageId — available when channel is email */
+  messageId?: string;
+  /** AgentMail threadId — available when channel is email */
+  threadId?: string;
   error?: string;
 }
 
@@ -307,6 +311,8 @@ export async function notifyUser(
           success: result.success,
           channel: "email",
           interactionId: result.interactionId,
+          messageId: result.messageId,
+          threadId: result.threadId,
           ...(result.error ? { error: result.error } : {}),
         };
       } catch (err) {

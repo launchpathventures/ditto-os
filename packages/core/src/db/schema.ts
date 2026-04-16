@@ -134,10 +134,11 @@ export const memoryTypeValues = [
   "user_model",
   "solution",
   "voice_model",
+  "guidance",
 ] as const;
 export type MemoryType = (typeof memoryTypeValues)[number];
 
-export const memorySourceValues = ["feedback", "human", "system", "conversation"] as const;
+export const memorySourceValues = ["feedback", "human", "system", "conversation", "escalation_resolution"] as const;
 export type MemorySource = (typeof memorySourceValues)[number];
 
 export const workItemTypeValues = [
@@ -642,8 +643,9 @@ export const credentials = sqliteTable("credentials", {
     .primaryKey()
     .$defaultFn(() => randomUUID()),
   processId: text("process_id")
-    .references(() => processes.id)
-    .notNull(),
+    .references(() => processes.id),
+  /** User ID for user-scoped credentials (Brief 152 — Google Workspace OAuth, etc.) */
+  userId: text("user_id"),
   service: text("service").notNull(),
   encryptedValue: text("encrypted_value").notNull(),
   iv: text("iv").notNull(),
@@ -654,6 +656,7 @@ export const credentials = sqliteTable("credentials", {
     .$defaultFn(() => Date.now()),
 }, (table) => [
   unique("credentials_process_service_unique").on(table.processId, table.service),
+  unique("credentials_user_service_unique").on(table.userId, table.service),
 ]);
 
 // ============================================================
@@ -706,3 +709,63 @@ export const delayedRuns = sqliteTable("delayed_runs", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+// ============================================================
+// Workspace Views — adaptive composition registration (Brief 154)
+// ============================================================
+
+export const workspaceViews = sqliteTable("workspace_views", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workspaceId: text("workspace_id").notNull(),
+  slug: text("slug").notNull(),
+  label: text("label").notNull(),
+  icon: text("icon"),
+  description: text("description"),
+  /** Composition schema JSON — opaque to core, interpreted by web package */
+  schema: text("schema", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>(),
+  /** Process that registered this view (nullable) */
+  sourceProcessId: text("source_process_id")
+    .references(() => processes.id),
+  /** Sidebar ordering position */
+  position: integer("position").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  uniqueSlugPerWorkspace: unique().on(table.workspaceId, table.slug),
+}));
+
+// ============================================================
+// Process Versions — version history for process definitions (Brief 164, MP-9.2)
+// ============================================================
+
+export const processVersions = sqliteTable("process_versions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  processId: text("process_id")
+    .references(() => processes.id)
+    .notNull(),
+  /** The version number this snapshot represents */
+  version: integer("version").notNull(),
+  /** Full process definition at this version */
+  definition: text("definition", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>(),
+  /** Human-readable summary of what changed */
+  changeSummary: text("change_summary"),
+  /** Who/what triggered the edit */
+  editedBy: text("edited_by").default("self"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  uniqueVersionPerProcess: unique().on(table.processId, table.version),
+}));

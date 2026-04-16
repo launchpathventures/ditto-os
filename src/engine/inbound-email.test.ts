@@ -85,7 +85,31 @@ vi.mock("./self", () => ({
   selfConverse: mockSelfConverse,
 }));
 
-import { processInboundEmail, type InboundEmailPayload } from "./inbound-email";
+// Mock workspace-provisioner (Brief 153)
+const { mockProvisionWorkspace } = vi.hoisted(() => ({
+  mockProvisionWorkspace: vi.fn().mockResolvedValue({
+    workspaceUrl: "https://ditto-ws-test.up.railway.app",
+    serviceId: "svc_1",
+    machineId: "svc_1",
+    volumeId: "vol_1",
+    tokenId: "tok_1",
+    status: "created",
+  }),
+}));
+vi.mock("./workspace-provisioner", () => ({
+  provisionWorkspace: mockProvisionWorkspace,
+  createRailwayClient: vi.fn(() => ({})),
+}));
+
+// Mock workspace-welcome (Brief 153)
+const { mockSendWorkspaceWelcome } = vi.hoisted(() => ({
+  mockSendWorkspaceWelcome: vi.fn().mockResolvedValue({ success: true, magicLinkUrl: "https://test.com/login/auth?token=abc" }),
+}));
+vi.mock("./workspace-welcome", () => ({
+  sendWorkspaceWelcome: mockSendWorkspaceWelcome,
+}));
+
+import { processInboundEmail, isWorkspaceAcceptanceSignal, type InboundEmailPayload } from "./inbound-email";
 import { resumeHumanStep } from "./heartbeat";
 import { createHmac } from "crypto";
 import { Webhook } from "svix";
@@ -411,7 +435,7 @@ describe("processInboundEmail", () => {
 // ============================================================
 
 describe("expanded reply classification (Brief 146)", () => {
-  it("classifies question replies with outcome 'question'", async () => {
+  it("classifies question replies with outcome 'question' and routes to fast-path (Brief 161)", async () => {
     const { personId } = await createPersonAndUser({ email: "sender@example.com" });
 
     const payload: InboundEmailPayload = {
@@ -425,7 +449,7 @@ describe("expanded reply classification (Brief 146)", () => {
 
     const result = await processInboundEmail(payload);
 
-    expect(result.action).toBe("interaction_recorded");
+    expect(result.action).toBe("question_fast_path");
     expect(result.personId).toBe(personId);
 
     const interactions = await testDb
@@ -543,7 +567,7 @@ describe("expanded reply classification (Brief 146)", () => {
 
     const result = await processInboundEmail(payload);
 
-    expect(result.action).toBe("interaction_recorded");
+    expect(result.action).toBe("question_fast_path");
 
     const interactions = await testDb
       .select()
@@ -1015,5 +1039,408 @@ describe("Self routing for inbound (099a)", () => {
       },
     );
     expect(selfReplyCall).toBeUndefined();
+  });
+});
+
+// ============================================================
+// Workspace Acceptance Detection (Brief 153)
+// ============================================================
+
+describe("isWorkspaceAcceptanceSignal", () => {
+  it("detects affirmative signals", () => {
+    expect(isWorkspaceAcceptanceSignal("yes")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("Yes")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("YES")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("yeah")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("sure")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("please")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("sounds good")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("let's go")).toBe(true);
+    expect(isWorkspaceAcceptanceSignal("set it up")).toBe(true);
+  });
+
+  it("rejects non-affirmative signals", () => {
+    expect(isWorkspaceAcceptanceSignal("no")).toBe(false);
+    expect(isWorkspaceAcceptanceSignal("not yet")).toBe(false);
+    expect(isWorkspaceAcceptanceSignal("maybe later")).toBe(false);
+    expect(isWorkspaceAcceptanceSignal("yes but can you also...")).toBe(false);
+    expect(isWorkspaceAcceptanceSignal("I said yes to the proposal")).toBe(false);
+  });
+});
+
+describe("workspace acceptance in processInboundEmail", () => {
+  beforeEach(() => {
+    // Set env vars needed by triggerWorkspaceProvisioning
+    process.env.RAILWAY_API_TOKEN = "test-token";
+    process.env.RAILWAY_PROJECT_ID = "proj_test_1";
+    process.env.NETWORK_BASE_URL = "https://ditto-network.test";
+  });
+
+  afterEach(() => {
+    delete process.env.RAILWAY_API_TOKEN;
+    delete process.env.RAILWAY_PROJECT_ID;
+    delete process.env.NETWORK_BASE_URL;
+  });
+
+  it("triggers provisioning when user replies 'yes' to suggestion thread", async () => {
+    const { userId, personId } = await createPersonAndUser({
+      email: "contact@example.com",
+      userEmail: "user@example.com",
+    });
+
+    // Set the suggestion thread on the user
+    await testDb
+      .update(schema.networkUsers)
+      .set({ suggestionThreadId: "thread-suggestion-123" })
+      .where(eq(schema.networkUsers.id, userId));
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "user@example.com",
+        text: "yes",
+        extractedText: "yes",
+        subject: "Re: Your status update",
+        threadId: "thread-suggestion-123",
+        messageId: "msg-reply-1",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result).toBeDefined();
+    expect(result!.action).toBe("workspace_acceptance");
+    expect(result!.details).toBe("Workspace provisioning triggered");
+
+    // Verify immediate ack was sent
+    const ackCall = mockNotifyUser.mock.calls.find(
+      (call: unknown[]) => {
+        const arg = call[0] as Record<string, string>;
+        return arg.body?.includes("setting up your workspace now");
+      },
+    );
+    expect(ackCall).toBeDefined();
+  });
+
+  it("does NOT trigger provisioning for 'yes' in non-suggestion thread", async () => {
+    await createPersonAndUser({
+      email: "contact@example.com",
+      userEmail: "user@example.com",
+    });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "user@example.com",
+        text: "yes",
+        extractedText: "yes",
+        subject: "Re: Some other thread",
+        threadId: "thread-other-456",
+        messageId: "msg-reply-2",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    // Should fall through to Self, not workspace acceptance
+    expect(result).toBeDefined();
+    expect(result!.action).not.toBe("workspace_acceptance");
+  });
+
+  it("sends existing workspace URL for user who already has workspace", async () => {
+    const { userId, personId } = await createPersonAndUser({
+      email: "contact@example.com",
+      userEmail: "user@example.com",
+    });
+
+    // Create a managed workspace
+    const wsId = randomUUID();
+    await testDb.insert(schema.managedWorkspaces).values({
+      id: wsId,
+      userId,
+      machineId: "svc_1",
+      volumeId: "vol_1",
+      workspaceUrl: "https://existing-workspace.up.railway.app",
+      region: "railway",
+      imageRef: "ghcr.io/ditto/workspace:latest",
+      status: "healthy",
+      tokenId: "tok_1",
+    });
+
+    // Update user to workspace status
+    await testDb
+      .update(schema.networkUsers)
+      .set({
+        status: "workspace",
+        workspaceId: wsId,
+        suggestionThreadId: "thread-suggestion-789",
+      })
+      .where(eq(schema.networkUsers.id, userId));
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "user@example.com",
+        text: "yes",
+        extractedText: "yes",
+        subject: "Re: Your status update",
+        threadId: "thread-suggestion-789",
+        messageId: "msg-reply-3",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result).toBeDefined();
+    expect(result!.action).toBe("workspace_acceptance");
+    expect(result!.details).toBe("User already has workspace — sent existing URL");
+
+    // Verify the existing URL was sent
+    const urlCall = mockNotifyUser.mock.calls.find(
+      (call: unknown[]) => {
+        const arg = call[0] as Record<string, string>;
+        return arg.body?.includes("existing-workspace.up.railway.app");
+      },
+    );
+    expect(urlCall).toBeDefined();
+  });
+
+  it("sends failure notification when provisioning fails", async () => {
+    const { userId, personId } = await createPersonAndUser({
+      email: "contact@example.com",
+      userEmail: "user-fail@example.com",
+    });
+
+    await testDb
+      .update(schema.networkUsers)
+      .set({ suggestionThreadId: "thread-fail-123" })
+      .where(eq(schema.networkUsers.id, userId));
+
+    // Make provisioning fail
+    mockProvisionWorkspace.mockRejectedValueOnce(new Error("Railway API timeout"));
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "user-fail@example.com",
+        text: "yes please",
+        extractedText: "yes please",
+        subject: "Re: Your status update",
+        threadId: "thread-fail-123",
+        messageId: "msg-reply-fail",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result).toBeDefined();
+    expect(result!.action).toBe("workspace_acceptance");
+    expect(result!.details).toBe("Workspace provisioning triggered");
+
+    // Wait for the async provisioning to fail and send notification
+    // The provisioning is fire-and-forget, so we need a small delay
+    await new Promise((r) => setTimeout(r, 100));
+
+    const failCall = mockNotifyUser.mock.calls.find(
+      (call: unknown[]) => {
+        const arg = call[0] as Record<string, string>;
+        return arg.body?.includes("Hit a snag");
+      },
+    );
+    expect(failCall).toBeDefined();
+  });
+});
+
+// ============================================================
+// Brief 161: Email Thread Context + Question Fast-Path
+// ============================================================
+
+describe("question fast-path (Brief 161 — MP-6.5)", () => {
+  it("routes question replies to Self and returns question_fast_path action", async () => {
+    const { personId, userId } = await createPersonAndUser({
+      email: "asker@example.com",
+      name: "Asker Person",
+    });
+
+    mockSelfConverse.mockResolvedValueOnce({
+      response: "Great question! Our pricing starts at $99/month.",
+      sessionId: "mock-session-id",
+      delegationsExecuted: 0,
+      consultationsExecuted: 0,
+      costCents: 3,
+    });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "asker@example.com",
+        subject: "Re: Introduction",
+        text: "What's your pricing? How much does it cost?",
+        messageId: "msg-q-1",
+        threadId: "thread-q-1",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("question_fast_path");
+    expect(result.personId).toBe(personId);
+    expect(result.interactionId).toBeDefined();
+
+    // Self should have been called with contact context
+    expect(mockSelfConverse).toHaveBeenCalledWith(
+      userId,
+      expect.stringContaining("Asker Person"),
+      "inbound",
+      undefined,
+      expect.objectContaining({}),
+    );
+
+    // Verify interaction recorded with question outcome
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0].outcome).toBe("question");
+  });
+
+  it("records interaction even when Self fails on question fast-path", async () => {
+    const { personId } = await createPersonAndUser({
+      email: "asker-fail@example.com",
+      name: "Fail Asker",
+    });
+
+    mockSelfConverse.mockRejectedValueOnce(new Error("LLM timeout"));
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "asker-fail@example.com",
+        subject: "Re: Hello",
+        text: "What do you charge?",
+        messageId: "msg-q-fail",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    // Should still return question_fast_path (interaction was recorded)
+    expect(result.action).toBe("question_fast_path");
+    expect(result.personId).toBe(personId);
+
+    // Interaction should still be recorded
+    const interactions = await testDb
+      .select()
+      .from(schema.interactions)
+      .where(eq(schema.interactions.personId, personId));
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0].outcome).toBe("question");
+  });
+
+  it("includes thread context in Self call when threadId is present", async () => {
+    const { personId, userId } = await createPersonAndUser({
+      email: "thread-asker@example.com",
+      name: "Thread Asker",
+    });
+
+    // Create an outreach interaction in the thread
+    await testDb.insert(schema.interactions).values({
+      personId,
+      userId,
+      type: "outreach_sent",
+      channel: "email",
+      mode: "connecting",
+      subject: "Let's connect",
+      summary: "Initial outreach about our services",
+      metadata: {
+        threadId: "thread-ctx-1",
+        emailBody: "Hi Thread Asker, I wanted to reach out about our consulting services...",
+      },
+    });
+
+    mockSelfConverse.mockResolvedValueOnce({
+      response: "Our consulting starts at $150/hr.",
+      sessionId: "mock-session-id",
+      delegationsExecuted: 0,
+      consultationsExecuted: 0,
+      costCents: 3,
+    });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "thread-asker@example.com",
+        subject: "Re: Let's connect",
+        text: "How much do you charge per hour?",
+        messageId: "msg-ctx-1",
+        threadId: "thread-ctx-1",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result.action).toBe("question_fast_path");
+
+    // Self should have been called with thread context
+    const selfCall = mockSelfConverse.mock.calls[0];
+    const selfOptions = selfCall[4];
+    expect(selfOptions).toBeDefined();
+    expect(selfOptions.threadContext).toBeDefined();
+    expect(selfOptions.threadContext.originalSubject).toBe("Let's connect");
+    expect(selfOptions.threadContext.originalBody).toContain("consulting services");
+  });
+});
+
+describe("thread context token budget (Brief 161 — AC4)", () => {
+  it("truncates long original body to fit budget", async () => {
+    const { personId, userId } = await createPersonAndUser({
+      email: "long-thread@example.com",
+      name: "Long Thread",
+    });
+
+    // Create an outreach with a very long body
+    const longBody = "A".repeat(10000);
+    await testDb.insert(schema.interactions).values({
+      personId,
+      userId,
+      type: "outreach_sent",
+      channel: "email",
+      mode: "connecting",
+      subject: "Intro",
+      summary: "Long outreach",
+      metadata: {
+        threadId: "thread-long-1",
+        emailBody: longBody,
+      },
+    });
+
+    mockSelfConverse.mockResolvedValueOnce({
+      response: "Short answer.",
+      sessionId: "mock-session-id",
+      delegationsExecuted: 0,
+      consultationsExecuted: 0,
+      costCents: 1,
+    });
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "long-thread@example.com",
+        subject: "Re: Intro",
+        text: "What's your timeline?",
+        messageId: "msg-long-1",
+        threadId: "thread-long-1",
+      },
+    };
+
+    await processInboundEmail(payload);
+
+    // Thread context should be truncated — original body should be much shorter than 10000
+    const selfCall = mockSelfConverse.mock.calls[0];
+    const selfOptions = selfCall[4];
+    expect(selfOptions.threadContext).toBeDefined();
+    expect(selfOptions.threadContext.originalBody.length).toBeLessThan(5000);
+    expect(selfOptions.threadContext.originalBody).toContain("…");
   });
 });

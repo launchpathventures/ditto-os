@@ -149,7 +149,7 @@ export const credentialListCommand = defineCommand({
 
     console.log(`CREDENTIALS (${creds.length})\n`);
     for (const cred of creds) {
-      const slug = slugMap.get(cred.processId) ?? cred.processId.slice(0, 8);
+      const slug = cred.processId ? (slugMap.get(cred.processId) ?? cred.processId.slice(0, 8)) : "(user-scoped)";
       const expires = cred.expiresAt
         ? new Date(cred.expiresAt).toISOString().slice(0, 10)
         : "never";

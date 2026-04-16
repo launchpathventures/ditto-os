@@ -26,6 +26,7 @@ const statusVariant: Record<string, string> = {
   negative: "bg-negative/10 text-negative",
   neutral: "bg-surface-secondary text-text-secondary",
   info: "bg-info/10 text-info",
+  vivid: "bg-accent/10 text-accent",
 };
 
 export function RecordBlockComponent({ block, onAction }: Props) {

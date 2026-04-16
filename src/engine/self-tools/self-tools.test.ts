@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 29 tools (5 original + 1 Brief 052 + 7 Brief 040 + 1 Brief 074 + 3 Brief 043 + 1 Brief 044 + 1 Brief 068 + 1 Brief 079 + 5 Brief 118 + 2 Brief 131 + 1 Brief 134)", async () => {
+  it("has 32 tools (5 original + 1 Brief 052 + 7 Brief 040 + 1 Brief 074 + 3 Brief 043 + 1 Brief 044 + 3 Brief 164 + 1 Brief 068 + 1 Brief 079 + 5 Brief 118 + 2 Brief 131 + 1 Brief 134)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(29);
+    expect(selfTools).toHaveLength(32);
 
     const names = selfTools.map((t) => t.name);
     // Original 5
@@ -440,6 +440,10 @@ describe("selfTools definitions", () => {
     expect(names).toContain("suggest_next");
     // Brief 044 — Onboarding Experience
     expect(names).toContain("adapt_process");
+    // Brief 164 — Process Editing & Versioning
+    expect(names).toContain("edit_process");
+    expect(names).toContain("process_history");
+    expect(names).toContain("rollback_process");
     // Brief 068 — Confidence Assessment
     expect(names).toContain("assess_confidence");
     // Brief 074 — Goal Pause

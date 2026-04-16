@@ -154,9 +154,9 @@ For all other destinations, the Self composes contextually. When Rob taps "Today
 
 ### 3. The Block Library Is the Vocabulary
 
-The block library (21 types today, extendable) is the COMPLETE vocabulary for the centre canvas. Every visible element in the centre column is a ContentBlock rendered by the block registry. No raw HTML. No custom one-off components in the canvas area.
+The block library (26 types today as of 2026-04-16, extendable — see ADR-021 addendums for the lineage) is the COMPLETE vocabulary for the centre canvas. Every visible element in the centre column is a ContentBlock rendered by the block registry. No raw HTML. No custom one-off components in the canvas area.
 
-**Current vocabulary (21 types):**
+**Current vocabulary (26 types):** Additions since this ADR was written: `WorkItemFormBlock`, `ConnectionSetupBlock`, `SendingIdentityChoiceBlock` (Brief 072 + Brief 152), `TrustMilestoneBlock` (Brief 160), plus RecordBlock `"vivid"` variant (Brief 168). ADR-021 addendum (2026-04-16) captures the full interactive-block taxonomy. Engine source (`packages/core/src/content-blocks.ts`) is authoritative.
 
 | Block | Purpose | Scaffold Category |
 |-------|---------|-------------------|
@@ -260,11 +260,14 @@ This means the vocabulary isn't limited to what we design today. It grows throug
 The composition engine is built incrementally, not all at once:
 
 **Phase 10 MVP — Deterministic composition, no LLM calls:**
-- Each navigation intent maps to a **composition function** — pure TypeScript, no LLM. Takes context (user model, active processes, pending items) as input, returns `ContentBlock[]`.
+- Each navigation intent maps to a **composition function** — pure TypeScript, no LLM. Takes context (user model, active processes, pending items, `activeRuns`) as input, returns `ContentBlock[]`.
 - These functions encode the reference compositions from prototypes as the DEFAULT assembly. E.g., `composeToday(context)` returns the blocks that P13 shows, adapted to the user's actual data.
 - The Self's conversation stream (chat) continues to use LLM-driven block emission as it does today.
 - This means navigation is fast (no LLM latency), compositions look like the prototypes (visual consistency), and the architecture is composition-ready for Phase 11+.
 - Composition functions live in `packages/web/lib/compositions/` — one per intent. They are explicitly designed to be REPLACED by Self-driven composition in Phase 11+.
+- **Intent injection into Self (Brief 073):** When the user starts a conversation from a composition intent, `intentContext` is threaded through `selfConverseStream()` and injected as `<intent_context>` into the system prompt. The composition function shapes the canvas; `intentContext` shapes the conversation Self — one Self, context-aware per intent. Modules: `composition-context.ts` (assembles context from SSR), `composition-empty-states.ts` (per-intent empty-state factories), `compositions/*.ts` (per-intent composition functions), `composition-engine.ts` (re-exports).
+- **Expanded destination set (2026-04-16):** Today, Inbox, Work, Projects, Routines, Growth (Brief 140), Library (Brief 138), plus Adaptive Views (Brief 154 — data-driven compositions registered at runtime via `workspaceViews` table).
+- **Adaptive compositions (Brief 154):** Network agents push blocks to the workspace live via `pushBlocksToWorkspace()` / `refreshWorkspaceView()` / `registerWorkspaceView()`. `CompositionSchema` is an opaque JSON blob validated by web-package types. Evaluates to `ContentBlock[]` via `evaluateAdaptiveComposition()` (pure, synchronous). Sidebar renders adaptive views after the divider. 20/min rate limit. `workspace.push_blocks` + `workspace.register_view` tools with `stepRunId` guards (Insight-180).
 
 **Phase 11+ — Self-driven composition:**
 - Navigation intents route through the Self. The Self uses its context + learned composition preferences to assemble blocks.

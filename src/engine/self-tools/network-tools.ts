@@ -46,12 +46,14 @@ export async function handleCreateSalesPlan(
   }
 
   // Delegate to cycle activation (Brief 118: sales plan → sales-marketing cycle)
+  // Default to 'principal' identity to bypass identity choice gate (Brief 152)
   const cycleResult = await handleActivateCycle({
     cycleType: "sales-marketing",
     goals: input.goal.trim(),
     icp: input.icp?.trim(),
     cadence: input.cadence?.trim() || "5 prospects per week",
     continuous: true,
+    sendingIdentity: "principal",
   });
 
   // Wrap the result with the create_sales_plan tool name for backward compat
@@ -88,11 +90,13 @@ export async function handleCreateConnectionPlan(
   }
 
   // Delegate to cycle activation (Brief 118: connection plan → network-connecting cycle)
+  // Default to 'principal' identity to bypass identity choice gate (Brief 152)
   const cycleResult = await handleActivateCycle({
     cycleType: "network-connecting",
     goals: input.need.trim(),
     boundaries: input.constraints?.trim(),
     continuous: true,
+    sendingIdentity: "principal",
   });
 
   return {

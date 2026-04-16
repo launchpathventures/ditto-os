@@ -43,7 +43,7 @@ export interface InboundEmailPayload {
 }
 
 export interface InboundProcessingResult {
-  action: "resumed_step" | "opt_out" | "positive_reply" | "interaction_recorded" | "unknown_sender" | "user_request" | "cancellation" | "auto_reply_ignored";
+  action: "resumed_step" | "opt_out" | "positive_reply" | "interaction_recorded" | "unknown_sender" | "user_request" | "cancellation" | "auto_reply_ignored" | "workspace_acceptance" | "question_fast_path";
   personId?: string;
   processRunId?: string;
   interactionId?: string;
@@ -341,6 +341,51 @@ export function isCancellationSignal(text: string): boolean {
   return false;
 }
 
+/**
+ * Detect affirmative workspace acceptance in a user's email reply (Brief 153).
+ * Keyword-based — no LLM call — for speed and reliability.
+ *
+ * Returns true only for clear affirmative signals like "yes", "yeah", "sure", "please".
+ * Ambiguous cases fall through to Self for judgment.
+ */
+export function isWorkspaceAcceptanceSignal(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+
+  const exactSignals = [
+    "yes",
+    "yes!",
+    "yes please",
+    "yes pls",
+    "yeah",
+    "yeah!",
+    "yep",
+    "yep!",
+    "yup",
+    "sure",
+    "sure!",
+    "please",
+    "please!",
+    "do it",
+    "let's go",
+    "lets go",
+    "go for it",
+    "sounds good",
+    "sounds great",
+    "absolutely",
+    "definitely",
+    "yes, please",
+    "yes, do it",
+    "i'd like that",
+    "id like that",
+    "i would like that",
+    "set it up",
+    "let's do it",
+    "lets do it",
+  ];
+
+  return exactSignals.includes(lower);
+}
+
 type WorkItemRow = {
   id: string;
   type: string;
@@ -438,8 +483,16 @@ async function resolveGoalFromThread(
 }
 
 // ============================================================
-// Thread Context (Brief 146)
+// Thread Context (Brief 146, Brief 161)
 // ============================================================
+
+/**
+ * Maximum character budget for thread context (Brief 161 AC4).
+ * ~4000 chars ≈ ~1000 tokens. Keeps thread context from bloating
+ * the system prompt while preserving enough for conversational continuity.
+ * Configurable via THREAD_CONTEXT_MAX_CHARS env var.
+ */
+const THREAD_CONTEXT_MAX_CHARS = parseInt(process.env.THREAD_CONTEXT_MAX_CHARS || "4000", 10);
 
 export interface ThreadContext {
   originalSubject: string | null;
@@ -489,10 +542,34 @@ async function loadThreadContext(
       createdAt: i.createdAt!,
     }));
 
+  // Brief 161 AC4: Enforce token budget on thread context
+  let originalBody = (outreachMetadata?.emailBody as string) || null;
+  let budget = THREAD_CONTEXT_MAX_CHARS;
+
+  // Subject is short — always include
+  if (outreach?.subject) budget -= outreach.subject.length;
+
+  // Truncate original body to fit budget
+  if (originalBody && originalBody.length > budget * 0.6) {
+    originalBody = originalBody.slice(0, Math.floor(budget * 0.6)) + "…";
+  }
+  if (originalBody) budget -= originalBody.length;
+
+  // Truncate prior replies to fit remaining budget
+  const truncatedReplies: typeof priorReplies = [];
+  for (const reply of priorReplies) {
+    if (budget <= 0) break;
+    const summary = reply.summary.length > budget
+      ? reply.summary.slice(0, budget) + "…"
+      : reply.summary;
+    budget -= summary.length;
+    truncatedReplies.push({ summary, createdAt: reply.createdAt });
+  }
+
   return {
     originalSubject: outreach?.subject || null,
-    originalBody: (outreachMetadata?.emailBody as string) || null,
-    priorReplies,
+    originalBody,
+    priorReplies: truncatedReplies,
   };
 }
 
@@ -512,6 +589,66 @@ async function loadThreadContext(
  * own processes, acknowledge receipt. Full intent classification
  * (new requests, status queries, corrections) deferred to Brief 099.
  */
+/**
+ * Brief 153: Trigger workspace provisioning asynchronously.
+ * Called fire-and-forget from handleUserEmail — the user gets an immediate ack,
+ * and this function handles the saga + welcome email or failure notification.
+ */
+async function triggerWorkspaceProvisioning(
+  userId: string,
+  userEmail: string,
+  personId: string,
+  emailSubject: string,
+  inReplyToMessageId?: string,
+): Promise<void> {
+  try {
+    const { provisionWorkspace, createRailwayClient } = await import("./workspace-provisioner");
+
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+    const networkUrl = process.env.NETWORK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+    const imageRef = process.env.RAILWAY_IMAGE_REF || "ghcr.io/ditto/workspace:latest";
+
+    if (!railwayToken || !railwayProjectId) {
+      throw new Error("RAILWAY_API_TOKEN and RAILWAY_PROJECT_ID must be set for workspace provisioning");
+    }
+
+    const railwayClient = createRailwayClient(railwayToken, railwayProjectId);
+    const result = await provisionWorkspace(userId, {
+      railwayClient,
+      projectId: railwayProjectId,
+      imageRef,
+      networkUrl,
+      ownerEmail: userEmail,
+    });
+
+    console.log(`[inbound] Workspace provisioned for ${userEmail}: ${result.workspaceUrl} (${result.status})`);
+
+    // Send welcome email with magic link
+    const { sendWorkspaceWelcome } = await import("./workspace-welcome");
+    const welcomeResult = await sendWorkspaceWelcome(userId, result.workspaceUrl);
+    if (!welcomeResult.success) {
+      console.error(`[inbound] Welcome email failed for ${userEmail}:`, welcomeResult.error);
+    }
+  } catch (err) {
+    console.error(`[inbound] Workspace provisioning failed for ${userEmail}:`, err);
+
+    // Send failure notification — don't let the user wonder
+    try {
+      await notifyUser({
+        userId,
+        personId,
+        subject: emailSubject.startsWith("Re:") ? emailSubject : `Re: ${emailSubject}`,
+        body: "Hit a snag setting up your workspace — I've flagged it for review. I'll follow up when it's sorted.",
+        inReplyToMessageId,
+        includeOptOut: false,
+      });
+    } catch {
+      // Double-failure: provisioning failed AND notification failed. Already logged above.
+    }
+  }
+}
+
 async function handleUserEmail(
   senderEmail: string,
   message: InboundEmailPayload["message"],
@@ -626,6 +763,110 @@ async function handleUserEmail(
     // No thread context or no matching goal — fall through to Self
     // Self will handle it conversationally
     console.log(`[inbound] Cancellation signal from ${senderEmail} but no thread context — routing to Self`);
+  }
+
+  // Brief 153: Workspace acceptance detection — runs AFTER cancellation, BEFORE waiting-step resume.
+  // If user replies affirmatively to a workspace suggestion thread, trigger provisioning.
+  if (isWorkspaceAcceptanceSignal(replyText) && message.threadId) {
+    // Check if this reply is in a workspace suggestion thread
+    if (networkUser.suggestionThreadId && message.threadId === networkUser.suggestionThreadId) {
+      // Already has a workspace? Send them the existing URL instead of re-provisioning.
+      if (networkUser.status === "workspace" && networkUser.workspaceId) {
+        const [existingWs] = await db
+          .select({ workspaceUrl: schema.managedWorkspaces.workspaceUrl })
+          .from(schema.managedWorkspaces)
+          .where(eq(schema.managedWorkspaces.id, networkUser.workspaceId))
+          .limit(1);
+
+        if (existingWs) {
+          try {
+            const personId = networkUser.personId || undefined;
+            if (personId) {
+              await notifyUser({
+                userId: networkUser.id,
+                personId,
+                subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
+                body: `You already have a workspace! Here's your link: ${existingWs.workspaceUrl}`,
+                inReplyToMessageId: message.messageId,
+                includeOptOut: false,
+              });
+            }
+          } catch {
+            // Notification failure is non-fatal
+          }
+
+          return {
+            action: "workspace_acceptance",
+            networkUserId: networkUser.id,
+            personId: networkUser.personId || undefined,
+            details: "User already has workspace — sent existing URL",
+          };
+        }
+      }
+
+      // Ensure personId exists
+      let personId = networkUser.personId;
+      if (!personId) {
+        const person = await createPerson({
+          userId: networkUser.id,
+          name: networkUser.name || senderEmail,
+          email: senderEmail,
+          source: "manual",
+          visibility: "connection",
+        });
+        personId = person.id;
+        await db
+          .update(schema.networkUsers)
+          .set({ personId: person.id })
+          .where(eq(schema.networkUsers.id, networkUser.id));
+      }
+
+      console.log(`[inbound] Workspace acceptance from ${senderEmail} — triggering provisioning`);
+
+      // Send immediate acknowledgment
+      try {
+        await notifyUser({
+          userId: networkUser.id,
+          personId,
+          subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
+          body: "On it — setting up your workspace now. I'll send you a link when it's ready (usually a couple of minutes).",
+          inReplyToMessageId: message.messageId,
+          includeOptOut: false,
+        });
+      } catch {
+        // Ack failure is non-fatal — provisioning still proceeds
+      }
+
+      // Record the acceptance interaction (learning layer signal)
+      const interaction = await recordInteraction({
+        personId,
+        userId: networkUser.id,
+        type: "reply_received",
+        channel: "email",
+        mode: "connecting",
+        subject,
+        summary: replyText.slice(0, 500),
+        outcome: "positive",
+        metadata: {
+          messageId: message.messageId,
+          threadId: message.threadId,
+          workspaceAcceptance: true,
+        },
+      });
+
+      // Trigger async provisioning — don't await the full saga
+      triggerWorkspaceProvisioning(networkUser.id, senderEmail, personId, subject, message.messageId).catch((err) => {
+        console.error(`[inbound] Workspace provisioning failed for ${senderEmail}:`, err);
+      });
+
+      return {
+        action: "workspace_acceptance",
+        networkUserId: networkUser.id,
+        personId,
+        interactionId: interaction.id,
+        details: "Workspace provisioning triggered",
+      };
+    }
   }
 
   // Check if user is replying to a waiting_human step on one of their processes.
@@ -811,7 +1052,7 @@ async function handleUserEmail(
 async function notifyUserImmediately(
   userId: string,
   personId: string,
-  event: "positive_reply" | "opt_out" | "step_resumed",
+  event: "positive_reply" | "opt_out" | "step_resumed" | "question_received",
   context: { personName: string; personEmail: string; subject: string; summary: string },
 ): Promise<void> {
   let subject: string;
@@ -847,6 +1088,17 @@ async function notifyUserImmediately(
         `> ${context.summary}`,
         "",
         "I'll let you know when the next step lands.",
+      ].join("\n");
+      break;
+
+    case "question_received":
+      subject = `${context.personName} had a question — I replied`;
+      body = [
+        `${context.personName} (${context.personEmail}) asked a question on "${context.subject}":`,
+        "",
+        `> ${context.summary}`,
+        "",
+        "I sent them a quick reply. Let me know if you'd like me to handle it differently.",
       ].join("\n");
       break;
   }
@@ -1044,6 +1296,58 @@ export async function processInboundEmail(
       ...(threadContext ? { threadContext } : {}),
     },
   });
+
+  // 9. Question fast-path (Brief 161 — MP-6.5): Route to Self for fast conversational response
+  if (classification === "question") {
+    console.log(
+      `[inbound] Question from ${senderEmail} — routing to Self fast-path`,
+    );
+
+    // Build contextual message for Self — include thread context + the question
+    let selfMessage = `A contact (${person.name}, ${senderEmail}) replied to your outreach with a question. Compose a concise, helpful reply as Alex.\n\nTheir question:\n${replyText}`;
+    if (threadContext?.originalSubject) {
+      selfMessage = `A contact (${person.name}, ${senderEmail}) replied to your outreach "${threadContext.originalSubject}" with a question. Compose a concise, helpful reply as Alex.\n\nTheir question:\n${replyText}`;
+    }
+
+    try {
+      const selfResult = await selfConverse(person.userId, selfMessage, "inbound", undefined, {
+        threadContext: threadContext ?? undefined,
+      });
+
+      // Send Self's response to the contact via sendAndRecord (outbound quality gate — AC7)
+      if (selfResult.response.trim()) {
+        const { sendAndRecord } = await import("./channel");
+        await sendAndRecord({
+          to: senderEmail,
+          subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
+          body: selfResult.response,
+          personaId: "alex",
+          mode: "connecting",
+          personId: person.id,
+          userId: person.userId,
+          inReplyToMessageId: message.messageId,
+          includeOptOut: false,
+        });
+      }
+    } catch (err) {
+      // Self failure is non-fatal — question is still recorded as interaction above
+      console.error(`[inbound] Question fast-path Self failed for ${senderEmail}:`, err);
+    }
+
+    // Notify user about the question (fire-and-forget)
+    notifyUserImmediately(person.userId, person.id, "question_received", {
+      personName: person.name,
+      personEmail: senderEmail,
+      subject,
+      summary: replyText.slice(0, 200),
+    }).catch(() => {});
+
+    return {
+      action: "question_fast_path",
+      personId: person.id,
+      interactionId: interaction.id,
+    };
+  }
 
   if (classification === "positive") {
     console.log(

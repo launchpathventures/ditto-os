@@ -40,7 +40,7 @@ export const sessions = sqliteTable("sessions", {
   summary: text("summary"),
   turns: text("turns", { mode: "json" })
     .notNull()
-    .$type<Array<{ role: string; content: string; timestamp: number; surface: string }>>()
+    .$type<Array<{ role: string; content: string; timestamp: number; surface: string; toolNames?: string[] }>>()
     .default([]),
 });
 

@@ -21,6 +21,8 @@ Alex IS the professional connector. This is Ditto's value proposition. The quali
 
 **Who reviews on downgrade:** If quality degrades and Alex is downgraded, the *Ditto admin team* reviews, not the end user. The user never sees approval flows for Alex's professional connector work. The trust gate is reviewer-agnostic (it just pauses), but the admin interface is where Ditto staff review. This is how a real company works — a manager reviews an employee's work quality, not the client.
 
+**Implementation (Brief 108, 2026-04-08):** `notifyAdmin()` / `notifyAdminOfDowngrade()` fire email to `ADMIN_EMAIL` on system-triggered downgrades via `executeTierChange()` in `trust.ts` (dynamic import, fire-and-forget). Admin dashboard at `/admin/users/[userId]` shows the downgraded user's processes, trust tiers, recent runs, and quality metrics. Admin can add feedback (`adminFeedback` table — surfaces as context to Self), pause/resume user processes (`pauseUserProcesses`/`resumeUserProcesses` sets `pausedAt` on `networkUsers`), or act-as-Alex (`sendAsAlex()`). This closes the open question documented above.
+
 ### Context 3: Alex on behalf of user's business
 **Processes:** selling-outreach, follow-up-sequences, social-publishing, content-creation, objection-handling
 

@@ -25,6 +25,7 @@ import { Sidebar, type NavigationDestination } from "./sidebar";
 import { RightPanel, type PanelContext } from "./right-panel";
 import { ProcessDetailContainer } from "@/components/detail/process-detail";
 import { ComposedCanvas } from "./composed-canvas";
+import { AdaptiveCanvas } from "./adaptive-canvas";
 import { ArtifactLayout } from "./artifact-layout";
 import { ArtifactSheet, FullArtifactSheet } from "./artifact-sheet";
 import { PromptInput } from "@/components/self/prompt-input";
@@ -38,6 +39,8 @@ import { resolveTransition } from "@/lib/transition-map";
 import type { ArtifactCenterView } from "@/lib/transition-map";
 import type { CompositionIntent } from "@/lib/compositions";
 import { useInteractionEvent } from "@/hooks/use-interaction-events";
+import { useWorkspaceViews } from "@/hooks/use-workspace-views";
+import { useNetworkPush } from "@/hooks/use-network-push";
 
 interface WorkspaceProps {
   userId?: string;
@@ -48,6 +51,7 @@ interface WorkspaceProps {
  */
 type CenterView =
   | { type: "canvas"; intent: CompositionIntent }
+  | { type: "adaptive"; slug: string }
   | { type: "process"; processId: string; runId?: string }
   | { type: "settings" }
   | ArtifactCenterView;
@@ -57,6 +61,18 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   // Ensure feed data is in React Query cache for composition context
   useFeed();
   const { emit: emitInteraction } = useInteractionEvent();
+  // Brief 154: Fetch adaptive workspace views for sidebar + routing
+  const { data: adaptiveViewsData } = useWorkspaceViews();
+  // Brief 154: Listen for workspace push events (blocks, refresh, registration)
+  useNetworkPush();
+  const adaptiveViews = useMemo(
+    () => (adaptiveViewsData ?? []).map((v) => ({ slug: v.slug, label: v.label, icon: v.icon })),
+    [adaptiveViewsData],
+  );
+  const adaptiveSlugs = useMemo(
+    () => new Set((adaptiveViewsData ?? []).map((v) => v.slug)),
+    [adaptiveViewsData],
+  );
 
   const [centerView, setCenterView] = useState<CenterView>({
     type: "canvas",
@@ -176,11 +192,14 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
 
     if (destination === "settings") {
       setCenterView({ type: "settings" });
+    } else if (adaptiveSlugs.has(destination)) {
+      // Brief 154: Adaptive view slug — route to adaptive canvas
+      setCenterView({ type: "adaptive", slug: destination });
     } else {
-      setCenterView({ type: "canvas", intent: destination });
+      setCenterView({ type: "canvas", intent: destination as CompositionIntent });
     }
     setPanelOverride(null);
-  }, [centerView, emitInteraction]);
+  }, [centerView, emitInteraction, adaptiveSlugs]);
 
   const handleSelectProcess = useCallback((processId: string) => {
     setCenterView({ type: "process", processId });
@@ -345,11 +364,13 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   const activeDestination: NavigationDestination =
     centerView.type === "canvas"
       ? centerView.intent
-      : centerView.type === "settings"
-        ? "settings"
-        : centerView.type === "process"
-          ? "routines" // Process drill-down highlights Routines
-          : "today"; // Artifact mode — no specific highlight
+      : centerView.type === "adaptive"
+        ? centerView.slug
+        : centerView.type === "settings"
+          ? "settings"
+          : centerView.type === "process"
+            ? "routines" // Process drill-down highlights Routines
+            : "today"; // Artifact mode — no specific highlight
 
   // Right panel context — reactive to center view
   const panelContext: PanelContext =
@@ -363,6 +384,10 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
   // Suggestion pills — context-aware conversation starters
   const suggestionPills = useMemo(() => {
     if (chatLoading || hasMessages) return [];
+    if (centerView.type === "adaptive") {
+      // Brief 154: Default pills for adaptive views
+      return ["What's the latest?", "Show me everything"];
+    }
     if (centerView.type !== "canvas") return [];
     const pillsByIntent: Record<string, string[]> = {
       today: ["What needs my attention?", "Show me my week", "Any new leads?"],
@@ -439,6 +464,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
             activeDestination={activeDestination}
             onNavigate={handleNavigate}
             onSelectProcess={handleSelectProcess}
+            adaptiveViews={adaptiveViews}
             collapsed
           />
         ) : (
@@ -448,6 +474,7 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
             activeDestination={activeDestination}
             onNavigate={handleNavigate}
             onSelectProcess={handleSelectProcess}
+            adaptiveViews={adaptiveViews}
           />
         )}
 
@@ -467,6 +494,48 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
               <div className="p-6 max-w-2xl mx-auto">
                 <h2 className="text-lg font-semibold text-text-primary mb-6">Settings</h2>
                 <ConnectionsPanel />
+              </div>
+            ) : centerView.type === "adaptive" ? (
+              /* Brief 154: Adaptive view — data-driven composition */
+              <div className="max-w-[720px] mx-auto" style={{ padding: "48px 24px 24px" }}>
+                <AdaptiveCanvas
+                  slug={centerView.slug}
+                  onAction={handleBlockAction}
+                />
+
+                {/* Conversation messages */}
+                {hasMessages && (
+                  <div className="mt-6 space-y-4">
+                    {messages.map((message, _idx, arr) => (
+                      <ConversationMessage
+                        key={message.id}
+                        message={message}
+                        isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
+                        onAction={handleBlockAction}
+                      />
+                    ))}
+                    {chatLoading && <TypingIndicator />}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+
+                {!hasMessages && chatLoading && (
+                  <div className="mt-4">
+                    <TypingIndicator />
+                  </div>
+                )}
+
+                {suggestionPills.length > 0 && (
+                  <div className="mt-6 max-w-[720px] mx-auto">
+                    <SuggestionPills
+                      pills={suggestionPills}
+                      onSelect={(pill) => {
+                        setInput(pill);
+                        handleChatSubmit();
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             ) : centerView.type === "canvas" ? (
               /* Canvas — composed blocks (P00: 720px centred, generous padding) */
@@ -546,18 +615,20 @@ export function Workspace({ userId = "default" }: WorkspaceProps) {
                 placeholder={
                   chatLoading
                     ? "Jump in anytime..."
-                    : centerView.type === "canvas"
-                      ? ({
-                          today: "What's on your mind?",
-                          inbox: "Ask about any of these...",
-                          work: "What do you need to get done?",
-                          projects: "Tell me about a project...",
-                          growth: "How should we grow?",
-                          library: "Need a new capability?",
-                          routines: "Need a new routine?",
-                          roadmap: "What should we build next?",
-                        } as Record<string, string>)[centerView.intent]
-                      : undefined
+                    : centerView.type === "adaptive"
+                      ? "Ask about this view..."
+                      : centerView.type === "canvas"
+                        ? ({
+                            today: "What's on your mind?",
+                            inbox: "Ask about any of these...",
+                            work: "What do you need to get done?",
+                            projects: "Tell me about a project...",
+                            growth: "How should we grow?",
+                            library: "Need a new capability?",
+                            routines: "Need a new routine?",
+                            roadmap: "What should we build next?",
+                          } as Record<string, string>)[centerView.intent]
+                        : undefined
                 }
               />
             </div>
@@ -590,12 +661,14 @@ function MobileMenuButton({
   activeDestination,
   onNavigate,
   onSelectProcess,
+  adaptiveViews,
 }: {
   processes: import("@/lib/process-query").ProcessSummary[];
   workItems: import("@/lib/process-query").WorkItemSummary[];
   activeDestination: NavigationDestination;
   onNavigate: (destination: NavigationDestination) => void;
   onSelectProcess: (id: string) => void;
+  adaptiveViews?: import("./sidebar").AdaptiveViewNavItem[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -623,6 +696,7 @@ function MobileMenuButton({
               activeDestination={activeDestination}
               onNavigate={(dest) => { onNavigate(dest); setOpen(false); }}
               onSelectProcess={(id) => { onSelectProcess(id); setOpen(false); }}
+              adaptiveViews={adaptiveViews}
             />
           </div>
           <div className="flex-1 bg-black/20" onClick={() => setOpen(false)} />

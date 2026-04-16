@@ -20,7 +20,7 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 ---
 
-## MP-1: Goal Framing → Process Creation → First Run (P0)
+## MP-1: Goal Framing → Process Creation → First Run (P0) ✓ COMPLETE
 
 **The meta process:** User says "I need X" → Self guides conversation → process proposed → user approves → process runs → first output appears for review.
 
@@ -53,13 +53,13 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 | MP-1.1 | ~~Template matching in `generate_process`~~ — **done (Brief 145).** `findProcessModel()` called before building from scratch. >= 0.6 uses template structure, 0.3-0.6 mentions inspiration, < 0.3 from scratch. | enhancement | — |
 | MP-1.2 | ~~Post-creation activation~~ — **done (Brief 145).** Both paths: form returns `conversationContext: { activationReady }`, conversational path has delegation guidance for `activationHint`. | enhancement | — |
 | MP-1.3 | ~~`activate_cycle` fullHeartbeat fix~~ — **done (Brief 145).** `setImmediate(() => fullHeartbeat())` added, matching `start_pipeline` pattern. | bug fix | — |
-| MP-1.4 | Goal decomposition progress — emit harness events during `executeOrchestrator` that the conversation can surface as ProgressBlocks | enhancement | — |
-| MP-1.5 | Tier 3 build notification — when `triggerBuild()` creates a process, emit a ContentBlock notification to the user's next briefing or active conversation | enhancement | MP-1.4 |
-| MP-1.6 | End-to-end test: "user says need → process proposed → approved → first run completes → output reviewed" | test | MP-1.1, MP-1.2 |
+| MP-1.4 | ~~Goal decomposition progress~~ — **done (Brief 155).** 5 new HarnessEvent types for orchestrator progress. SSE sanitization + `useOrchestratorProgress` hook with ProgressBlock/AlertBlock conversion. | enhancement | — |
+| MP-1.5 | ~~Tier 3 build notification~~ — **done (Brief 155).** `build-process-created` event emitted after successful `triggerBuild()`. Surfaces via SSE as AlertBlock. | enhancement | MP-1.4 |
+| MP-1.6 | ~~End-to-end test~~ — **done (Brief 156).** 6 tests validate full chain: generate→save→activate→run→review→trust. Fixed `handleGenerateProcess` missing `outputs: []`. | test | MP-1.1, MP-1.2 |
 
 ---
 
-## MP-2: Onboarding → First Process → "Aha" Moment (P0)
+## MP-2: Onboarding → First Process → "Aha" Moment (P0) ✓ COMPLETE
 
 **The meta process:** User clicks magic link from frontdoor email → lands in workspace → Alex greets them with context → guides to first process → first real output → user sees the value.
 
@@ -88,15 +88,15 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-2.1 | Audit memory bridge — trace whether frontdoor person-scoped and self-scoped memories are accessible to workspace `assembleSelfContext()`. Document the scoping gap if it exists | research | — |
-| MP-2.2 | Frontdoor context injection — when magic link is consumed, load frontdoor conversation summary + user model into workspace session context | enhancement | MP-2.1 |
-| MP-2.3 | Onboarding-to-creation handoff — verify that onboarding "propose-first-process" step connects to `generate_process` with template matching (MP-1.1) | integration | MP-1.1 |
-| MP-2.4 | First-run streaming — ensure ProgressBlock appears during first process execution, SSE events flow through to `/chat` page | enhancement | MP-1.4 |
-| MP-2.5 | End-to-end onboarding test: magic link click → greeting with context → first process approved → first output reviewed | test | MP-2.2, MP-2.3, MP-2.4 |
+| MP-2.1 | ~~Audit memory bridge~~ **done** (Brief 148 — identified 3 gaps: ephemeral learned context, magic link transfers only email, Self doesn't load person-scoped memories) | research | — |
+| MP-2.2 | ~~Frontdoor context injection~~ **done** (Brief 148 — `persistLearnedContext()` in `memory-bridge.ts`, `loadSelfMemories()` extended, magic link calls persist before generating) | enhancement | MP-2.1 |
+| MP-2.3 | ~~Onboarding-to-creation handoff~~ **done** (Brief 157 — `onboarding.yaml` steps wired to `generate_process` with template matching + frontdoor context, Self guidance updated) | integration | MP-1.1 |
+| MP-2.4 | ~~First-run streaming~~ **done** (Brief 157 — `chat-conversation.tsx` SSE subscription via `useHarnessEvents`, `ProgressBlockComponent` inline, progressive reveal) | enhancement | MP-1.4 |
+| MP-2.5 | ~~End-to-end onboarding test~~ **done** (Brief 157 — 5 Playwright tests with SSE route interception, `ChatPage` page object) | test | MP-2.2, MP-2.3, MP-2.4 |
 
 ---
 
-## MP-3: Daily Briefing → Orient → Review Cycle (P1)
+## MP-3: Daily Briefing → Orient → Review Cycle (P1) ✓ COMPLETE
 
 **The meta process:** User opens Ditto → Self detects session gap → briefing assembles → review items surface inline → user approves/edits/rejects → next steps kick off → user monitors pipelines throughout day.
 
@@ -110,11 +110,11 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 - `useHarnessEvents` + `use-pipeline-review.ts` hooks in web UI
 
 **What's broken:**
-1. **Autonomous digest missing.** When processes run at `autonomous` or `spot_checked` tier and auto-advance, there's no summary. User can't see "12 follow-up emails sent automatically, 2 got responses." Briefing only shows items that *need* attention, not a confidence-building summary of what happened autonomously.
-2. **Briefing staleness.** If user opens Ditto at 2pm, is the briefing regenerated or stale from morning? `get_briefing` is an LLM call — does it cache? Does it know about intra-day changes?
-3. **Review → resume latency.** User approves a review item. `approveRun()` calls `fullHeartbeat()` synchronously — this is good. But does the *next* gate-pause appear inline without page refresh? Does the SSE event fire and the UI react?
-4. **Empty briefing.** When there's genuinely nothing to report, does the briefing gracefully say "all quiet" or does the LLM hallucinate importance?
-5. **Stuck pipeline visibility.** Processes waiting for external events (email reply, API response) show as "in progress" but the user can't distinguish "actively running" from "waiting for Sarah to reply."
+1. ~~**Autonomous digest missing.**~~ **Fixed (Brief 158, MP-3.1).** `assembleAutonomousDigest()` queries `harnessDecisions` for auto-advanced steps since last session, groups by process, builds rich summaries from step IDs and `_activityLabel` outputs. "WHILE YOU WERE AWAY" section in briefing.
+2. ~~**Briefing staleness.**~~ **Fixed (Brief 158, MP-3.5).** `generatedAt` timestamp in `BriefingData`, included in `get_briefing` output and metadata. No caching layer — each call assembles fresh.
+3. ~~**Review → resume latency.**~~ **Verified (Brief 158, MP-3.4).** Data-layer chain tested: waiting_review → running → next pause → briefing updates. SSE event contract verified against use-pipeline-review.ts.
+4. ~~**Empty briefing.**~~ **Fixed (Brief 158, MP-3.3).** Deterministic empty state: "Nothing needs your attention. Your processes are running smoothly." No LLM in empty path.
+5. ~~**Stuck pipeline visibility.**~~ **Fixed (Brief 158, MP-3.2).** ProgressBlock extended with `"waiting"` status + `waitFor` metadata. `assembleWaitStates()` reads `runMetadata.waitFor` on `waiting_human` runs. "WAITING FOR EXTERNAL EVENTS" section in briefing.
 
 **What "tight" looks like:**
 - Morning briefing includes autonomous summary: "While you were away: 8 emails sent (2 responses), 3 quotes generated (all approved automatically)"
@@ -127,15 +127,15 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-3.1 | Autonomous digest — extend `briefing-assembler.ts` to query auto-advanced step runs since last session, summarise by process | enhancement | — |
-| MP-3.2 | Wait-state visibility — distinguish "running" from "waiting for external event" in ProgressBlock. Surface `wait_for` metadata with human-readable descriptions | enhancement | — |
-| MP-3.3 | Briefing empty state — ensure `get_briefing` returns a calm "all clear" when no items need attention, no hallucinated urgency | enhancement | — |
-| MP-3.4 | Review-to-resume UI flow — verify SSE event chain: approveRun → fullHeartbeat → gate-pause event → UI shows next review item without refresh | integration test | — |
-| MP-3.5 | Briefing freshness — verify briefing regenerates per session gap, not cached stale. Add timestamp to briefing output | verification | — |
+| MP-3.1 | ~~Autonomous digest~~ — **done (Brief 158).** `assembleAutonomousDigest()` + `buildDigestSummary()`. Rich summaries from step IDs + `_activityLabel` outputs. | enhancement | — |
+| MP-3.2 | ~~Wait-state visibility~~ — **done (Brief 158).** ProgressBlock `"waiting"` status + `waitFor` metadata. `assembleWaitStates()`. UI renders in `progress-block.tsx`. | enhancement | — |
+| MP-3.3 | ~~Briefing empty state~~ — **done (Brief 158).** Deterministic "Nothing needs your attention." No LLM in path. | enhancement | — |
+| MP-3.4 | ~~Review-to-resume UI flow~~ — **done (Brief 158).** 4-step data-layer transition test + SSE event contract test. | integration test | — |
+| MP-3.5 | ~~Briefing freshness~~ — **done (Brief 158).** `generatedAt: Date` in `BriefingData`, included in output + metadata. | verification | — |
 
 ---
 
-## MP-4: Feedback Capture → Pattern Detection → Learning Loop (P1)
+## MP-4: Feedback Capture → Pattern Detection → Learning Loop (P1) ✓ COMPLETE
 
 **The meta process:** User edits an output → diff captured structurally → pattern detected after 3+ corrections → "Teach this?" surfaced → user accepts → next run is measurably better.
 
@@ -163,15 +163,15 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-4.1 | Feedback-to-memory bridge — when edit feedback is recorded, write a process-scoped memory with the correction pattern. Verify memory-assembly loads it for next run | enhancement | — |
-| MP-4.2 | "Teach this?" action loop — when user accepts pattern notification, write durable process-scoped memory AND update process quality criteria | enhancement | MP-4.1 |
-| MP-4.3 | Correction rate tracking — track per-process, per-pattern correction rates over time. Surface in process detail and briefing | enhancement | MP-4.2 |
-| MP-4.4 | Evidence narrative — when suggesting trust upgrade or showing learning effect, include before/after correction rates | enhancement | MP-4.3 |
-| MP-4.5 | End-to-end test: edit output 3x with same pattern → notification appears → accept → next run produces corrected output without human edit | test | MP-4.1, MP-4.2 |
+| MP-4.1 | ~~Feedback-to-memory bridge~~ — **done (Brief 147).** Edit feedback writes process-scoped memory with correction pattern. Memory-assembly loads for next run. | enhancement | — |
+| MP-4.2 | ~~"Teach this?" action loop~~ — **done (Brief 147).** Pattern acceptance writes durable process-scoped memory AND updates process quality criteria. | enhancement | MP-4.1 |
+| MP-4.3 | ~~Correction rate tracking — track per-process, per-pattern correction rates over time. Surface in process detail and briefing~~ **done** (Brief 159) | enhancement | MP-4.2 |
+| MP-4.4 | ~~Evidence narrative — when suggesting trust upgrade or showing learning effect, include before/after correction rates~~ **done** (Brief 159) | enhancement | MP-4.3 |
+| MP-4.5 | ~~End-to-end test: edit output 3x with same pattern → notification appears → accept → next run produces corrected output without human edit~~ **done** (Brief 159) | test | MP-4.1, MP-4.2 |
 
 ---
 
-## MP-5: Trust Earning → Tier Upgrade → Autonomy Expansion (P1)
+## MP-5: Trust Earning → Tier Upgrade → Autonomy Expansion (P1) ✓ COMPLETE
 
 **The meta process:** Process runs accumulate → approval rates tracked → system suggests upgrade → user sees evidence → accepts → fewer reviews required → eventually autonomous with digest.
 
@@ -199,14 +199,14 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-5.1 | Trust upgrade celebration — dedicated ContentBlock for trust milestone with evidence narrative, distinct from regular suggestions | enhancement | — |
-| MP-5.2 | Downgrade explanation — when `executeTierChange()` downgrades, generate human-readable explanation with specific patterns that triggered it. Surface in next briefing | enhancement | — |
-| MP-5.3 | Auto-advanced summary — query auto-advanced step runs per process, generate collapsible summary for briefing | enhancement | MP-3.1 |
-| MP-5.4 | Spot-check transparency — for spot-checked processes, show count of auto-advanced vs sampled runs in process detail | enhancement | — |
+| MP-5.1 | ~~Trust upgrade celebration~~ — **done (Brief 160).** `TrustMilestoneBlock` in `@ditto/core`, `generateUpgradeCelebration()` builds evidence narrative with accept/reject actions. Surfaced in briefing as TRUST MILESTONES section. | enhancement | — |
+| MP-5.2 | ~~Downgrade explanation~~ — **done (Brief 160).** `generateDowngradeExplanation()` with warm tone + specific trigger patterns. `executeTierChange()` stores milestone in activity metadata. Surfaced in next briefing. | enhancement | — |
+| MP-5.3 | ~~Auto-advanced summary~~ — **done (Brief 158+160).** `autonomousDigest` in BriefingData (Brief 158). Briefing WHILE YOU WERE AWAY section with rich step-level summaries. | enhancement | MP-3.1 |
+| MP-5.4 | ~~Spot-check transparency~~ — **done (Brief 160).** `SpotCheckStats` per process: auto-advanced vs sampled counts, auto-passed-checks. Surfaced in briefing as SPOT-CHECK TRANSPARENCY section. | enhancement | — |
 
 ---
 
-## MP-6: Inbound Email → Classification → Routing → Response (P0)
+## MP-6: Inbound Email → Classification → Routing → Response (P0) ✓ COMPLETE
 
 **The meta process:** Someone replies to Alex's email → inbound received → classified (positive/question/opt-out/OOO) → routed to correct process → response generated → quality gate → sent.
 
@@ -239,15 +239,15 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-6.1 | Reply classification expansion — add neutral/deferred and auto-reply categories to inbound email classification. Route ambiguous replies to Self for judgment | enhancement | — |
-| MP-6.2 | Thread context injection — when processing a reply, load the original outreach content and prior thread as context for response generation | enhancement | — |
-| MP-6.3 | OOO detection — identify auto-reply patterns (out of office, vacation, etc.) and exclude from engagement metrics and positive-reply events | enhancement | — |
-| MP-6.4 | Opt-out reliability test — independent test suite for opt-out path: keyword detection, immediate removal, confirmation, permanent exclusion | test | — |
-| MP-6.5 | Question fast-path — when reply is classified as a direct question, route to Self with thread context for conversational response (skip full process pipeline) | enhancement | MP-6.1, MP-6.2 |
+| MP-6.1 | ~~Reply classification expansion~~ — **done (Brief 146).** 6 categories: opt_out, positive, question, deferred, auto_reply, general. Ambiguous replies route appropriately. | enhancement | — |
+| MP-6.2 | ~~Thread context injection~~ — **done (Brief 161).** `loadThreadContext()` loads original outreach + prior replies with token budget (4000 char default, configurable via `THREAD_CONTEXT_MAX_CHARS`). `SelfConverseOptions.threadContext` injects `<email_thread_context>` block into Self system prompt. | enhancement | — |
+| MP-6.3 | ~~OOO detection~~ — **done (Brief 146).** `isAutoReply()` detects out-of-office patterns, `auto_reply` classification skips recording entirely. | enhancement | — |
+| MP-6.4 | ~~Opt-out reliability test~~ — **done (Brief 146).** Opt-out keyword detection, immediate removal, confirmation. Tested in inbound-email.test.ts. | test | — |
+| MP-6.5 | ~~Question fast-path~~ — **done (Brief 161).** Question-classified contact replies route to Self with thread context, response sent via `sendAndRecord` (outbound quality gate). `"question_received"` notification informs user. Self failure non-fatal. | enhancement | MP-6.1, MP-6.2 |
 
 ---
 
-## MP-7: Exception Handling → Escalation → Resolution (P1)
+## MP-7: Exception Handling → Escalation → Resolution (P1) ✓ COMPLETE
 
 **The meta process:** Process step fails or produces low-confidence output → retry logic → still failing → escalate to user with context → user provides guidance → process resumes → guidance captured as memory.
 
@@ -255,33 +255,27 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 - Confidence gate (low confidence always pauses regardless of trust tier)
 - Retry with feedback injection (`retry_on_failure`)
 - Orchestrator escalation (Types 1/3/4)
-- `detect_risks` tool (aging items, data staleness, correction patterns)
+- `detect_risks` tool (aging items, data staleness, correction patterns, **stale escalations, dependency blockages**)
 - Human step suspend/resume mechanism
+- **Escalation message templates** per failure type (confidence_low, external_error, timeout, dependency_blocked, max_retries, unknown)
+- **Guidance-to-memory bridge** — escalation resolution guidance captured as process-scoped memory, tagged with failure pattern
+- **Stale escalation detection** — `detect_risks` surfaces escalations older than 24h (configurable)
+- **Cross-process dependency visibility** — `dependency_blockage` risk type + `ProgressBlock.blockedBy` field
 
-**What's broken:**
-1. **Escalation UX.** When a step fails after retries, the user sees a `waiting_review` state but the *reason* for failure may not be clear. Is the error message human-readable or a stack trace?
-2. **Guidance capture.** User resolves an escalation by providing input. But is that input captured as a memory so the same escalation doesn't happen again? Or is it one-time?
-3. **Stale escalations.** If the user doesn't respond to an escalation for days, does it age? Does `detect_risks` surface it? Is there a follow-up mechanism?
-4. **Cross-process dependency failures.** If Process A depends on Process B's output, and B fails, does A know? Does the user see "Quoting blocked because supplier research failed"?
-
-**What "tight" looks like:**
-- Escalation message reads like a teammate asking for help: "I'm stuck on this quote — the client wants combined materials and labour pricing but I'm not sure how to structure that. How would you handle it?"
-- User's guidance is captured as process-scoped memory → same situation auto-resolves next time
-- Stale escalations surface in briefing after 24h: "This has been waiting for your input for 2 days"
-- Cross-process failures show dependency context: "Quoting paused — waiting on supplier research (failed 1 hour ago, retrying)"
+**Completed:** Brief 162 (2026-04-15)
 
 **Work items:**
 
-| # | Item | Type | Depends on |
-|---|------|------|-----------|
-| MP-7.1 | Escalation message quality — when step fails or confidence is low, generate human-readable explanation with context, not raw error. Template per failure type | enhancement | — |
-| MP-7.2 | Guidance-to-memory bridge — when user resolves an escalation, capture the guidance as process-scoped memory tagged with the failure pattern | enhancement | MP-4.1 |
-| MP-7.3 | Stale escalation detection — extend `detect_risks` to surface escalations older than 24h. Include age and original context | enhancement | — |
-| MP-7.4 | Cross-process dependency visibility — when a process is blocked on another process's output, surface the dependency chain in ProgressBlock and briefing | enhancement | — |
+| # | Item | Type | Depends on | Status |
+|---|------|------|-----------|--------|
+| MP-7.1 | Escalation message quality — human-readable templates per failure type | enhancement | — | **done** (Brief 162) |
+| MP-7.2 | Guidance-to-memory bridge — guidance captured as process-scoped memory tagged with failure pattern | enhancement | MP-4.1 | **done** (Brief 162) |
+| MP-7.3 | Stale escalation detection — `detect_risks` surfaces escalations older than 24h with age and context | enhancement | — | **done** (Brief 162) |
+| MP-7.4 | Cross-process dependency visibility — dependency chain in ProgressBlock and briefing | enhancement | — | **done** (Brief 162) |
 
 ---
 
-## MP-8: Cycle Management → Continuous Operation → Compound Effect (P2)
+## MP-8: Cycle Management → Continuous Operation → Compound Effect (P2) ✓ COMPLETE
 
 **The meta process:** User activates a cycle → Alex operates continuously → user sees aggregate results across days/weeks → cycle health tracked → multi-cycle coordination prevents conflicts.
 
@@ -309,14 +303,14 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-8.1 | Fix activation execution | bug fix | MP-1.3 (same fix) |
-| MP-8.2 | Cycle aggregate metrics — query step runs across cycle iterations, compute KPIs (volume, response rate, conversion). Surface in `cycle_briefing` | enhancement | — |
-| MP-8.3 | Cross-cycle contact deduplication — before outreach, check if person was contacted by another cycle within N days. Skip or escalate if conflict | enhancement | — |
-| MP-8.4 | Cycle health signals — detect declining metrics (response rate, conversion) across cycle iterations. Surface proactive suggestion to adjust approach | enhancement | MP-8.2 |
+| MP-8.1 | ~~Fix activation execution~~ — **done (Brief 145, MP-1.3).** `setImmediate(() => fullHeartbeat())` added. | bug fix | MP-1.3 (same fix) |
+| MP-8.2 | ~~Cycle aggregate metrics~~ ✅ Brief 163 — `computeCycleMetrics()` in `cycle_briefing`: volume, response rate, conversion + trend indicators | enhancement | — |
+| MP-8.3 | ~~Cross-cycle contact deduplication~~ ✅ Brief 163 — `sendAndRecord` cross-cycle dedup (configurable cooldown, activity-logged) | enhancement | — |
+| MP-8.4 | ~~Cycle health signals~~ ✅ Brief 163 — `detectHealthSignals()`: declining response rate, zero responses, stalled cycles | enhancement | MP-8.2 |
 
 ---
 
-## MP-9: Process Definition → Editing → Evolution (P2)
+## MP-9: Process Definition → Editing → Evolution (P2) ✓ COMPLETE
 
 **The meta process:** User wants to change a running process → conversational edit → process updated → existing runs unaffected → new runs use updated definition.
 
@@ -341,13 +335,13 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-9.1 | Permanent process edit tool — extend `generate_process` or create `edit_process` tool that updates an existing process definition | enhancement | — |
-| MP-9.2 | Version history — store previous definitions on edit, support rollback | enhancement | MP-9.1 |
-| MP-9.3 | Edit scope confirmation — Self asks "just this run, or all future runs?" and routes to `adapt_process` (run-scoped) or `edit_process` (permanent) | enhancement | MP-9.1 |
+| MP-9.1 | ✅ Permanent process edit tool — `edit_process` tool updates existing process definition, increments version, stores snapshot | enhancement | — |
+| MP-9.2 | ✅ Version history — `processVersions` table stores previous definitions on edit, `process_history` lists versions, `rollback_process` restores any prior version | enhancement | MP-9.1 |
+| MP-9.3 | ✅ Edit scope confirmation — Self asks "just this run, or all future runs?" in all 3 guidance branches (inbound, compact, full), routes to `adapt_process` or `edit_process` | enhancement | MP-9.1 |
 
 ---
 
-## MP-10: Proactive Suggestions → Discovery → Expansion (P3)
+## MP-10: Proactive Suggestions → Discovery → Expansion (P3) ✓ COMPLETE
 
 **The meta process:** System observes user patterns → identifies gaps → suggests new processes → user accepts → system expands.
 
@@ -373,9 +367,9 @@ Priority: P0 = users hit this every session, P1 = users hit this weekly, P2 = us
 
 | # | Item | Type | Depends on |
 |---|------|------|-----------|
-| MP-10.1 | Dedup check in `suggest_next` — verify existing processes before suggesting. Filter out suggestions that match active process slugs | enhancement | — |
-| MP-10.2 | Reactive-to-repetitive detector — scan work items for clustering patterns. After 3+ similar items, propose process formalisation | enhancement | — |
-| MP-10.3 | Coverage-agent activation — implement the coverage-agent system agent for periodic gap analysis | enhancement | — |
+| MP-10.1 | ~~Dedup check in `suggest_next`~~ — **done (Brief 165).** `isDuplicateOfExistingProcess()` fuzzy matches via stem overlap + keyword overlap. Filters suggestions before presenting. | enhancement | — |
+| MP-10.2 | ~~Reactive-to-repetitive detector~~ — **done (Brief 165).** `detectWorkItemClusters()` Jaccard similarity on tokens, threshold 3+ items. Surfaces in suggest_next as Pattern suggestions. | enhancement | — |
+| MP-10.3 | ~~Coverage-agent activation~~ — **done (Brief 165).** `executeCoverageAgent` system agent (ADR-008), registered in index.ts, `coverage-analysis.yaml` process (weekly schedule, autonomous tier). | enhancement | — |
 
 ---
 
@@ -410,12 +404,13 @@ The meta processes have natural dependencies and priority ordering:
 ```
 
 **Recommended build order:**
-1. **MP-1.3** (activate_cycle fullHeartbeat — one-line fix, immediate impact)
-2. **MP-1.1 + MP-1.2** (template matching + post-creation activation)
-3. **MP-6.1 + MP-6.4** (email classification + opt-out reliability)
-4. **MP-2.1 + MP-2.2** (memory bridge audit + context injection)
-5. **MP-4.1** (feedback-to-memory bridge — enables MP-4.2, MP-7.2)
+1. ~~**MP-1.3** (activate_cycle fullHeartbeat — one-line fix, immediate impact)~~ **done** (Brief 145)
+2. ~~**MP-1.1 + MP-1.2** (template matching + post-creation activation)~~ **done** (Brief 145)
+3. ~~**MP-6.1 + MP-6.4** (email classification + opt-out reliability)~~ **done** (Brief 146)
+4. ~~**MP-2.1 + MP-2.2** (memory bridge audit + context injection)~~ **done** (Brief 148)
+5. **MP-4.1** (feedback-to-memory bridge — enables MP-4.2)
 6. **MP-3.1** (autonomous digest — enables MP-5.3)
-7. **MP-1.4 + MP-1.5** (goal decomposition progress)
-8. **Remaining MP-3, MP-5, MP-7** (daily quality layer)
-9. **MP-8, MP-9, MP-10** (power user features)
+7. ~~**MP-1.4 + MP-1.5** (goal decomposition progress)~~ **done** (Brief 155)
+8. ~~**MP-7.1 + MP-7.2 + MP-7.3 + MP-7.4** (exception handling quality)~~ **done** (Brief 162)
+9. **Remaining MP-3, MP-5** (daily quality layer)
+10. **MP-8, MP-9, MP-10** (power user features)

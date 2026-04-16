@@ -42,6 +42,7 @@ import { handleGetBriefing } from "./self-tools/get-briefing";
 import { handleDetectRisks } from "./self-tools/detect-risks";
 import { handleSuggestNext } from "./self-tools/suggest-next";
 import { handleAdaptProcess } from "./self-tools/adapt-process";
+import { handleEditProcess, handleProcessHistory, handleRollbackProcess } from "./self-tools/edit-process";
 import { handleAssessConfidence } from "./self-tools/assess-confidence";
 import { handleSearchKnowledge } from "./self-tools/search-knowledge";
 import {
@@ -476,6 +477,63 @@ export const selfTools: LlmToolDefinition[] = [
     },
   },
   // ============================================================
+  // Brief 164 — Process Editing & Versioning
+  // ============================================================
+  {
+    name: "edit_process",
+    description: "Permanently edit a process definition (all future runs). Stores previous version for rollback. Use ONLY after scope confirmation ('all future runs'). For 'just this run', use adapt_process instead.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Slug of the process to edit",
+        },
+        updatedDefinition: {
+          type: "object",
+          description: "Full updated process definition (same shape as YAML). Must include steps array.",
+        },
+        changeSummary: {
+          type: "string",
+          description: "Human-readable summary of what changed (shown to user)",
+        },
+      },
+      required: ["processSlug", "updatedDefinition", "changeSummary"],
+    },
+  },
+  {
+    name: "process_history",
+    description: "List version history for a process. Shows all prior versions with timestamps and change summaries.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Slug of the process to query",
+        },
+      },
+      required: ["processSlug"],
+    },
+  },
+  {
+    name: "rollback_process",
+    description: "Rollback a process to a prior version. Stores current version before restoring. IRREVERSIBLE — requires user confirmation.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        processSlug: {
+          type: "string",
+          description: "Slug of the process to rollback",
+        },
+        targetVersion: {
+          type: "number",
+          description: "Version number to restore (must be less than current version)",
+        },
+      },
+      required: ["processSlug", "targetVersion"],
+    },
+  },
+  // ============================================================
   // Brief 068 — Confidence Assessment Tool
   // ============================================================
   {
@@ -902,6 +960,25 @@ export async function executeDelegation(
         adaptedDefinition: toolInput.adaptedDefinition as Record<string, unknown>,
         reasoning: toolInput.reasoning as string,
         expectedVersion: toolInput.expectedVersion as number | undefined,
+      });
+
+    // Brief 164 — Process Editing & Versioning
+    case "edit_process":
+      return await handleEditProcess({
+        processSlug: toolInput.processSlug as string,
+        updatedDefinition: toolInput.updatedDefinition as Record<string, unknown>,
+        changeSummary: toolInput.changeSummary as string,
+      });
+
+    case "process_history":
+      return await handleProcessHistory({
+        processSlug: toolInput.processSlug as string,
+      });
+
+    case "rollback_process":
+      return await handleRollbackProcess({
+        processSlug: toolInput.processSlug as string,
+        targetVersion: toolInput.targetVersion as number,
       });
 
     // Brief 068 — Confidence Assessment

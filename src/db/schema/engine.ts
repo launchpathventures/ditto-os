@@ -8,7 +8,7 @@
  * Tables: processes, processDependencies, agents, processRuns, stepRuns,
  * processOutputs, harnessDecisions, trustChanges, trustSuggestions,
  * feedback, memories, improvements, workItems, activities, credentials,
- * outboundActions, schedules, delayedRuns
+ * outboundActions, schedules, delayedRuns, workspaceViews, processVersions
  */
 
 export {
@@ -73,4 +73,6 @@ export {
   outboundActions,
   schedules,
   delayedRuns,
+  workspaceViews,
+  processVersions,
 } from "@ditto/core";

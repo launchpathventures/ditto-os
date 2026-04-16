@@ -142,4 +142,23 @@ export async function notifyProcessCompletion(processRunId: string): Promise<voi
     // Fire-and-forget
     console.error(`[completion] Failed to notify user ${userId.slice(0, 8)}:`, err);
   }
+
+  // Brief 154: Refresh any workspace views linked to this process
+  try {
+    const linkedViews = await db
+      .select({ slug: schema.workspaceViews.slug })
+      .from(schema.workspaceViews)
+      .where(eq(schema.workspaceViews.sourceProcessId, run.processId));
+
+    if (linkedViews.length > 0) {
+      const { refreshWorkspaceView } = await import("./workspace-push");
+      for (const view of linkedViews) {
+        refreshWorkspaceView(userId, view.slug);
+      }
+      console.log(`[completion] Refreshed ${linkedViews.length} workspace view(s) for process ${processName}`);
+    }
+  } catch (err) {
+    // Fire-and-forget — view refresh failure doesn't affect completion
+    console.error(`[completion] Failed to refresh workspace views:`, err);
+  }
 }

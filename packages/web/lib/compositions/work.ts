@@ -25,7 +25,8 @@ export function composeWork(context: CompositionContext): ContentBlock[] {
     for (const run of activeRuns) {
       blocks.push({
         type: "progress",
-        processRunId: run.runId,
+        entityType: "process_run",
+        entityId: run.runId,
         currentStep: run.currentStep,
         totalSteps: run.totalSteps,
         completedSteps: run.completedSteps,

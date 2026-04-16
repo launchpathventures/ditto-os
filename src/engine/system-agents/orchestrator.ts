@@ -43,6 +43,7 @@ import { triggerBuild, archiveBuildInProgress, type BuildResult } from "./build-
 import { resolveSubGoalTrust, type GoalTrust } from "../goal-trust";
 import { collectForBundledReview, isReviewBoundary, presentBundledReview, clearPendingReviews } from "../bundled-review";
 import type { TrustTier } from "../../db/schema";
+import { harnessEvents } from "../events";
 
 // ============================================================
 // Types
@@ -109,6 +110,13 @@ export async function executeOrchestrator(
   // Activates when: goal/outcome type AND no pre-assigned process slug
   // Brief 103: after decomposition, routes sub-goals via find-or-build
   if (isGoalType && !processSlug) {
+    // Brief 155 MP-1.4: emit decomposition start
+    harnessEvents.emit({
+      type: "orchestrator-decomposition-start",
+      goalWorkItemId: workItemId,
+      goalContent: workItemContent,
+    });
+
     const result = await decomposeGoalLLM(
       workItemId,
       workItemContent,
@@ -119,9 +127,32 @@ export async function executeOrchestrator(
 
     const orchestration = result.outputs["orchestration-result"] as OrchestrationResult;
     if (orchestration.action === "decomposed" && workItemId && orchestration.goalDecompositionResult?.ready) {
+      // Brief 155 MP-1.4: emit subtask-identified for each decomposed task
+      for (let i = 0; i < orchestration.tasks.length; i++) {
+        const task = orchestration.tasks[i];
+        const subGoals = orchestration.goalDecompositionResult.decomposition?.subGoals;
+        const sg = subGoals?.find((s) => s.id === task.taskId);
+        harnessEvents.emit({
+          type: "orchestrator-subtask-identified",
+          goalWorkItemId: workItemId,
+          subtaskId: task.taskId,
+          subtaskDescription: sg?.description ?? task.stepId,
+          index: i + 1,
+          total: orchestration.tasks.length,
+        });
+      }
+
       const subGoals = orchestration.goalDecompositionResult.decomposition?.subGoals;
       // Brief 103: three-tier routing for LLM-decomposed sub-goals
       await routeDecomposedTasks(workItemId, orchestration.tasks, subGoals, industrySignals);
+
+      // Brief 155 MP-1.4: emit decomposition complete
+      harnessEvents.emit({
+        type: "orchestrator-decomposition-complete",
+        goalWorkItemId: workItemId,
+        totalTasks: orchestration.tasks.length,
+        reasoning: orchestration.reasoning,
+      });
 
       // Auto-trigger goalHeartbeatLoop (non-blocking)
       const { goalHeartbeatLoop } = await import("../heartbeat");
@@ -129,6 +160,13 @@ export async function executeOrchestrator(
         goalHeartbeatLoop(workItemId, goalTrustOverrides).catch((err) => {
           console.error(`Goal heartbeat loop failed for ${workItemId}:`, err);
         });
+      });
+    } else {
+      // Brief 155: emit failure so the UI clears the progress bar
+      harnessEvents.emit({
+        type: "orchestrator-decomposition-failed",
+        goalWorkItemId: workItemId,
+        reason: orchestration.reasoning,
       });
     }
 
@@ -155,12 +193,40 @@ export async function executeOrchestrator(
 
   // ── Fast path (Brief 021): goal + process slug → step decomposition ──
   if (isGoalType) {
+    // Brief 155 MP-1.4: emit decomposition start
+    harnessEvents.emit({
+      type: "orchestrator-decomposition-start",
+      goalWorkItemId: workItemId,
+      goalContent: workItemContent,
+    });
+
     const result = await decomposeGoal(processSlug, workItemId, workItemContent);
 
     const orchestration = result.outputs["orchestration-result"] as OrchestrationResult;
     if (orchestration.action === "decomposed" && workItemId) {
+      // Brief 155 MP-1.4: emit subtask-identified for each decomposed task
+      for (let i = 0; i < orchestration.tasks.length; i++) {
+        const task = orchestration.tasks[i];
+        harnessEvents.emit({
+          type: "orchestrator-subtask-identified",
+          goalWorkItemId: workItemId,
+          subtaskId: task.taskId,
+          subtaskDescription: task.stepId,
+          index: i + 1,
+          total: orchestration.tasks.length,
+        });
+      }
+
       // Auto-route decomposed tasks to processes (Brief 074 → Brief 103 three-tier)
       await routeDecomposedTasks(workItemId, orchestration.tasks);
+
+      // Brief 155 MP-1.4: emit decomposition complete
+      harnessEvents.emit({
+        type: "orchestrator-decomposition-complete",
+        goalWorkItemId: workItemId,
+        totalTasks: orchestration.tasks.length,
+        reasoning: orchestration.reasoning,
+      });
 
       // Auto-trigger goalHeartbeatLoop (non-blocking)
       // Import lazily to avoid circular dependency
@@ -169,6 +235,13 @@ export async function executeOrchestrator(
         goalHeartbeatLoop(workItemId, goalTrustOverrides).catch((err) => {
           console.error(`Goal heartbeat loop failed for ${workItemId}:`, err);
         });
+      });
+    } else {
+      // Brief 155: emit failure so the UI clears the progress bar
+      harnessEvents.emit({
+        type: "orchestrator-decomposition-failed",
+        goalWorkItemId: workItemId,
+        reason: orchestration.reasoning,
       });
     }
 
@@ -508,6 +581,15 @@ async function routeDecomposedTasks(
       goalWorkItemId,
       { industryKeywords, buildDepth: 0 },
     );
+
+    // Brief 155 MP-1.4: emit subtask-dispatched after routing
+    harnessEvents.emit({
+      type: "orchestrator-subtask-dispatched",
+      goalWorkItemId,
+      subtaskId: task.taskId,
+      routingPath: routingResult.path,
+      processSlug: routingResult.processSlug,
+    });
 
     if (routingResult.processId && routingResult.path !== "escalated") {
       await db

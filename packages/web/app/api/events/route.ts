@@ -66,6 +66,52 @@ function sanitizeEvent(event: HarnessEvent): Record<string, unknown> {
         processName: event.processName,
         error: "Process run failed",
       };
+    // Brief 155 MP-1.4: orchestrator decomposition progress
+    case "orchestrator-decomposition-start":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        goalContent: event.goalContent.slice(0, 200),
+      };
+    case "orchestrator-subtask-identified":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        subtaskId: event.subtaskId,
+        subtaskDescription: event.subtaskDescription.slice(0, 200),
+        index: event.index,
+        total: event.total,
+      };
+    case "orchestrator-subtask-dispatched":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        subtaskId: event.subtaskId,
+        routingPath: event.routingPath,
+        processSlug: event.processSlug,
+      };
+    case "orchestrator-decomposition-complete":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        totalTasks: event.totalTasks,
+        reasoning: event.reasoning.slice(0, 200),
+      };
+    case "orchestrator-decomposition-failed":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        reason: event.reason.slice(0, 200),
+      };
+    // Brief 155 MP-1.5: build notification
+    case "build-process-created":
+      return {
+        type: event.type,
+        goalWorkItemId: event.goalWorkItemId,
+        processSlug: event.processSlug,
+        processName: event.processName,
+        processDescription: event.processDescription.slice(0, 200),
+      };
     default:
       return { type: (event as HarnessEvent).type };
   }

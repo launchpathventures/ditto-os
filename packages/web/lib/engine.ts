@@ -49,6 +49,8 @@ export type {
   InteractiveField,
   WorkItemFormBlock,
   ConnectionSetupBlock,
+  SendingIdentityChoiceBlock,
+  TrustMilestoneBlock,
   FormSubmitAction,
 } from "../../../src/engine/content-blocks";
 // renderBlockToText is a pure function — import it directly from

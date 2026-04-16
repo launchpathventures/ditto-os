@@ -24,6 +24,13 @@ import { executeRest } from "./integration-handlers/rest";
 // Dynamic import to avoid pulling LanceDB native binary into webpack bundle
 // import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
+/** Execution context for identity-aware tool dispatch (Brief 152) */
+export interface ToolExecutionContext {
+  sendingIdentity?: string;
+  userId?: string;
+  stepRunId?: string;
+}
+
 export interface ResolvedTools {
   /** LLM-native tool definitions for the LLM to call */
   tools: LlmToolDefinition[];
@@ -31,6 +38,7 @@ export interface ResolvedTools {
   executeIntegrationTool: (
     name: string,
     input: Record<string, unknown>,
+    context?: ToolExecutionContext,
   ) => Promise<string>;
 }
 
@@ -41,7 +49,7 @@ export interface ResolvedTools {
 
 interface BuiltInTool {
   definition: LlmToolDefinition;
-  execute: (input: Record<string, unknown>, stepRunId?: string) => Promise<string>;
+  execute: (input: Record<string, unknown>, stepRunId?: string, context?: ToolExecutionContext) => Promise<string>;
   /** If true, tool calls queue to stagedOutboundActions instead of dispatching (Brief 129) */
   staged?: boolean;
   /** Extract content/channel/recipientId from args for quality gate checking */
@@ -101,19 +109,29 @@ const builtInTools: Record<string, BuiltInTool> = {
         required: ["to", "subject", "body", "personId", "mode"],
       },
     },
-    execute: async (input: Record<string, unknown>, executionStepRunId?: string): Promise<string> => {
+    execute: async (input: Record<string, unknown>, executionStepRunId?: string, execContext?: ToolExecutionContext): Promise<string> => {
       const { sendAndRecord } = await import("./channel");
+      const { resolveEmailChannel } = await import("./channel-resolver");
+
+      const userId = execContext?.userId ?? "founder";
+      const sendingIdentity = execContext?.sendingIdentity;
+
+      // Brief 152: resolve the email channel based on sending identity
+      const { adapter, fromIdentity } = await resolveEmailChannel(sendingIdentity, userId);
+
       const result = await sendAndRecord({
         to: input.to as string,
         subject: input.subject as string,
         body: input.body as string,
-        personaId: "alex",
+        personaId: fromIdentity.personaId,
         mode: (input.mode as "selling" | "connecting" | "nurture") ?? "nurture",
         personId: input.personId as string,
-        userId: "founder", // single-user MVP
+        userId,
         processRunId: input.processRunId as string | undefined,
         includeOptOut: true,
         stepRunId: executionStepRunId,
+        sendingIdentity: sendingIdentity as "principal" | "user" | "agent-of-user" | "ghost" | undefined,
+        adapter,
       });
       return JSON.stringify(result, null, 2);
     },
@@ -839,6 +857,125 @@ const builtInTools: Record<string, BuiltInTool> = {
     },
   },
 
+  // ---- Workspace tools (Brief 154) ----
+  "workspace.push_blocks": {
+    definition: {
+      name: "workspace_push_blocks",
+      description:
+        "Push content blocks into an adaptive workspace view. Blocks appear live in the user's workspace without page reload.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          viewSlug: {
+            type: "string",
+            description: "Slug of the target adaptive workspace view",
+          },
+          blocks: {
+            type: "array",
+            items: { type: "object" },
+            description: "Array of ContentBlock objects to push into the view",
+          },
+          mode: {
+            type: "string",
+            enum: ["append", "replace"],
+            description: "append: add blocks to existing view. replace: replace all blocks.",
+          },
+          userId: {
+            type: "string",
+            description: "Target user ID (defaults to 'founder')",
+          },
+        },
+        required: ["viewSlug", "blocks", "mode"],
+      },
+    },
+    execute: async (input: Record<string, unknown>, executionStepRunId?: string): Promise<string> => {
+      if (!executionStepRunId && !process.env.DITTO_TEST_MODE) {
+        return JSON.stringify({ success: false, error: "stepRunId required (Insight-180)" });
+      }
+      const { pushBlocksToWorkspace } = await import("./workspace-push");
+      const userId = (input.userId as string) || "founder";
+      const eventId = pushBlocksToWorkspace(
+        userId,
+        input.viewSlug as string,
+        input.blocks as import("./content-blocks").ContentBlock[],
+        input.mode as "append" | "replace",
+        executionStepRunId,
+      );
+      if (eventId === null) {
+        return JSON.stringify({ success: false, error: "Rate limited or rejected" });
+      }
+      return JSON.stringify({ success: true, eventId });
+    },
+  },
+
+  "workspace.register_view": {
+    definition: {
+      name: "workspace_register_view",
+      description:
+        "Register a new adaptive workspace view. Creates a new navigation item in the user's workspace sidebar with a data-driven composition schema.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          slug: {
+            type: "string",
+            description: "URL-safe slug for the view (must be unique per workspace, cannot be a reserved name like 'today', 'inbox', etc.)",
+          },
+          label: {
+            type: "string",
+            description: "Human-readable label shown in the sidebar",
+          },
+          icon: {
+            type: "string",
+            description: "Optional icon name",
+          },
+          description: {
+            type: "string",
+            description: "Optional description of what this view shows",
+          },
+          schema: {
+            type: "object",
+            description: "CompositionSchema object: { version: 1, blocks: [...] }. Each block has blockType, content, optional contextQuery and showWhen.",
+          },
+          sourceProcessId: {
+            type: "string",
+            description: "Process ID that created this view (for refresh-on-completion linking)",
+          },
+          userId: {
+            type: "string",
+            description: "Target user ID (defaults to 'founder')",
+          },
+          workspaceId: {
+            type: "string",
+            description: "Target workspace ID (defaults to 'default')",
+          },
+        },
+        required: ["slug", "label", "schema"],
+      },
+    },
+    execute: async (input: Record<string, unknown>, executionStepRunId?: string): Promise<string> => {
+      if (!executionStepRunId && !process.env.DITTO_TEST_MODE) {
+        return JSON.stringify({ success: false, error: "stepRunId required (Insight-180)" });
+      }
+      const { registerWorkspaceView } = await import("./workspace-push");
+      const userId = (input.userId as string) || "founder";
+      const workspaceId = (input.workspaceId as string) || "default";
+      const result = await registerWorkspaceView(
+        userId,
+        workspaceId,
+        {
+          slug: input.slug as string,
+          label: input.label as string,
+          icon: input.icon as string | undefined,
+          description: input.description as string | undefined,
+          schema: input.schema as Record<string, unknown>,
+          sourceProcessId: input.sourceProcessId as string | undefined,
+        },
+        executionStepRunId,
+      );
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
   // ---- Knowledge tools (Brief 079) ----
   "knowledge.search": {
     definition: {
@@ -1081,6 +1218,7 @@ export function resolveTools(
   const executeIntegrationTool = async (
     name: string,
     input: Record<string, unknown>,
+    context?: ToolExecutionContext,
   ): Promise<string> => {
     // Check built-in tools first
     const builtIn = builtInMap.get(name);
@@ -1100,8 +1238,8 @@ export function resolveTools(
         });
         return JSON.stringify({ status: "queued", draftId }, null, 2);
       }
-      // Pass stepRunId as second parameter for Insight-180 invocation guard (Brief 151)
-      return builtIn.execute(input, stepRunId);
+      // Pass stepRunId + context for identity-aware dispatch (Brief 151, 152)
+      return builtIn.execute(input, stepRunId, context);
     }
 
     const entry = toolMap.get(name);

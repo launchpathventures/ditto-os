@@ -3,7 +3,7 @@
 **Date:** 2026-04-14
 **Trigger:** Brief 145 review caught that post-creation activation guidance was only added to the new-user delegation guidance branch, missing the established-user compact branch
 **Layers affected:** L6 Human (Self system prompt assembly)
-**Status:** active
+**Status:** absorbed → review-checklist.md item 14
 
 ## The Insight
 

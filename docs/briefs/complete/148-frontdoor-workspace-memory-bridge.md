@@ -1,7 +1,7 @@
 # Brief 148: Frontdoor-to-Workspace Memory Bridge
 
 **Date:** 2026-04-14
-**Status:** draft
+**Status:** complete
 **Depends on:** none (sequencing preference: builds better after Brief 145 ships, but no hard build dependency)
 **Unlocks:** MP-2.3 (onboarding-to-creation handoff), MP-2.4 (first-run streaming)
 

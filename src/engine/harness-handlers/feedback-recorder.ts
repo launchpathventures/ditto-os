@@ -13,7 +13,7 @@
  */
 
 import { db, schema } from "../../db";
-import { eq, and, like } from "drizzle-orm";
+import { eq, and, like, sql } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { classifyEdit } from "../trust-diff";
 import { evaluateTrust } from "../trust-evaluator";
@@ -540,6 +540,136 @@ async function triggerKnowledgeExtraction(params: {
 }
 
 /**
+ * Guidance-to-memory bridge for escalation resolution (Brief 162, MP-7.2).
+ *
+ * Called when a user provides guidance to resolve an escalation (e.g., after
+ * a step fails and the user explains how to handle it). Creates a process-scoped
+ * memory tagged with the failure pattern so the same escalation can be
+ * auto-resolved on future occurrences.
+ *
+ * @param processId - The process the escalation belongs to
+ * @param guidance - The user's guidance text
+ * @param failurePattern - Classified failure pattern (e.g., "external_error:api_timeout")
+ * @param stepName - The step that triggered the escalation
+ * @param originalError - The original error that caused the escalation
+ */
+export async function createGuidanceMemory(
+  processId: string,
+  guidance: string,
+  failurePattern: string,
+  stepName: string,
+  originalError?: string,
+): Promise<void> {
+  if (!guidance || guidance.trim().length === 0) return;
+
+  const trimmedGuidance = guidance.trim();
+  const patternTag = `escalation:${failurePattern}`;
+
+  // Check for existing guidance memory with same pattern — reinforce instead of duplicating
+  // Uses json_extract for DB-level filtering (L1 review: avoids in-memory scan at scale)
+  const existing = await db
+    .select()
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        eq(schema.memories.scopeId, processId),
+        eq(schema.memories.type, "guidance"),
+        eq(schema.memories.active, true),
+        sql`json_extract(${schema.memories.metadata}, '$.failurePattern') = ${failurePattern}`,
+      ),
+    );
+
+  const matchingMemory = existing[0] ?? null;
+
+  if (matchingMemory) {
+    // Reinforce existing guidance — update content if different, increment count
+    const metadata = (matchingMemory.metadata as Record<string, unknown>) ?? {};
+    await db
+      .update(schema.memories)
+      .set({
+        content: trimmedGuidance, // Update to latest guidance
+        reinforcementCount: matchingMemory.reinforcementCount + 1,
+        lastReinforcedAt: new Date(),
+        confidence: Math.min(0.95, 0.5 + matchingMemory.reinforcementCount * 0.15),
+        metadata: { ...metadata, lastStepName: stepName },
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.memories.id, matchingMemory.id));
+
+    await db.insert(schema.activities).values({
+      action: "guidance.reinforced",
+      actorType: "user",
+      entityType: "memory",
+      entityId: matchingMemory.id,
+      metadata: { processId, failurePattern, stepName },
+    });
+  } else {
+    // Create new guidance memory tagged with failure pattern
+    const [memory] = await db
+      .insert(schema.memories)
+      .values({
+        scopeType: "process",
+        scopeId: processId,
+        type: "guidance",
+        content: trimmedGuidance,
+        source: "escalation_resolution",
+        confidence: 0.5, // Higher initial confidence than corrections — explicit human guidance
+        metadata: {
+          failurePattern,
+          patternTag,
+          stepName,
+          originalError: originalError?.slice(0, 500),
+          createdFrom: "escalation_guidance",
+        },
+      })
+      .returning();
+
+    await db.insert(schema.activities).values({
+      action: "guidance.created",
+      actorType: "user",
+      entityType: "memory",
+      entityId: memory.id,
+      metadata: { processId, failurePattern, stepName },
+    });
+  }
+}
+
+/**
+ * Retrieve stored guidance for a failure pattern (Brief 162, MP-7.2).
+ *
+ * Looks up process-scoped guidance memories tagged with the given failure pattern.
+ * Returns the most confident guidance if found, null otherwise.
+ */
+export async function findGuidanceForFailure(
+  processId: string,
+  failurePattern: string,
+): Promise<{ guidance: string; confidence: number } | null> {
+  // DB-level json_extract filtering (L1 review: avoids in-memory scan at scale)
+  const matching = await db
+    .select()
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        eq(schema.memories.scopeId, processId),
+        eq(schema.memories.type, "guidance"),
+        eq(schema.memories.active, true),
+        sql`json_extract(${schema.memories.metadata}, '$.failurePattern') = ${failurePattern}`,
+      ),
+    );
+
+  if (matching.length === 0) return null;
+
+  // Return highest confidence
+  matching.sort((a, b) => b.confidence - a.confidence);
+  return {
+    guidance: matching[0].content,
+    confidence: matching[0].confidence,
+  };
+}
+
+/**
  * Accept a correction pattern — promotes all matching process-scoped correction
  * memories to high confidence (0.95) and locks them against future reduction.
  *
@@ -718,4 +848,208 @@ export async function dismissInsightPattern(
   const { recordDismissal } = await import("../suggestion-dismissals");
   // userId "workspace" for single-workspace architecture
   await recordDismissal("workspace", "insight_pattern", `${processId}:${pattern}`);
+}
+
+// ============================================================
+// Correction Rate Tracking (Brief 159, MP-4.3)
+// ============================================================
+
+export interface PatternCorrectionRate {
+  pattern: string;
+  /** Total feedback records for this process (edits + approvals) */
+  totalReviews: number;
+  /** Feedback records with this correction pattern */
+  corrections: number;
+  /** corrections / totalReviews */
+  rate: number;
+  /** Rate before learning was applied (before "Teach this?" acceptance) */
+  rateBefore: number | null;
+  /** Rate after learning was applied */
+  rateAfter: number | null;
+  /** Whether a [learned] quality criterion exists for this pattern */
+  hasLearned: boolean;
+  /** When the pattern was taught (if applicable) */
+  learnedAt: Date | null;
+}
+
+export interface ProcessCorrectionRates {
+  processId: string;
+  processName: string;
+  /** Overall correction rate for the process */
+  overallRate: number;
+  /** Per-pattern breakdown */
+  patterns: PatternCorrectionRate[];
+  /** Patterns with significant improvement (rate dropped >50% after learning) */
+  significantImprovements: PatternCorrectionRate[];
+}
+
+/**
+ * Compute correction rates per process and per pattern.
+ *
+ * Queries all feedback records for the process, groups by correctionPattern,
+ * and computes rates. For patterns that have been "taught" (via acceptCorrectionPattern),
+ * computes before/after rates using the teach action timestamp as the dividing line.
+ *
+ * Brief 159, MP-4.3: Correction rate tracking.
+ */
+export async function computeCorrectionRates(
+  processId: string,
+): Promise<ProcessCorrectionRates> {
+  // Get process name
+  const [proc] = await db
+    .select({ name: schema.processes.name, definition: schema.processes.definition })
+    .from(schema.processes)
+    .where(eq(schema.processes.id, processId))
+    .limit(1);
+
+  const processName = proc?.name ?? "Unknown";
+  const definition = (proc?.definition as Record<string, unknown>) ?? {};
+  const qualityCriteria: string[] = (definition.quality_criteria as string[] | undefined) ?? [];
+
+  // Get all feedback for this process (both edits and approvals count toward total)
+  const allFeedback = await db
+    .select({
+      id: schema.feedback.id,
+      type: schema.feedback.type,
+      correctionPattern: schema.feedback.correctionPattern,
+      createdAt: schema.feedback.createdAt,
+    })
+    .from(schema.feedback)
+    .where(eq(schema.feedback.processId, processId))
+    .orderBy(schema.feedback.createdAt);
+
+  const totalReviews = allFeedback.filter(
+    (f) => f.type === "approve" || f.type === "edit" || f.type === "reject",
+  ).length;
+  const totalCorrections = allFeedback.filter(
+    (f) => f.type === "edit" || f.type === "reject",
+  ).length;
+  const overallRate = totalReviews > 0 ? totalCorrections / totalReviews : 0;
+
+  // Get teach action timestamps from activities
+  const teachActions = await db
+    .select({
+      metadata: schema.activities.metadata,
+      createdAt: schema.activities.createdAt,
+    })
+    .from(schema.activities)
+    .where(
+      and(
+        eq(schema.activities.action, "learning.teach"),
+        eq(schema.activities.entityType, "process"),
+        eq(schema.activities.entityId, processId),
+      ),
+    );
+
+  // Build pattern → teach timestamp map
+  const patternTeachDates = new Map<string, Date>();
+  for (const ta of teachActions) {
+    const meta = ta.metadata as Record<string, unknown> | null;
+    const pattern = meta?.pattern as string | undefined;
+    if (pattern && ta.createdAt) {
+      const date = ta.createdAt instanceof Date ? ta.createdAt : new Date(Number(ta.createdAt));
+      patternTeachDates.set(pattern, date);
+    }
+  }
+
+  // Group feedback by correctionPattern
+  const patternFeedback = new Map<string, typeof allFeedback>();
+  for (const fb of allFeedback) {
+    if (fb.correctionPattern) {
+      const existing = patternFeedback.get(fb.correctionPattern) ?? [];
+      existing.push(fb);
+      patternFeedback.set(fb.correctionPattern, existing);
+    }
+  }
+
+  // Compute per-pattern rates
+  const patterns: PatternCorrectionRate[] = [];
+  for (const [pattern, feedbackList] of patternFeedback) {
+    const corrections = feedbackList.length; // All entries have this pattern = they were edits
+    const rate = totalReviews > 0 ? corrections / totalReviews : 0;
+
+    const hasLearned = qualityCriteria.some(
+      (c) => c.includes("[learned]") && c.includes(`(pattern: ${pattern})`),
+    );
+    const learnedAt = patternTeachDates.get(pattern) ?? null;
+
+    let rateBefore: number | null = null;
+    let rateAfter: number | null = null;
+
+    if (learnedAt) {
+      // Split all feedback (not just this pattern) into before/after learning
+      const feedbackBefore = allFeedback.filter((f) => {
+        const date = f.createdAt instanceof Date ? f.createdAt : new Date(Number(f.createdAt));
+        return date < learnedAt && (f.type === "approve" || f.type === "edit" || f.type === "reject");
+      });
+      const feedbackAfter = allFeedback.filter((f) => {
+        const date = f.createdAt instanceof Date ? f.createdAt : new Date(Number(f.createdAt));
+        return date >= learnedAt && (f.type === "approve" || f.type === "edit" || f.type === "reject");
+      });
+
+      const correctionsBefore = feedbackList.filter((f) => {
+        const date = f.createdAt instanceof Date ? f.createdAt : new Date(Number(f.createdAt));
+        return date < learnedAt;
+      }).length;
+      const correctionsAfter = feedbackList.filter((f) => {
+        const date = f.createdAt instanceof Date ? f.createdAt : new Date(Number(f.createdAt));
+        return date >= learnedAt;
+      }).length;
+
+      rateBefore = feedbackBefore.length > 0 ? correctionsBefore / feedbackBefore.length : null;
+      rateAfter = feedbackAfter.length > 0 ? correctionsAfter / feedbackAfter.length : null;
+    }
+
+    patterns.push({
+      pattern,
+      totalReviews,
+      corrections,
+      rate,
+      rateBefore,
+      rateAfter,
+      hasLearned,
+      learnedAt,
+    });
+  }
+
+  // Sort by correction count (most frequent first)
+  patterns.sort((a, b) => b.corrections - a.corrections);
+
+  // Identify significant improvements (rate dropped >50% after learning)
+  const significantImprovements = patterns.filter((p) => {
+    if (p.rateBefore === null || p.rateAfter === null) return false;
+    if (p.rateBefore === 0) return false;
+    return (p.rateBefore - p.rateAfter) / p.rateBefore > 0.5;
+  });
+
+  return {
+    processId,
+    processName,
+    overallRate,
+    patterns,
+    significantImprovements,
+  };
+}
+
+/**
+ * Format correction rate evidence as a human-readable narrative.
+ *
+ * Brief 159, MP-4.4: Evidence narrative for trust upgrade suggestions and briefing.
+ */
+export function formatCorrectionEvidence(rates: ProcessCorrectionRates): string | null {
+  if (rates.patterns.length === 0) return null;
+
+  const parts: string[] = [];
+
+  for (const p of rates.significantImprovements) {
+    if (p.rateBefore !== null && p.rateAfter !== null) {
+      const humanPattern = p.pattern.replace(/_/g, " ");
+      const beforePct = Math.round(p.rateBefore * 100);
+      const afterPct = Math.round(p.rateAfter * 100);
+      parts.push(`${humanPattern} corrections: ${beforePct}% → ${afterPct}% after learning`);
+    }
+  }
+
+  if (parts.length === 0) return null;
+  return parts.join("; ");
 }

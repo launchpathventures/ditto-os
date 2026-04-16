@@ -150,13 +150,105 @@ export async function deleteCredential(
   );
 }
 
+// ============================================================
+// User-Scoped Credentials (Brief 152)
+// ============================================================
+
+/**
+ * Store or replace a user-scoped credential (userId, service).
+ * Used for user-level integrations like Google Workspace OAuth.
+ */
+export async function storeUserCredential(
+  userId: string,
+  service: string,
+  value: string,
+  expiresAt?: number,
+): Promise<void> {
+  const { encryptedValue, iv, authTag } = encrypt(value);
+
+  // Upsert: delete existing, then insert
+  await db.delete(schema.credentials).where(
+    and(
+      eq(schema.credentials.userId, userId),
+      eq(schema.credentials.service, service),
+    ),
+  );
+
+  await db.insert(schema.credentials).values({
+    processId: null,
+    userId,
+    service,
+    encryptedValue,
+    iv,
+    authTag,
+    expiresAt: expiresAt ?? null,
+    createdAt: Date.now(),
+  });
+}
+
+/**
+ * Retrieve a user-scoped credential (userId, service).
+ * Returns decrypted value + source, or null if not found.
+ */
+export async function getUserCredential(
+  userId: string,
+  service: string,
+): Promise<{ value: string; source: "vault" } | null> {
+  const rows = await db
+    .select()
+    .from(schema.credentials)
+    .where(
+      and(
+        eq(schema.credentials.userId, userId),
+        eq(schema.credentials.service, service),
+      ),
+    );
+
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+  const value = decrypt({
+    encryptedValue: row.encryptedValue,
+    iv: row.iv,
+    authTag: row.authTag,
+  });
+
+  return { value, source: "vault" };
+}
+
+/**
+ * Check if a user-scoped credential exists and is not expired.
+ */
+export async function hasUserCredential(
+  userId: string,
+  service: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ expiresAt: schema.credentials.expiresAt })
+    .from(schema.credentials)
+    .where(
+      and(
+        eq(schema.credentials.userId, userId),
+        eq(schema.credentials.service, service),
+      ),
+    );
+
+  if (rows.length === 0) return false;
+
+  const row = rows[0];
+  // If expiresAt is set and in the past, credential is expired
+  if (row.expiresAt && row.expiresAt < Date.now()) return false;
+
+  return true;
+}
+
 /**
  * List credentials (never reveals values).
  * Filter by processId if provided.
  */
 export async function listCredentials(
   processId?: string,
-): Promise<Array<{ processId: string; service: string; expiresAt: number | null; createdAt: number }>> {
+): Promise<Array<{ processId: string | null; service: string; expiresAt: number | null; createdAt: number }>> {
   const query = processId
     ? db.select({
         processId: schema.credentials.processId,

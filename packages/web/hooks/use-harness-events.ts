@@ -22,6 +22,14 @@ const PIPELINE_EVENTS = new Set([
   "gate-advance",
   "run-complete",
   "run-failed",
+  // Brief 155 MP-1.4: orchestrator decomposition progress
+  "orchestrator-decomposition-start",
+  "orchestrator-subtask-identified",
+  "orchestrator-subtask-dispatched",
+  "orchestrator-decomposition-complete",
+  "orchestrator-decomposition-failed",
+  // Brief 155 MP-1.5: build notification
+  "build-process-created",
 ]);
 
 export interface HarnessEventData {

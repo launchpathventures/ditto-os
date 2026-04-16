@@ -48,6 +48,14 @@ interface GenerateProcessInput {
   trustTier?: string;
   /** Whether to save to DB immediately */
   save: boolean;
+  /** Brief 154: Optional companion workspace view */
+  companionView?: {
+    slug: string;
+    label: string;
+    icon?: string;
+    description?: string;
+    schema: Record<string, unknown>;
+  };
 }
 
 export async function handleGenerateProcess(
@@ -141,6 +149,7 @@ export async function handleGenerateProcess(
       feedback: "implicit",
     },
     steps: finalSteps,
+    outputs: (templateDefinition?.outputs as Array<Record<string, unknown>> | undefined) ?? [],
   };
 
   // Validate the definition — basic checks + process-loader validators
@@ -236,6 +245,36 @@ export async function handleGenerateProcess(
       })
       .returning({ id: schema.processes.id });
 
+    // Brief 154: Register companion workspace view if provided
+    let companionViewResult: { slug: string; label: string } | undefined;
+    if (input.companionView) {
+      try {
+        const { registerWorkspaceView } = await import("../workspace-push");
+        const viewResult = await registerWorkspaceView(
+          "founder", // single-user MVP
+          "default",
+          {
+            slug: input.companionView.slug,
+            label: input.companionView.label,
+            icon: input.companionView.icon,
+            description: input.companionView.description,
+            schema: input.companionView.schema,
+            sourceProcessId: proc.id,
+          },
+          "generate-process", // synthetic stepRunId for Self tool context
+        );
+        if (viewResult.success) {
+          companionViewResult = { slug: input.companionView.slug, label: input.companionView.label };
+        }
+      } catch (err) {
+        console.warn(`[generate-process] Failed to register companion view:`, err);
+      }
+    }
+
+    const viewMessage = companionViewResult
+      ? ` I've also created a "${companionViewResult.label}" view in your workspace sidebar.`
+      : "";
+
     return {
       toolName: "generate_process",
       success: true,
@@ -248,8 +287,9 @@ export async function handleGenerateProcess(
         status: "draft",
         activationHint: true,
         processSlug: slug,
-        message: `Process "${name}" saved as draft with ${finalSteps.length} steps. It's ready to activate when you're confident in the definition.`,
+        message: `Process "${name}" saved as draft with ${finalSteps.length} steps. It's ready to activate when you're confident in the definition.${viewMessage}`,
         ...(templateInfo ?? {}),
+        ...(companionViewResult ? { companionView: companionViewResult } : {}),
       }),
     };
   } catch (err) {

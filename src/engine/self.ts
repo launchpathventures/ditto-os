@@ -19,6 +19,8 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
+import { db, schema } from "../db";
+import { eq } from "drizzle-orm";
 import { getCognitiveCore } from "./cognitive-core";
 import {
   createCompletion,
@@ -41,6 +43,10 @@ import {
 import { selfTools, executeDelegation } from "./self-delegation";
 import { getUserModelSummary, getUserModel } from "./user-model";
 import { assembleBriefing } from "./briefing-assembler";
+import {
+  matchCapabilitiesWithSuppression,
+  type CapabilityMatch,
+} from "./capability-matcher";
 
 // ============================================================
 // Constants
@@ -52,6 +58,30 @@ const CHARS_PER_TOKEN = 4;
 
 /** Maximum tool_use turns in a single conversation cycle (prevents runaway loops) */
 const MAX_TOOL_TURNS = 10;
+
+/** Max chars for capability_awareness section (AC6: ≤1200 chars) */
+const CAPABILITY_AWARENESS_CHAR_LIMIT = 1200;
+
+/**
+ * Track whether a capability signal has already fired in a session.
+ * Module-level Map keyed by sessionId — follows session-trust.ts pattern.
+ * Prevents repeated signals within a single session (AC9, AC10).
+ * Pruned when exceeding 50 entries to prevent unbounded growth.
+ */
+const capabilitySignalFired = new Map<string, boolean>();
+
+function pruneCapabilitySignalMap(): void {
+  if (capabilitySignalFired.size > 50) {
+    // Delete oldest entries (Map preserves insertion order)
+    const toDelete = capabilitySignalFired.size - 50;
+    let deleted = 0;
+    for (const key of capabilitySignalFired.keys()) {
+      if (deleted >= toDelete) break;
+      capabilitySignalFired.delete(key);
+      deleted++;
+    }
+  }
+}
 
 // ============================================================
 // Context Assembly
@@ -146,9 +176,10 @@ export async function assembleSelfContext(
     sections.push(
       `<delegation_guidance>
 Async inbound (email/voice). Be concise, actionable. No workspace UI references.
-Tools work: create_work_item, start_pipeline, start_dev_role, get_briefing, update_user_model, quick_capture, generate_process.
+Tools work: create_work_item, start_pipeline, start_dev_role, get_briefing, update_user_model, quick_capture, generate_process, edit_process, process_history, rollback_process.
 Bias action over questions — round-trips are expensive in async. Mention assumptions.
-Irreversible actions (trust, process save): describe plan, ask confirmation.
+Process changes: ask "Just this run, or all future runs?" before editing. "this run" = adapt_process, "all future" = edit_process.
+Irreversible actions (trust, process save, edit_process, rollback_process): describe plan, ask confirmation.
 </delegation_guidance>`,
     );
   } else if (isEstablished) {
@@ -157,11 +188,12 @@ Irreversible actions (trust, process save): describe plan, ask confirmation.
       `<delegation_guidance>
 You are a workspace conductor. Tools shape the workspace — use them to move from chat into structured experiences.
 
-**Tool routing:** Recurring need → generate_process(save=false). Substantial work → start_dev_role / start_pipeline. Quick question → consult_role. Planning → plan_with_role. Status → use loaded context. Casual → respond directly.
+**Tool routing:** Recurring need → generate_process(save=false). Substantial work → start_dev_role / start_pipeline. Quick question → consult_role. Planning → plan_with_role. Status → use loaded context. Casual → respond directly. Process change → scope confirmation first.
 **Process creation:** Draft early with generate_process(save=false), iterate through the tool, save after confirmation. After save=true with activationHint, offer to run immediately via start_pipeline.
+**Process editing:** When user wants to change a process, ask "Just this run, or all future runs?" → "this run" = adapt_process, "all future" = edit_process. process_history to view versions, rollback_process to restore.
 **Delegation** = full harness run (~1-5 min). **Consultation** = quick perspective (~10 sec). **Planning** = doc reading + analysis. **Pipeline** = end-to-end (PM→Builder→Reviewer).
 **Proactive:** get_briefing on return, detect_risks for signals, suggest_next for coverage gaps (never during exceptions).
-**Confirmation required:** adjust_trust(confirmed=true), generate_process(save=true), connect_service(action='guide') — always preview first, get explicit "yes".
+**Confirmation required:** adjust_trust(confirmed=true), generate_process(save=true), edit_process, rollback_process, connect_service(action='guide') — always preview first, get explicit "yes".
 </delegation_guidance>`,
     );
   } else {
@@ -233,6 +265,10 @@ Planning roles: PM (triage, priorities), Researcher (investigation), Designer (U
 **Intent routing — how to decide:**
 - "I need help checking my emails each day" → **process creation** (generate_process — draft a daily email process)
 - "Can you handle my invoicing?" → **process creation** (generate_process — draft an invoice process)
+- "Skip the follow-up step in my quoting process" → **scope confirmation** → ask "Just this run, or all future runs?" → "this run" routes to adapt_process, "all future" routes to edit_process
+- "Change my process to add a review step" → **scope confirmation** → ask "Just this run, or all future runs?" → then edit_process or adapt_process
+- "Show me the history of my quoting process" → **process query** (process_history — no confirmation needed)
+- "Roll back my quoting process to v2" → **rollback** (rollback_process — requires user confirmation)
 - "I want to add dark mode" → **planning** (scope first: plan_with_role with PM or Architect)
 - "Build Brief 050" → **pipeline** (full pipeline: start_pipeline with task "Implement Brief 050")
 - "Implement Brief 050" → **pipeline** (start_pipeline)
@@ -251,10 +287,18 @@ Do NOT delegate, plan, or consult for:
 
 When the human's first message is casual, respond conversationally. Be the competent teammate — you don't need to call in a specialist to say good morning.
 
+**SCOPE CONFIRMATION — PROCESS EDITS (Brief 164):**
+When a user wants to change a process definition, ALWAYS ask: "Just this run, or all future runs?"
+- "Just this run" → use adapt_process (run-scoped override, requires a runId)
+- "All future runs" → use edit_process (permanent, stores version history)
+Do NOT apply a permanent edit without scope confirmation. If no run is active, default to edit_process but still confirm.
+
 **CONFIRMATION MODEL — CRITICAL:**
 These tools are IRREVERSIBLE and require explicit user confirmation before executing:
 - adjust_trust with confirmed=true (always call with confirmed=false first to show evidence)
 - generate_process with save=true (always preview first with save=false)
+- edit_process (always show proposed changes and get confirmation before calling)
+- rollback_process (always show version history first, confirm target version)
 - connect_service action='guide' (shows credential input — user controls submission)
 For these tools, always: (1) present what you intend to do, (2) show the evidence/preview, (3) wait for the user to explicitly say "yes", "go ahead", "do it", or similar. Never assume confirmation from ambiguous input.
 </delegation_guidance>`,
@@ -268,6 +312,9 @@ For these tools, always: (1) present what you intend to do, (2) show the evidenc
       `<onboarding_guidance>
 **For new users (empty user model):**
 Drive a multi-session deep intake. First session: understand their problems and immediate tasks (enough to create their first process and deliver value). Subsequent sessions: deepen into vision, goals, challenges. Ask open questions, pick up signals, suggest where to start. Use update_user_model to store what you learn.
+
+**First process creation (MP-2.3):**
+When proposing the user's first process, use generate_process(save=false) to preview it. Pre-fill the description with frontdoor context (business type, pain point) so template matching finds the best library match. Present the preview and wait for explicit approval. On approval, call generate_process(save=true) to persist. Then use create_work_item to submit the first task and let the pipeline run — ProgressBlock will appear in real-time via SSE.
 
 **For returning users:**
 Continue building understanding. Notice gaps in the user model and naturally explore them in conversation.
@@ -324,6 +371,46 @@ This is a brand new user with no work history. You MUST speak first — greet th
     }
   }
 
+  // ============================================================
+  // Capability Awareness (Brief 167, AC6-10)
+  // ============================================================
+  // Conditionally loaded: omit for inbound surface, first-session-signal path,
+  // no user model, or when matcher returns empty. If matcher throws, silently omit.
+  const isFirstSession = sections.some((s) => s.startsWith("<first_session_signal>"));
+  if (surface !== "inbound" && !isFirstSession && userModel.entries.length > 0) {
+    try {
+      const { matches: capMatches, activeProcesses: activeProcs } =
+        await matchCapabilitiesWithSuppression(userId, userModel.entries);
+
+      if (capMatches.length > 0) {
+        // AC6: Build <capability_awareness> section (≤1200 chars)
+        const awarenessSection = buildCapabilityAwarenessSection(capMatches, activeProcs);
+        if (awarenessSection.length <= CAPABILITY_AWARENESS_CHAR_LIMIT) {
+          sections.push(awarenessSection);
+        }
+
+        // Trigger signals — max once per session (AC9/AC10 share flag)
+        pruneCapabilitySignalMap();
+        const signalAlreadyFired = capabilitySignalFired.get(sessionId) ?? false;
+
+        if (!signalAlreadyFired) {
+          const signal = await detectCapabilitySignal(
+            userId,
+            sessionId,
+            resumed,
+            capMatches,
+          );
+          if (signal) {
+            sections.push(signal);
+            capabilitySignalFired.set(sessionId, true);
+          }
+        }
+      }
+    } catch {
+      // Capability matching failure is non-fatal — silently omit section
+    }
+  }
+
   // Budget check — truncate if over token budget
   // Priority order for dropping (Insight-170): onboarding → delegation → memories (most valuable last)
   let systemPrompt = sections.join("\n\n");
@@ -332,6 +419,11 @@ This is a brand new user with no work history. You MUST speak first — greet th
     // Drop onboarding guidance first (least valuable for established users)
     let filtered = sections.filter((s) => !s.startsWith("<onboarding_guidance>"));
     systemPrompt = filtered.join("\n\n");
+    if (systemPrompt.length > charBudget) {
+      // Drop capability awareness next (helpful but not critical)
+      filtered = filtered.filter((s) => !s.startsWith("<capability_awareness>") && !s.startsWith("<capability_signal"));
+      systemPrompt = filtered.join("\n\n");
+    }
     if (systemPrompt.length > charBudget) {
       // Drop delegation guidance next
       filtered = filtered.filter((s) => !s.startsWith("<delegation_guidance>"));
@@ -349,6 +441,151 @@ This is a brand new user with no work history. You MUST speak first — greet th
   }
 
   return { systemPrompt, sessionId, resumed, previousSummary, cacheBreakpointOffset };
+}
+
+// ============================================================
+// Capability Awareness Helpers (Brief 167)
+// ============================================================
+
+/**
+ * Build the <capability_awareness> section for Self context.
+ * Lists active processes by category + top 3 unmatched capabilities. (AC6)
+ */
+function buildCapabilityAwarenessSection(
+  matches: CapabilityMatch[],
+  activeProcesses: Array<{ name: string; slug: string }>,
+): string {
+  // Active processes summary
+  const activeList = activeProcesses.length > 0
+    ? `Active (${activeProcesses.length}): ${activeProcesses.map((p) => p.name).join(", ")}`
+    : "No active processes yet.";
+
+  // Top 3 unmatched capabilities
+  const top3 = matches.slice(0, 3);
+  const lines = top3.map(
+    (m) => `- ${m.templateName}: "${m.matchReason}"`,
+  );
+
+  return `<capability_awareness>
+${activeList}
+Unmatched capabilities for this user:
+${lines.join("\n")}
+Reference these naturally using observe→connect→offer. Use the user's own words. Max 1-2 mentions per conversation. Heavier first 2 weeks, lighter once 4+ processes active. Never as a list. Never during exceptions.
+</capability_awareness>`;
+}
+
+/**
+ * Detect which capability signal to inject, if any. (AC7-10)
+ * Returns the signal XML string, or null if no signal applies.
+ *
+ * AC9/AC10 check session turns for tool_name as specified in the brief.
+ * Tool names are recorded on SessionTurn.toolNames during selfConverse().
+ */
+async function detectCapabilitySignal(
+  userId: string,
+  sessionId: string,
+  resumed: boolean,
+  matches: CapabilityMatch[],
+): Promise<string | null> {
+  // Load session turns once — used by AC9 and AC10 for tool_name detection
+  const sessionTurns = await loadSessionTurnsRaw(sessionId);
+  // AC7: Post-onboarding — first process created recently (within 24h)
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Single query: load active processes with createdAt to check both recency and count
+    const allActiveProcesses = await db
+      .select({ id: schema.processes.id, createdAt: schema.processes.createdAt })
+      .from(schema.processes)
+      .where(eq(schema.processes.status, "active"));
+
+    const hasRecentProcess = allActiveProcesses.some(
+      (p) => (p.createdAt instanceof Date ? p.createdAt : new Date(Number(p.createdAt))) >= oneDayAgo,
+    );
+
+    if (hasRecentProcess && allActiveProcesses.length <= 2) {
+      const top3 = matches.slice(0, 3);
+      const slugList = top3.map((m) => `${m.templateSlug}: "${m.matchReason}"`).join("; ");
+      return `<capability_signal type="post_onboarding">
+First process was recently created. Present matched capabilities as a package:
+${slugList}
+Use TextBlock header + RecordBlock per capability (status: { label: "Recommended", variant: "info" }) + ActionBlock for "Set up [top match]". Compose from existing block types.
+</capability_signal>`;
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  // AC8: Post-trust-upgrade — pending trust milestones
+  try {
+    const pendingMilestones = await db
+      .select({
+        id: schema.trustSuggestions.id,
+        processId: schema.trustSuggestions.processId,
+      })
+      .from(schema.trustSuggestions)
+      .where(eq(schema.trustSuggestions.status, "pending"))
+      .limit(1);
+
+    if (pendingMilestones.length > 0) {
+      // A process is graduating — suggest expansion
+      const topMatch = matches[0];
+      if (topMatch) {
+        return `<capability_signal type="post_trust_upgrade">
+A process just graduated to a higher trust tier, freeing review capacity.
+Suggest expansion: ${topMatch.templateName} — "${topMatch.matchReason}".
+Mention BELOW the trust celebration. One line: "Now that [process] runs itself, I can take on [capability]."
+</capability_signal>`;
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  // AC9: New-context-learned -- check session turns for update_user_model tool call
+  const hasUserModelUpdate = sessionTurns.some(
+    (t) => t.toolNames?.includes("update_user_model"),
+  );
+  if (hasUserModelUpdate) {
+    const allSlugs = matches.map((m) => `${m.templateSlug}: "${m.matchReason}"`).join("; ");
+    return `<capability_signal type="new_context">
+User model was updated this session. Current matches: ${allSlugs}
+Naturally mention the most relevant one: "You mentioned [X] — I can handle that." Max one mention.
+</capability_signal>`;
+  }
+
+  // AC10: Post-approval -- check session turns for approve_review tool call
+  const hasApproval = sessionTurns.some(
+    (t) => t.toolNames?.includes("approve_review"),
+  );
+  if (hasApproval) {
+    const topMatch = matches[0];
+    if (topMatch) {
+      return `<capability_signal type="post_approval">
+A review was approved this session. As a P.S., mention: ${topMatch.templateName} — "${topMatch.matchReason}".
+One sentence max. "While I have you —" tone. Don't steal the approval moment.
+</capability_signal>`;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Load raw session turns (untruncated) for signal detection.
+ * Unlike loadSessionTurns which applies token budgeting, this returns
+ * all turns to check toolNames across the full session.
+ */
+async function loadSessionTurnsRaw(
+  sessionId: string,
+): Promise<Array<{ role: string; content: string; toolNames?: string[] }>> {
+  const [session] = await db
+    .select({ turns: schema.sessions.turns })
+    .from(schema.sessions)
+    .where(eq(schema.sessions.id, sessionId))
+    .limit(1);
+
+  if (!session?.turns) return [];
+  return session.turns as Array<{ role: string; content: string; toolNames?: string[] }>;
 }
 
 // ============================================================
@@ -395,6 +632,16 @@ export interface SelfConverseOptions {
   chatEscalationAvailable?: boolean;
   /** User's email address — needed for magic link generation during chat escalation. */
   userEmail?: string;
+  /**
+   * Email thread context for reply-aware responses (Brief 161 — MP-6.2).
+   * When present, injected into system prompt so Self can reference the
+   * original outreach and prior thread naturally.
+   */
+  threadContext?: {
+    originalSubject: string | null;
+    originalBody: string | null;
+    priorReplies: Array<{ summary: string; createdAt: Date }>;
+  };
 }
 
 export async function selfConverse(
@@ -412,6 +659,27 @@ export async function selfConverse(
     context.systemPrompt += `\n\n<chat_escalation>
 You can offer email-to-chat escalation. When the user's request is complex and would benefit from a focused back-and-forth conversation (multiple clarifying questions, rich context gathering), use the generate_chat_link tool to create a magic link. Include it naturally in your reply: "I'd love to help with that — let me ask a few questions. [Continue in chat →](url)". This is YOUR judgment call based on request complexity — simple requests should be handled inline in email.${options.userEmail ? `\nUser email: ${options.userEmail}` : ""}
 </chat_escalation>`;
+  }
+
+  // Brief 161 (MP-6.2): Inject email thread context so Self can reference
+  // the original outreach and prior conversation naturally.
+  if (options?.threadContext) {
+    const tc = options.threadContext;
+    let threadBlock = "\n\n<email_thread_context>\nYou are replying in an existing email thread. Reference the original outreach naturally — don't repeat the intro.";
+    if (tc.originalSubject) {
+      threadBlock += `\nOriginal subject: ${tc.originalSubject}`;
+    }
+    if (tc.originalBody) {
+      threadBlock += `\nOriginal outreach:\n${tc.originalBody}`;
+    }
+    if (tc.priorReplies.length > 0) {
+      threadBlock += "\nPrior replies in thread:";
+      for (const reply of tc.priorReplies) {
+        threadBlock += `\n- [${reply.createdAt.toISOString().slice(0, 10)}] ${reply.summary}`;
+      }
+    }
+    threadBlock += "\n</email_thread_context>";
+    context.systemPrompt += threadBlock;
   }
 
   // 2. Load session turns as conversation history
@@ -443,6 +711,8 @@ You can offer email-to-chat escalation. When the user's request is complex and w
   let consultationsExecuted = 0;
   let totalCostCents = 0;
   let finalResponse = "";
+  /** Tool names invoked this turn — recorded on session turn for signal detection (Brief 167) */
+  const invokedToolNames: string[] = [];
 
   // Track last delegated role for cross-turn redirect detection (Flag 2, Brief 034a).
   // Scan prior session turns for the most recent delegation to seed the tracker.
@@ -520,6 +790,9 @@ You can offer email-to-chat escalation. When the user's request is complex and w
     for (const toolUse of toolUses) {
       const input = toolUse.input as Record<string, unknown>;
 
+      // Track tool names for session turn recording (Brief 167 — signal detection)
+      invokedToolNames.push(toolUse.name);
+
       // Track consultations separately from delegations
       if (toolUse.name === "consult_role") {
         consultationsExecuted++;
@@ -596,12 +869,13 @@ You can offer email-to-chat escalation. When the user's request is complex and w
     }
   }
 
-  // 5. Record assistant turn
+  // 5. Record assistant turn (with tool names for capability signal detection — Brief 167)
   await appendSessionTurn(context.sessionId, {
     role: "assistant",
     content: finalResponse,
     timestamp: Date.now(),
     surface,
+    toolNames: invokedToolNames.length > 0 ? invokedToolNames : undefined,
   });
 
   return {

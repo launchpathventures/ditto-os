@@ -11,12 +11,14 @@
  */
 
 import type { ContentBlock } from "@/lib/engine";
+import type { CompositionContext, ProcessCapability } from "./compositions/types";
 
 /**
  * Today empty state — greeting + "What would you like to work on?" + suggestions.
+ * Brief 168 AC6: Adds matched capability to suggestions when available.
  */
-export function emptyToday(greeting: string): ContentBlock[] {
-  return [
+export function emptyToday(greeting: string, recommended?: ProcessCapability[]): ContentBlock[] {
+  const blocks: ContentBlock[] = [
     {
       type: "text",
       text: `${greeting}. Alex isn\u2019t working for you yet.`,
@@ -33,6 +35,27 @@ export function emptyToday(greeting: string): ContentBlock[] {
         },
       ],
     },
+  ];
+
+  // Brief 168: Insert top recommendation before generic suggestions
+  if (recommended && recommended.length > 0) {
+    const topRec = recommended[0];
+    blocks.push({
+      type: "suggestion",
+      content: topRec.name,
+      reasoning: topRec.matchReason || topRec.description,
+      actions: [
+        {
+          id: `capability.start.${topRec.slug}`,
+          label: "Set this up",
+          style: "primary",
+          payload: { templateId: topRec.slug, templateName: topRec.name },
+        },
+      ],
+    });
+  }
+
+  blocks.push(
     {
       type: "suggestion",
       content: "Find me more clients",
@@ -70,7 +93,9 @@ export function emptyToday(greeting: string): ContentBlock[] {
         },
       ],
     },
-  ];
+  );
+
+  return blocks;
 }
 
 /**
@@ -271,8 +296,43 @@ export function emptyGrowth(): ContentBlock[] {
 
 /**
  * Library empty state — loading or no templates found.
+ * Brief 168 AC6: Context-aware when user model + recommendations available.
  */
-export function emptyLibrary(): ContentBlock[] {
+export function emptyLibrary(context?: Pick<CompositionContext, "recommended">): ContentBlock[] {
+  // Brief 168: Context-aware empty state with matched capabilities
+  if (context?.recommended && context.recommended.length > 0) {
+    const blocks: ContentBlock[] = [
+      {
+        type: "text",
+        text: "Based on what I know about your business, here\u2019s what would help most.",
+        variant: "hero-primary",
+      },
+    ];
+
+    for (const cap of context.recommended.slice(0, 3)) {
+      blocks.push({
+        type: "record",
+        title: cap.name,
+        subtitle: cap.matchReason || cap.description,
+        status: { label: "Recommended", variant: "vivid" },
+        fields: [
+          { label: "Type", value: cap.type === "cycle" ? "Continuous" : "On-demand" },
+        ],
+        actions: [
+          {
+            id: `capability.start.${cap.slug}`,
+            label: "Start this",
+            style: "primary",
+            payload: { templateId: cap.slug, templateName: cap.name },
+          },
+        ],
+      });
+    }
+
+    return blocks;
+  }
+
+  // Generic empty state — no user model
   return [
     {
       type: "text",

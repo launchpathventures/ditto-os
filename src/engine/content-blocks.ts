@@ -41,6 +41,8 @@ export {
   type TableRow,
   type InteractiveTableBlock,
   type ArtifactBlock,
+  type SendingIdentityChoiceBlock,
+  type TrustMilestoneBlock,
 
   // Response-level metadata
   type ConfidenceCheck,

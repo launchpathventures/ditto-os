@@ -22,6 +22,7 @@ import { db, schema } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { createCompletion, extractText } from "../llm";
 import type { TrustTier } from "../../db/schema";
+import { harnessEvents } from "../events";
 
 // ============================================================
 // Types
@@ -237,6 +238,15 @@ async function executeBuild(ctx: BuildContext, buildId: string): Promise<BuildRe
       processSlug: slug,
       processId: process.id,
       costCents: totalCostCents,
+    });
+
+    // Brief 155 MP-1.5: emit build-process-created notification
+    harnessEvents.emit({
+      type: "build-process-created",
+      goalWorkItemId: ctx.goalId,
+      processSlug: slug,
+      processName: generationResult.definition.name,
+      processDescription: generationResult.definition.description,
     });
 
     return {

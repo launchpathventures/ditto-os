@@ -26,6 +26,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
   services: Map<string, RailwayService>;
   volumes: Map<string, RailwayVolume>;
   calls: string[];
+  lastUpsertedVariables: Record<string, string> | null;
 } {
   const services = new Map<string, RailwayService>();
   const volumes = new Map<string, RailwayVolume>();
@@ -37,6 +38,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
     services,
     volumes,
     calls,
+    lastUpsertedVariables: null as Record<string, string> | null,
 
     async getEnvironmentId() {
       calls.push("getEnvironmentId");
@@ -73,8 +75,9 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
       volumes.delete(volumeId);
     },
 
-    async upsertVariables() {
+    async upsertVariables(_serviceId: string, _envId: string, variables: Record<string, string>) {
       calls.push("upsertVariables");
+      this.lastUpsertedVariables = variables;
     },
 
     async deployService(serviceId, environmentId) {
@@ -532,6 +535,64 @@ describe("workspace-provisioner", () => {
       );
 
       expect(status).toBeNull();
+    });
+  });
+
+  // ============================================================
+  // Brief 153: WORKSPACE_OWNER_EMAIL env var + status update
+  // ============================================================
+
+  describe("Brief 153 wiring", () => {
+    it("includes WORKSPACE_OWNER_EMAIL in env vars when ownerEmail is provided", async () => {
+      const { provisionWorkspace } = await import("./workspace-provisioner");
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient, { ownerEmail: "alice@example.com" });
+
+      await provisionWorkspace("user-owner-1", config);
+
+      expect(railwayClient.lastUpsertedVariables).toBeDefined();
+      expect(railwayClient.lastUpsertedVariables!.WORKSPACE_OWNER_EMAIL).toBe("alice@example.com");
+      expect(railwayClient.lastUpsertedVariables!.DITTO_NETWORK_URL).toBe("https://ditto-network.up.railway.app");
+    });
+
+    it("omits WORKSPACE_OWNER_EMAIL when ownerEmail is not provided", async () => {
+      const { provisionWorkspace } = await import("./workspace-provisioner");
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient);
+
+      await provisionWorkspace("user-no-owner-1", config);
+
+      expect(railwayClient.lastUpsertedVariables).toBeDefined();
+      expect(railwayClient.lastUpsertedVariables!.WORKSPACE_OWNER_EMAIL).toBeUndefined();
+    });
+
+    it("updates networkUsers.status to 'workspace' after successful provisioning", async () => {
+      const { provisionWorkspace } = await import("./workspace-provisioner");
+      const railwayClient = createMockRailwayClient();
+      const config = makeConfig(railwayClient, { ownerEmail: "status-test@example.com" });
+
+      // Create a network user first
+      const userId = "user-status-update-1";
+      await db.insert(schema.networkUsers).values({
+        id: userId,
+        email: "status-test@example.com",
+        name: "Status Test User",
+        status: "active",
+      });
+
+      const result = await provisionWorkspace(userId, config);
+      expect(result.status).toBe("created");
+
+      // Verify the user status was updated
+      const [updatedUser] = await db
+        .select()
+        .from(schema.networkUsers)
+        .where(eq(schema.networkUsers.id, userId))
+        .limit(1);
+
+      expect(updatedUser.status).toBe("workspace");
+      expect(updatedUser.workspaceId).toBeDefined();
+      expect(updatedUser.workspaceAcceptedAt).toBeDefined();
     });
   });
 });

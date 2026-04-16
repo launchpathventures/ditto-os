@@ -147,3 +147,4 @@ See `packages/core/SETUP_PROMPT.md` for a complete prompt that guides an AI agen
 - TypeScript strict mode
 - ADRs in `docs/adrs/` for significant decisions (use `docs/adrs/000-template.md`)
 - Provenance required: every pattern must trace to a source project or be marked as original
+- **Schema migrations (Insight-190):** Drizzle migration journal (`drizzle/meta/_journal.json`) is a concurrency bottleneck. When adding schema changes: check the journal for the next available idx, run `drizzle-kit generate` to create SQL + snapshot, and verify the SQL file exists for every journal entry. On merge conflicts, resequence idx values.

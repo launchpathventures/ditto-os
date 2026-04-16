@@ -1,7 +1,7 @@
 # Brief: Unipile Social Channel Spike + Adapter
 
 **Date:** 2026-04-11
-**Status:** draft
+**Status:** complete
 **Depends on:** Brief 124 (ghost mode email infrastructure), Brief 132 (parent design)
 **Unlocks:** Ghost-mode LinkedIn DMs, WhatsApp messages, social channel process templates
 

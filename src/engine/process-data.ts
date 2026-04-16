@@ -833,6 +833,8 @@ export interface ProcessCapability {
   active: boolean;
   activeCount: number;
   operator?: string;
+  relevanceScore?: number;
+  matchReason?: string;
 }
 
 /**
@@ -878,8 +880,11 @@ const INTERNAL_SLUGS = new Set([
 /**
  * Get process capabilities for the Library view.
  * Reads templates + cycles from filesystem, cross-references with active runs.
+ *
+ * When userId is provided, annotates each capability with relevanceScore and
+ * matchReason from the capability matcher (Brief 168).
  */
-export async function getProcessCapabilities(): Promise<ProcessCapability[]> {
+export async function getProcessCapabilities(userId?: string): Promise<ProcessCapability[]> {
   const capabilities: ProcessCapability[] = [];
 
   const loadFromDir = (dir: string, type: ProcessCapability["type"]) => {
@@ -960,6 +965,68 @@ export async function getProcessCapabilities(): Promise<ProcessCapability[]> {
         cap.active = true;
         cap.activeCount = total;
       }
+    }
+  }
+
+  // Brief 168: Annotate with relevance scoring when userId provided.
+  // Uses matchCapabilities() directly with templates derived from already-loaded
+  // capabilities to avoid double YAML loading. Suppression rules (5+ processes,
+  // 2+ supervised, dismissals) applied inline.
+  if (userId) {
+    try {
+      const { getUserModel } = await import("./user-model");
+      const capMatcher = await import("./capability-matcher");
+      const { getActiveDismissalHashes, hashContent } = await import("./suggestion-dismissals");
+
+      const userModel = await getUserModel(userId);
+      if (userModel.entries.length > 0) {
+        // Suppression: 5+ active-or-paused processes → skip scoring
+        const registeredProcesses = await db
+          .select({ slug: schema.processes.slug, status: schema.processes.status, trustTier: schema.processes.trustTier })
+          .from(schema.processes)
+          .where(or(eq(schema.processes.status, "active"), eq(schema.processes.status, "paused")));
+
+        const shouldSuppress =
+          registeredProcesses.length >= 5 ||
+          registeredProcesses.filter((p) => p.status === "active" && p.trustTier === "supervised").length >= 2;
+
+        if (!shouldSuppress) {
+          // Build templates from already-loaded capabilities (avoid re-reading YAML)
+          const templates = capabilities.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            description: c.description,
+            qualityCriteria: [] as string[],
+          }));
+
+          const activeSlugs = registeredProcesses.map((p) => p.slug);
+          const rawMatches = capMatcher.matchCapabilities(
+            userModel.entries.map((e) => ({ dimension: e.dimension, content: e.content })),
+            activeSlugs,
+            templates,
+          );
+
+          // Filter dismissed suggestions (30-day cooldown)
+          const dismissedHashes = await getActiveDismissalHashes(userId);
+          const matches = rawMatches.filter(
+            (m) => !dismissedHashes.has(hashContent(m.templateSlug)),
+          );
+
+          // Create lookup map from matches
+          const matchMap = new Map(matches.map((m) => [m.templateSlug, m]));
+
+          for (const cap of capabilities) {
+            const match = matchMap.get(cap.slug);
+            if (match) {
+              cap.relevanceScore = match.relevanceScore;
+              cap.matchReason = match.matchReason;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // AC7: Graceful degradation — return capabilities without scoring
+      console.warn("[process-data] Capability scoring failed, returning unscored:", err);
     }
   }
 

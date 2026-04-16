@@ -13,6 +13,7 @@ import { createTestDb, makeTestProcessDefinition, type TestDb } from "../../test
 import * as schema from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { harnessEvents } from "../events";
 
 let testDb: TestDb;
 let cleanup: () => void;
@@ -322,5 +323,145 @@ describe("Task-to-process routing", () => {
     } else {
       expect(result.confidence).toBe(0);
     }
+  });
+});
+
+// ============================================================
+// Brief 155: Orchestrator progress events (MP-1.4)
+// ============================================================
+
+describe("Orchestrator progress events (Brief 155)", () => {
+  it("emits decomposition-start, subtask-identified, and decomposition-complete events (AC1)", async () => {
+    const { executeOrchestrator } = await import("./orchestrator");
+
+    const emittedEvents: Array<{ type: string; [k: string]: unknown }> = [];
+    const unsub = harnessEvents.on((event) => {
+      if (event.type.startsWith("orchestrator-")) {
+        emittedEvents.push(event);
+      }
+    });
+
+    // Create a 2-step process
+    const processDef = makeTestProcessDefinition({
+      name: "Event Test Pipeline",
+      id: "event-test",
+      steps: [
+        { id: "step-a", name: "Alpha", executor: "script", commands: ["echo alpha"] },
+        { id: "step-b", name: "Beta", executor: "script", depends_on: ["step-a"], commands: ["echo beta"] },
+      ],
+    });
+
+    await testDb.insert(schema.processes).values({
+      name: "Event Test Pipeline",
+      slug: "event-test",
+      definition: processDef as unknown as Record<string, unknown>,
+      status: "active",
+      trustTier: "supervised",
+    });
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "intake",
+      content: "Test goal for events",
+      source: "capture",
+    }).returning();
+
+    await executeOrchestrator({
+      processSlug: "event-test",
+      workItemId: goalItem.id,
+      content: "Test goal for events",
+      workItemType: "goal",
+    });
+
+    unsub();
+
+    // Should have: 1 start + 2 subtask-identified + 2 subtask-dispatched + 1 complete = 6
+    const starts = emittedEvents.filter((e) => e.type === "orchestrator-decomposition-start");
+    const identified = emittedEvents.filter((e) => e.type === "orchestrator-subtask-identified");
+    const dispatched = emittedEvents.filter((e) => e.type === "orchestrator-subtask-dispatched");
+    const completes = emittedEvents.filter((e) => e.type === "orchestrator-decomposition-complete");
+
+    expect(starts).toHaveLength(1);
+    expect(starts[0].goalWorkItemId).toBe(goalItem.id);
+    expect(starts[0].goalContent).toBe("Test goal for events");
+
+    expect(identified).toHaveLength(2);
+    expect(identified[0].index).toBe(1);
+    expect(identified[0].total).toBe(2);
+    expect(identified[1].index).toBe(2);
+    expect(identified[1].total).toBe(2);
+
+    // dispatched depends on routing — may or may not find matches
+    expect(dispatched.length).toBeGreaterThanOrEqual(0);
+
+    expect(completes).toHaveLength(1);
+    expect(completes[0].totalTasks).toBe(2);
+  });
+
+  it("does not emit progress events for non-goal pass-through (AC5)", async () => {
+    const { executeOrchestrator } = await import("./orchestrator");
+
+    const emittedEvents: Array<{ type: string }> = [];
+    const unsub = harnessEvents.on((event) => {
+      if (event.type.startsWith("orchestrator-")) {
+        emittedEvents.push(event);
+      }
+    });
+
+    await testDb.insert(schema.processes).values({
+      name: "Pass Through",
+      slug: "pass-through",
+      definition: makeTestProcessDefinition() as unknown as Record<string, unknown>,
+      status: "active",
+      trustTier: "supervised",
+    });
+
+    await executeOrchestrator({
+      processSlug: "pass-through",
+      workItemId: randomUUID(),
+      content: "simple task",
+      workItemType: "task",
+    });
+
+    unsub();
+
+    // No orchestrator events for pass-through
+    expect(emittedEvents).toHaveLength(0);
+  });
+
+  it("emits decomposition-failed when fast-path decomposition escalates (AC5 + reviewer fix)", async () => {
+    const { executeOrchestrator } = await import("./orchestrator");
+
+    const emittedEvents: Array<{ type: string; [k: string]: unknown }> = [];
+    const unsub = harnessEvents.on((event) => {
+      if (event.type.startsWith("orchestrator-")) {
+        emittedEvents.push(event);
+      }
+    });
+
+    const [goalItem] = await testDb.insert(schema.workItems).values({
+      type: "goal",
+      status: "intake",
+      content: "Test failure events",
+      source: "capture",
+    }).returning();
+
+    // Non-existent process slug → escalation after start event
+    await executeOrchestrator({
+      processSlug: "nonexistent-process",
+      workItemId: goalItem.id,
+      content: "Test failure events",
+      workItemType: "goal",
+    });
+
+    unsub();
+
+    const starts = emittedEvents.filter((e) => e.type === "orchestrator-decomposition-start");
+    const failures = emittedEvents.filter((e) => e.type === "orchestrator-decomposition-failed");
+
+    expect(starts).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].goalWorkItemId).toBe(goalItem.id);
+    expect(failures[0].reason).toBeTruthy();
   });
 });

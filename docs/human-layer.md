@@ -171,15 +171,23 @@ When deep review or document work is needed, the workspace transitions to artifa
 
 Sidebar destinations are **composition intents** — each one triggers a different query to the composition engine, which returns ContentBlock[] rendered by the ComposedCanvas:
 
-| Intent | What it shows | Blocks used |
-|--------|--------------|-------------|
-| **Today** | Daily brief, pending reviews, running pipelines, proactive suggestions | TextBlock (brief narrative), ReviewCardBlock, ProgressBlock, SuggestionBlock |
-| **Inbox** | Items needing attention — reviews, exceptions, suggestions | ReviewCardBlock, AlertBlock, SuggestionBlock |
-| **Work** | Active work items with status, running pipelines | StatusCardBlock, ProgressBlock, ChecklistBlock |
-| **Projects** | Process portfolio — health, trust, metrics | StatusCardBlock, MetricBlock, ChartBlock |
-| **Routines** | Recurring processes, schedules, health | StatusCardBlock, DataBlock |
+| Intent | What it shows | Blocks used | Module |
+|--------|--------------|-------------|--------|
+| **Today** | Daily brief, pending reviews, running pipelines, proactive suggestions | TextBlock (brief narrative), ReviewCardBlock, ProgressBlock, SuggestionBlock | `compositions/today.ts` |
+| **Inbox** | Items needing attention — reviews, exceptions, suggestions | ReviewCardBlock, AlertBlock, SuggestionBlock | `compositions/inbox.ts` |
+| **Work** | Active work items with status, running pipelines | StatusCardBlock, ProgressBlock, ChecklistBlock | `compositions/work.ts` |
+| **Projects** | Process portfolio — health, trust, metrics | StatusCardBlock, MetricBlock, ChartBlock | `compositions/projects.ts` |
+| **Routines** | Recurring processes, schedules, health | StatusCardBlock, DataBlock | `compositions/routines.ts` |
+| **Growth** (Brief 140) | GTM pipeline plans, experiments, published content | StatusCardBlock, InteractiveTableBlock, ChecklistBlock, RecordBlock | `compositions/growth.ts` |
+| **Library** (Brief 138, 168) | Process capability catalog + "Recommended for your business" section | RecordBlock (+ vivid variant), SuggestionBlock | `compositions/library.ts` |
 
-The composition engine assembles these from real data (work items, process runs, trust data, etc.) — the human sees structured, context-aware content, not raw data.
+The composition engine assembles these from real data (work items, process runs, trust data, `activeRuns`, etc.) — the human sees structured, context-aware content, not raw data.
+
+**Pipeline progress (`activeRuns`) enrichment** (Brief 053): Today and Work compositions prepend `ProgressBlock` entries for running pipelines. `activeRuns` is queried from `CompositionContext` (populated server-side via `/api/processes?action=activeRuns`). SSE events (`step-complete`, `gate-pause`, `gate-advance`, `run-complete`, `run-failed`) invalidate the query key via `useHarnessEvents`. Brief 158 extended ProgressBlock with `"waiting"` status + `waitFor` metadata for wait-state visibility.
+
+**Composition intent injection** (Brief 073): When the user starts a conversation from a composition intent, `intentContext` is passed to `selfConverseStream()` and injected into the Self's system prompt as `<intent_context>`. Routines → "focus on recurring cadence." Projects → "group work by parent goal." One Self, context-aware per intent. Empty states (`composition-empty-states.ts`) provide per-intent fallback blocks (TextBlock + ActionBlock + SuggestionBlock) when the query returns no data.
+
+**Inline review prompt pattern** (Brief 053): When trust gate pauses a run, the `use-pipeline-review.ts` hook listens for `gate-pause`, fetches step output, exposes `pendingReview` state. The conversation UI renders a ReviewCardBlock inline with approve/edit/reject actions. User responds without navigating away. This is the "Review — inline in conversation" delivery of the Review job (vs artifact mode for deep review).
 
 ---
 
@@ -187,20 +195,23 @@ The composition engine assembles these from real data (work items, process runs,
 
 ### ContentBlocks: The Universal Unit
 
-Everything the user sees flows through **ContentBlocks** — typed, structured data units defined in the engine (`src/engine/content-blocks.ts`) and rendered by the block registry (`packages/web/components/blocks/`).
+Everything the user sees flows through **ContentBlocks** — typed, structured data units defined in `packages/core/src/content-blocks.ts` (re-exported from `src/engine/content-blocks.ts`) and rendered by the block registry (`packages/web/components/blocks/`).
 
-**22 ContentBlock types** (discriminated union, exhaustiveness-checked):
+**26 ContentBlock types** (discriminated union, exhaustiveness-checked — engine source is authoritative):
 
 | Category | Block types | Purpose |
 |----------|------------|---------|
 | **Core** | TextBlock, ActionBlock, InputRequestBlock | Text, choices, form fields |
 | **Status** | StatusCardBlock, ProgressBlock, AlertBlock | Process/item status, pipeline progress, attention needed |
-| **Review** | ReviewCardBlock, SuggestionBlock | Inline review surface, proactive suggestions |
-| **Data** | DataBlock, ChartBlock, MetricBlock, RecordBlock, InteractiveTableBlock | Structured data in various formats |
+| **Review** | ReviewCardBlock, SuggestionBlock, TrustMilestoneBlock | Inline review surface, proactive suggestions, trust upgrade/downgrade celebrations (Brief 160) |
+| **Data** | DataBlock, ChartBlock, MetricBlock, RecordBlock (+`"vivid"` variant), InteractiveTableBlock | Structured data in various formats |
 | **Knowledge** | KnowledgeCitationBlock, ReasoningTraceBlock | Provenance, decision reasoning |
 | **Visual** | ImageBlock, CodeBlock | Images, syntax-highlighted code |
-| **Onboarding** | KnowledgeSynthesisBlock, ProcessProposalBlock, GatheringIndicatorBlock | First-run experience |
+| **Onboarding** | KnowledgeSynthesisBlock, ProcessProposalBlock (+interactive mode, Brief 072), GatheringIndicatorBlock | First-run experience |
+| **Interactive** | WorkItemFormBlock, ConnectionSetupBlock, SendingIdentityChoiceBlock | In-conversation form capture (Brief 072, 152) |
 | **Meta** | ChecklistBlock, ArtifactBlock | Task lists, artifact references |
+
+**Interactive blocks** (Brief 072): `InteractiveField` describes a form field (type: text/select/number/toggle) with label, placeholder, options, required flag. `WorkItemFormBlock` and `ConnectionSetupBlock` use `InteractiveField[]` for in-conversation capture; `ProcessProposalBlock` extended with interactive mode. Submit routes via the `form-submit` action namespace, validated by block-type-scoped registry tokens (Brief 072 Reviewer F1 fix — no action-registry bypass).
 
 **Design rule:** ALL rendering flows through ContentBlocks. No bespoke viewers. Artifact mode renders BlockList. The composition engine produces BlockList. Self responses contain BlockList. This is the most critical architecture principle.
 

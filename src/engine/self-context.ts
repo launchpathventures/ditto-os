@@ -209,6 +209,8 @@ export interface SessionTurn {
   content: string;
   timestamp: number;
   surface: string;
+  /** Tool names invoked in this turn (Brief 167 — capability signal detection) */
+  toolNames?: string[];
 }
 
 /**
@@ -365,6 +367,7 @@ export async function getOrCreateSession(
       .update(schema.sessions)
       .set({ status: "suspended", summary })
       .where(eq(schema.sessions.id, activeSession.id));
+
 
     // Create new session
     const newSession = await createNewSession(userId, surface);

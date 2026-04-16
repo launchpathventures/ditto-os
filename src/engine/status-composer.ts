@@ -526,13 +526,22 @@ export async function runStatusComposition(): Promise<StatusCheckResult> {
     // Compose and send status update via user's preferred channel
     const { subject, body } = await composeStatusEmail(data, workspaceSuggestionReason);
 
-    await notifyUser({
+    const notifyResult = await notifyUser({
       userId: user.id,
       personId: user.personId!,
       subject,
       body,
       htmlBlocks,
     });
+
+    // Brief 153: Record the outbound threadId when a workspace suggestion was sent,
+    // so inbound acceptance can be matched by thread.
+    if (workspaceSuggestionReason && notifyResult.success && notifyResult.threadId) {
+      await db
+        .update(schema.networkUsers)
+        .set({ suggestionThreadId: notifyResult.threadId })
+        .where(eq(schema.networkUsers.id, user.id));
+    }
 
     result.sent++;
     result.details.push({ userId: user.id, action: "sent" });

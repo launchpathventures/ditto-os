@@ -59,13 +59,31 @@ These are the functions the architecture already describes, now formalized as sy
 | **onboarding-guide** | Walks new outcome owners through first process setup. Conversational. Helps users who "know what good looks like" but haven't codified it. Knows template library | Phase 11 (PM triage: may move earlier) | Not started |
 | **process-discoverer** | Connects to org data sources, identifies recurring process patterns, surfaces candidates | Phase 11 (requires Phase 6 integrations) | Not started |
 | **governance-monitor** | Watches for trust gaming, rubber-stamping, permission violations, compliance gaps | Phase 12 | Not started |
-| **coverage-agent** | Proactively identifies process coverage gaps. Reasons from user model + Process Model Library + Standards Library + industry patterns + connected data to suggest what the user should have in place but doesn't. The outward-looking complement to improvement-scanner (which looks inward at existing processes). Max 1-2 suggestions per cycle with stage-aware timing. Runs on scheduled heartbeat (daily default). Dismissed suggestions tracked in memory. (Insight-142) | Phase 11 | Not started |
+| **coverage-agent** | Proactively identifies process coverage gaps. Reasons from user model + Process Model Library + Standards Library + industry patterns + connected data to suggest what the user should have in place but doesn't. The outward-looking complement to improvement-scanner (which looks inward at existing processes). Max 1-2 suggestions per cycle with stage-aware timing. Runs on weekly schedule. Dismissed suggestions tracked in memory. (Insight-142, Brief 165) | MP-10 | Done |
 | **network-agent** | External relationship management — outreach, introductions, and nurture on behalf of users. Operates through personas (Alex/Mira). Mode-shifted posture: Selling (internal BDR) vs Connecting (researcher/advisor). Person-scoped memory. Trust tiers on outreach (supervised default), Critical tier on introductions. (Brief 079) | Phase 14 | In progress |
 | **process-validator** | Unified quality validator for the Process Model Library. Performs four checks: edge-case testing, compliance scanning, efficiency analysis, duplicate detection. Produces structured validation reports. Runs as part of the library-curation pipeline. (Brief 104) | Phase 11 | Done |
 
 **Key principle:** Not all system agents are built at once. The architecture accommodates them now; the roadmap sequences when they're built. Four are done (trust-evaluator Phase 3, intake-classifier + router + orchestrator Phase 4-5).
 
 **Key principle:** System agents are subject to their own trust tiers. The governance monitor is always `critical` (human reviews every finding). The brief synthesizer starts `supervised` and can earn `spot-checked`. System agents are not trusted by default — they earn trust like any other agent.
+
+### 2a. Persona-based operator routing (Insight-153, 2026-04-16)
+
+Processes declare an `operator` field on `ProcessDefinition` naming the persona layer that runs the process. The orchestrator routes based on operator, and the cognitive-core loader (`cognitive/modes/{connecting,nurturing,selling,chief-of-staff}.md`) selects the mode file via `resolveModeFromProcess(operator, processId)`. Persona guard blocks `selling` mode for `alex-or-mira` operators — Alex/Mira never sell. The User Agent sells; Alex/Mira connect.
+
+This extends system agent selection beyond `systemRole` alone: a `network-agent` instance may run as Alex (connecting), Mira (connecting), or a User Agent (selling) depending on the process's declared operator. The agent is one — the persona layer and cognitive mode differ.
+
+### 2b. Orchestrator dual decomposition (Brief 102-103, 2026-04-16)
+
+The orchestrator now has two decomposition paths and three-tier routing:
+
+**Decomposition paths:**
+- **Step-based** (original): goal has `processSlug` → decompose into process steps. Fast path, used when routing already has a process.
+- **LLM-powered goal decomposition** (Brief 102): goal has no `processSlug` → `decomposeGoalWithLLM()` gathers process inventory + industry patterns + web search (capped at 2), calls LLM (`purpose: "analysis"`), parses `GoalDecompositionResult` (sub-goals tagged `find`/`build`). Gated by `DimensionMap` clarity assessment.
+
+**Find-or-build routing** (Brief 103): `routeSubGoal()` evaluates three tiers: (1) Process Model Library — `findProcessModel()` keyword match against `processModels` table. (2) Existing process match — `matchTaskToProcess()` with confidence ≥ 0.6. (3) Build meta-process — `triggerBuild()` researches, generates, saves, first-run validates. Build depth enforced (max 1). Concurrent-build dedup. First-run gate promotes `draft` → `active` on success.
+
+ADR-015 section 4 documents Build as the generative core; this ADR records the system agent mapping for the expanded orchestrator capability. See Brief 102 for DimensionMap / GoalDecomposition types (engine primitives in `packages/core/src/goal-decomposition.ts`) and Brief 103 for routing tiers.
 
 ### 3. Process template library: hybrid model (templates as data + agents trained on them)
 

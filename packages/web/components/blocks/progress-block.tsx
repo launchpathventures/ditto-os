@@ -7,12 +7,14 @@ const STATUS_BAR_COLOR: Record<string, string> = {
   running: "bg-accent",
   paused: "bg-caution",
   complete: "bg-positive",
+  waiting: "bg-caution",
 };
 
 const STATUS_BADGE_VARIANT: Record<string, string> = {
   running: "bg-positive/10 text-positive",
   paused: "bg-caution/10 text-caution",
   complete: "bg-positive/10 text-positive",
+  waiting: "bg-caution/10 text-caution",
 };
 
 export function ProgressBlockComponent({ block }: { block: ProgressBlock }) {
@@ -44,6 +46,11 @@ export function ProgressBlockComponent({ block }: { block: ProgressBlock }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+      {block.status === "waiting" && block.waitFor && (
+        <p className="text-xs text-text-secondary mt-1">
+          {block.waitFor.description}
+        </p>
+      )}
     </div>
   );
 }

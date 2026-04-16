@@ -52,6 +52,16 @@ const FRONT_DOOR_PILLS = [
 
 const SESSION_KEY = "ditto-chat-session";
 const EMAIL_KEY = "ditto-email-captured";
+const PREAMBLE_COOKIE = "ditto-preamble-seen";
+
+function hasPreambleCookie(): boolean {
+  return document.cookie.split("; ").some((c) => c.startsWith(`${PREAMBLE_COOKIE}=`));
+}
+
+function setPreambleCookie(): void {
+  // Session cookie — no max-age/expires so it clears when the browser closes
+  document.cookie = `${PREAMBLE_COOKIE}=1; path=/; SameSite=Lax`;
+}
 
 // ============================================================
 // Component
@@ -212,12 +222,20 @@ export function DittoConversation() {
   // Then introCount: 1=title → 2=body → 3=input+pills+cards
   useEffect(() => {
     if (!showIntro) return;
+
+    // If user already saw the preamble this session, skip straight to Alex
+    if (hasPreambleCookie()) {
+      setPreamble(5);
+      setIntroCount(3);
+      return;
+    }
+
     const timers = [
       setTimeout(() => setPreamble(1), 1600),       // "AI can do more for you and your business than it currently does."
       setTimeout(() => setPreamble(2), 5200),       // "You know it. You just don't have time to figure it out."
       setTimeout(() => setPreamble(3), 8000),       // "What if AI just worked?"
       setTimeout(() => setPreamble(4), 11400),      // Fade out all
-      setTimeout(() => setPreamble(5), 12200),      // Show Alex
+      setTimeout(() => { setPreamble(5); setPreambleCookie(); }, 12200), // Show Alex + mark seen
       setTimeout(() => setIntroCount(2), 13000),    // Body text
       setTimeout(() => setIntroCount(3), 14200),    // Input appears
     ];

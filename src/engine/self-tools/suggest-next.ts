@@ -6,6 +6,9 @@
  * industry patterns, process maturity, and coverage-agent findings.
  * Returns max 1-2 suggestions, zero during exceptions.
  *
+ * Coverage gap detection now uses the capability matcher (Brief 167)
+ * for deterministic, dimension-weighted matching against all templates.
+ *
  * Dimensions consulted (Insight-093):
  * - problems + tasks (immediate)
  * - vision + goals (strategic)
@@ -26,15 +29,16 @@
  * 2. Outward: standards library + world knowledge for current best practices
  * 3. Cross-instance: community corrections refine the Process Model Library
  *
- * Provenance: APQC patterns, Insight-076, Insight-093, Insight-142, Brief 043.
+ * Provenance: APQC patterns, Insight-076, Insight-093, Insight-142, Brief 043, Brief 167.
  */
 
 import { db, schema } from "../../db";
 import { eq } from "drizzle-orm";
 import { getUserModel, getWorkingPatterns } from "../user-model";
-import { matchIndustry, findCoverageGaps } from "../industry-patterns";
 import { computeTrustState } from "../trust";
 import { getActiveDismissalHashes, hashContent } from "../suggestion-dismissals";
+import { matchCapabilitiesWithSuppression, tokenize, stem } from "../capability-matcher";
+import { detectWorkItemClusters } from "./work-item-clustering";
 import type { DelegationResult } from "../self-delegation";
 
 interface SuggestNextInput {
@@ -60,61 +64,56 @@ export async function handleSuggestNext(
   try {
     const userModel = await getUserModel(userId);
     const suggestions: string[] = [];
-    const structuredSuggestions: Array<{ type: string; content: string }> = [];
+    const structuredSuggestions: Array<{ type: string; content: string; templateSlug?: string; suggestedProcessName?: string }> = [];
 
-    // 1. Coverage gaps — from industry patterns + coverage-agent findings
-    // The coverage-agent (Insight-142, Proactive Guidance meta-process)
-    // produces rich, context-aware suggestions by reasoning from:
-    //   - User model (business type, stage, goals, pain points)
-    //   - Process Model Library (what businesses like this typically have)
-    //   - Standards Library (quality baselines, risk thresholds)
-    //   - Connected data (email patterns, calendar gaps, manual work indicators)
-    //   - Community corrections (cross-instance learning)
-    //
-    // TODO: When coverage-agent is built (Phase 11), consume its
-    // CoverageSuggestion[] output here instead of basic pattern matching.
-    // The agent produces richer, more contextual suggestions than
-    // the static industry patterns below — e.g., dependency gaps
-    // ("your quotes reference supplier prices but you have no process
-    // for keeping supplier prices current"), bottleneck gaps, and
-    // timing-aware suggestions based on trust maturity.
-    //
-    // For now, fall back to industry-patterns-based coverage gaps.
-    const signals = userModel.entries.map((e) => e.content);
-    const industry = matchIndustry(signals);
-
-    if (industry) {
-      const existingProcesses = await db
-        .select({
-          name: schema.processes.name,
-          description: schema.processes.description,
-        })
-        .from(schema.processes)
-        .where(eq(schema.processes.status, "active"));
-
-      const gaps = findCoverageGaps(industry, existingProcesses);
-      const coreGaps = gaps.filter((g) => g.importance === "core");
-      const topGap = coreGaps[0] ?? gaps[0];
-
-      if (topGap) {
-        const content = `Other ${industry.name.toLowerCase()} businesses find ${topGap.name.toLowerCase()} useful — ${topGap.description.toLowerCase()}.`;
-        suggestions.push(`Coverage: ${content}`);
-        structuredSuggestions.push({ type: "Coverage", content });
-      }
-    }
-
-    // 2. Trust maturity upgrades (AC9: process maturity)
-    const processes = await db
+    // Load active processes once — used for dedup and coverage gap analysis
+    const activeProcesses = await db
       .select({
         id: schema.processes.id,
         name: schema.processes.name,
         slug: schema.processes.slug,
+        description: schema.processes.description,
         trustTier: schema.processes.trustTier,
       })
       .from(schema.processes)
       .where(eq(schema.processes.status, "active"));
 
-    for (const proc of processes) {
+    // 1. Coverage gaps — from capability matcher (Brief 167, AC13)
+    // Replaces inline industry-pattern matching with dimension-weighted matcher.
+    const { matches: capMatches } = await matchCapabilitiesWithSuppression(userId, userModel.entries);
+    if (capMatches.length > 0) {
+      const topMatch = capMatches[0];
+      const content = `${topMatch.matchReason}. I can handle ${topMatch.templateName.toLowerCase()} for you.`;
+      suggestions.push(`Coverage: ${content}`);
+      structuredSuggestions.push({
+        type: "Coverage",
+        content,
+        templateSlug: topMatch.templateSlug,
+      });
+    }
+
+    // 1b. MP-10.2: Reactive-to-repetitive — detect work item clustering
+    if (suggestions.length < 2) {
+      const clusters = await detectWorkItemClusters(activeProcesses);
+      for (const cluster of clusters) {
+        if (suggestions.length >= 2) break;
+        const templateHint = cluster.templateSlug
+          ? ` (template: ${cluster.templateSlug})`
+          : "";
+        const content = `You've created ${cluster.count} similar ${cluster.label} items. Want me to set up a ${cluster.suggestedProcessName} process?${templateHint}`;
+        suggestions.push(`Pattern: ${content}`);
+        structuredSuggestions.push({
+          type: "Pattern",
+          content,
+          // AC6: generate_process metadata for Self to use when user accepts
+          templateSlug: cluster.templateSlug ?? undefined,
+          suggestedProcessName: cluster.suggestedProcessName,
+        });
+      }
+    }
+
+    // 2. Trust maturity upgrades (AC9: process maturity)
+    for (const proc of activeProcesses) {
       if (proc.trustTier === "autonomous" || proc.trustTier === "critical") continue;
 
       const trustState = await computeTrustState(proc.id);
@@ -158,7 +157,7 @@ export async function handleSuggestNext(
     if (challengeEntries.length > 0 && suggestions.length < 2) {
       // Check if any known challenge maps to a process that could improve
       for (const entry of challengeEntries) {
-        const matchingProc = processes.find(
+        const matchingProc = activeProcesses.find(
           (p) =>
             p.name.toLowerCase().includes(entry.content.toLowerCase().split(" ")[0]) ||
             entry.content.toLowerCase().includes(p.name.toLowerCase()),
@@ -219,4 +218,59 @@ export async function handleSuggestNext(
       output: `Suggestion failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+// ============================================================
+// MP-10.1: Dedup — fuzzy match suggestions against active processes
+// ============================================================
+
+interface ProcessInfo {
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
+/**
+ * Check if a suggestion duplicates an existing process.
+ * Uses slug match, name similarity, and keyword overlap.
+ * Handles variants like "invoicing" ≈ "invoice-generation".
+ */
+export function isDuplicateOfExistingProcess(
+  suggestionName: string,
+  suggestionKeywords: string[],
+  activeProcesses: ProcessInfo[],
+): boolean {
+  const nameLower = suggestionName.toLowerCase();
+  const nameTokens = tokenize(nameLower);
+
+  for (const proc of activeProcesses) {
+    const slugLower = proc.slug.toLowerCase();
+    const procNameLower = proc.name.toLowerCase();
+    const descLower = (proc.description ?? "").toLowerCase();
+    const procText = `${slugLower} ${procNameLower} ${descLower}`;
+    const procTokens = tokenize(procText);
+
+    // Exact slug or name match
+    if (slugLower.includes(nameLower) || procNameLower.includes(nameLower)) {
+      return true;
+    }
+
+    // Stem-level match: check if name stems overlap significantly
+    const nameStems = nameTokens.map(stem);
+    const procStems = procTokens.map(stem);
+    const stemOverlap = nameStems.filter((s) => procStems.includes(s)).length;
+    if (nameStems.length > 0 && stemOverlap / nameStems.length >= 0.5) {
+      return true;
+    }
+
+    // Keyword match: if 2+ suggestion keywords appear in process text
+    const keywordHits = suggestionKeywords.filter((kw) =>
+      procText.includes(kw.toLowerCase()),
+    );
+    if (keywordHits.length >= 2) {
+      return true;
+    }
+  }
+
+  return false;
 }

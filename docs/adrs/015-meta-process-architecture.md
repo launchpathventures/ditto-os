@@ -181,6 +181,10 @@ The Build process creates all processes, agents, and skills — including other 
 
 **Implementation:** The existing dev pipeline (processes/dev-pipeline.yaml) is the first Build process. The process-analyst system agent (ADR-008, Phase 11) becomes a Build capability. The dev roles (/dev-pm, /dev-researcher, /dev-architect, /dev-builder, /dev-reviewer, /dev-documenter) are Build's agents.
 
+**Reactive trigger from orchestrator (Brief 103, 2026-04-16):** Build is triggered two ways. (1) **Manual** — the human asks for something new and /dev-pm routes through the dev pipeline. (2) **Reactive** — the orchestrator's `routeSubGoal()` fails to find an existing process or process model and calls `triggerBuild()` on the sub-goal. Reactive Build researches, generates, saves, and first-run validates the new process in-line within the user's goal decomposition. Build depth is capped at 1 (no recursive Build of Build). First-run validation gate: generated processes start `draft`, promote to `active` on first successful run, archive on failure (max 1 retry, then escalate with evidence). Concurrent-build dedup: keyword-based dedup key, in-flight builds tracked, duplicates wait for the in-flight build rather than duplicating work.
+
+The reactive trigger turns Build from a human-invoked meta-process into a continuously available capability. When the orchestrator hits a gap, it fills it — the system extends itself within a user goal, not just during dev cycles. This is the concrete mechanism behind "the system runs ON itself."
+
 **Trust:** Build starts supervised — the human approves every creation. Everything can earn trust, including Build itself and its self-modification capabilities. But **breaking changes always require human approval** — regardless of trust tier. The trust gradient within Build:
 
 | Operation Type | Can earn autonomous trust? | Breaking change? |

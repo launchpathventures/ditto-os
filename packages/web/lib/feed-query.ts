@@ -49,6 +49,9 @@ export function useFeed() {
         "gate-advance",
         "run-complete",
         "run-failed",
+        // Brief 155: orchestrator progress + build notifications
+        "orchestrator-decomposition-complete",
+        "build-process-created",
       ];
       if (refetchEvents.includes(event.type)) {
         queryClient.invalidateQueries({ queryKey: FEED_QUERY_KEY });

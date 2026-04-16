@@ -73,6 +73,8 @@ export interface CompositionContext {
   growthPlans?: GrowthPlanSummary[];
   /** Process capabilities — lazily loaded when library intent is active */
   capabilities?: ProcessCapability[];
+  /** Recommended capabilities from capability matcher (score > 0.5, max 3) */
+  recommended?: ProcessCapability[];
   /** Current time for narrative generation */
   now: Date;
 }
@@ -134,6 +136,10 @@ export interface ProcessCapability {
   activeCount: number;
   /** The operator (who runs it) */
   operator?: string;
+  /** Relevance score from capability matcher (0-1), present when user model exists */
+  relevanceScore?: number;
+  /** Match reason using user's own words, present when relevanceScore > 0 */
+  matchReason?: string;
 }
 
 // ============================================================

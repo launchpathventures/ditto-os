@@ -1,7 +1,7 @@
 # Brief 147: Learning Loop Closure — "Teach This?" Action
 
 **Date:** 2026-04-14
-**Status:** draft
+**Status:** complete
 **Depends on:** none (MP-4.1 feedback-to-memory bridge already implemented — see Insight-181)
 **Unlocks:** MP-4.3 (correction rate tracking), MP-7.2 (escalation guidance-to-memory)
 

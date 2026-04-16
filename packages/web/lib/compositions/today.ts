@@ -26,7 +26,8 @@ export function composeToday(context: CompositionContext): ContentBlock[] {
     for (const run of activeRuns) {
       blocks.push({
         type: "progress",
-        processRunId: run.runId,
+        entityType: "process_run",
+        entityId: run.runId,
         currentStep: run.currentStep,
         totalSteps: run.totalSteps,
         completedSteps: run.completedSteps,
@@ -64,7 +65,7 @@ export function composeToday(context: CompositionContext): ContentBlock[] {
 
   // Empty state: no active work, no reviews, no processes — show actionable empty state
   if (summaryParts.length === 0 && activeRuns.length === 0) {
-    return emptyToday(greeting);
+    return emptyToday(greeting, context.recommended);
   }
 
   const summaryText = `${greeting}. ${summaryParts.join(", ")}.`;
@@ -130,6 +131,29 @@ export function composeToday(context: CompositionContext): ContentBlock[] {
         ],
       });
     }
+  }
+
+  // Brief 168 AC5: Recommended capability strip — max 1, between reviews and routines
+  const { recommended } = context;
+  if (recommended && recommended.length > 0 && processes.length < 5) {
+    const topRec = recommended[0];
+    blocks.push({
+      type: "record",
+      title: topRec.name,
+      subtitle: topRec.matchReason || topRec.description,
+      status: { label: "Recommended", variant: "vivid" },
+      fields: [
+        { label: "Type", value: topRec.type === "cycle" ? "Continuous" : "On-demand" },
+      ],
+      actions: [
+        {
+          id: `capability.start.${topRec.slug}`,
+          label: "Set this up",
+          style: "primary",
+          payload: { templateId: topRec.slug, templateName: topRec.name },
+        },
+      ],
+    });
   }
 
   // 4. Active processes — StatusBlock summaries

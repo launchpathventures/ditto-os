@@ -18,6 +18,7 @@ import { AgentMailClient } from "agentmail";
 import { UnipileClient } from "unipile-node-sdk";
 import type { PersonaId } from "../db/schema";
 import { db, schema } from "../db";
+import { eq, and, gte, ne, inArray, sql } from "drizzle-orm";
 
 // ============================================================
 // Social Platform Types
@@ -45,7 +46,7 @@ export interface OutboundMessage {
   /** Magic link URL for "Continue in chat" footer (Brief 123) */
   magicLinkUrl?: string;
   /** Sending identity: 'principal', 'agent-of-user', 'ghost' (Brief 124) */
-  sendingIdentity?: "principal" | "agent-of-user" | "ghost";
+  sendingIdentity?: "principal" | "user" | "agent-of-user" | "ghost";
   /**
    * BCC address — used in ghost mode to copy the user (Brief 124).
    * Note: per-message sender display name is NOT supported by AgentMail.
@@ -566,6 +567,142 @@ function parseSearchResults(result: string): InboundMessage[] {
 }
 
 // ============================================================
+// Gmail API Channel Adapter (Brief 152 — Sending Identity Routing)
+// ============================================================
+
+/**
+ * Gmail API adapter — sends email via Google's Gmail API using OAuth tokens.
+ * Used for 'user' sending identity when the user has connected Gmail.
+ *
+ * Token lifecycle: access tokens expire after 1 hour. This adapter checks
+ * expiry before each send and refreshes using the stored refresh token.
+ * Decrypted tokens never leave this adapter's scope.
+ *
+ * Provenance: Brief 152, googleapis SDK (depend level — Apache-2.0)
+ */
+export class GmailApiAdapter implements ChannelAdapter {
+  readonly channel = "email" as const;
+
+  private userId: string;
+  private fromAddress: string;
+  private displayName: string;
+
+  constructor(userId: string, fromAddress: string, displayName: string) {
+    this.userId = userId;
+    this.fromAddress = fromAddress;
+    this.displayName = displayName;
+  }
+
+  async send(message: OutboundMessage): Promise<SendResult> {
+    if (isTestModeSuppressed(message.to)) {
+      return { success: true, messageId: `test-suppressed-gmail-${Date.now()}` };
+    }
+
+    try {
+      // Dynamic import to avoid pulling googleapis into bundles that don't need it
+      const { google } = await import("googleapis");
+      const { getGoogleCredential, updateGoogleTokens } = await import("./integration-availability");
+
+      const tokens = await getGoogleCredential(this.userId);
+      if (!tokens) {
+        return { success: false, error: "Google credential not found" };
+      }
+
+      // Set up OAuth2 client
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+      );
+      oauth2Client.setCredentials({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_type: tokens.token_type,
+        expiry_date: tokens.expiry_date,
+      });
+
+      // Auto-refresh if expired
+      if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
+        const { credentials: refreshed } = await oauth2Client.refreshAccessToken();
+        const updatedTokens = {
+          access_token: refreshed.access_token!,
+          refresh_token: refreshed.refresh_token ?? tokens.refresh_token,
+          token_type: refreshed.token_type ?? "Bearer",
+          expiry_date: refreshed.expiry_date ?? Date.now() + 3600 * 1000,
+          email: tokens.email,
+        };
+        oauth2Client.setCredentials(updatedTokens);
+        // Persist refreshed tokens atomically
+        await updateGoogleTokens(this.userId, updatedTokens);
+      }
+
+      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+      // Build the email body — for 'user' identity, use user's voice (no Ditto branding)
+      const body = message.sendingIdentity === "user" || message.sendingIdentity === "ghost"
+        ? message.body
+        : formatEmailBody(message);
+      const html = textToHtml(body);
+
+      // Construct RFC 2822 email
+      const fromHeader = this.displayName
+        ? `"${this.displayName}" <${this.fromAddress}>`
+        : this.fromAddress;
+
+      const emailLines = [
+        `From: ${fromHeader}`,
+        `To: ${message.to}`,
+        `Subject: ${message.subject ?? ""}`,
+        "MIME-Version: 1.0",
+        'Content-Type: multipart/alternative; boundary="boundary152"',
+        "",
+        "--boundary152",
+        "Content-Type: text/plain; charset=UTF-8",
+        "",
+        body,
+        "--boundary152",
+        "Content-Type: text/html; charset=UTF-8",
+        "",
+        html,
+        "--boundary152--",
+      ];
+
+      if (message.inReplyToMessageId) {
+        emailLines.splice(3, 0, `In-Reply-To: ${message.inReplyToMessageId}`);
+        emailLines.splice(4, 0, `References: ${message.inReplyToMessageId}`);
+      }
+
+      const rawEmail = emailLines.join("\r\n");
+      const encodedEmail = Buffer.from(rawEmail)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const result = await gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw: encodedEmail },
+      });
+
+      return {
+        success: true,
+        messageId: result.data.id ?? undefined,
+        threadId: result.data.threadId ?? undefined,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async search(_query: string): Promise<InboundMessage[]> {
+    // Gmail search is not implemented for send-only adapter
+    return [];
+  }
+}
+
+// ============================================================
 // Unipile Social Channel Adapter (Brief 133)
 // ============================================================
 
@@ -839,7 +976,7 @@ export interface SendAndRecordInput {
   /** Skip auto-generating magic link footer (when body already contains the link) */
   skipMagicLink?: boolean;
   /** Sending identity: 'principal', 'agent-of-user', 'ghost' (Brief 124) */
-  sendingIdentity?: "principal" | "agent-of-user" | "ghost";
+  sendingIdentity?: "principal" | "user" | "agent-of-user" | "ghost";
   /** User email address for BCC in ghost mode (Brief 124) */
   userEmail?: string;
   /** Additional metadata to store on the interaction record (never exposed in email headers/body — Brief 126 AC18) */
@@ -855,17 +992,23 @@ export interface SendAndRecordInput {
   htmlBlocks?: string[];
   /** Step run ID for invocation guard (Insight-180, Brief 151) */
   stepRunId?: string;
+  /** Injected channel adapter — when non-null, used instead of default AgentMail (Brief 152) */
+  adapter?: ChannelAdapter | null;
 }
 
 export interface SendAndRecordResult {
   success: boolean;
   interactionId?: string;
   messageId?: string;
+  threadId?: string;
   error?: string;
 }
 
 /** Max outreach_sent interactions to same person in 24 hours (Brief 151 AC2) */
 const MAX_OUTREACH_PER_PERSON_PER_DAY = 3;
+
+/** Default cross-cycle contact cooldown in days (Brief 163 MP-8.3) */
+const CROSS_CYCLE_COOLDOWN_DAYS = 7;
 
 /**
  * Log outreach suppression to activities table (Brief 151 AC3, Insight-184 corollary 3).
@@ -927,6 +1070,66 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     console.log(`[channel] DAILY CAP: ${recentToday.length} outreach to ${input.personId} in 24h (max ${MAX_OUTREACH_PER_PERSON_PER_DAY})`);
     await logOutreachSuppressed(input.personId, input.processRunId, "daily_person_cap_exceeded");
     return { success: false, error: "daily_person_cap_exceeded" };
+  }
+
+  // Brief 163 MP-8.3: Cross-cycle contact dedup — check if person was contacted
+  // by a DIFFERENT cycle within the cooldown window. Prevents multi-cycle spam.
+  // Wrapped in try-catch: non-cycle runs (no processRuns table access) skip gracefully.
+  if (input.processRunId) {
+    try {
+      // Find the current run's cycle type and config
+      const [currentRun] = await db
+        .select({ cycleType: schema.processRuns.cycleType, cycleConfig: schema.processRuns.cycleConfig })
+        .from(schema.processRuns)
+        .where(eq(schema.processRuns.id, input.processRunId))
+        .limit(1);
+
+      if (currentRun?.cycleType) {
+        // Cooldown is configurable per-cycle via cycleConfig.crossCycleCooldownDays
+        const config = (currentRun.cycleConfig as Record<string, unknown>) || {};
+        const cooldownDays = typeof config.crossCycleCooldownDays === "number"
+          ? config.crossCycleCooldownDays
+          : CROSS_CYCLE_COOLDOWN_DAYS;
+        const cooldownSince = new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000);
+        // Find OTHER cycle runs created within the cooldown window (bounded for performance)
+        const otherCycleRuns = await db
+          .select({ id: schema.processRuns.id })
+          .from(schema.processRuns)
+          .where(
+            and(
+              sql`${schema.processRuns.cycleType} IS NOT NULL`,
+              ne(schema.processRuns.id, input.processRunId),
+              gte(schema.processRuns.createdAt, cooldownSince),
+            ),
+          );
+
+        const otherRunIds = otherCycleRuns.map((r) => r.id);
+
+        if (otherRunIds.length > 0) {
+          // Check for outreach to this person from other cycles within cooldown
+          const crossCycleOutreach = await db
+            .select({ id: schema.interactions.id, processRunId: schema.interactions.processRunId })
+            .from(schema.interactions)
+            .where(
+              and(
+                eq(schema.interactions.personId, input.personId),
+                eq(schema.interactions.type, "outreach_sent"),
+                gte(schema.interactions.createdAt, cooldownSince),
+                inArray(schema.interactions.processRunId, otherRunIds),
+              ),
+            )
+            .limit(1);
+
+          if (crossCycleOutreach.length > 0) {
+            console.log(`[channel] CROSS-CYCLE DEDUP: person ${input.personId} contacted by another cycle (run ${crossCycleOutreach[0].processRunId}) within ${cooldownDays}d`);
+            await logOutreachSuppressed(input.personId, input.processRunId, "cross_cycle_contact_conflict");
+            return { success: false, error: "cross_cycle_contact_conflict" };
+          }
+        }
+      }
+    } catch {
+      // Non-cycle context or DB not fully available — skip cross-cycle dedup
+    }
   }
 
   // Ghost mode (Brief 124): map "ghost" to "connecting" for interaction records
@@ -997,6 +1200,7 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
       success: sendResult.success,
       interactionId: interaction.id,
       messageId: sendResult.messageId,
+      threadId: sendResult.threadId,
       ...(sendResult.error ? { error: sendResult.error } : {}),
     };
   }
@@ -1015,7 +1219,8 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     }
   }
 
-  const adapter = createAgentMailAdapterForPersona(input.personaId);
+  // Brief 152: use injected adapter (from channel resolver) when provided
+  const adapter = input.adapter ?? createAgentMailAdapterForPersona(input.personaId);
   if (!adapter) {
     console.warn("[channel] AgentMail not configured — recording interaction without sending to", input.to);
     const interaction = await recordInteraction({
@@ -1080,6 +1285,7 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     success: sendResult.success,
     interactionId: interaction.id,
     messageId: sendResult.messageId,
+    threadId: sendResult.threadId,
     ...(sendResult.error ? { error: sendResult.error } : {}),
   };
 }

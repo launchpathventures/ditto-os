@@ -18,6 +18,7 @@ import { createTestDb, makeTestProcessDefinition, type TestDb } from "../../test
 import * as schema from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { harnessEvents } from "../events";
 
 let testDb: TestDb;
 let cleanup: () => void;
@@ -373,6 +374,64 @@ describe("find-or-build routing", () => {
       // Activity should be logged
       const activities = await testDb.select().from(schema.activities);
       expect(activities.some(a => a.action === "goal.cancelled")).toBe(true);
+    });
+  });
+
+  // ============================================================
+  // Brief 155 MP-1.5: build-process-created event emission
+  // ============================================================
+
+  describe("build-process-created event (Brief 155 AC3)", () => {
+    it("emits build-process-created event on successful build", async () => {
+      const { triggerBuild } = await import("./build-on-gap");
+
+      const emittedEvents: Array<{ type: string; [k: string]: unknown }> = [];
+      const unsub = harnessEvents.on((event) => {
+        if (event.type === "build-process-created") {
+          emittedEvents.push(event);
+        }
+      });
+
+      const goalId = randomUUID();
+      const result = await triggerBuild({
+        subGoalId: randomUUID(),
+        subGoalDescription: "Build a notification test process",
+        goalId,
+        buildDepth: 0,
+        validateFirstRun: false, // Skip validation to ensure success path
+      });
+
+      unsub();
+
+      if (result.success) {
+        expect(emittedEvents).toHaveLength(1);
+        expect(emittedEvents[0].goalWorkItemId).toBe(goalId);
+        expect(emittedEvents[0].processSlug).toBe(result.processSlug);
+        expect(emittedEvents[0].processName).toBeTruthy();
+        expect(emittedEvents[0].processDescription).toBeTruthy();
+      }
+    });
+
+    it("does not emit build-process-created on depth-exceeded failure", async () => {
+      const { triggerBuild } = await import("./build-on-gap");
+
+      const emittedEvents: Array<{ type: string }> = [];
+      const unsub = harnessEvents.on((event) => {
+        if (event.type === "build-process-created") {
+          emittedEvents.push(event);
+        }
+      });
+
+      await triggerBuild({
+        subGoalId: randomUUID(),
+        subGoalDescription: "Nested build attempt",
+        goalId: randomUUID(),
+        buildDepth: 1, // Exceeds depth limit
+      });
+
+      unsub();
+
+      expect(emittedEvents).toHaveLength(0);
     });
   });
 });

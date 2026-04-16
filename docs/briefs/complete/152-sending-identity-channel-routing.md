@@ -1,7 +1,7 @@
 # Brief 152: Sending Identity Channel Routing
 
 **Date:** 2026-04-14
-**Status:** draft
+**Status:** complete
 **Depends on:** Brief 116 (operating cycle handlers — identity-router, outbound-quality-gate), Brief 124 (ghost mode), Brief 151 (outreach dedup + staged dispatch)
 **Unlocks:** End-to-end outreach cycles with correct sending identity, Google Workspace OAuth integration, workspace graduation credential handoff
 

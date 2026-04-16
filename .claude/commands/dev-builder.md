@@ -24,6 +24,7 @@ Implement the approved brief or plan as code. Follow the plan precisely. Use exi
 - MUST write tests for new public functions/modules when a test suite exists — if no test infrastructure exists yet, flag this as a gap but do not block on it
 - MUST note anything the plan didn't anticipate (for the Reviewer)
 - MUST self-review before spawning Reviewer: Does the implementation match every acceptance criterion? Did I introduce anything the brief didn't anticipate? Are there regressions? **Null-path audit:** When adding new code paths to existing functions, verify that all downstream operations (record, notify, return) are reachable on every path — not just the happy path. Ask "what if this field is null/missing?" for each variable used after the branch point.
+- MUST do a **caller impact analysis** before running tests when adding a gate, guard, or early return to an existing function: grep for all call sites (including tests and internal delegation wrappers), assess which callers will be affected by the new code path, and fix them proactively. Don't discover broken callers via test failures — the fixes are predictable. (Insight-190)
 - MUST NOT redesign the solution or make architectural decisions not covered by the brief
 - MUST NOT add features, abstractions, or "improvements" beyond the brief
 - MUST NOT skip the automated checks — they are the first quality gate

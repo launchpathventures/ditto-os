@@ -24,6 +24,7 @@ import {
   acceptUpgradeSuggestion,
   rejectUpgradeSuggestion,
   overrideDowngrade,
+  getCorrectionEvidence,
 } from "../../engine/trust";
 import { trustTierLabel } from "../format";
 
@@ -129,7 +130,9 @@ export const trustCommand = defineCommand({
     // Show pending upgrade suggestion if any
     const suggestion = await getPendingSuggestion(proc.id);
     if (suggestion) {
-      console.log(formatUpgradeSuggestion(proc.slug, suggestion, state));
+      // Brief 159 MP-4.4: Include correction rate evidence in upgrade suggestion
+      const correctionEvidence = await getCorrectionEvidence(proc.id);
+      console.log(formatUpgradeSuggestion(proc.slug, suggestion, state, correctionEvidence));
     }
 
     // Show recent downgrade if any

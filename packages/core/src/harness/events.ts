@@ -16,7 +16,15 @@ export type HarnessEvent =
   | { type: "retry"; processRunId: string; stepId: string; attempt: number; maxRetries: number }
   | { type: "step-skipped"; processRunId: string; stepId: string; reason: string }
   | { type: "run-complete"; processRunId: string; processName: string; stepsExecuted: number }
-  | { type: "run-failed"; processRunId: string; processName: string; error: string };
+  | { type: "run-failed"; processRunId: string; processName: string; error: string }
+  // Orchestrator goal decomposition progress (Brief 155 MP-1.4)
+  | { type: "orchestrator-decomposition-start"; goalWorkItemId: string; goalContent: string }
+  | { type: "orchestrator-subtask-identified"; goalWorkItemId: string; subtaskId: string; subtaskDescription: string; index: number; total: number }
+  | { type: "orchestrator-subtask-dispatched"; goalWorkItemId: string; subtaskId: string; routingPath: string; processSlug: string | null }
+  | { type: "orchestrator-decomposition-complete"; goalWorkItemId: string; totalTasks: number; reasoning: string }
+  | { type: "orchestrator-decomposition-failed"; goalWorkItemId: string; reason: string }
+  // Build notification (Brief 155 MP-1.5)
+  | { type: "build-process-created"; goalWorkItemId: string; processSlug: string; processName: string; processDescription: string };
 
 type EventListener = (event: HarnessEvent) => void;
 

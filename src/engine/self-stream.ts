@@ -140,6 +140,8 @@ export async function* selfConverseStream(
   let consultationsExecuted = 0;
   let totalCostCents = 0;
   let fullResponse = "";
+  /** Tool names invoked this turn — recorded on session turn for signal detection (Brief 167) */
+  const invokedToolNames: string[] = [];
 
   // Brief 068: Track tool activity for confidence assessment
   let toolsWereCalled = false;
@@ -202,6 +204,9 @@ export async function* selfConverseStream(
 
     for (const toolUse of turnToolUses) {
       const input = toolUse.input as Record<string, unknown>;
+
+      // Track tool names for session turn recording (Brief 167 — signal detection)
+      invokedToolNames.push(toolUse.name);
 
       if (toolUse.name === "consult_role") {
         consultationsExecuted++;
@@ -417,12 +422,13 @@ export async function* selfConverseStream(
     };
   }
 
-  // 6. Record assistant turn
+  // 6. Record assistant turn (with tool names for capability signal detection — Brief 167)
   await appendSessionTurn(context.sessionId, {
     role: "assistant",
     content: fullResponse,
     timestamp: Date.now(),
     surface: "web",
+    toolNames: invokedToolNames.length > 0 ? invokedToolNames : undefined,
   });
 
   yield {
@@ -983,7 +989,8 @@ export async function toolResultToContentBlocks(
 
         const progressBlock: ProgressBlock = {
           type: "progress",
-          processRunId: parsed.runId,
+          entityType: "process_run",
+          entityId: parsed.runId,
           currentStep: parsed.steps[0] ?? "Starting",
           totalSteps: parsed.steps.length,
           completedSteps: 0,

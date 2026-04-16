@@ -112,6 +112,12 @@ These three, combined with ADR-008's seven, form the **meta-process layer** — 
 
 **Router vs process-analyst (ADR-008):** The process-analyst helps users *create and formalise* new processes via conversation (Phase 11). The router *dispatches work items to existing* processes (Phase 4). They are complementary — the router assumes processes already exist; the process-analyst creates them. Over time, the router's inability to find a matching process may trigger the process-analyst to suggest creating one.
 
+**Router implementation (Brief 074, 2026-04-01):** `matchTaskToProcess()` in `router.ts` combines two mechanisms: (1) slug exact match (confidence 1.0) and (2) keyword matching with **word-boundary regex** (not substring `.includes()` — Brief 074 Reviewer F074-3 fix). Confidence equals token overlap ratio. Threshold ≥ 0.6 auto-routes; below threshold escalates to `waiting_human`. `matchTaskToProcessFromList()` variant used by orchestrator to constrain candidate processes.
+
+**Goal auto-wiring lifecycle (Brief 074, 2026-04-01):** `goalHeartbeatLoop(goalId, trustOverrides?)` continuously orchestrates: `decomposeGoal` → `routeDecomposedTasks` → `fullHeartbeat` per task → `checkAndResumeGoal` after approve_review on child runs. Dependency ordering enforced. Duplicate guard prevents re-routing an already-routed task. All routing decisions logged to the activity log. Trust overrides stored on child run inputs — trust-gate reads session overrides and broadcast forcing today; goal-level trust override enforcement at the gate remains a follow-up design (stored and logged, not yet consulted by the gate handler).
+
+**pause_goal / resume_goal (Brief 074, 2026-04-01):** Self tools that control the goal heartbeat lifecycle. `pauseGoal(goalId)` stops the loop; `resumeGoal(goalId)` restarts from the current dependency-ordered position. Goal status tracks `completed | paused | failed | pending`.
+
 Provenance: Orchestrator-worker pattern — Anthropic multi-agent research system (`anthropic.com/engineering/multi-agent-research-system`). Intake classification — Original to Ditto. Router as separate concern — Vercel AI SDK tool routing pattern (`vercel/ai`). System agents through same harness — Original to Ditto.
 
 ### 4. Define the human step executor

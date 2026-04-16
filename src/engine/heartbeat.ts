@@ -101,6 +101,110 @@ const sharedPipeline = (() => {
 })();
 
 // ============================================================
+// Escalation Message Templates (Brief 162, MP-7.1)
+// ============================================================
+
+/**
+ * Failure type taxonomy for escalation messages.
+ * Each type gets a human-readable template that reads like a teammate asking for help.
+ */
+export type EscalationFailureType =
+  | "confidence_low"
+  | "external_error"
+  | "timeout"
+  | "dependency_blocked"
+  | "max_retries"
+  | "unknown";
+
+/**
+ * Classify a step failure into a typed escalation category.
+ * Uses error message patterns and step metadata to determine the type.
+ */
+export function classifyFailureType(
+  error: string,
+  step: { executor?: string; retry_on_failure?: unknown; depends_on?: string[] },
+): EscalationFailureType {
+  const lower = error.toLowerCase();
+
+  if (lower.includes("confidence") || lower.includes("uncertain") || lower.includes("low confidence")) {
+    return "confidence_low";
+  }
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline exceeded")) {
+    return "timeout";
+  }
+  if (lower.includes("blocked") || lower.includes("dependency") || lower.includes("waiting on") ||
+      (step.depends_on && step.depends_on.length > 0 && lower.includes("not ready"))) {
+    return "dependency_blocked";
+  }
+  if (lower.includes("max retries") || lower.includes("exhausted retries") || lower.includes("retry limit")) {
+    return "max_retries";
+  }
+  if (lower.includes("api") || lower.includes("network") || lower.includes("connection") ||
+      lower.includes("status code") || lower.includes("econnrefused") || lower.includes("fetch failed") ||
+      step.executor === "integration") {
+    return "external_error";
+  }
+
+  return "unknown";
+}
+
+/**
+ * Format a human-readable escalation message from a step failure.
+ * Reads like a teammate: "I'm stuck on X because Y. How would you handle it?"
+ *
+ * Returns both the human-readable message and the classified failure type.
+ */
+export function formatEscalationMessage(
+  stepName: string,
+  rawError: string,
+  step: { executor?: string; retry_on_failure?: unknown; depends_on?: string[] },
+  context?: { processName?: string; retryCount?: number; maxRetries?: number },
+): { message: string; failureType: EscalationFailureType } {
+  const failureType = classifyFailureType(rawError, step);
+
+  const templates: Record<EscalationFailureType, string> = {
+    confidence_low:
+      `I'm not confident about "${stepName}" — my output didn't meet the quality bar. ` +
+      `Could you review what I produced and let me know how to adjust?`,
+
+    external_error:
+      `I'm stuck on "${stepName}" — an external service returned an error: ${truncateError(rawError)}. ` +
+      `Is this a temporary issue, or should I try a different approach?`,
+
+    timeout:
+      `"${stepName}" took too long and timed out. ` +
+      `Should I try again, or is there a simpler way to get this done?`,
+
+    dependency_blocked:
+      `I can't proceed with "${stepName}" because it depends on work that isn't ready yet. ` +
+      `Can you help unblock the upstream step?`,
+
+    max_retries:
+      `I've tried "${stepName}" ${context?.maxRetries ?? "multiple"} times and keep hitting the same issue: ${truncateError(rawError)}. ` +
+      `How would you handle this?`,
+
+    unknown:
+      `I ran into a problem with "${stepName}": ${truncateError(rawError)}. ` +
+      `How would you like me to proceed?`,
+  };
+
+  let message = templates[failureType];
+
+  // Add process context if available
+  if (context?.processName) {
+    message = `[${context.processName}] ${message}`;
+  }
+
+  return { message, failureType };
+}
+
+/** Truncate raw error to a readable length */
+function truncateError(error: string, maxLen = 200): string {
+  if (error.length <= maxLen) return error;
+  return error.slice(0, maxLen) + "…";
+}
+
+// ============================================================
 // Dependency resolution
 // ============================================================
 
@@ -332,6 +436,8 @@ interface StepPipelineResult {
   stepName: string;
   message: string;
   routingDecision?: import("./harness-handlers/routing").RoutingDecision | null;
+  /** Classified failure type for escalation templating (Brief 162, MP-7.1) */
+  failureType?: EscalationFailureType;
 }
 
 async function executeSingleStep(
@@ -489,11 +595,19 @@ async function executeSingleStep(
           })
           .where(eq(schema.stepRuns.id, stepRunRecord.id));
 
+        // MP-7.1: Human-readable escalation for sub-process failures
+        const subEscalation = formatEscalationMessage(
+          step.name,
+          childResult.message,
+          step,
+          { processName: definition.name },
+        );
         return {
           status: "failed",
           stepId: step.id,
           stepName: step.name,
-          message: `Sub-process "${targetSlug}" failed: ${childResult.message}`,
+          message: subEscalation.message,
+          failureType: subEscalation.failureType,
         };
       }
 
@@ -546,11 +660,19 @@ async function executeSingleStep(
         })
         .where(eq(schema.stepRuns.id, stepRunRecord.id));
 
+      // MP-7.1: Human-readable escalation for sub-process errors
+      const subErrEscalation = formatEscalationMessage(
+        step.name,
+        message,
+        step,
+        { processName: definition.name },
+      );
       return {
         status: "failed",
         stepId: step.id,
         stepName: step.name,
-        message: `Sub-process "${targetSlug}" error: ${message}`,
+        message: subErrEscalation.message,
+        failureType: subErrEscalation.failureType,
       };
     }
   }
@@ -654,11 +776,20 @@ async function executeSingleStep(
       error: result.stepError.message,
     });
 
+    // MP-7.1: Human-readable escalation message
+    const escalation = formatEscalationMessage(
+      step.name,
+      result.stepError.message,
+      step,
+      { processName: definition.name },
+    );
+
     return {
       status: "failed",
       stepId: step.id,
       stepName: step.name,
-      message: `Step "${step.name}" failed: ${result.stepError.message}`,
+      message: escalation.message,
+      failureType: escalation.failureType,
     };
   }
 
@@ -1263,15 +1394,23 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
           .set({ status: "waiting_review" })
           .where(eq(schema.processRuns.id, processRunId));
 
+        // MP-7.1: Human-readable escalation for max retries
+        const retryEscalation = formatEscalationMessage(
+          nextWork.step.name,
+          result.message,
+          nextWork.step,
+          { processName: definition.name, retryCount: retryCount, maxRetries: retryConfig.max_retries },
+        );
+
         harnessEvents.emit({
           type: "gate-pause",
           processRunId,
           stepId: nextWork.step.id,
           reason: `max retries (${retryConfig.max_retries}) exceeded`,
-          output: result.message,
+          output: retryEscalation.message,
         });
 
-        return { processRunId, stepsExecuted: 1, status: "waiting_review", message: `Step "${nextWork.step.name}" exhausted retries — paused for review` };
+        return { processRunId, stepsExecuted: 1, status: "waiting_review", message: retryEscalation.message };
       }
 
       await db.update(schema.processRuns)
@@ -1457,6 +1596,31 @@ export async function resumeHumanStep(
         .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
         .where(eq(schema.workItems.id, wi.id));
       break;
+    }
+  }
+
+  // MP-7.2: Capture escalation guidance as memory if present
+  // Human input with a guidance/comment field when resolving an escalation
+  const guidanceText = (humanInput.guidance ?? humanInput.comment ?? humanInput.instructions) as string | undefined;
+  if (guidanceText && typeof guidanceText === "string" && guidanceText.trim().length > 0) {
+    try {
+      const { createGuidanceMemory } = await import("./harness-handlers/feedback-recorder");
+      // Derive failure pattern from the suspend payload's error context
+      const escalationError = (suspendPayload?.error ?? suspendPayload?.reason ?? "") as string;
+      const stepMeta = { executor: suspendPayload?.executor as string | undefined };
+      const failureType = classifyFailureType(escalationError, stepMeta);
+      const failurePattern = `${failureType}:${suspendedStepId}`;
+
+      await createGuidanceMemory(
+        run.processId,
+        guidanceText,
+        failurePattern,
+        suspendedStepId,
+        escalationError || undefined,
+      );
+    } catch (err) {
+      // Non-blocking — guidance capture failing shouldn't block resume
+      console.error("[heartbeat] Guidance memory capture failed (non-blocking):", err instanceof Error ? err.message : String(err));
     }
   }
 

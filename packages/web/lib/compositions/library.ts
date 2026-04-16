@@ -25,12 +25,15 @@ const CATEGORY_ORDER: Array<{ key: ProcessCapability["category"]; label: string;
 /**
  * Compose the Library view — process capability catalog.
  * Pure, synchronous. All data comes from CompositionContext.
+ *
+ * Brief 168: "Recommended for your business" section at top when
+ * capability matcher returns matches with relevanceScore > 0.5.
  */
 export function composeLibrary(context: CompositionContext): ContentBlock[] {
-  const { capabilities } = context;
+  const { capabilities, recommended } = context;
 
   if (!capabilities || capabilities.length === 0) {
-    return emptyLibrary();
+    return emptyLibrary(context);
   }
 
   const blocks: ContentBlock[] = [];
@@ -48,13 +51,52 @@ export function composeLibrary(context: CompositionContext): ContentBlock[] {
     ],
   });
 
+  // Brief 168 AC3/AC4: Recommended section — hidden when empty or 5+ active processes
+  if (recommended && recommended.length > 0 && active.length < 5) {
+    blocks.push({
+      type: "text",
+      text: "Recommended for your business",
+      variant: "hero-secondary",
+    });
+
+    for (const cap of recommended) {
+      blocks.push({
+        type: "record",
+        title: cap.name,
+        subtitle: cap.matchReason || cap.description,
+        status: { label: "Recommended", variant: "vivid" },
+        fields: [
+          { label: "Type", value: cap.type === "cycle" ? "Continuous" : "On-demand" },
+        ],
+        actions: [
+          {
+            id: `capability.start.${cap.slug}`,
+            label: "Start this",
+            style: "primary",
+            payload: { templateId: cap.slug, templateName: cap.name },
+          },
+        ],
+      });
+    }
+  }
+
+  // Brief 168: Exclude recommended slugs from category sections to avoid duplicates
+  const recommendedSlugs = new Set(
+    recommended && recommended.length > 0 && active.length < 5
+      ? recommended.map((c) => c.slug)
+      : [],
+  );
+
   // Group by category
   for (const cat of CATEGORY_ORDER) {
     const inCategory = capabilities.filter((c) => c.category === cat.key);
     if (inCategory.length === 0) continue;
 
     const activeInCategory = inCategory.filter((c) => c.active);
-    const availableInCategory = inCategory.filter((c) => !c.active);
+    const availableInCategory = inCategory.filter((c) => !c.active && !recommendedSlugs.has(c.slug));
+
+    // Skip empty categories (all items may have moved to recommended section)
+    if (activeInCategory.length === 0 && availableInCategory.length === 0) continue;
 
     blocks.push({
       type: "text",
