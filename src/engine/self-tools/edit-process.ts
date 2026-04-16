@@ -100,6 +100,20 @@ export async function handleEditProcess(
       };
     }
 
+    // Brief 173: YAML round-trip validation. Same guard as generate_process —
+    // a well-formed definition tree can still produce YAML that fails to
+    // parse back cleanly; catch it before the edit persists.
+    const { roundTripValidate } = await import("./yaml-round-trip");
+    const roundTrip = roundTripValidate(updatedDefinition as unknown as import("../process-loader").ProcessDefinition);
+    if (!roundTrip.ok) {
+      const pathNote = roundTrip.path ? ` (at ${roundTrip.path})` : "";
+      return {
+        toolName: "edit_process",
+        success: false,
+        output: `YAML round-trip check failed${pathNote}: ${roundTrip.reason}`,
+      };
+    }
+
     // 3. Snapshot the current version into process_versions (MP-9.2)
     await db.insert(schema.processVersions).values({
       processId: proc.id,
