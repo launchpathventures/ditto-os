@@ -43,7 +43,12 @@ export default defineConfig({
       : `pnpm --filter @ditto/web dev -p ${port}`,
     url: baseURL,
     reuseExistingServer: !isCI,
-    timeout: 120_000,
+    // CI runs `build && start`; the Next.js build alone takes ~80s locally and
+    // often exceeds the previous 120s window on GitHub-hosted runners. Bumped
+    // to 4 minutes to cover build + start on slower CI hardware.
+    timeout: 240_000,
+    stdout: "pipe",
+    stderr: "pipe",
     env: {
       MOCK_LLM: "true",
       NODE_ENV: "test",
