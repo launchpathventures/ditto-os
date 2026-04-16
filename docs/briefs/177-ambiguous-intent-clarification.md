@@ -1,7 +1,16 @@
 # Brief: Ambiguous Intent Clarification (P0 UX)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
+
+> **Scope adjustment (2026-04-16):** Chose the cognitive-extension pattern
+> over a hard pre-tool short-circuit: the specificity score extends the
+> system prompt with a named clarifying question and explicit instruction
+> to ask before calling mutating tools. Keeps multi-turn flows working
+> naturally (LLM can still proceed when prior context resolves the gap),
+> zero runtime cost beyond the probe. `userPreferences.clarifyBeforeAct`
+> opt-out deferred — operators can silence the hint by turning off the
+> cognitive extension wholesale if needed.
 **Depends on:** Brief 169 (parent)
 **Unlocks:** User messages that are genuinely ambiguous get a clarifying question instead of a silent best-guess tool call.
 

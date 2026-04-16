@@ -70,6 +70,20 @@ const CAPABILITY_AWARENESS_CHAR_LIMIT = 1200;
  */
 const capabilitySignalFired = new Map<string, boolean>();
 
+/** Brief 177: label for system-prompt hint describing what signals were missing. */
+function describeMissingSignals(
+  signals: import("./self-specificity").SpecificitySignals,
+): string {
+  const missing: string[] = [];
+  if (!signals.action) missing.push("action verb");
+  if (!signals.named) missing.push("named person");
+  if (!signals.temporal) missing.push("temporal anchor");
+  if (!signals.artefact) missing.push("artefact");
+  if (!signals.outcome) missing.push("measurable outcome");
+  if (!signals.domain) missing.push("domain hook");
+  return missing.join(", ") || "none";
+}
+
 function pruneCapabilitySignalMap(): void {
   if (capabilitySignalFired.size > 50) {
     // Delete oldest entries (Map preserves insertion order)
@@ -680,6 +694,22 @@ You can offer email-to-chat escalation. When the user's request is complex and w
     }
     threadBlock += "\n</email_thread_context>";
     context.systemPrompt += threadBlock;
+  }
+
+  // Brief 177: Specificity probe. When the user's message is vague and
+  // there's no prior context to fill in gaps, cognitive-extend the system
+  // prompt to ask a clarifying question BEFORE calling any mutating tool.
+  // No LLM cost, deterministic, bypasses if the user has prior session turns
+  // (the ambiguity is more likely resolved by that context).
+  const { scoreSpecificity } = await import("./self-specificity");
+  const specificity = scoreSpecificity(message);
+  if (specificity.score < 2 && specificity.clarifyingQuestion) {
+    context.systemPrompt += `\n\n<clarify_before_act>
+The user's latest message scored low on specificity signals (${specificity.score}/6 — missing: ${describeMissingSignals(specificity.signals)}).
+Before calling any mutating tool (generate_process(save=true), start_pipeline, create_work_item, orchestrate_work, edit_process, activate_cycle, adapt_process), consider asking this single clarifying question instead:
+"${specificity.clarifyingQuestion}"
+If prior conversation context already resolves the ambiguity, proceed as normal. If not, ask the question first — it's cheaper than a wrong-direction process.
+</clarify_before_act>`;
   }
 
   // 2. Load session turns as conversation history
