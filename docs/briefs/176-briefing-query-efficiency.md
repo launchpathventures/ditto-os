@@ -1,7 +1,12 @@
 # Brief: Briefing Query Efficiency (P0 performance)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
+
+> **Scope adjustment (2026-04-16):** Landed the high-value fix: `assembleFocus`
+> O(N)→O(1) process-name batching. `assembleSuggestions` trust-state batch +
+> correction-rate parallelisation deferred (additional work behind a
+> separate brief) — the hot path is closed.
 **Depends on:** Brief 169 (parent), Brief 158 (briefing quality)
 **Unlocks:** Briefing assembly stays under 500ms at 100+ concurrent processes.
 
