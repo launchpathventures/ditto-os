@@ -497,6 +497,8 @@ export const harnessDecisions = sqliteTable("harness_decisions", {
     .default({}),
   reviewCostCents: integer("review_cost_cents").notNull().default(0),
   memoriesInjected: integer("memories_injected").notNull().default(0),
+  /** How many memories were eligible but dropped due to token budget (Brief 175). */
+  memoriesDropped: integer("memories_dropped").notNull().default(0),
   samplingHash: text("sampling_hash"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()

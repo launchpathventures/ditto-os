@@ -1,0 +1,1 @@
+ALTER TABLE `harness_decisions` ADD `memories_dropped` integer DEFAULT 0 NOT NULL;

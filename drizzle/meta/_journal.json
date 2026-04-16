@@ -29,6 +29,13 @@
       "when": 1776381485052,
       "tag": "0004_yummy_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776381807411,
+      "tag": "0005_silent_magik",
+      "breakpoints": true
     }
   ]
 }

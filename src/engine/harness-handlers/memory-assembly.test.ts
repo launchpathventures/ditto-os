@@ -261,4 +261,42 @@ describe("memory-assembly handler", () => {
       }
     });
   });
+
+  describe("memoriesDropped (Brief 175)", () => {
+    it("is zero when no memories exist", async () => {
+      const context = makeContext();
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memoriesDropped).toBe(0);
+    });
+
+    it("counts agent memories dropped when budget is tight", async () => {
+      // Agent role 'pm' with 20 long memories, budget tight
+      const context = makeContext({ agentRole: "pm" });
+      const LONG_CONTENT = "x".repeat(400); // 400 chars per memory
+      for (let i = 0; i < 20; i++) {
+        await testDb.insert(schema.memories).values({
+          scopeType: "agent",
+          scopeId: "pm",
+          type: "correction",
+          content: `Memory ${i}: ${LONG_CONTENT}`,
+          source: "feedback",
+          confidence: 0.8,
+          reinforcementCount: 1,
+          active: true,
+        });
+      }
+
+      // Use a tight budget (500 tokens ≈ 2000 chars)
+      (context.stepDefinition.config as Record<string, unknown> | undefined) = {
+        memory_token_budget: 500,
+      };
+
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memoriesInjected).toBeLessThan(20);
+      expect(result.memoriesDropped).toBeGreaterThan(0);
+      expect(result.memoriesInjected + result.memoriesDropped).toBeGreaterThanOrEqual(
+        Math.min(20, 20), // all 20 agent memories accounted for
+      );
+    });
+  });
 });

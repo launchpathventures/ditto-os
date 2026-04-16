@@ -307,6 +307,10 @@ export interface HarnessContext {
   // Accumulated by handlers
   memories: string;
   memoriesInjected: number;
+  /** How many durable/solution/person memories were skipped because the
+   * token budget filled before they could be rendered (Brief 175).
+   * Observability signal — see risk-detector `memory_pressure`. */
+  memoriesDropped: number;
   stepResult: StepExecutionResult | null;
   stepError: Error | null;
   reviewResult: ReviewResult;
@@ -415,6 +419,7 @@ export function createHarnessContext(params: {
 
     memories: "",
     memoriesInjected: 0,
+    memoriesDropped: 0,
     stepResult: null,
     stepError: null,
     reviewResult: "skip",

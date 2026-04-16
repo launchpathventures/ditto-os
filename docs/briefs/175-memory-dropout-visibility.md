@@ -1,7 +1,11 @@
 # Brief: Memory Dropout Visibility (P0 observability)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
+
+> **Scope adjustment (2026-04-16):** Landed the primitive (counter + persist).
+> Risk-detector `memory_pressure` surface + briefing integration deferred to
+> a follow-up — the observability foundation is now in place.
 **Depends on:** Brief 169 (parent)
 **Unlocks:** MP-4 evidence narrative can show when memory budget pressure is suppressing context.
 

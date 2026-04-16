@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "36afc1f2-ae7c-44e8-ba06-c6b8e8dbb5a1",
-  "prevId": "395c33ff-ebbc-46ea-b605-914cf36a27b9",
+  "id": "2cb29521-e916-4616-b69b-57ec358d35a9",
+  "prevId": "36afc1f2-ae7c-44e8-ba06-c6b8e8dbb5a1",
   "tables": {
     "activities": {
       "name": "activities",
@@ -605,6 +605,14 @@
         },
         "memories_injected": {
           "name": "memories_injected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "memories_dropped": {
+          "name": "memories_dropped",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
