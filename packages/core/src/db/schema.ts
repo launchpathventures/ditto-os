@@ -310,6 +310,15 @@ export const processRuns = sqliteTable("process_runs", {
     .$type<Record<string, unknown>>(),
   /** Absolute timeout timestamp for wait_for steps (Brief 121). Indexed for scheduler queries. */
   timeoutAt: integer("timeout_at", { mode: "timestamp_ms" }),
+  /** Stale-escalation ladder tier (Brief 178): 0 = none, 1 = briefing (24h),
+   * 2 = user notified (48h), 3 = admin notified (72h). Reset to 0 when the
+   * run transitions out of waiting_human/waiting_review. */
+  staleEscalationTier: integer("stale_escalation_tier").notNull().default(0),
+  /** Timestamp of the last stale-escalation action (Brief 178). Used to
+   * make the hourly sweep idempotent within a tier. */
+  staleEscalationLastActionAt: integer("stale_escalation_last_action_at", {
+    mode: "timestamp_ms",
+  }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

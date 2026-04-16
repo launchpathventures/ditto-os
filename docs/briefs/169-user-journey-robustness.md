@@ -1,7 +1,7 @@
 # Brief: User Journey Robustness — P0 Gap Closure (parent)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
 **Depends on:** Briefs 145-148, 155-165 (meta-process roadmap MP-1 through MP-10)
 **Unlocks:** Sub-briefs 170-178. After all sub-briefs close, the user journey — from "I need X" through understanding, planning, safe execution, and reliable follow-up — is robust end-to-end.
 

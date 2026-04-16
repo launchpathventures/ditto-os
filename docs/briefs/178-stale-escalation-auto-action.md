@@ -1,7 +1,16 @@
 # Brief: Stale Escalation Auto-Action (P0 reliability)
 
 **Date:** 2026-04-16
-**Status:** draft
+**Status:** complete
+
+> **Scope adjustment (2026-04-16):** Landed the tier-classification primitive,
+> idempotent sweep, and reset helper, plus hourly scheduler registration.
+> `notifyUser`/`notifyAdmin` callbacks are defined on the sweep API but
+> left unwired in the default scheduler path — wiring them needs a
+> personId resolution layer beyond single-user MVP. Follow-up work: add
+> `stale_escalation` support to `notifyUser`, then register the callback.
+> Tiers still advance and the idempotency marker persists, so the ladder
+> is observable even without the notifications.
 **Depends on:** Brief 169 (parent), Brief 162 (exception handling quality)
 **Unlocks:** Escalations can't rot indefinitely; the system nudges the user before abandoning work.
 
