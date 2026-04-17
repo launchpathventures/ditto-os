@@ -12,6 +12,7 @@
 import type { RestInterface } from "../integration-registry";
 import { scrubCredentials } from "./cli";
 import { resolveServiceAuth } from "../credential-vault";
+import { scrubCredentialsFromValue, secretsFromAuthEnv } from "./scrub";
 
 /**
  * Resolve auth credentials for a REST service via credential vault.
@@ -131,8 +132,13 @@ export async function executeRest(
       parsed = scrubbedResponse;
     }
 
+    // Brief 171: belt-and-braces scrub on the structured value in case any
+    // auth value survived JSON parsing unchanged (e.g. echoed as a key).
+    const secrets = secretsFromAuthEnv(authValues);
+    const scrubbedParsed = scrubCredentialsFromValue(parsed, secrets, service);
+
     logs.push(`OK (${responseText.length} bytes)`);
-    return { result: parsed, logs };
+    return { result: scrubbedParsed, logs };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     const scrubbedMsg = scrubCredentials(msg, authValues);

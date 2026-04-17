@@ -29,6 +29,34 @@
       "when": 1776383051655,
       "tag": "0004_persona_selection",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776381485052,
+      "tag": "0005_yummy_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776381807411,
+      "tag": "0006_silent_magik",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776382381088,
+      "tag": "0007_purple_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776389117237,
+      "tag": "0008_even_joystick",
+      "breakpoints": true
     }
   ]
 }

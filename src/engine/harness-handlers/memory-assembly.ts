@@ -201,18 +201,25 @@ export const memoryAssemblyHandler: HarnessHandler = {
     const sections: string[] = [];
     let totalChars = 0;
     let injectedCount = 0;
+    // Brief 175: track dropped so feedback-recorder can persist the count
+    // and risk-detector can surface memory pressure without this info
+    // disappearing silently.
+    let droppedCount = 0;
 
     if (agentMemories.length > 0) {
       const header = "## Agent Memory";
-      totalChars += header.length + 1; // +1 for newline
+      totalChars += header.length + 1;
       const lines: string[] = [header];
+      let thisTierInjected = 0;
       for (const mem of agentMemories) {
         const line = renderMemory(mem);
         if (totalChars + line.length + 1 > charBudget) break;
         lines.push(line);
         totalChars += line.length + 1;
         injectedCount++;
+        thisTierInjected++;
       }
+      droppedCount += agentMemories.length - thisTierInjected;
       if (lines.length > 1) {
         sections.push(lines.join("\n"));
       }
@@ -223,13 +230,16 @@ export const memoryAssemblyHandler: HarnessHandler = {
       const header = `## Process Memory (${processName})`;
       totalChars += header.length + 1;
       const lines: string[] = [header];
+      let thisTierInjected = 0;
       for (const mem of dedupedProcessMemories) {
         const line = renderMemory(mem);
         if (totalChars + line.length + 1 > charBudget) break;
         lines.push(line);
         totalChars += line.length + 1;
         injectedCount++;
+        thisTierInjected++;
       }
+      droppedCount += dedupedProcessMemories.length - thisTierInjected;
       if (lines.length > 1) {
         sections.push(lines.join("\n"));
       }
@@ -240,13 +250,16 @@ export const memoryAssemblyHandler: HarnessHandler = {
       const header = "## Person Memory";
       totalChars += header.length + 1;
       const lines: string[] = [header];
+      let thisTierInjected = 0;
       for (const mem of dedupedPersonMemories) {
         const line = renderMemory(mem);
         if (totalChars + line.length + 1 > charBudget) break;
         lines.push(line);
         totalChars += line.length + 1;
         injectedCount++;
+        thisTierInjected++;
       }
+      droppedCount += dedupedPersonMemories.length - thisTierInjected;
       if (lines.length > 1) {
         sections.push(lines.join("\n"));
       }
@@ -281,9 +294,9 @@ export const memoryAssemblyHandler: HarnessHandler = {
       const header = "## Prior Solution Knowledge";
       let solutionChars = header.length + 1;
       const solutionLines: string[] = [header];
+      let thisTierInjected = 0;
 
       for (const sol of solutionMemories) {
-        // Salience: confidence × log(reinforcementCount + 1)
         const meta = (sol.metadata ?? {}) as Record<string, unknown>;
         const category = (meta.category as string) || "unknown";
         const confidence = sol.confidence;
@@ -294,8 +307,10 @@ export const memoryAssemblyHandler: HarnessHandler = {
         solutionLines.push(line);
         solutionChars += line.length + 1;
         injectedCount++;
+        thisTierInjected++;
       }
 
+      droppedCount += solutionMemories.length - thisTierInjected;
       if (solutionLines.length > 1) {
         sections.push(solutionLines.join("\n"));
       }
@@ -358,9 +373,11 @@ export const memoryAssemblyHandler: HarnessHandler = {
     if (sections.length === 0) {
       context.memories = "";
       context.memoriesInjected = 0;
+      context.memoriesDropped = droppedCount;
     } else {
       context.memories = sections.join("\n\n");
       context.memoriesInjected = injectedCount;
+      context.memoriesDropped = droppedCount;
     }
 
     // --- Cognitive mode extension (Brief 114, Brief 124) ---

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "395c33ff-ebbc-46ea-b605-914cf36a27b9",
-  "prevId": "d2f4f712-a176-4d8c-b6ca-5bea85da3bb3",
+  "id": "a3c02b81-057c-4ec6-9ac3-a5c953678d2e",
+  "prevId": "01a9c142-bd69-4850-9c91-2ea118c3acae",
   "tables": {
     "activities": {
       "name": "activities",
@@ -605,6 +605,14 @@
         },
         "memories_injected": {
           "name": "memories_injected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "memories_dropped": {
+          "name": "memories_dropped",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1316,6 +1324,13 @@
           "autoincrement": false,
           "default": 0
         },
+        "definition_override_summary": {
+          "name": "definition_override_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "chains_processed": {
           "name": "chains_processed",
           "type": "integer",
@@ -1361,6 +1376,28 @@
         },
         "timeout_at": {
           "name": "timeout_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stale_escalation_tier": {
+          "name": "stale_escalation_tier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "stale_escalation_last_action_at": {
+          "name": "stale_escalation_last_action_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "waiting_state_since": {
+          "name": "waiting_state_since",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

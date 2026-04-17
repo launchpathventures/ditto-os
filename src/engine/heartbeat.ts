@@ -14,7 +14,7 @@
 
 import { db, schema } from "../db";
 import type { StepExecutor, TrustTier, RunStatus } from "../db/schema";
-import { eq, and, inArray, notInArray } from "drizzle-orm";
+import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
 import { parseDuration } from "@ditto/core";
 import type {
   ProcessDefinition,
@@ -52,6 +52,7 @@ import { deliverOutput } from "./process-io";
 import { processChains } from "./chain-executor";
 import { notifyProcessCompletion } from "./completion-notifier";
 import { checkBudgetExhausted, checkBudgetWarning, formatBudgetForLlm, requestTopUp } from "./budget";
+import { markRunTerminal, markRunWaiting } from "./run-state-transitions";
 import { notifyUser } from "./notify-user";
 
 /**
@@ -735,6 +736,76 @@ async function executeSingleStep(
     stepRunId: stepRunRecord[0].id,
   });
 
+  // Brief 172: Pre-dispatch budget guard. Block outbound actions when the
+  // goal's budget is already exhausted, so nothing ships on an over-budget
+  // goal even though content rules passed. Looks up the goal work item by
+  // matching this run's ID inside `workItems.executionIds` (JSON array).
+  harnessContext.checkBudgetBeforeDispatch = async () => {
+    try {
+      // Filter to goals whose executionIds JSON array contains this run id.
+      // SQLite's json_each + EXISTS would be cleaner, but drizzle's sqlite
+      // dialect lacks a first-class helper; the LIKE on the stringified
+      // JSON is exact because run IDs are quoted UUIDs.
+      const idPattern = `%"${processRunId}"%`;
+      const candidateItems = await db
+        .select({
+          id: schema.workItems.id,
+          executionIds: schema.workItems.executionIds,
+        })
+        .from(schema.workItems)
+        .where(
+          and(
+            eq(schema.workItems.type, "goal"),
+            sql`${schema.workItems.executionIds} LIKE ${idPattern}`,
+          ),
+        );
+      const goalItem = candidateItems.find(
+        (wi) =>
+          Array.isArray(wi.executionIds) &&
+          (wi.executionIds as string[]).includes(processRunId),
+      );
+      if (!goalItem) {
+        // Brief 179 P0-3: fail closed on orphan runs. The only runs
+        // legitimately without a goal work item are operating-cycle runs
+        // (network agent) — those are expected to be goal-less by design.
+        // Every other orphan is an anomaly: a run whose goal was deleted,
+        // WIP state divergence, or a test fixture that didn't wire things
+        // up. Blocking by default is the safety-critical choice (OWASP
+        // "fail closed" principle).
+        const [runMeta] = await db
+          .select({ cycleType: schema.processRuns.cycleType })
+          .from(schema.processRuns)
+          .where(eq(schema.processRuns.id, processRunId))
+          .limit(1);
+        if (runMeta?.cycleType) {
+          return { blocked: false };
+        }
+        console.warn(
+          `[heartbeat] budget pre-dispatch: orphan run ${processRunId} (no goal found, no cycleType) — blocking dispatch by default`,
+        );
+        return {
+          blocked: true,
+          reason:
+            "orphan run — no goal work item found, budget guard rejecting by default",
+        };
+      }
+      const exhausted = await checkBudgetExhausted(goalItem.id);
+      if (exhausted) {
+        return {
+          blocked: true,
+          reason: `budget exhausted for goal (${formatBudgetForLlm(exhausted)})`,
+        };
+      }
+      return { blocked: false };
+    } catch (err) {
+      console.warn(
+        `[heartbeat] budget pre-dispatch check failed for run ${processRunId}:`,
+        err,
+      );
+      return { blocked: false };
+    }
+  };
+
   // Brief 151 AC6: Wire dispatchStagedAction so approved staged outbound
   // actions (crm.send_email etc.) actually dispatch via sendAndRecord
   harnessContext.dispatchStagedAction = async (staged) => {
@@ -1133,10 +1204,10 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   const nextWork = findNextWork(definition, doneStepIds, waitingStepIds);
 
   if (nextWork.type === "complete") {
-    await db
-      .update(schema.processRuns)
-      .set({ status: "approved", completedAt: new Date() })
-      .where(eq(schema.processRuns.id, processRunId));
+    // Brief 179: markRunTerminal nulls definitionOverride (Brief 174),
+    // clears the stale-escalation ladder (Brief 178 P1), and drops the
+    // waitingStateSince anchor (Brief 179 P0).
+    await markRunTerminal(processRunId, "approved", { completedAt: new Date() });
 
     await logActivity("process.run.completed", processRunId, "process_run");
 
@@ -1390,9 +1461,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
           })
           .where(eq(schema.stepRuns.id, lastFailedRun!.id));
 
-        await db.update(schema.processRuns)
-          .set({ status: "waiting_review" })
-          .where(eq(schema.processRuns.id, processRunId));
+        // Brief 179: anchor the escalation clock at waiting-state entry.
+        await markRunWaiting(processRunId, "waiting_review");
 
         // MP-7.1: Human-readable escalation for max retries
         const retryEscalation = formatEscalationMessage(
@@ -1413,9 +1483,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
         return { processRunId, stepsExecuted: 1, status: "waiting_review", message: retryEscalation.message };
       }
 
-      await db.update(schema.processRuns)
-        .set({ status: "failed" })
-        .where(eq(schema.processRuns.id, processRunId));
+      // Brief 179: centralised terminal bookkeeping.
+      await markRunTerminal(processRunId, "failed");
 
       harnessEvents.emit({
         type: "run-failed",
@@ -1438,9 +1507,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
       const isHumanStep = nextWork.step.executor === "human";
       const isWaitingForEvent = nextWork.step.wait_for != null;
       const runStatus = (isHumanStep || isWaitingForEvent) ? "waiting_human" : "waiting_review";
-      await db.update(schema.processRuns)
-        .set({ status: runStatus })
-        .where(eq(schema.processRuns.id, processRunId));
+      // Brief 179: anchor the escalation clock at waiting-state entry.
+      await markRunWaiting(processRunId, runStatus);
       await logActivity(
         (isHumanStep || isWaitingForEvent) ? "process.run.waiting_human" : "process.run.waiting_review",
         processRunId,
@@ -1472,9 +1540,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
 
   if (anyFailed) {
     // Group fails if any step fails
-    await db.update(schema.processRuns)
-      .set({ status: "failed" })
-      .where(eq(schema.processRuns.id, processRunId));
+    // Brief 179: centralised terminal bookkeeping.
+    await markRunTerminal(processRunId, "failed");
     return {
       processRunId,
       stepsExecuted,
@@ -1484,9 +1551,8 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   }
 
   if (anyWaiting) {
-    await db.update(schema.processRuns)
-      .set({ status: "waiting_review", currentStepId: groupId })
-      .where(eq(schema.processRuns.id, processRunId));
+    // Brief 179: anchor the escalation clock at waiting-state entry.
+    await markRunWaiting(processRunId, "waiting_review", { currentStepId: groupId });
     await logActivity("process.run.waiting_review", processRunId, "process_run", {
       parallelGroup: groupId,
       waitingSteps: results.filter((r) => r.status === "waiting_review").map((r) => r.stepId),
@@ -1626,11 +1692,17 @@ export async function resumeHumanStep(
 
   // Clear suspend state and set run back to running.
   // emailThreads live in runMetadata (not suspendState), so clearing suspendState is safe.
+  // Brief 179 P1: clear waitingStateSince + reset stale-escalation ladder on
+  // resume, so if this same run later re-enters waiting we start the clock fresh
+  // and re-fire the ladder from tier 0.
   await db.update(schema.processRuns)
     .set({
       status: "running",
       suspendState: null,
       timeoutAt: null,
+      waitingStateSince: null,
+      staleEscalationTier: 0,
+      staleEscalationLastActionAt: null,
     })
     .where(eq(schema.processRuns.id, processRunId));
 
@@ -2314,10 +2386,8 @@ export async function pauseGoal(goalWorkItemId: string): Promise<void> {
         // Pause any active process runs for this child
         const executionIds = (child.executionIds as string[]) || [];
         for (const runId of executionIds) {
-          await db
-            .update(schema.processRuns)
-            .set({ status: "cancelled" })
-            .where(eq(schema.processRuns.id, runId));
+          // Brief 179: centralised terminal bookkeeping.
+          await markRunTerminal(runId, "cancelled");
         }
       }
     }

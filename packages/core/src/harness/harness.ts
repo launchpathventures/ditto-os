@@ -307,6 +307,10 @@ export interface HarnessContext {
   // Accumulated by handlers
   memories: string;
   memoriesInjected: number;
+  /** How many durable/solution/person memories were skipped because the
+   * token budget filled before they could be rendered (Brief 175).
+   * Observability signal — see risk-detector `memory_pressure`. */
+  memoriesDropped: number;
   stepResult: StepExecutionResult | null;
   stepError: Error | null;
   reviewResult: ReviewResult;
@@ -346,6 +350,17 @@ export interface HarnessContext {
   voiceModelLoader: ((processId: string, userId: string) => Promise<string | null>) | null;
   /** Outbound action recorder callback — injected by product layer */
   recordOutboundAction: ((action: OutboundActionRecord) => Promise<void>) | null;
+  /**
+   * Pre-dispatch budget guard callback — injected by product layer (Brief 172).
+   * Called per approved staged action before `dispatchStagedAction` fires. If
+   * the callback returns `{ blocked: true }`, the action is flagged as a
+   * quality violation, recorded, and NOT dispatched — even though it passed
+   * content rules. This prevents outbound actions (email sends, API calls)
+   * from shipping on a goal whose budget is exhausted.
+   */
+  checkBudgetBeforeDispatch:
+    | ((action: StagedOutboundAction) => Promise<{ blocked: boolean; reason?: string }>)
+    | null;
 
   // Control flow
   shortCircuit: boolean;
@@ -404,6 +419,7 @@ export function createHarnessContext(params: {
 
     memories: "",
     memoriesInjected: 0,
+    memoriesDropped: 0,
     stepResult: null,
     stepError: null,
     reviewResult: "skip",
@@ -430,6 +446,7 @@ export function createHarnessContext(params: {
     audienceClassificationRules: null,
     voiceModelLoader: null,
     recordOutboundAction: null,
+    checkBudgetBeforeDispatch: null,
 
     shortCircuit: false,
   };

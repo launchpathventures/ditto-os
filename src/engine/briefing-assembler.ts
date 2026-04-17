@@ -250,23 +250,6 @@ async function assembleFocus(lastActiveAt: Date | null): Promise<FocusItem[]> {
     .where(eq(schema.processRuns.status, "waiting_review"))
     .orderBy(schema.processRuns.createdAt);
 
-  for (const run of pendingReviews) {
-    // Get process name
-    const [proc] = await db
-      .select({ name: schema.processes.name })
-      .from(schema.processes)
-      .where(eq(schema.processes.id, run.processId))
-      .limit(1);
-
-    items.push({
-      id: run.id,
-      label: proc?.name ?? "Unknown process",
-      reason: "Waiting for your review",
-      priority: "high",
-      type: "review",
-    });
-  }
-
   // 2. Waiting for human input
   const waitingHuman = await db
     .select({
@@ -277,22 +260,6 @@ async function assembleFocus(lastActiveAt: Date | null): Promise<FocusItem[]> {
     .from(schema.processRuns)
     .where(eq(schema.processRuns.status, "waiting_human"))
     .orderBy(schema.processRuns.createdAt);
-
-  for (const run of waitingHuman) {
-    const [proc] = await db
-      .select({ name: schema.processes.name })
-      .from(schema.processes)
-      .where(eq(schema.processes.id, run.processId))
-      .limit(1);
-
-    items.push({
-      id: run.id,
-      label: proc?.name ?? "Unknown process",
-      reason: `Needs your input (step: ${run.currentStepId ?? "unknown"})`,
-      priority: "high",
-      type: "human_input",
-    });
-  }
 
   // 3. Failed runs — exceptions
   const failedRuns = await db
@@ -305,22 +272,6 @@ async function assembleFocus(lastActiveAt: Date | null): Promise<FocusItem[]> {
     .orderBy(desc(schema.processRuns.createdAt))
     .limit(5);
 
-  for (const run of failedRuns) {
-    const [proc] = await db
-      .select({ name: schema.processes.name })
-      .from(schema.processes)
-      .where(eq(schema.processes.id, run.processId))
-      .limit(1);
-
-    items.push({
-      id: run.id,
-      label: proc?.name ?? "Unknown process",
-      reason: "Something went wrong — needs investigation",
-      priority: "high",
-      type: "exception",
-    });
-  }
-
   // 4. Active runs (informational)
   const activeRuns = await db
     .select({
@@ -332,16 +283,61 @@ async function assembleFocus(lastActiveAt: Date | null): Promise<FocusItem[]> {
     .where(eq(schema.processRuns.status, "running"))
     .orderBy(schema.processRuns.createdAt);
 
-  for (const run of activeRuns) {
-    const [proc] = await db
-      .select({ name: schema.processes.name })
+  // Brief 176: batch-fetch all process names in a single query (was O(N)
+  // per dimension). `inArray` with deduped IDs collapses 4× loops of DB
+  // lookups into one round-trip.
+  const allProcessIds = Array.from(
+    new Set([
+      ...pendingReviews.map((r) => r.processId),
+      ...waitingHuman.map((r) => r.processId),
+      ...failedRuns.map((r) => r.processId),
+      ...activeRuns.map((r) => r.processId),
+    ]),
+  );
+  const processNames = new Map<string, string>();
+  if (allProcessIds.length > 0) {
+    const rows = await db
+      .select({ id: schema.processes.id, name: schema.processes.name })
       .from(schema.processes)
-      .where(eq(schema.processes.id, run.processId))
-      .limit(1);
+      .where(inArray(schema.processes.id, allProcessIds));
+    for (const row of rows) processNames.set(row.id, row.name);
+  }
+  const lookupName = (id: string) => processNames.get(id) ?? "Unknown process";
 
+  for (const run of pendingReviews) {
     items.push({
       id: run.id,
-      label: proc?.name ?? "Unknown process",
+      label: lookupName(run.processId),
+      reason: "Waiting for your review",
+      priority: "high",
+      type: "review",
+    });
+  }
+
+  for (const run of waitingHuman) {
+    items.push({
+      id: run.id,
+      label: lookupName(run.processId),
+      reason: `Needs your input (step: ${run.currentStepId ?? "unknown"})`,
+      priority: "high",
+      type: "human_input",
+    });
+  }
+
+  for (const run of failedRuns) {
+    items.push({
+      id: run.id,
+      label: lookupName(run.processId),
+      reason: "Something went wrong — needs investigation",
+      priority: "high",
+      type: "exception",
+    });
+  }
+
+  for (const run of activeRuns) {
+    items.push({
+      id: run.id,
+      label: lookupName(run.processId),
       reason: `Running (${run.currentStepId ?? "in progress"})`,
       priority: "low",
       type: "active",

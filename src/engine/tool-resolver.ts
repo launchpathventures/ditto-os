@@ -21,6 +21,15 @@ import type {
 import { getIntegration } from "./integration-registry";
 import { executeCli } from "./integration-handlers/cli";
 import { executeRest } from "./integration-handlers/rest";
+import {
+  tokenizeCommandTemplate,
+  substituteArgv,
+} from "./integration-handlers/shell-tokenizer";
+import {
+  scrubCredentialsFromValue,
+  secretsFromAuthEnv,
+} from "./integration-handlers/scrub";
+import { resolveServiceAuth } from "./credential-vault";
 // Dynamic import to avoid pulling LanceDB native binary into webpack bundle
 // import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
@@ -1010,6 +1019,8 @@ const builtInTools: Record<string, BuiltInTool> = {
 /**
  * Interpolate template strings with parameter values.
  * Replaces {param} with the value. No eval() — simple string replacement.
+ * Used for REST endpoints/bodies/queries where the target is a URL or JSON
+ * value, not a shell command. For CLI commands see buildCliCommand.
  */
 function interpolate(template: string, params: Record<string, unknown>): string {
   let result = template;
@@ -1022,24 +1033,37 @@ function interpolate(template: string, params: Record<string, unknown>): string 
 }
 
 /**
- * Build a CLI command from a tool's execute config and input parameters.
+ * Build a CLI command's argv from a tool's execute config and input parameters.
+ * Brief 170: returns `{ executable, args }` instead of a shell string. The
+ * caller (executeCli) invokes `execFile` with this argv, so no shell
+ * interpretation occurs — LLM-supplied parameter values cannot inject
+ * arbitrary commands via `;`, `&&`, `$(...)`, backticks, etc.
  */
 function buildCliCommand(
   config: CliExecuteConfig,
   input: Record<string, unknown>,
-): string {
-  let command = interpolate(config.command_template, input);
+): { executable: string; args: string[] } {
+  const baseTokens = tokenizeCommandTemplate(config.command_template);
+  const argv = substituteArgv(baseTokens, input);
+  if (argv.length === 0) {
+    throw new Error(
+      `CLI command_template '${config.command_template}' tokenised to empty argv`,
+    );
+  }
 
   // Append optional arg templates when their parameters are provided
   if (config.args) {
     for (const [paramName, argTemplate] of Object.entries(config.args)) {
-      if (input[paramName] !== undefined && input[paramName] !== null && input[paramName] !== "") {
-        command += " " + interpolate(argTemplate, input);
+      const v = input[paramName];
+      if (v !== undefined && v !== null && v !== "") {
+        const optTokens = tokenizeCommandTemplate(argTemplate);
+        const optArgv = substituteArgv(optTokens, input);
+        argv.push(...optArgv);
       }
     }
   }
 
-  return command;
+  return { executable: argv[0]!, args: argv.slice(1) };
 }
 
 /**
@@ -1090,20 +1114,26 @@ async function executeCliTool(
     return `Error: service '${service}' has no CLI interface`;
   }
 
-  const command = buildCliCommand(config, input);
+  const { executable, args } = buildCliCommand(config, input);
   const result = await executeCli({
     service,
-    command,
+    executable,
+    args,
     cliInterface,
     processId,
   });
 
   // Return the result text for the LLM
+  let text: string;
   if (result.confidence === "low") {
-    return `Error: ${JSON.stringify(result.outputs)}`;
+    text = `Error: ${JSON.stringify(result.outputs)}`;
+  } else {
+    const output = result.outputs.result;
+    text = typeof output === "string" ? output : JSON.stringify(output, null, 2);
   }
-  const output = result.outputs.result;
-  return typeof output === "string" ? output : JSON.stringify(output, null, 2);
+  // Brief 171 safety net: scrub the final string at the dispatch boundary —
+  // defence in depth in case a future handler variant forgets to scrub.
+  return scrubToolOutput(text, service, processId, { envVars: cliInterface.env_vars });
 }
 
 /**
@@ -1145,11 +1175,41 @@ async function executeRestTool(
   });
 
   // Check for error
+  let text: string;
   if (result && typeof result === "object" && "error" in result) {
-    return `Error: ${JSON.stringify(result)}\n${logs.join("\n")}`;
+    text = `Error: ${JSON.stringify(result)}\n${logs.join("\n")}`;
+  } else {
+    text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
   }
+  // Brief 171 safety net: scrub at the dispatch boundary.
+  return scrubToolOutput(text, service, processId, {
+    authType: restInterface.auth,
+  });
+}
 
-  return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+/**
+ * Brief 171 safety net: scrub the final text returned to the LLM against the
+ * known credential values for this (processId, service). Handlers already
+ * scrub their own output; this exists so a future handler variant that
+ * forgets to scrub still cannot leak a credential past this boundary.
+ */
+async function scrubToolOutput(
+  text: string,
+  service: string,
+  processId: string | undefined,
+  authConfig: { envVars?: string[]; authType?: string },
+): Promise<string> {
+  try {
+    const { envVars } = await resolveServiceAuth(processId, service, authConfig);
+    const secrets = secretsFromAuthEnv(envVars);
+    if (secrets.length === 0) return text;
+    return scrubCredentialsFromValue(text, secrets, service);
+  } catch {
+    // Auth resolution failed (e.g. DB not ready in a test). Return unscrubbed
+    // text rather than failing the tool — the handler-level scrub has
+    // already run.
+    return text;
+  }
 }
 
 /**

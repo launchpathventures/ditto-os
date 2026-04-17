@@ -287,6 +287,11 @@ export const processRuns = sqliteTable("process_runs", {
   definitionOverrideVersion: integer("definition_override_version")
     .notNull()
     .default(0),
+  /** One-line summary of the last definition override applied (Brief 174).
+   * Preserved across run completion so the activity feed can still show
+   * "this run was adapted to skip step X" even after the override body is
+   * cleared at terminal status. */
+  definitionOverrideSummary: text("definition_override_summary"),
   // Chain processing flag (Brief 098a) — prevents duplicate chain execution
   chainsProcessed: integer("chains_processed", { mode: "boolean" })
     .notNull()
@@ -305,6 +310,23 @@ export const processRuns = sqliteTable("process_runs", {
     .$type<Record<string, unknown>>(),
   /** Absolute timeout timestamp for wait_for steps (Brief 121). Indexed for scheduler queries. */
   timeoutAt: integer("timeout_at", { mode: "timestamp_ms" }),
+  /** Stale-escalation ladder tier (Brief 178): 0 = none, 1 = briefing (24h),
+   * 2 = user notified (48h), 3 = admin notified (72h). Reset to 0 when the
+   * run transitions out of waiting_human/waiting_review. */
+  staleEscalationTier: integer("stale_escalation_tier").notNull().default(0),
+  /** Timestamp of the last stale-escalation action (Brief 178). Used to
+   * make the hourly sweep idempotent within a tier. */
+  staleEscalationLastActionAt: integer("stale_escalation_last_action_at", {
+    mode: "timestamp_ms",
+  }),
+  /** When the run entered its current waiting state (Brief 179 — fixes
+   * Brief 178 P0 which anchored escalation on `createdAt`). Populated on
+   * any transition to waiting_human/waiting_review; cleared on transition
+   * out. Stale classification reads this, with `createdAt` as fallback for
+   * runs that predate the column. */
+  waitingStateSince: integer("waiting_state_since", {
+    mode: "timestamp_ms",
+  }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -492,6 +514,8 @@ export const harnessDecisions = sqliteTable("harness_decisions", {
     .default({}),
   reviewCostCents: integer("review_cost_cents").notNull().default(0),
   memoriesInjected: integer("memories_injected").notNull().default(0),
+  /** How many memories were eligible but dropped due to token budget (Brief 175). */
+  memoriesDropped: integer("memories_dropped").notNull().default(0),
   samplingHash: text("sampling_hash"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()

@@ -1,0 +1,1 @@
+ALTER TABLE `process_runs` ADD `waiting_state_since` integer;

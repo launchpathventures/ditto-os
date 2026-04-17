@@ -46,6 +46,7 @@ export const feedbackRecorderHandler: HarnessHandler = {
       reviewDetails,
       reviewCostCents: context.reviewCostCents,
       memoriesInjected: context.memoriesInjected,
+      memoriesDropped: context.memoriesDropped,
       samplingHash: context.samplingHash,
     });
 

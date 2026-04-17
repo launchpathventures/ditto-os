@@ -22,6 +22,7 @@ import {
 } from "../process-loader";
 import type { DelegationResult } from "../self-delegation";
 import { findProcessModel } from "../system-agents/process-model-lookup";
+import { roundTripValidate } from "./yaml-round-trip";
 
 interface ProcessStep {
   id: string;
@@ -182,7 +183,20 @@ export async function handleGenerateProcess(
     };
   }
 
-  const yamlStr = YAML.stringify(processDefinition);
+  // Brief 173: YAML round-trip validation. Catches definitions that pass
+  // structural checks but fail to serialise-then-parse cleanly (e.g. NUL
+  // bytes in a prompt, non-JSON-safe values). Better to fail here with a
+  // clear reason than at first heartbeat tick.
+  const roundTrip = roundTripValidate(processDefinition as unknown as ProcessDefinition);
+  if (!roundTrip.ok) {
+    const pathNote = roundTrip.path ? ` (at ${roundTrip.path})` : "";
+    return {
+      toolName: "generate_process",
+      success: false,
+      output: `YAML round-trip check failed${pathNote}: ${roundTrip.reason}`,
+    };
+  }
+  const yamlStr = roundTrip.yaml;
 
   // Build template match info for the response
   const templateInfo = templateMatch

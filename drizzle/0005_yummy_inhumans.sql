@@ -1,0 +1,1 @@
+ALTER TABLE `process_runs` ADD `definition_override_summary` text;

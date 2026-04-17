@@ -100,6 +100,27 @@ export async function start(): Promise<void> {
   });
   activeTasks.set("__wait_for_timeout_checker__", timeoutChecker);
 
+  // Register hourly stale-escalation sweep (Brief 178).
+  // NOTE: user/admin notify callbacks are left unwired for now — the sweep
+  // still advances tiers (persisted via the idempotency marker) so the
+  // ladder is observable and rate-limited. Wiring the callbacks to
+  // `notifyUser` needs a personId resolution layer (single-user MVP
+  // currently assumes founder) — tracked as follow-up in brief 178.
+  const staleSweep = cron.schedule("0 * * * *", async () => {
+    try {
+      const { sweepStaleEscalations } = await import("./stale-escalation");
+      const result = await sweepStaleEscalations();
+      if (result.transitions.length > 0) {
+        console.log(
+          `[scheduler] stale-escalation sweep: ${result.transitions.length} tier transitions across ${result.scannedRuns} waiting runs`,
+        );
+      }
+    } catch (err) {
+      console.error("[scheduler] stale-escalation sweep error:", err);
+    }
+  });
+  activeTasks.set("__stale_escalation_sweep__", staleSweep);
+
   console.log(`Scheduler started: ${activeTasks.size} schedule(s) registered`);
 }
 
