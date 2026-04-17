@@ -207,7 +207,7 @@ Success shape at 12 months: 50+ active nodes, release cadence established on an 
 |------|--------|-------|----------------|
 | Evidence emitter privacy layer | Original to Ditto, informed by k-anonymity + differential privacy literature | pattern | No existing OSS tool matches our allowlist-first + pattern-only-emission shape |
 | Evidence harvest endpoint | ADR-025 `/network/feedback` (existing) | depend | Extends existing auth + per-user API — adds typed evidence channel |
-| Cross-node replay sandbox | Brief 183 from prior draft extended, DGM (`jennyzzt/dgm` DGM_outer.py + self_improve_step.py) | adopt | Archive + probabilistic selection + sandbox validation pattern; now network-scoped |
+| Cross-node replay sandbox | Sub-brief 190 (formerly 183 in prior draft) extended, DGM (`jennyzzt/dgm` DGM_outer.py + self_improve_step.py) | adopt | Archive + probabilistic selection + sandbox validation pattern; now network-scoped |
 | Archive + clade scoring | Huxley-Gödel Machine (metauto-ai/HGM), Darwin Gödel Machine | pattern | Network-scale lineage depth makes CMP actually computable |
 | Self-referential mutation (scanner evolves) | Promptbreeder (arXiv:2309.16797) | pattern | Mutation-prompts-mutate-task-prompts; now runs once centrally with network-scale evidence |
 | Textual gradient propagation | TextGrad (`zou-group/textgrad`) | pattern | Cross-node edit classifications form much stronger gradient signal than single-node feedback |
@@ -233,45 +233,45 @@ This brief is the parent. Each sub-brief below owns its file deltas. The union:
 
 | File | Action |
 |------|--------|
-| `src/engine/network-learning/evidence-receiver.ts` | **Create (182):** Auth'd endpoint that receives typed evidence from nodes, validates against allowlist, runs k-anonymity check, writes to `networkEvidence` |
-| `src/engine/network-learning/aggregator.ts` | **Create (182):** Reputation-weighted aggregation; outlier detection; cohort/segment queries |
-| `src/engine/network-learning/scanner.ts` | **Create (183):** Central scanner. Consumes aggregated evidence, proposes improvements with cross-node evidence trail |
-| `src/engine/network-learning/sandbox.ts` | **Create (183):** Cross-node replay validation. Runs proposed changes against sampled node-contributed replay corpora (anonymized). Five-dim scoring |
-| `src/engine/network-learning/archive.ts` | **Create (183):** Network proposal archive with lineage, clade-metaproductivity scoring, probabilistic selection |
-| `src/engine/network-learning/release-builder.ts` | **Create (184):** Packages approved proposals into signed release manifests. Handles version bumping, dependency resolution, release-note generation |
-| `src/engine/network-learning/release-signer.ts` | **Create (184):** Cryptographic signing over release manifests; key rotation support |
-| `src/engine/network-learning/rollout-controller.ts` | **Create (184):** Staged rollout logic: canary → partial → full gating on cross-node telemetry from prior stage |
-| `src/engine/network-learning/strategy-evolution.ts` | **Create (185):** Meta-scanner — scanner's own prompts + config evolve from network-wide proposal hit rate. Promptbreeder-shaped |
-| `src/engine/network-learning/cognitive-evolution.ts` | **Create (185):** Cross-node cognitive-layer evolution. Uses mode-outcome correlation across all contributing nodes. Allowlist enforcement for frozen paths |
-| `src/engine/network-learning/adversarial-detector.ts` | **Create (186):** Suspected coordinated adversarial evidence surfaced as maintainer alert; node reputation updates |
-| `src/engine/network-learning/meta-health.ts` | **Create (186):** Scanner health metrics (hit rate, sandbox calibration, clade fecundity, adoption-success rate, time-from-evidence-to-release) |
-| `packages/web/app/api/v1/network/evidence/route.ts` | **Create (182):** POST endpoint, authenticated, rate-limited, schema-validated |
-| `packages/web/app/api/v1/network/releases/route.ts` | **Create (184):** GET endpoint — nodes pull manifest list; signed responses |
-| `packages/web/app/api/v1/network/releases/[id]/route.ts` | **Create (184):** GET single signed release; POST rollout-telemetry back |
-| `packages/web/app/admin/improvements/page.tsx` | **Create (186):** Maintainer dashboard — pending proposals, rollout status, health metrics, release approval UI |
-| `processes/network-learning.yaml` | **Create (183):** Network-scale learning meta-process definition — triggers scanner, runs sandbox, packages releases |
+| `src/engine/network-learning/evidence-receiver.ts` | **Create (189):** Auth'd endpoint that receives typed evidence from nodes, validates against allowlist, runs k-anonymity check, writes to `networkEvidence` |
+| `src/engine/network-learning/aggregator.ts` | **Create (189):** Reputation-weighted aggregation; outlier detection; cohort/segment queries |
+| `src/engine/network-learning/scanner.ts` | **Create (190):** Central scanner. Consumes aggregated evidence, proposes improvements with cross-node evidence trail |
+| `src/engine/network-learning/sandbox.ts` | **Create (190):** Cross-node replay validation. Runs proposed changes against sampled node-contributed replay corpora (anonymized). Five-dim scoring |
+| `src/engine/network-learning/archive.ts` | **Create (190):** Network proposal archive with lineage, clade-metaproductivity scoring, probabilistic selection |
+| `src/engine/network-learning/release-builder.ts` | **Create (191):** Packages approved proposals into signed release manifests. Handles version bumping, dependency resolution, release-note generation |
+| `src/engine/network-learning/release-signer.ts` | **Create (191):** Cryptographic signing over release manifests; key rotation support |
+| `src/engine/network-learning/rollout-controller.ts` | **Create (191):** Staged rollout logic: canary → partial → full gating on cross-node telemetry from prior stage |
+| `src/engine/network-learning/strategy-evolution.ts` | **Create (192):** Meta-scanner — scanner's own prompts + config evolve from network-wide proposal hit rate. Promptbreeder-shaped |
+| `src/engine/network-learning/cognitive-evolution.ts` | **Create (192):** Cross-node cognitive-layer evolution. Uses mode-outcome correlation across all contributing nodes. Allowlist enforcement for frozen paths |
+| `src/engine/network-learning/adversarial-detector.ts` | **Create (193):** Suspected coordinated adversarial evidence surfaced as maintainer alert; node reputation updates |
+| `src/engine/network-learning/meta-health.ts` | **Create (193):** Scanner health metrics (hit rate, sandbox calibration, clade fecundity, adoption-success rate, time-from-evidence-to-release) |
+| `packages/web/app/api/v1/network/evidence/route.ts` | **Create (189):** POST endpoint, authenticated, rate-limited, schema-validated |
+| `packages/web/app/api/v1/network/releases/route.ts` | **Create (191):** GET endpoint — nodes pull manifest list; signed responses |
+| `packages/web/app/api/v1/network/releases/[id]/route.ts` | **Create (191):** GET single signed release; POST rollout-telemetry back |
+| `packages/web/app/admin/improvements/page.tsx` | **Create (193):** Maintainer dashboard — pending proposals, rollout status, health metrics, release approval UI |
+| `processes/network-learning.yaml` | **Create (190):** Network-scale learning meta-process definition — triggers scanner, runs sandbox, packages releases |
 | `src/db/schema.ts` | **Modify:** Add `networkEvidence`, `improvementProposals`, `improvementArchive`, `releaseManifests`, `rolloutStages`, `nodeReputation`, `adoptionTelemetry` tables. Journal/migration per Insight-190 |
 
 ### On the node (`DITTO_DEPLOYMENT=workspace`)
 
 | File | Action |
 |------|--------|
-| `src/engine/node-learning/evidence-emitter.ts` | **Create (182):** Extracts allowlisted signals from local harnessDecisions/activities, strips PII, classifies into pattern types, posts to network evidence endpoint |
-| `src/engine/node-learning/emission-consent.ts` | **Create (182):** Per-signal-type consent management; config-driven defaults; opt-out totality |
-| `src/engine/node-learning/update-fetcher.ts` | **Create (184):** Polls network for new releases on channel; verifies signatures; stages pending updates |
-| `src/engine/node-learning/update-adopter.ts` | **Create (184):** Trust-tier-gated adoption; applies updates atomically; rollback command |
-| `src/engine/node-learning/adoption-policy.ts` | **Create (184):** Config-driven policy engine: per-tier, per-release-type rules (auto-accept additive, queue structural for review, etc.) |
-| `src/engine/node-learning/local-scanner.ts` | **Create (185):** Lightweight local scanner for node-specific patterns (user's own process customizations). Never emits proposals upstream — proposes to the node's own Self only |
-| `src/cli/commands/updates.ts` | **Create (184):** `ditto updates list/show/apply/rollback/channel/pause` |
+| `src/engine/node-learning/evidence-emitter.ts` | **Create (189):** Extracts allowlisted signals from local harnessDecisions/activities, strips PII, classifies into pattern types, posts to network evidence endpoint |
+| `src/engine/node-learning/emission-consent.ts` | **Create (189):** Per-signal-type consent management; config-driven defaults; opt-out totality |
+| `src/engine/node-learning/update-fetcher.ts` | **Create (191):** Polls network for new releases on channel; verifies signatures; stages pending updates |
+| `src/engine/node-learning/update-adopter.ts` | **Create (191):** Trust-tier-gated adoption; applies updates atomically; rollback command |
+| `src/engine/node-learning/adoption-policy.ts` | **Create (191):** Config-driven policy engine: per-tier, per-release-type rules (auto-accept additive, queue structural for review, etc.) |
+| `src/engine/node-learning/local-scanner.ts` | **Create (192):** Lightweight local scanner for node-specific patterns (user's own process customizations). Never emits proposals upstream — proposes to the node's own Self only |
+| `src/cli/commands/updates.ts` | **Create (191):** `ditto updates list/show/apply/rollback/channel/pause` |
 | `config/ditto.yaml` schema | **Modify:** Add `learning.evidence`, `learning.updates`, `learning.adoption_policy` sections |
 
 ### Shared (`packages/core/`)
 
 | File | Action |
 |------|--------|
-| `packages/core/src/learning/evidence-types.ts` | **Create (182):** Typed evidence schema; allowlist constants; zod validators |
-| `packages/core/src/learning/release-manifest.ts` | **Create (184):** Release manifest shape — engine version, template versions, cognitive-content versions, signatures, release notes |
-| `packages/core/src/learning/adoption-policy-types.ts` | **Create (184):** Typed policy shapes — per-tier-per-release-type |
+| `packages/core/src/learning/evidence-types.ts` | **Create (189):** Typed evidence schema; allowlist constants; zod validators |
+| `packages/core/src/learning/release-manifest.ts` | **Create (191):** Release manifest shape — engine version, template versions, cognitive-content versions, signatures, release notes |
+| `packages/core/src/learning/adoption-policy-types.ts` | **Create (191):** Typed policy shapes — per-tier-per-release-type |
 
 ### Documentation
 
@@ -286,7 +286,9 @@ This brief is the parent. Each sub-brief below owns its file deltas. The union:
 
 Strict dependency order. Each sub-brief ships independently with ACs, ADR or insight, fresh-context review.
 
-### Sub-brief 182 — Evidence Harvest Pipeline (node emitter + network receiver + privacy layer)
+**Numbering note (2026-04-17):** Earlier drafts of this brief referenced sub-briefs 182–187. Those numbers were taken by parallel threads that shipped (browser work 182–186, OAuth 187, autopilot 188). Sub-briefs below are renumbered to 189–194. The What Changes (Work Products) table and Exit Criteria references use the new numbers.
+
+### Sub-brief 189 — Evidence Harvest Pipeline (node emitter + network receiver + privacy layer)
 
 Build the flow of evidence from nodes to network. Foundation for everything else.
 
@@ -296,7 +298,7 @@ Build the flow of evidence from nodes to network. Foundation for everything else
 
 **Exit criteria:** 3+ dev nodes emitting to a staging network; evidence dashboard shows signal volume per type per day; PII audit passes (hand-audit 100 random payloads); total-opt-out verified (node with `evidence.enabled: false` emits nothing); k-anonymity rejection verified (signal type with only 2 contributors stays below threshold).
 
-### Sub-brief 183 — Network Scanner + Sandbox + Archive
+### Sub-brief 190 — Network Scanner + Sandbox + Archive
 
 Build the central learning brain. Scanner reads aggregated evidence, produces proposals with cross-node evidence trail and predicted impact. Sandbox validates by replaying (against node-contributed replay corpora, anonymized) the proposal vs current on the evidence cohort. Archive persists lineage with probabilistic selection and clade scoring.
 
@@ -308,7 +310,7 @@ Build the central learning brain. Scanner reads aggregated evidence, produces pr
 
 **Exit criteria:** Scanner produces ≥1 proposal per run on seeded network with known patterns. Sandbox PASS correlates >70% with maintainer approval on a curated eval set. Archive survives network restart. Clade prior measurably shifts scanner output distribution after 3+ generations.
 
-### Sub-brief 184 — Release Distribution Pipeline
+### Sub-brief 191 — Release Distribution Pipeline
 
 Everything between "proposal approved by maintainer" and "update applied on node." Release builder packages approved proposals into signed manifests (engine version + template diffs + cognitive-content diffs + release notes). Rollout controller stages: canary (nightly-channel, ≤5%) → partial (beta + 25% of stable) → full (100% of stable). Each stage gates on cross-node telemetry from the prior stage (error rate, rollback rate, adoption success).
 
@@ -318,7 +320,7 @@ Everything between "proposal approved by maintainer" and "update applied on node
 
 **Exit criteria:** Full round-trip on staging network — proposal approved → release signed → canary deploys → partial deploys → full deploys. Rollback tested. Signature rejection tested (tampered manifest rejected by node). Trust-tier policy tested (supervised-tier queues a structural update, autonomous-tier auto-applies).
 
-### Sub-brief 185 — Scanner Self-Evolution + Cognitive Layer Evolution
+### Sub-brief 192 — Scanner Self-Evolution + Cognitive Layer Evolution
 
 The recursive kernel, centrally.
 
@@ -330,7 +332,7 @@ The recursive kernel, centrally.
 
 **Exit criteria:** Meta-scanner has produced ≥1 approved edit within 50 proposals. Cognitive-layer has shipped ≥1 cross-node-validated mode update. Frozen-paths allowlist rejection tested (adversarial proposal against `cognitive/core.md` rejected at release-builder). `improvement-scanning.md` has been edited by a scanner proposal at least once.
 
-### Sub-brief 186 — Adversarial Detection + Meta-Observability
+### Sub-brief 193 — Adversarial Detection + Meta-Observability
 
 Build the guardrails and the dashboard.
 
@@ -340,7 +342,7 @@ Build the guardrails and the dashboard.
 
 **Exit criteria:** Synthetic adversarial evidence injected into staging triggers maintainer alert within 1 cycle. Node with reputation < threshold has evidence weight reduced appropriately. Dashboard visible in admin. Self-degradation synthetic triggers top-level alert within 7 days.
 
-### Sub-brief 187 — Dev Pipeline Integration for Engine-Level Changes
+### Sub-brief 194 — Dev Pipeline Integration for Engine-Level Changes
 
 Close the loop for code changes.
 
@@ -565,7 +567,7 @@ At network scale, reward-hacking surfaces change. Potential attacks:
 - Sandbox precision drifts (PASS no longer predicts real-world success) → meta-observability flags, triggering sandbox recalibration proposal
 - Release rushes (maintainer approves too fast under pressure) → required dwell times at each rollout stage, no manual skip without explicit override that's audit-logged
 
-## Open Questions (Resolve Before Starting Sub-brief 182)
+## Open Questions (Resolve Before Starting Sub-brief 189)
 
 1. **Signing key management.** Where does the network release signing key live? Candidate answer: air-gapped hardware token; fallback HSM; ceremonies for rotation. Defer final choice to ADR-032 but this brief must note the dependency.
 2. **Replay trace consent model.** Is "share aggregate evidence" opt-in sufficient, or do replay traces (actual step_run samples, anonymized) require a separate, stricter opt-in? Strong preference: separate opt-in, default off, with a clear "why this is different" in consent UI.
@@ -575,9 +577,9 @@ At network scale, reward-hacking surfaces change. Potential attacks:
 6. **Engine-version divergence between nodes.** At any moment, the network has nodes on various engine versions (some pinned, some behind). How does the scanner reason about proposals when evidence comes from heterogeneous versions? Candidate: evidence carries engine-version in payload; scanner aggregates per-version; proposals target version ranges.
 7. **Cognitive content layering.** A node's local cognitive customizations (e.g. user overrode a mode prompt) + incoming cognitive update — who wins? Candidate: three-way merge like config file management (apt `Dpkg::Options::=--force-confold` pattern); user customization wins unless explicitly marked auto-accept.
 
-8. **Integration provisioning — local creation vs network curation.** Category D in the engine-change table (§Phasing / Sub-brief 187) as drafted routes new integrations through scanner → maintainer → release. Stress-test reveals this blocks individual users on integrations the network doesn't yet know are wanted (single-node demand produces no network evidence; k-anonymity floor blocks action). Three lanes plausibly exist: (a) **local creation** — node-level, via Brief 037 codegen or Self-assisted YAML authoring, private unless opted to share shape; (b) **runtime discovery** — no YAML at all, via Zapier SDK (Brief 113), browser protocol (Briefs 182–184), or Stagehand `browse_web` (Brief 134); (c) **network curation** — scanner proposes *promotion* of convergent local creations to canonical signed releases, rather than proposing up-front creation.
+8. **Integration provisioning — local creation vs network curation.** Category D in the engine-change table (§Phasing / Sub-brief 194) as drafted routes new integrations through scanner → maintainer → release. Stress-test reveals this blocks individual users on integrations the network doesn't yet know are wanted (single-node demand produces no network evidence; k-anonymity floor blocks action). Three lanes plausibly exist: (a) **local creation** — node-level, via Brief 037 codegen or Self-assisted YAML authoring, private unless opted to share shape; (b) **runtime discovery** — no YAML at all, via Zapier SDK (Brief 113), browser protocol (Briefs 182–184), or Stagehand `browse_web` (Brief 134); (c) **network curation** — scanner proposes *promotion* of convergent local creations to canonical signed releases, rather than proposing up-front creation.
 
-   Architect to resolve in ADR-031:
+   Architect to resolve in ADR-033 (Network-Scale RSI Architecture §5 resolves this question as of 2026-04-17):
    - Does the scanner *propose creation* (current Brief 181 draft) or *propose promotion* of convergent local creations?
    - If promotion: what allowlisted aggregate signal represents "integration shape convergence" without leaking endpoints or credentials? Candidate: `integration_created` with `{service_name_hash, protocol_type, operation_count, auth_pattern}`. Service-name hashed over an enumerated vocabulary to prevent free-text injection.
    - Merge UX when a node has a local version and the network ships canonical: three-way merge per `apt Dpkg::Options::=--force-confold`? Auto-replace for autonomous tier, prompt for supervised?
