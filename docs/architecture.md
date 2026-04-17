@@ -1203,7 +1203,6 @@ All configured providers are loaded simultaneously. `createCompletion({ purpose:
 |----------|--------|----------------|--------|
 | Pricing model | Revenue, market positioning | Before beta | Open |
 | Multi-tenancy from day one? | Architecture complexity | Phase 10+ | Open |
-| Integration credential platform — build minimal, Nango, or Composio? | Security, infrastructure complexity | Brief 026 build | Open |
 | Mobile capture — PWA vs native | Development effort | Phase 13 | Open |
 
 ### Resolved Questions
@@ -1215,6 +1214,7 @@ All configured providers are loaded simultaneously. `createCompletion({ purpose:
 | Process template library scope | **3 templates** shipped in Phase 5: invoice-follow-up, content-review, incident-response (Brief 020) | 2026-03-21 |
 | System analyst AI | **Deferred to Phase 11** as `process-analyst` system agent (ADR-008). Outcome owner reframe means this may move earlier. | 2026-03-21 |
 | OpenClaw integration | Partially addressed by ADR-005 (multi-protocol architecture). Specific adapter deferred to Phase 6 build. | 2026-03-21 |
+| Integration credential platform — build minimal, Nango, or Composio? | **Build core inside Network Service for top-5 providers; defer Nango to Phase 12 re-evaluation (trigger: ≥3 unplanned integration requests per week for one month + commercial-licence conversation with NangoHQ)** (ADR-031) | 2026-04-17 |
 
 ---
 

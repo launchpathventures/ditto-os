@@ -245,7 +245,7 @@ When the deployment splits, these modules move to the Network Service and the Wo
 
 **Follow-up decisions needed:**
 - **Network Service hosting for MVP:** Hetzner VPS (aligned with ADR-018 Track B1) vs Fly.io vs Railway — developer choice, same architecture
-- **Custom domain for Network Service:** `api.ditto.partners` or similar — needed for webhook delivery and web front door
+- ~~**Custom domain for Network Service:** `api.ditto.partners` or similar — needed for webhook delivery and web front door~~ **Resolved 2026-04-17: `ditto.partners` is the Network Service domain.** The Network Service *is* the front door — marketing, workspace-lite, Layer 1 & 2 onboarding, AgentMail sender identity (`@ditto.partners`), OAuth callbacks, SSE endpoints, and webhook targets all share this host. No sub-domain split. A split may happen later if traffic or security isolation demands it; the OAuth contract survives a DNS cutover + provider redirect URI update. (`ditto.you` is reserved for the per-user workspace face, not the Network.)
 - **Turso migration timeline:** When to move from SQLite-on-VPS to Turso for the Network database (enables embedded replicas for Workspaces)
 
 **Resolved in this ADR:**
