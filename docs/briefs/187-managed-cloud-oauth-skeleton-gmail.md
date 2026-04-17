@@ -162,7 +162,7 @@ Exit criterion: Rob (the persona) clicks "Connect Gmail" in his workspace, compl
 9. [ ] `POST /v1/network/gmail/send` rejects unauthenticated calls (no valid workspace API token → 401), rejects calls missing `stepRunId` (Insight-180 guard → 400 unless `DITTO_TEST_MODE=1`), rejects calls whose `stepRunId` does not resolve to an active `stepRuns` row → 400, refreshes token on 401 from Google and retries once, writes activity row with actor/service/operation/scopes/timestamp/result on every call (success or failure). Body text does not appear in any logger sink (asserted via test that captures all log output, including error paths). Trust-gate enforcement happens in the workspace's integration pipeline before the HTTP call — Network broker does not second-guess.
 10. [ ] `connect_service` Self tool `oauth_start` action returns the Network redirect URL given a service name. Existing `check | guide | verify` actions continue to work.
 11. [ ] Workspace `connect-button.tsx` opens the OAuth URL, listens for `oauth.connected` SSE, updates UI on success. Success page lands and returns to conversation.
-12. [ ] End-to-end smoke test (integration-level, real Google OAuth sandbox or recorded-fixture equivalent): user connects Gmail, Alex sends an email through the Network broker, email is sent, activity row written, no raw token appears in workspace logs.
+12. [ ] End-to-end smoke test against **a real Google test account** (one-time-setup Google Cloud project in Ditto's dev org; test account credentials in 1Password under "Ditto OAuth — dev test accounts"): user connects Gmail, Alex sends an email through the Network broker, email arrives in the test recipient inbox, activity row written, no raw token appears in workspace logs. Recorded-fixture path is explicitly NOT acceptable for this AC — the only proof that refresh + send work end-to-end is a real Google call. CI gates this behind `INTEGRATION_TEST_GOOGLE=1` so normal PR runs don't require the credential.
 13. [ ] `TOKEN_REVOKED` path tested: revoking the grant in the vault triggers SSE, next Alex send falls back to AgentMail (Insight-186), Self surfaces non-blocking reconnect offer exactly once.
 14. [ ] `pnpm run type-check` passes at repo root. All existing integration tests continue to pass.
 15. [ ] ADR-031 "Closes Out" bullets verified: ADR-005 follow-up line updated, `docs/architecture.md` Open Decisions row moved to Resolved Questions.
@@ -197,7 +197,7 @@ pnpm cli inspect integration google-workspace
 pnpm dev:network &
 pnpm dev:workspace &
 
-# Simulate OAuth start (real network call to Google sandbox OR recorded fixture)
+# OAuth start — real Google call using dev test account (INTEGRATION_TEST_GOOGLE=1 required)
 curl -X POST http://localhost:${NETWORK_PORT}/v1/network/oauth/start \
   -H "Authorization: Bearer $WORKSPACE_API_TOKEN" \
   -d '{"service":"google-workspace"}'

@@ -45,7 +45,7 @@ Three options for the Network's OAuth implementation were evaluated in `docs/res
 ### What we defer
 
 1. **Long-tail providers** (Xero, HubSpot, Mailchimp, Meta Ads, etc.) — added case-by-case after the top-5 ships, using the same pattern. Each new provider is a scoped brief, not a platform decision.
-2. **Nango adoption** — re-evaluated at Phase 12. Trigger: ≥3 unplanned integration requests per week sustained over one month. Before adoption, Ditto must (a) secure a commercial license from NangoHQ, or (b) obtain legal confirmation that Elastic License v2 scope does not apply to our deployment model.
+2. **Nango adoption** — re-evaluated at Phase 12. **Canonical trigger:** ≥3 unplanned integration requests per week sustained over one month AND a commercial-licence conversation with NangoHQ completed (pricing in hand, OR legal confirmation that Elastic License v2 scope does not apply to Ditto's deployment model). **Owner of the counter:** Dev PM role — tracked in the weekly PM triage alongside roadmap review.
 3. **Self-hoster OAuth story** (Track B) — document the fork ("use Ditto Network as auth proxy OR register your own OAuth apps") and pick a default when self-hosters actually ask. No demand signal yet.
 4. **BYO OAuth apps** — user wants their own Google Cloud project / Slack app backing the integration. Valid request, deferred until demand appears.
 

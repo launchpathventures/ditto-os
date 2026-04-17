@@ -516,7 +516,7 @@ AI SDR market in correction: 50-70% churn within 3 months. Hybrid (AI+human) mod
 **Nango** — github.com/NangoHQ/nango (6.9k stars, TypeScript 96%)
 - Code-first integration platform: 700+ APIs with managed OAuth + automatic token refresh. Self-hostable (Docker/Helm) or cloud. SOC 2 Type II, HIPAA, GDPR compliant. Integrations authored as TypeScript functions, git-tracked, CI/CD-deployed. Syncs (scheduled pulls) + actions (agent-triggered) model. Per-tenant isolation, retries, rate-limit handling.
 - **Classification: DEFERRED (ADR-031).** Elastic License v2 restricts "providing the software to third parties as a hosted or managed service, where the service provides users with access to any substantial set of the features or functionality of the software." A conservative reading triggers for the Ditto Network Service (managed-cloud hosts OAuth functionality for paying users). Commercial licence from NangoHQ would resolve the ambiguity; not pursued yet.
-- **Re-evaluation trigger (Phase 12):** ≥3 unplanned integration requests per week sustained over one month AND commercial-licence pricing from NangoHQ in hand.
+- **Re-evaluation trigger (Phase 12, owner: Dev PM):** ≥3 unplanned integration requests per week sustained over one month AND a commercial-licence conversation with NangoHQ completed (pricing in hand OR legal confirmation that ELv2 does not apply). Canonical definition: ADR-031.
 - **What we adopted anyway (patterns, not code):** brokered-credentials invariant, refresh-before-expiry pattern, integration-as-declaration (YAML registry). See ADR-031 §Provenance.
 
 **Composio** — composio.dev (27.4k stars, MIT, TypeScript + Python)

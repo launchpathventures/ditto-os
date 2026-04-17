@@ -922,7 +922,7 @@ Unblocks Phase 3 (always-on heartbeats for trust earning). Engine codebase is th
 | Temporal | Industrial-grade durable execution | When enterprise reliability requirements emerge | landscape.md |
 | Turso/libSQL | Local-first with cloud sync | When scaling beyond single machine | landscape.md |
 | Rules engine executor | `rules` step executor type (in schema, no implementation) | When deterministic logic steps are needed beyond scripts | architecture.md |
-| Nango (self-hosted) | Managed OAuth, 700+ API integrations, syncs + actions | **Phase 12 re-evaluation (ADR-031): ≥3 unplanned integration requests/week for one month + commercial-licence conversation with NangoHQ.** Elastic License v2 blocks drop-in adoption inside the Network Service; build core OAuth for top-5 providers instead. | ADR-005, ADR-031 |
+| Nango (self-hosted) | Managed OAuth, 700+ API integrations, syncs + actions | **Phase 12 re-evaluation — canonical trigger in ADR-031 §Decision.** Summary: ≥3 unplanned integration requests/week sustained over one month AND NangoHQ commercial-licence conversation completed. Owner: Dev PM. Elastic License v2 blocks drop-in adoption inside the Network Service; build core OAuth for top-5 providers instead. | ADR-005, ADR-031 |
 | Composio (cloud) | 1000+ integrations, brokered credentials, tool routing | **Deferred (ADR-031): cloud-only, incompatible with Track B and with Ditto owning the integration layer.** | ADR-005, ADR-031 |
 
 ---
