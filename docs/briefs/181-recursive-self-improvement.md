@@ -128,7 +128,7 @@ This matches how mature software ecosystems actually work (apt, Homebrew, npm, b
 
 Make Ditto a network-scale self-improving system: evidence flows continuously from workspace nodes to the central ditto-network (opt-in, privacy-preserving, allowlisted); a central scanner aggregates evidence, proposes improvements, validates them empirically across cross-node replay corpora, and hands approved proposals to a central dev pipeline that produces signed release manifests; nodes pull releases on trust-tier-gated adoption policies; post-deployment outcomes attribute back to specific proposals, improving the scanner's own strategy; the cognitive layer evolves from network-wide mode-outcome correlation. All under maintainer approval at the release layer and node-operator-set adoption policies at the node layer.
 
-Success shape at 12 months: 50+ active nodes, weekly release cadence, scanner hit rate trending up month-over-month, node adoption lag (time from release to 50% adoption) under 7 days, zero reported adversarial-node incidents that survived outlier detection, measurable compounding — the month-12 engine is measurably more capable than the month-1 engine across the same benchmark.
+Success shape at 12 months: 50+ active nodes, release cadence established on an adaptive rhythm (monthly floor, biweekly or weekly as archive depth permits — see ADR-034 §5; early-year reality is typically monthly), scanner hit rate trending up month-over-month, node adoption lag (time from release to 50% adoption) under 7 days, zero reported adversarial-node incidents that survived outlier detection, measurable compounding — the month-12 engine is measurably more capable than the month-1 engine across the same benchmark.
 
 ## Non-Goals
 
