@@ -661,6 +661,14 @@ export interface VoiceEvaluation {
   stage: string;
   /** True when `validateAndCleanResponse` modified the guidance (Brief 180). */
   validateRewrote?: boolean;
+  /**
+   * ETag captured when the evaluation was computed, attached by the caller
+   * after `evaluateVoiceConversation` returns. When the in-flight promise is
+   * shared via `voiceDedup.runOrJoin`, joined requests receive the evaluator's
+   * etag (reflecting the state the evaluation actually ran against), not a
+   * stale etag from the joining request's own frame.
+   */
+  etag?: string;
 }
 
 /**
