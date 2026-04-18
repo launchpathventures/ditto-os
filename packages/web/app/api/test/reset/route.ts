@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,23 +33,31 @@ export async function POST() {
     // Ensure schema exists before truncating
     dbModule.ensureSchema();
 
-    // Truncate all tables (order matters for foreign keys)
-    await db.delete(schema.harnessDecisions);
-    await db.delete(schema.trustChanges);
-    await db.delete(schema.trustSuggestions);
-    await db.delete(schema.feedback);
-    await db.delete(schema.processOutputs);
-    await db.delete(schema.stepRuns);
-    await db.delete(schema.processRuns);
-    await db.delete(schema.processDependencies);
-    await db.delete(schema.credentials);
-    await db.delete(schema.memories);
-    await db.delete(schema.improvements);
-    await db.delete(schema.activities);
-    await db.delete(schema.workItems);
-    await db.delete(schema.sessions);
-    await db.delete(schema.agents);
-    await db.delete(schema.processes);
+    // Truncate all tables. Disable FK enforcement for the reset so we don't
+    // have to hand-maintain a parent-after-child delete order as new tables
+    // are added to the schema. Re-enabled before seed inserts so seed data
+    // still validates referential integrity. Pattern matches migration 0003.
+    await db.run(sql`PRAGMA foreign_keys = OFF`);
+    try {
+      await db.delete(schema.harnessDecisions);
+      await db.delete(schema.trustChanges);
+      await db.delete(schema.trustSuggestions);
+      await db.delete(schema.feedback);
+      await db.delete(schema.processOutputs);
+      await db.delete(schema.stepRuns);
+      await db.delete(schema.processRuns);
+      await db.delete(schema.processDependencies);
+      await db.delete(schema.credentials);
+      await db.delete(schema.memories);
+      await db.delete(schema.improvements);
+      await db.delete(schema.activities);
+      await db.delete(schema.workItems);
+      await db.delete(schema.sessions);
+      await db.delete(schema.agents);
+      await db.delete(schema.processes);
+    } finally {
+      await db.run(sql`PRAGMA foreign_keys = ON`);
+    }
 
     // Seed minimal test data
     const processId = "test-process-001";
