@@ -288,6 +288,13 @@ Strict dependency order. Each sub-brief ships independently with ACs, ADR or ins
 
 **Numbering note (2026-04-17):** Earlier drafts of this brief referenced sub-briefs 182–187. Those numbers were taken by parallel threads that shipped (browser work 182–186, OAuth 187, autopilot 188). Sub-briefs below are renumbered to 189–194. The What Changes (Work Products) table and Exit Criteria references use the new numbers.
 
+**Split note (2026-04-18):** Reviewer Round-1 on sub-briefs 189–194 flagged Sub-brief 191 as over-scoped per Insight-004: four distinct integration seams, ~30 work products, ceremony alone is multi-day human work. Split into three sub-briefs:
+- **191** (narrowed) — Signing + Ceremony + Shard Escrow
+- **195** — Rollout Controller + Cause-Attributed Gating + Telemetry
+- **196** — Node Adoption Policy + Three-Way-Merge + Rollback
+
+Dependencies updated: Briefs 192 and 194 now depend on `190 + 191 + 195 + 196` (composite) instead of `190 + 191`. Total RSI sub-briefs = 8 (189–196).
+
 ### Sub-brief 189 — Evidence Harvest Pipeline (node emitter + network receiver + privacy layer)
 
 Build the flow of evidence from nodes to network. Foundation for everything else.

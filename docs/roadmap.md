@@ -471,19 +471,21 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | ADR-034 — release distribution model | done (proposed) | Brief 181, research report | TUF-lite + optional Rekor + in-toto; air-gapped YubiKey ceremony; cause-attributed rollback; adaptive cadence |
 | Research report — 25 signing/privacy/canary options surveyed | done | — | WebSearch + WebFetch audit, neutrality review |
 | 18 landscape entries for RSI external deps | done | Insight-043 | Live metadata verified |
-| **Sub-briefs (pending renumbering + detailing)** | | | |
-| Evidence harvest pipeline (node→network emitter + network receiver + privacy layer) | draft (outlined in Brief 181 §182) | Brief 181, ADR-033 §1 | Original |
-| Network scanner + sandbox + archive | draft (outlined in Brief 181 §183) | Brief 181, ADR-033 §2/§4 | DGM archive + probabilistic selection pattern |
-| Signed release distribution pipeline | draft (outlined in Brief 181 §184) | Brief 181, ADR-034 | TUF walk-forward, cause-attributed rollback |
-| Scanner self-evolution + cognitive layer (L5 × LC) | draft (outlined in Brief 181 §185) | Brief 181, ADR-033 §3 | Promptbreeder mutation-prompt pattern |
-| Adversarial node detection + meta-observability | draft (outlined in Brief 181 §186) | Brief 181, ADR-033 §1a | Original (reputation-weighted aggregation) |
-| Dev pipeline integration for engine-level changes | draft (outlined in Brief 181 §187) | Brief 181 | Existing dev-pipeline.yaml; new staged engine-release flow |
+| **Sub-briefs (ready for builder)** | | | |
+| Brief 189 — Evidence harvest pipeline (node emitter + network receiver + privacy layer) | ready | Brief 181, ADR-033 §1 | Original; starts |
+| Brief 190 — Network scanner + sandbox + archive | ready | Brief 181, ADR-033 §2/§4 | DGM archive + probabilistic selection; depends 189 |
+| Brief 191 — Release signing + ceremony + shard escrow (narrowed 2026-04-18 per reviewer) | ready | Brief 181, ADR-034 §1-3 | TUF walk-forward; depends 189 |
+| Brief 195 — Rollout controller + cause-attributed gating + telemetry (split from original 191) | ready | Brief 181, ADR-034 §4 | Cause-attributed rollback weighting; depends 189+191 |
+| Brief 196 — Node adoption policy + three-way merge + rollback (split from original 191) | ready | Brief 181, ADR-034 §3-4, ADR-033 §3 | Tier-gated adoption; depends 191+195 |
+| Brief 192 — Scanner self-evolution + cognitive layer (L5 × LC) | ready | Brief 181, ADR-033 §3 | Promptbreeder mutation-prompt; depends 190+191+195+196 |
+| Brief 193 — Adversarial detection + meta-observability | ready | Brief 181, ADR-033 §1a | Original reputation-weighted aggregation; depends 189+190 |
+| Brief 194 — Dev pipeline integration for engine-level changes | ready | Brief 181 | Existing dev-pipeline + replay-corpus validator + shadow-mode; depends 190+191+195+196 |
 | **Legacy/prior single-node capabilities (absorbed)** | | | |
 | `improvement-scanner` system agent (single-node framing) | superseded by ADR-033 network-scale model | architecture.md, ADR-008 | — |
 | Improvement proposals in review queue (single-node framing) | superseded by ADR-033 Improvement Card + release manifest model | architecture.md L5 | — |
 | Approved improvements → feature-implementation handoff (single-node framing) | superseded by ADR-034 release distribution model | architecture.md (Process 3) | — |
 
-**Downstream prerequisites:** Brief 181 sub-briefs cannot start until renumbered and detailed into standalone briefs. Architect session scope. Sequential dependency: evidence harvest → scanner+sandbox+archive → release distribution → scanner self-evolution + cognitive → adversarial detection + meta-observability → engine-level dev pipeline integration.
+**Downstream prerequisites:** All 8 sub-briefs are Status: ready. Sequential dependency: 189 (starts) → {190, 191} (both depend 189) → 195 (depends 189+191) → 196 (depends 191+195) → {192, 194} (both depend 190+191+195+196) → 193 (depends 189+190, can run parallel with 191+). Recommended build order: 189 → 190 → 191 → 195 → 196 → {192, 193, 194} parallel.
 
 ### Phase 10: Web Dashboard — The Living Workspace
 
