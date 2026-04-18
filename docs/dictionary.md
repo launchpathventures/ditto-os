@@ -60,6 +60,18 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 - Layer: 3 (Harness)
 - Related: Supervised, Spot-checked, Critical, Trust Tier, Trust Downgrade
 
+**Autopilot (Dev Process)** — Two skills (`/drain-queue` and `/autobuild`) that automate dispatch through Ditto's seven-role dev pipeline. `/drain-queue` claims `**Status:** ready` briefs from `docs/briefs/` via atomic-push mutex on `origin/main` and runs `/autobuild` on each. `/autobuild` orchestrates `/dev-builder` (full role contract) → fresh-subagent `/dev-reviewer` → fresh-subagent `/dev-review` → PR open → feature-branch `**PR:** <url>` annotation. Stops at the human merge gate. Companion brief: Brief 188. Doctrine: ADR-035. Operational guide: `docs/dev-process.md` §Autopilot.
+- Layer: Meta (dev-process)
+- Related: Brief State Mutex, Dispatch-Authorization Trust Boundary, Maker-Checker, Dev Builder, Dev Reviewer
+
+**Brief State Mutex** — The cross-workspace dispatch coordination primitive. Brief state lives in markdown bold-prefix lines (`**Status:** ready | draft | in_progress | complete`) inside the brief file. The atomic claim is a single-line edit pushed to `origin/main`; git's non-fast-forward push rejection is the mutex. Race-loss recovery via `git checkout -B claim-tmp origin/main`. No filename prefixes, no schemas, no external locks. See ADR-035 doctrine 1.
+- Layer: Meta (dev-process)
+- Related: Autopilot, Dispatch-Authorization Trust Boundary, ADR-035
+
+**Dispatch-Authorization Trust Boundary** — Architectural trust surface orthogonal to the agent-execution trust tiers. Flipping a brief's `**Status:**` to `ready` IS the boundary that authorizes autonomous build via `/drain-queue`. Reviewers approving briefs for `ready` should treat the flip as code-execution authorization. The autopilot's pre-flight hard-stops cover DB-related risk only; everything else relies on the human at the gate. See ADR-035 doctrine 2 and `docs/architecture.md` §Cross-Cutting Governance.
+- Layer: Cross-cutting
+- Related: Autopilot, Brief State Mutex, Trust Tier, Maker-Checker
+
 **Awareness Layer** — Architecture Layer 4. Cross-process intelligence through a dependency graph with event propagation. Processes declare what they consume and produce, creating a live graph of the organisation's data flow.
 - Layer: 4 (Awareness)
 - Related: Process Graph, Dependency Graph, Event Propagation, Process Layer

@@ -1203,7 +1203,6 @@ All configured providers are loaded simultaneously. `createCompletion({ purpose:
 |----------|--------|----------------|--------|
 | Pricing model | Revenue, market positioning | Before beta | Open |
 | Multi-tenancy from day one? | Architecture complexity | Phase 10+ | Open |
-| Integration credential platform — build minimal, Nango, or Composio? | Security, infrastructure complexity | Brief 026 build | Open |
 | Mobile capture — PWA vs native | Development effort | Phase 13 | Open |
 
 ### Resolved Questions
@@ -1215,6 +1214,28 @@ All configured providers are loaded simultaneously. `createCompletion({ purpose:
 | Process template library scope | **3 templates** shipped in Phase 5: invoice-follow-up, content-review, incident-response (Brief 020) | 2026-03-21 |
 | System analyst AI | **Deferred to Phase 11** as `process-analyst` system agent (ADR-008). Outcome owner reframe means this may move earlier. | 2026-03-21 |
 | OpenClaw integration | Partially addressed by ADR-005 (multi-protocol architecture). Specific adapter deferred to Phase 6 build. | 2026-03-21 |
+| Integration credential platform — build minimal, Nango, or Composio? | **Build core inside Network Service for top-5 providers; defer Nango to Phase 12 re-evaluation (trigger: ≥3 unplanned integration requests per week for one month + commercial-licence conversation with NangoHQ)** (ADR-031) | 2026-04-17 |
+
+---
+
+## Cross-Cutting Governance
+
+Trust boundaries that don't fit cleanly inside a single layer.
+
+### Dispatch-Authorization Trust Boundary
+
+The agent-execution trust tiers (§Trust Tiers above) govern *how an agent is allowed to act once it's running a process step*. There is a separate, orthogonal trust surface: *who is allowed to authorize an agent to start running on a brief in the first place*. With the introduction of the autopilot skills (`/drain-queue` + `/autobuild`, see Brief 188), this becomes an architectural concern.
+
+**The doctrine:** flipping a brief's `**Status:**` bold-line from `draft` to `ready` in `docs/briefs/NNN-*.md` IS the dispatch-authorization trust boundary. Once the autopilot is installed, marking a brief `ready` is functionally equivalent to authorizing `/dev-builder` to implement it autonomously and open a PR against `main`. The autopilot does not introduce a new privilege — running `/dev-builder` manually on the same brief is the same authorization. The autopilot only removes the per-step dispatch friction.
+
+**What this means in practice:**
+
+- Reviewers approving briefs for `ready` SHOULD scan §What Changes for high-blast-radius patterns: `package.json` `dependencies`/`devDependencies`, `.github/workflows/*.yml`, `.env*`, `next.config.*`, `vite.config.*`, `tsconfig.*`, new scripts in `package.json` "scripts" field. Either reject the flip or hand-build instead of leaving for the autopilot.
+- The autopilot's pre-flight hard-stops cover **DB-related risk only** (`drizzle/*`, `pnpm db:*`, `supabase db push`). Everything else relies on the human at the `Status: ready` gate.
+- No autonomous path bypasses this gate. `/drain-queue` only operates on `Status: ready` briefs. `/dev-pm` does not auto-promote `draft` → `ready`. `/autobuild` does not auto-merge PRs.
+- This dispatch-authorization trust is **orthogonal to the agent-execution trust tiers**. The autopilot does not modify trust-tier configuration; brief implementations that change trust constants do so under `/dev-builder`'s normal constraints.
+
+Full doctrine — including the dispatch mutex (atomic-push of `**Status:**` line to `origin/main`) and the narrow `Brief NNN` dependency model — lives in **ADR-035 (`docs/adrs/035-brief-state-doctrine.md`)**. Implementation: Brief 188 (`docs/briefs/188-cross-brief-autopilot.md`). Operational guide: `docs/dev-process.md` §Autopilot.
 
 ---
 

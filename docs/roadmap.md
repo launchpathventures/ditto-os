@@ -460,13 +460,32 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 
 ### Phase 9: Self-Improvement Meta-Process
 
-**Re-entry condition:** Layer 5 (Learning) is live
+**Re-entry condition:** Layer 5 (Learning) is live ✓ (Brief 060 knowledge-compounding shipped; correction → solution memory bridge operational).
+**Status (2026-04-17): re-opened as network-scale learning loop.** Brief 181 (`docs/briefs/181-recursive-self-improvement.md`) is the parent plan. ADR-033 (`docs/adrs/033-network-scale-rsi-architecture.md`) resolves the five architecture-layer questions; ADR-034 (`docs/adrs/034-release-distribution-model.md`) resolves the three distribution-layer questions. Research report: `docs/research/network-scale-rsi-tech-choices.md`. Seven sub-briefs described in Brief 181 §Phasing, pending renumbering (originally 182–188, collide with browser/OAuth/autopilot briefs that shipped in parallel; will renumber to 189+ when detailed).
 
-| Capability | Source doc | Build from |
-|-----------|-----------|------------|
-| `improvement-scanner` system agent | architecture.md (Self-Improvement), ADR-008 | compound-product analyse → propose cycle |
-| Improvement proposals in review queue | architecture.md L5 | compound-product |
-| Approved improvements → feature-implementation handoff | architecture.md (Process 3) | Process YAML exists |
+| Capability | Status | Source doc | Build from |
+|-----------|--------|-----------|------------|
+| **Parent plan + architectural decisions (2026-04-17)** | | | |
+| Brief 181 parent — network-scale RSI plan | done | Brief 181 | Original + DGM/HGM/Promptbreeder/STOP/TextGrad/DSPy/compound-product |
+| ADR-033 — network-scale RSI architecture | done (proposed) | Brief 181, research report | Original (composed from Brief 091 canary primitive + Insight-111/156 constraints + surveyed options) |
+| ADR-034 — release distribution model | done (proposed) | Brief 181, research report | TUF-lite + optional Rekor + in-toto; air-gapped YubiKey ceremony; cause-attributed rollback; adaptive cadence |
+| Research report — 25 signing/privacy/canary options surveyed | done | — | WebSearch + WebFetch audit, neutrality review |
+| 18 landscape entries for RSI external deps | done | Insight-043 | Live metadata verified |
+| **Sub-briefs (ready for builder)** | | | |
+| Brief 189 — Evidence harvest pipeline (node emitter + network receiver + privacy layer) | ready | Brief 181, ADR-033 §1 | Original; starts |
+| Brief 190 — Network scanner + sandbox + archive | ready | Brief 181, ADR-033 §2/§4 | DGM archive + probabilistic selection; depends 189 |
+| Brief 191 — Release signing + ceremony + shard escrow (narrowed 2026-04-18 per reviewer) | ready | Brief 181, ADR-034 §1-3 | TUF walk-forward; depends 189 |
+| Brief 195 — Rollout controller + cause-attributed gating + telemetry (split from original 191) | ready | Brief 181, ADR-034 §4 | Cause-attributed rollback weighting; depends 189+191 |
+| Brief 196 — Node adoption policy + three-way merge + rollback (split from original 191) | ready | Brief 181, ADR-034 §3-4, ADR-033 §3 | Tier-gated adoption; depends 191+195 |
+| Brief 192 — Scanner self-evolution + cognitive layer (L5 × LC) | ready | Brief 181, ADR-033 §3 | Promptbreeder mutation-prompt; depends 190+191+195+196 |
+| Brief 193 — Adversarial detection + meta-observability | ready | Brief 181, ADR-033 §1a | Original reputation-weighted aggregation; depends 189+190 |
+| Brief 194 — Dev pipeline integration for engine-level changes | ready | Brief 181 | Existing dev-pipeline + replay-corpus validator + shadow-mode; depends 190+191+195+196 |
+| **Legacy/prior single-node capabilities (absorbed)** | | | |
+| `improvement-scanner` system agent (single-node framing) | superseded by ADR-033 network-scale model | architecture.md, ADR-008 | — |
+| Improvement proposals in review queue (single-node framing) | superseded by ADR-033 Improvement Card + release manifest model | architecture.md L5 | — |
+| Approved improvements → feature-implementation handoff (single-node framing) | superseded by ADR-034 release distribution model | architecture.md (Process 3) | — |
+
+**Downstream prerequisites:** All 8 sub-briefs are Status: ready. Sequential dependency: 189 (starts) → {190, 191} (both depend 189) → 195 (depends 189+191) → 196 (depends 191+195) → {192, 194} (both depend 190+191+195+196) → 193 (depends 189+190, can run parallel with 191+). Recommended build order: 189 → 190 → 191 → 195 → 196 → {192, 193, 194} parallel.
 
 ### Phase 10: Web Dashboard — The Living Workspace
 
@@ -905,8 +924,8 @@ Unblocks Phase 3 (always-on heartbeats for trust earning). Engine codebase is th
 | Temporal | Industrial-grade durable execution | When enterprise reliability requirements emerge | landscape.md |
 | Turso/libSQL | Local-first with cloud sync | When scaling beyond single machine | landscape.md |
 | Rules engine executor | `rules` step executor type (in schema, no implementation) | When deterministic logic steps are needed beyond scripts | architecture.md |
-| Nango (self-hosted) | Managed OAuth, 700+ API integrations, syncs + actions | When credential management complexity exceeds minimal vault | ADR-005 |
-| Composio (cloud) | 1000+ integrations, brokered credentials, tool routing | When cloud dependency is acceptable for integration breadth | ADR-005 |
+| Nango (self-hosted) | Managed OAuth, 700+ API integrations, syncs + actions | **Phase 12 re-evaluation — canonical trigger in ADR-031 §Decision.** Summary: ≥3 unplanned integration requests/week sustained over one month AND NangoHQ commercial-licence conversation completed. Owner: Dev PM. Elastic License v2 blocks drop-in adoption inside the Network Service; build core OAuth for top-5 providers instead. | ADR-005, ADR-031 |
+| Composio (cloud) | 1000+ integrations, brokered credentials, tool routing | **Deferred (ADR-031): cloud-only, incompatible with Track B and with Ditto owning the integration layer.** | ADR-005, ADR-031 |
 
 ---
 

@@ -511,13 +511,42 @@ AI SDR market in correction: 50-70% churn within 3 months. Hybrid (AI+human) mod
 - Refusals as trust-building feature
 - Relationship-first outreach for SMB owners
 
-### Browser Automation (2026-04-13)
+### Managed OAuth & Integration Platforms (2026-04-17, ADR-031)
+
+**Nango** — github.com/NangoHQ/nango (6.9k stars, TypeScript 96%)
+- Code-first integration platform: 700+ APIs with managed OAuth + automatic token refresh. Self-hostable (Docker/Helm) or cloud. SOC 2 Type II, HIPAA, GDPR compliant. Integrations authored as TypeScript functions, git-tracked, CI/CD-deployed. Syncs (scheduled pulls) + actions (agent-triggered) model. Per-tenant isolation, retries, rate-limit handling.
+- **Classification: DEFERRED (ADR-031).** Elastic License v2 restricts "providing the software to third parties as a hosted or managed service, where the service provides users with access to any substantial set of the features or functionality of the software." A conservative reading triggers for the Ditto Network Service (managed-cloud hosts OAuth functionality for paying users). Commercial licence from NangoHQ would resolve the ambiguity; not pursued yet.
+- **Re-evaluation trigger (Phase 12, owner: Dev PM):** ≥3 unplanned integration requests per week sustained over one month AND a commercial-licence conversation with NangoHQ completed (pricing in hand OR legal confirmation that ELv2 does not apply). Canonical definition: ADR-031.
+- **What we adopted anyway (patterns, not code):** brokered-credentials invariant, refresh-before-expiry pattern, integration-as-declaration (YAML registry). See ADR-031 §Provenance.
+
+**Composio** — composio.dev (27.4k stars, MIT, TypeScript + Python)
+- 1000+ pre-built tool integrations. Managed OAuth/credential vault (SOC 2). Tool Router for runtime tool discovery. MCP server support (Rube) — 850+ apps. Framework-agnostic (OpenAI, Anthropic, LangChain, CrewAI, Mastra). **Primarily a cloud service** — SDK connects to Composio's hosted backend, not self-hostable.
+- **Classification: DEFERRED (ADR-031).** Cloud-only conflicts with Ditto owning the integration layer directly and with self-hosted Track B. "Brokered credentials" pattern already adopted at the ADR-005 level without Composio dependency.
+
+**Decision (ADR-031):** Build core OAuth inside the Network Service for top-5 providers (Gmail, Google Calendar, Google Drive, Slack, Notion). Top-5 is small enough that building is cheaper than integrating. Re-evaluate Nango when coverage demand exceeds engineering patience. Keep the integration-handler shape provider-agnostic so a Nango-backed handler can slot in later without re-architecture.
+
+### Browser Automation (2026-04-13, extended 2026-04-17)
 
 **Stagehand** — github.com/browserbase/stagehand (8k+ stars, TypeScript, MIT)
 - AI browser SDK built on Playwright. Four primitives: `act`, `extract`, `observe`, `agent`. Supports Anthropic, OpenAI, Gemini via Vercel AI SDK. Production cloud option via Browserbase ($99/mo). Local mode uses headless Chromium.
 - **Classification:** ADOPT — TypeScript-first, MIT license, clean API, actively maintained. Best fit for Ditto's stack. Young project (startup-backed, 8k stars) — validation step included.
 - **Ditto usage:** `browse_web` self-tool (Brief 134). READ-only: `extract` primitive for research and data extraction. No `act` (write operations blocked by design). SSRF guard blocks private/internal network addresses. Token budget hard-enforced. Model configurable via `STAGEHAND_MODEL` env var.
-- **Full evaluation:** `docs/research/linkedin-ghost-mode-and-browser-automation.md`
+- **WRITE/act modality status (2026-04-17):** unexplored in Ditto. `act` / `agent` / `observe` primitives available in the library but not surfaced in any self-tool; `WRITE_INTENT_PATTERNS` at `src/engine/self-tools/browser-tools.ts:52-79` blocks write intent at the tool boundary. Extending to writes is an open architecture question.
+- **Full evaluation:** `docs/research/linkedin-ghost-mode-and-browser-automation.md` (READ/LinkedIn context), `docs/research/authenticated-saas-browser-automation.md` (WRITE/authenticated-SaaS context).
+
+**Playwright MCP (Microsoft)** — github.com/microsoft/playwright-mcp (TypeScript, Apache-2.0, Added 2026-04-17)
+- Official Microsoft MCP server wrapping Playwright. Exposes tools: `browser_navigate`, `browser_click`, `browser_type`, `browser_snapshot` (accessibility-tree, not pixels), `browser_select_option`, `browser_wait_for`, `browser_pdf_save`, `browser_file_upload`, and others. Snapshot-based (a11y-tree rather than vision).
+- **Classification:** UNEVALUATED — candidate for DEPEND or ADOPT if write-capable browser modality proceeds. Maps cleanly to ADR-005's existing MCP protocol slot; `--user-data-dir` flag supports persistent auth sessions.
+- **Ditto relevance:** HIGH if Ditto adds WRITE browser capability — provider-neutral, structured rather than vision-based, fits existing MCP infrastructure.
+- **Full evaluation:** `docs/research/authenticated-saas-browser-automation.md` §Modality 3.
+
+**Anthropic Computer Use** — part of Anthropic SDK (Added 2026-04-17)
+- LLM-driven vision-based browser/desktop control. Screenshot → model → `computer` tool calls (`click`, `type`, `key`, `screenshot`). Tool versioned; specific identifier to be verified per Insight-180 before adoption.
+- **Classification:** UNEVALUATED — PATTERN / DEPEND-on-SDK-tool. Viable when vision is needed (canvas apps, Citrix, UIs without good a11y tree).
+- **Ditto relevance:** MEDIUM — handles any visual UI but Claude-only (violates ADR-026 multi-provider goal); expensive per step (vision tokens per screenshot).
+- **Full evaluation:** `docs/research/authenticated-saas-browser-automation.md` §Modality 2.
+
+**browser-use / Skyvern / Browserbase Director / Steel / Airtop / Anchor / Hyperbrowser / AgentQL / Firecrawl-actions / Gumloop / n8n / OpenAI Operator** — surveyed but not individually evaluated in landscape. See `docs/research/authenticated-saas-browser-automation.md` §Modality 4 for context. Most are candidate dependencies only if hosted-browser or non-TypeScript agent approach is chosen.
 
 ### Hub-and-Spoke Deployment (2026-04-06)
 
@@ -579,6 +608,130 @@ New category for Insight-152 (Network Service is centralized). Full report: `doc
 - **Classification:** NOT ADOPTED — adds a dependency for both channels when Unipile (already paying) covers LinkedIn and X API v2 is cheaper for X.
 - **Ditto relevance:** LOW for v1 — both channels publish natively. Could be reconsidered for scheduling/analytics if needed later.
 - See ADR-029 for evaluation rationale.
+
+---
+
+## Release Distribution + Signing (2026-04-17)
+
+Added to support Brief 181 (Network-Scale Recursive Self-Improvement) and ADR-034 (Release Distribution Model). Full survey in `docs/research/network-scale-rsi-tech-choices.md` §Topic 1.
+
+**TUF — The Update Framework** — theupdateframework.github.io/specification/latest/ (spec, CNCF-adjacent, Added 2026-04-17)
+- Specification for secure software update distribution with four-role threshold signing (root/targets/snapshot/timestamp), delegation, versioned metadata, and defenses against 12 documented attack classes including rollback, freeze, fast-forward, and key compromise.
+- **Classification:** ADOPT (via `tuf-js`) for ADR-034 signing protocol.
+- **Ditto usage:** core signing protocol for network release manifests per ADR-034 §1. Nodes verify signed releases via walk-forward metadata protocol.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1A.
+
+**tuf-js (theupdateframework/tuf-js)** — github.com/theupdateframework/tuf-js (82 stars, TypeScript 97.5%, MIT, Added 2026-04-17)
+- Reference TypeScript TUF client implementation. Latest: tuf-js@5.0.1 (April 2026). Maintained by `theupdateframework` org. Production exemplars: PyPI (via PEP 458 Python TUF sibling), Docker Notary v1. Not the library behind npm's package-provenance stack (that's Sigstore/keyless).
+- **Classification:** DEPEND — mature, typed, actively maintained.
+- **Ditto usage:** ADR-034 §1 release signing + verification. Sub-brief 184.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1A.
+
+**Sigstore / cosign (sigstore/cosign)** — github.com/sigstore/cosign (5.8k stars, Go 98.7%, Apache-2.0, Added 2026-04-17)
+- Keyless artifact signing: OIDC-bound short-lived certificates from Fulcio CA, signatures logged in Rekor transparency log. Used by npm provenance, GitHub Actions attestations, PyPI pilots, Kubernetes SLSA compliance.
+- **Classification:** PATTERN + DEPEND (Rekor only, optional) — full keyless model rejected for Ditto because it requires live Fulcio at sign time, blocking the air-gap ceremony requirement in ADR-034 §1. Rekor transparency log is adopted optionally for post-hoc audit (`verify_rekor: false` default per ADR-034).
+- **Ditto usage:** optional Rekor entry submission per release for audit trail.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1B.
+
+**sigstore-js (sigstore/sigstore-js)** — github.com/sigstore/sigstore-js (178 stars, TypeScript 98.2%, Apache-2.0, Added 2026-04-17)
+- TypeScript Sigstore client, used by npm for provenance signing.
+- **Classification:** EVALUATE — only if ADR-034 §1 Rekor optional-integration ships. Otherwise unused.
+- **Ditto usage:** potential Rekor lookup client for optional verification, sub-brief 184.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1B.
+
+**npm ECDSA registry signatures + npm/ssri** — github.com/npm/ssri (Node ecosystem utility, MIT, Added 2026-04-17)
+- SSRI (Subresource Integrity) for content hashing and ECDSA registry signatures over package metadata. Verified via `npm audit signatures`. Single-key model, no delegation or rotation protocol.
+- **Classification:** SKIP for Ditto's use case — signing protocol too minimal (no rotation, no threshold). SSRI hash format itself is useful if Ditto needs content-hash fields in release manifests.
+- **Ditto usage:** SSRI hash format as a reference if ADR-034 sub-brief 184 designs release-manifest content-hash fields.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1C.
+
+**Omaha Protocol (google/omaha)** — github.com/google/omaha (Chrome auto-update stack, Apache-2.0, Added 2026-04-17)
+- Chrome's auto-update protocol. Handles version targeting, differential updates, staged rollout, channel assignment. Purpose-built for installed-app fleet; not a pure signing system (signing delegated to OS layer).
+- **Classification:** PATTERN (for staged rollout concepts) + SKIP (as a product — too heavy, wrong shape for pull-based node updates).
+- **Ditto usage:** staged-rollout pattern reference for ADR-034 §4; not adopted as a product.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1D.
+
+**in-toto / SLSA** — github.com/in-toto/in-toto (994 stars, Python, Apache-2.0 + Apache-2.0 for SLSA framework, Added 2026-04-17)
+- Specification for supply-chain provenance attestations. SLSA (Supply-chain Levels for Software Artifacts) builds graded assurance levels on top. in-toto attestations are JSON documents describing build inputs, steps, outputs, signed separately.
+- **Classification:** ADOPT — composable with TUF signing; attestations carry build provenance.
+- **Ditto usage:** ADR-034 §1 release manifests include in-toto attestations under the targets key describing build commit, workflow, input artifacts.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1F.
+
+**Notary v2 / notation (notaryproject/notation)** — github.com/notaryproject/notation (477 stars, Go 95.5%, Apache-2.0, CNCF Incubating, Added 2026-04-17)
+- OCI-native signing via the OCI distribution-spec referrers API. Plugin architecture supports multiple backends including Sigstore.
+- **Classification:** SKIP for Ditto v1 — requires OCI artifact format for distribution, which Ditto does not use. Worth revisiting if Ditto later ships as OCI artifacts.
+- **Ditto usage:** none at v1.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1G.
+
+**gh attestation (cli/cli)** — part of GitHub CLI, GitHub-specific, Added 2026-04-17
+- GitHub's attestation tooling built on Sigstore. `gh attestation sign` produces keyless Sigstore attestations tied to GitHub Actions workflow identity.
+- **Classification:** SKIP — vendor lock-in on GitHub; incompatible with ADR-034's air-gap ceremony.
+- **Ditto usage:** none.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §1H.
+
+## Progressive Delivery + Feature Gating (2026-04-17)
+
+Added to support Brief 181 and ADR-034 §4 rollout gating. Full survey in `docs/research/network-scale-rsi-tech-choices.md` §Topic 3.
+
+**Argo Rollouts (argoproj/argo-rollouts)** — github.com/argoproj/argo-rollouts (3.4k stars, Go 86.7%, Apache-2.0, v1.9.0 March 2026, Added 2026-04-17)
+- Kubernetes controller for progressive delivery (blue-green, canary, progressive rollout). Configurable step-based traffic splits with metric-driven analysis (`AnalysisTemplate`) between steps. Automatic rollback on analysis failure.
+- **Classification:** PATTERN (staged rollout + metric-gated progression concepts) — product skipped because it's Kubernetes-native and Ditto's rollout model is pull-based, not traffic-split.
+- **Ditto usage:** stage progression + gate pattern informing ADR-034 §4; not adopted as a dependency.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §3B.
+
+**Flagger (fluxcd/flagger)** — github.com/fluxcd/flagger (5.3k stars, Go 91.7%, Apache-2.0, v1.42.0 October 2025, Added 2026-04-17)
+- Progressive delivery controller for Kubernetes + service mesh (Istio, Linkerd, NGINX). Deeper traffic-routing integration than Argo Rollouts; automated A/B testing.
+- **Classification:** SKIP — service-mesh requirement mismatches Ditto's architecture.
+- **Ditto usage:** none.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §3C.
+
+**Kayenta (spinnaker/kayenta)** — github.com/spinnaker/kayenta (1.3k stars, Java 78.5%, Apache-2.0, v2.42.2 May 2025, archived December 2025, Added 2026-04-17)
+- Netflix-originated statistical canary analysis. Judges canary vs baseline via Mann-Whitney U-test on time-series metrics.
+- **Classification:** PATTERN (statistical comparison concept — revisit in sub-brief 186 once evidence deep enough); SKIP as a product (archived repo, Spinnaker dependency prohibitive).
+- **Ditto usage:** statistical-comparison pattern reference for future sub-brief 186 iteration when node count supports proper statistical tests.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §3D.
+
+**OpenFeature (open-feature/spec)** — github.com/open-feature/spec (1.1k stars, polyglot, Apache-2.0, CII Best Practices certified, Added 2026-04-17)
+- Vendor-neutral feature-flag specification with SDKs for multiple languages. Aims to be the OpenTelemetry-equivalent for feature management.
+- **Classification:** EVALUATE — potential fit if Ditto later needs runtime activation gating distinct from release distribution.
+- **Ditto usage:** not adopted for ADR-034 (release distribution is the chosen primary mechanism); candidate for future work if runtime gating becomes needed.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §3F.
+
+**Unleash (Unleash/unleash)** — github.com/Unleash/unleash (13.4k stars, TypeScript 96.9%, Apache-2.0, v7.6.3 April 2026, Added 2026-04-17)
+- Open-source feature management platform with optional commercial tier. Self-hostable. Privacy-by-design, API-first, 12+ official SDKs.
+- **Classification:** EVALUATE — TypeScript ecosystem fit if feature-flag path is taken.
+- **Ditto usage:** not adopted at v1; reference if ADR-034 rollout distribution proves insufficient and runtime gating becomes needed.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §3F.
+
+**Flagsmith, LaunchDarkly** — mentioned alongside OpenFeature/Unleash as commercial alternatives. Not separately evaluated at v1.
+
+## Privacy Primitives (2026-04-17)
+
+Added to support Brief 181 Sub-brief 182 (evidence harvest) and ADR-033 §1 consent model. Full survey in `docs/research/network-scale-rsi-tech-choices.md` §Topic 2.
+
+**k-anonymity / l-diversity / t-closeness** — academic literature, Added 2026-04-17
+- Tabular de-identification primitives. k-anonymity requires each record indistinguishable from ≥k−1 others on quasi-identifiers; l-diversity extends to sensitive-attribute diversity; t-closeness extends to distribution bounding. Widely used in HIPAA de-identification (k=5 to 20 typical).
+- **Classification:** PATTERN (k-anonymity adopted for evidence aggregation thresholds in ADR-033 §1 and §5; l-diversity and t-closeness flagged as future enhancements if threat model sharpens).
+- **Ditto usage:** k=5 threshold on aggregate evidence actionability per ADR-033; joint-tuple k-anonymity on integration-creation signals per ADR-033 §5 revision.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §2A–2C.
+
+**RAPPOR (Google)** — historical: github.com/google/rappor (Apache-2.0, deprecated in production 2023), Added 2026-04-17
+- Local differential privacy mechanism for collecting categorical telemetry from Chrome browsers. Two-stage randomized response with permanent + instantaneous noise. Deployed by Google 2014-2023, then deprecated in favor of shuffle-DP approaches.
+- **Classification:** PATTERN (reference for LDP mechanics if Ditto later adopts DP); SKIP as a product (deprecated).
+- **Ditto usage:** not adopted. Reference point if privacy threat model sharpens toward adversarial aggregator scenarios.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §2D.
+
+**TensorFlow Federated (tensorflow/federated)** — github.com/tensorflow/federated (Python, Apache-2.0, Added 2026-04-17)
+- Federated learning framework with Secure Aggregation primitive. Clients contribute to aggregate sum via pairwise-masked protocol; aggregator learns only the sum. Mature Bonawitz et al. (CCS 2017) implementation.
+- **Classification:** EVALUATE — only if Ditto's SLM training pipeline (Briefs 135–137) draws on network evidence; not needed for scaffold-level RSI at v1.
+- **Ditto usage:** future candidate for federated SLM training.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §2G.
+
+**Flower (adap/flower)** — github.com/adap/flower (6.8k stars, Python 72.5%, Apache-2.0, v1.29.0 April 2026, Added 2026-04-17)
+- Framework-agnostic federated learning framework. Supports PyTorch, TensorFlow, JAX, scikit-learn, XGBoost, Opacus (DP), iOS/Android edge. Newer and more active than TFF.
+- **Classification:** EVALUATE — same rationale as TFF; federated learning is out of scope for RSI v1.
+- **Ditto usage:** future candidate for federated SLM training.
+- **Full evaluation:** `docs/research/network-scale-rsi-tech-choices.md` §2G.
 
 ---
 

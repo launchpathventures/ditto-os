@@ -173,7 +173,7 @@ Severity levels:
 
 ## Final Steps
 
-1. Run `pnpm typecheck` to confirm no type regressions
+1. Run `pnpm run type-check` to confirm no type regressions
 2. Summarise: total issues by severity, most critical items, overall assessment
 3. If `--fix` was passed, fix all CRITICAL and HIGH issues, then re-run typecheck
 

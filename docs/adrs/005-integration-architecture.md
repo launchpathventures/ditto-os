@@ -122,7 +122,7 @@ The `integration` executor resolves the service and protocol from the registry, 
 - Context window budget must account for MCP tool schemas when MCP is used
 
 **Follow-up decisions needed:**
-- Which integration platform (if any) to adopt for credential management: build minimal, adopt Nango, or use Composio
+- ~~Which integration platform (if any) to adopt for credential management: build minimal, adopt Nango, or use Composio~~ **Resolved by ADR-031 (2026-04-17): build core inside Network Service for top-5 providers; defer Nango to Phase 12 re-evaluation (trigger: ≥3 unplanned integration requests per week for one month + commercial-licence conversation with NangoHQ).**
 - Exact phase placement in roadmap (proposed: between Phase 5 and current Phase 6)
 - Whether the integration registry is YAML files (like processes) or database-backed
 - Error handling and retry strategy for external calls
