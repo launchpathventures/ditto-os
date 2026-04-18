@@ -117,7 +117,7 @@ Exit criterion: Rob (the persona) clicks "Connect Gmail" in his workspace, compl
 | `packages/web/components/integrations/connect-button.tsx` | Create — minimal component. Button → fetch Network OAuth URL → window.open → poll for `oauth.connected` SSE → update UI. |
 | `packages/web/app/(workspace)/integrations/connected.tsx` | Create — success page the Network callback redirects to. Shows "Gmail connected" + returns to conversation. |
 | `.env.example` | Modify — add `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` under a new "Network Service — Managed OAuth" section. Stubs for Slack/Notion (Briefs 189/190) commented out. Redirect URI documented as `https://ditto.partners/v1/network/oauth/callback`. Already staged during the brief-drafting pass (2026-04-17) so this row is effectively a check-in, not net-new. |
-| `src/cli/commands/network-debug.ts` | Create — admin CLI group. Two subcommands: (1) `pnpm cli network debug oauth-revoke --service <name> --user <id>` force-flips a vault grant to `REVOKED` and fires SSE; used by smoke test and for ops-driven revocation testing. (2) `pnpm cli debug step-run seed --process <slug> --json` creates a minimal active `stepRuns` row and prints its id as JSON; used by smoke test to exercise the gmail/send Insight-180 guard path without running a full process. Both guarded by `DITTO_ADMIN=1` env — refuse to run without it. |
+| `src/cli/commands/network-debug.ts` | Create — admin CLI group under `pnpm cli network debug *`. Two subcommands: (1) `pnpm cli network debug oauth-revoke --service <name> --user <id>` force-flips a vault grant to `REVOKED` and fires SSE; used by smoke test and for ops-driven revocation testing. (2) `pnpm cli network debug step-run seed --process <slug> --json` creates a minimal active `stepRuns` row and prints `{"stepRunId": "<id>"}` to stdout; used by smoke test to exercise the gmail/send Insight-180 guard path without running a full process. Both subcommands guarded by `DITTO_ADMIN=1` env — refuse to run without it. |
 | `src/engine/network/oauth/module-boundary.test.ts` | Create — asserts no file under `src/` outside `src/engine/network/` imports from `packages/core/src/oauth/internal/*`. Covers the "workspace never holds a token" invariant at the module level. |
 | `src/engine/network/oauth/response-shape.test.ts` | Create — asserts no Network HTTP response or SSE event fixture payload contains `access_token` or `refresh_token` substrings. Runs against representative fixtures for every endpoint the Network exposes. |
 | `docs/state.md` | Modify — record Brief 187 complete, OAuth skeleton + Gmail live. |
@@ -208,7 +208,7 @@ curl -X POST http://localhost:${NETWORK_PORT}/v1/network/oauth/start \
 
 # Broker send
 # Seed a stepRun for the smoke test (or reuse an active one from a real process run)
-STEP_RUN_ID=$(pnpm cli debug step-run seed --process gmail-smoke --json | jq -r .stepRunId)
+STEP_RUN_ID=$(DITTO_ADMIN=1 pnpm cli network debug step-run seed --process gmail-smoke --json | jq -r .stepRunId)
 
 curl -X POST http://localhost:${NETWORK_PORT}/v1/network/gmail/send \
   -H "Authorization: Bearer $WORKSPACE_API_TOKEN" \

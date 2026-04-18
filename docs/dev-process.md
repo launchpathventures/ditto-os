@@ -348,3 +348,34 @@ These role contracts are the manual precursor to the automated harness. Here's h
 The transition from skills to harness is a trust decision, not an architecture decision. Skills rely on AI discipline + human oversight. The harness enforces mechanically. Convert when you want automated enforcement — when the process is repeatable enough and the quality criteria are mature enough that the system can govern itself.
 
 This follows the project's own core thesis: **conversation crystallises into process definition.**
+
+## Autopilot
+
+The seven-role manual pipeline can be driven by hand for every brief, or it can be automated by two skills that compose on top of the existing roles: `/drain-queue` (cross-brief autopilot) and `/autobuild` (within-brief autopilot). Together they reduce the human's per-brief workload to: triage (`/dev-pm` or direct), design (`/dev-architect` when needed), mark `**Status:** ready`, then return to a stack of open PRs to merge.
+
+Companion brief: `docs/briefs/188-cross-brief-autopilot.md`. Doctrine: `docs/adrs/035-brief-state-doctrine.md`.
+
+### When to use the autopilot vs invoking roles directly
+
+- **Use `/drain-queue`** when you have one or more `**Status:** ready` briefs in `docs/briefs/` and want to walk away. Single brief: `/drain-queue 1`. Whole queue: `/drain-queue all`. Cost is real (~30–60 min wall-clock + $5–30 LLM spend per brief), so prefer `/drain-queue 1` for the first session and escalate to `all` once trust and rate-limit headroom are confirmed.
+- **Use `/autobuild`** when you've already manually flipped a single brief to `**Status:** in_progress` on its own feature branch and just want the implement → review → PR pipeline to run.
+- **Invoke the roles directly** (`/dev-builder`, `/dev-reviewer`, etc.) when the work is exploratory, ambiguous, or needs human judgment mid-build — i.e., the brief itself is uncertain. The autopilot is for briefs that are clear enough to dispatch autonomously.
+
+### Maker-checker invariants (load-bearing)
+
+- `/autobuild` Step 4 (architecture review via `/dev-reviewer`) and Step 5 (exhaustive bug audit via `/dev-review`) MUST each spawn a fresh subagent (Task / Agent tool), NOT inline review in the Builder's conversation. This preserves the maker-checker separation per CLAUDE.md §Critical separation. The two reviewers catch different classes of issue (architectural compliance vs runtime/integration bugs).
+- `/autobuild` does NOT enumerate `/dev-builder`'s verify steps. It invokes `/dev-builder` and inherits the full role contract — type-check, all four `pnpm test*` suites, smoke test, engine-first rule, caller-impact analysis, etc.
+- `/drain-queue` never checks out `main`. Conductor worktrees can't share a checkout, so the no-checkout rule is what makes parallel-workspace concurrency safe.
+
+### Trust-boundary note
+
+`**Status:** ready` IS the architectural trust boundary for autonomous build. Anything marked ready will be implemented and PR-opened by `/drain-queue` without further human gate until merge. Reviewers approving briefs for `ready` should treat the flip as code-execution authorization. Pre-flight hard-stops in `/autobuild` cover **DB-related risk only** (`drizzle/*`, `pnpm db:*`, `supabase db push`); other classes of dangerous brief content (`package.json` deps, `.github/workflows/*.yml`, `.env*`, build configs) rely entirely on the human at the `Status: ready` gate. See `docs/adrs/035-brief-state-doctrine.md`.
+
+### Pre-flight hard-stops (the autopilot's narrow safety net)
+
+Before invoking `/dev-builder`, `/autobuild` Step 2 scans the brief and hard-stops if the brief touches:
+
+- `drizzle/meta/_journal.json`, `drizzle/migrations/`, `packages/core/src/db/schema/`, `src/db/schema/` (Drizzle journal is a concurrency bottleneck per `docs/insights/190-migration-journal-concurrency.md`)
+- `pnpm db:push`, `pnpm db:migrate`, `drizzle-kit push`, `drizzle-kit migrate`, `supabase db push`
+
+On hard-stop the brief stays at `**Status:** in_progress` (claim already happened in `/drain-queue`) and the autopilot reports to the human. Manual build required for these classes of brief.

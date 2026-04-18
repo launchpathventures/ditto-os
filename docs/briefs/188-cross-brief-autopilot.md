@@ -1,7 +1,7 @@
 # Brief 188: Cross-Brief Autopilot — Drain-Queue + Autobuild Adapted to Ditto
 
 **Date:** 2026-04-17
-**Status:** draft
+**Status:** ready
 **Depends on:** Existing dev-role pipeline (`/dev-pm`, `/dev-architect`, `/dev-builder`, `/dev-reviewer`, `/dev-documenter`); existing `/dev-review` skill at `.catalyst/skills/dev-review/` (already installed identically to Catalyst source). No Brief NNN dependencies — the dev-role pipeline is the substrate, not a brief.
 **Unlocks:** Hands-off execution of the `Status: ready` brief queue. Human stays on planning + merge-time taste; dispatch between roles becomes machine work. Enables N parallel Conductor workspaces to drain the queue concurrently. Non-recursive prerequisite for Brief 181 (Recursive Self-Improvement).
 
@@ -83,6 +83,15 @@ These run as `/autobuild` Step 2, after Step 1 (resolve brief) and BEFORE Step 3
 - **External-side-effect spike-test note** (`docs/insights/180-spike-test-every-new-api.md`). Scan §What Changes for new functions in `src/engine/integration-spike.test.ts` or new external API integration. Do not hard-stop — `/dev-builder` already enforces the spike-test requirement — but log a flag in the autopilot's final report so the human knows to verify the spike was run.
 - **Side-effecting functions need `stepRunId` guard** (`docs/insights/180-steprun-guard-for-side-effecting-functions.md`). `/dev-builder` enforces this on functions producing publishing/payment/webhook side effects. The autopilot does not gate on this directly; relies on `/dev-builder`'s contract.
 
+**Pre-flight scope note (important):** Pre-flight hard-stops cover **DB-related risk only** (`drizzle/*`, `pnpm db:*`, `supabase db push`). They do NOT cover other classes of dangerous brief content that an autonomous build could amplify:
+- `package.json` `dependencies` / `devDependencies` modifications → `pnpm install` of arbitrary packages on every Builder workspace
+- `.github/workflows/*.yml` → can exfiltrate `${{ secrets.* }}` after merge
+- `.env*` modifications → may leak credentials into git history
+- `next.config.*`, `vite.config.*`, `tsconfig.*`, etc. → arbitrary build-time code execution
+- New scripts referenced by `package.json` "scripts" field
+
+These rely entirely on the **`Status: ready` human gate** (the trust boundary, see §Security boundary). Reviewers approving briefs for `ready` SHOULD scan §What Changes for these patterns and either reject or hand-build instead of leaving for the autopilot. ADR-035 documents this trust-boundary scope.
+
 ### Guardrails (carried over verbatim from Catalyst, no Ditto-specific change)
 
 - **No `--force`, `--no-verify`, `reset --hard`.** Race-loss recovery uses ONLY `git checkout -B claim-tmp origin/main` (capital `-B`); this discards the prior claim attempt's local commit and rebuilds `claim-tmp` on top of whatever the winning workspace pushed. This is the only legitimate "discard local state" operation in either skill.
@@ -92,7 +101,7 @@ These run as `/autobuild` Step 2, after Step 1 (resolve brief) and BEFORE Step 3
 ### Security boundary (Insight-017)
 
 - **`Status: ready` IS the trust boundary.** Anything marked ready will be implemented autonomously, with PR opened against `main`. A malicious or careless brief that passes `/dev-pm`'s human gate becomes a write-capable agent invocation. This is no different from running `/dev-builder` manually on a brief — the autopilot does not introduce a new privilege; it only removes the per-step dispatch friction. Because this changes the surface area of the trust boundary in a way the existing architecture spec does not document, an ADR (`ADR-035`, see §What Changes) records the doctrine; this brief is its first reference.
-- **No credential exfiltration surface.** The skills do not read `.env`, do not hit the network beyond `git fetch`/`git push`/`gh pr create`/`gh pr view`/`gh pr comment`, and do not transmit brief contents to external services. Inherits `gh` auth scope (already-authenticated user) with no token broadening.
+- **No credential exfiltration surface.** The skills do not read `.env`, do not hit the network beyond `git fetch`/`git push`/`gh pr list`/`gh pr create`/`gh pr view`/`gh pr comment`, and do not transmit brief contents to external services. Inherits `gh` auth scope (already-authenticated user) with no token broadening. **Minimum required `gh` scope:** `repo` (covers all PR operations); current `gh auth status` on this repo shows `gist`, `read:org`, `repo`, `workflow` — sufficient.
 - **Trust-tier integrity preserved.** `/autobuild` does not modify trust-tier configuration in `packages/core/src/trust/`. If a brief's implementation changes trust constants, that's the Builder's choice under `/dev-builder`'s normal constraints — the autopilot does not bypass trust gates.
 - **Audit trail is the git history + PR comments.** Every claim, every fix-pass commit, the GC pass's complete-flips, and every escalation is recorded as a normal git commit on `origin/main` (for state mutations) or on the feature branch / PR (for build artifacts).
 - **Single-process scope.** The autopilot operates on the dev-process pipeline only — it does not interact with any user-facing process, the Self, network agents, personas, or the harness pipeline at runtime. There is no path by which `/drain-queue` can be triggered from a process step.
@@ -100,6 +109,12 @@ These run as `/autobuild` Step 2, after Step 1 (resolve brief) and BEFORE Step 3
 ### Architecture-layer impact
 
 This is **meta-process tooling**, not an architectural-layer change. It does not add to or modify any of the six layers (Process, Agent, Harness, Awareness, Learning, Human). It sits *alongside* the role pipeline documented in `docs/dev-process.md` as a dispatch-automation layer.
+
+### Cost & throughput (informed-consent note for `/drain-queue all`)
+
+A single `/autobuild` run has substantial wall-clock and LLM-token cost: `/dev-builder` (multiple LLM turns + `pnpm test:e2e` Playwright run + `pnpm test:e2e:auto`) + fresh-subagent `/dev-reviewer` + fresh-subagent `/dev-review` + up to 3 `/dev-review --fix` recursions. Empirical estimate: **30–60 minutes wall-clock per brief**; LLM token cost on the order of $5–$30 per brief depending on complexity. `/drain-queue all` against a 50-brief queue therefore commits to **25–50 compute-hours** plus **$250–$1500 in LLM spend**, plus ~50 PRs requiring human merge review.
+
+With N parallel Conductor workspaces, throughput scales near-linearly in N (Catalyst's empirical claim) up to the bottleneck of GitHub Actions CI concurrency, the GH PR API rate limit (`gh pr list` and `gh pr create` each consume one rate-limit token), and local CPU/memory load (Playwright runs are not cheap). Recommend starting with `/drain-queue 1` for the first session and only escalating to `/drain-queue all` once trust and rate-limit headroom are confirmed.
 
 ### Engine Core (`@ditto/core`) boundary
 
@@ -128,7 +143,7 @@ These are Claude Code skills (filesystem-resident SKILL.md files at `.catalyst/s
 | `.catalyst/skills/dev-review/SKILL.md` | **Modify**: replace `pnpm typecheck` → `pnpm run type-check` at all three current sites (line 9 in "Why This Skill Exists" prose, line 40 in Guardrails, plus any other site grep finds). Line 26: `origin/master...HEAD` → `origin/main...HEAD`. After the patch, `grep -n "pnpm typecheck"` and `grep -n "origin/master"` against the file MUST both return zero. |
 | `.catalyst/skills/dev-review/references/dev-review-checklist.md` | **Modify**: replace `pnpm typecheck` → `pnpm run type-check` at line 176 (§Final Steps) and any other site grep finds. Verify no `origin/master` reference exists in this file. |
 | `docs/dev-process.md` | **Modify**: add a §Autopilot section explaining when to use `/drain-queue` vs invoking roles directly, the maker-checker invariants `/autobuild` enforces (fresh subagents for both reviewers), the security-boundary note (`Status: ready` is the trust gate; cross-reference ADR-035), and the pre-flight hard-stop list. Reference this brief. |
-| `docs/adrs/035-brief-status-as-dispatch-mutex.md` | **Create** (use `docs/adrs/000-template.md`): document the doctrine that (a) brief `**Status:**` bold-line mutation on `origin/main` is the cross-workspace dispatch mutex, (b) `Status: ready` is the architectural trust boundary for autonomous build, (c) the narrow `Brief NNN` dependency model intentionally treats ADR/Phase/infrastructure references as informational. ADR-035 is the canonical home for these claims; the brief is just the implementation. |
+| `docs/adrs/035-brief-state-doctrine.md` | **Create** (use `docs/adrs/000-template.md`): document the doctrine that (a) brief `**Status:**` bold-line mutation on `origin/main` is the cross-workspace dispatch mutex, (b) `Status: ready` is the architectural trust boundary for autonomous build, (c) the narrow `Brief NNN` dependency model intentionally treats ADR/Phase/infrastructure references as informational. ADR-035 is the canonical home for these claims; the brief is just the implementation. |
 | `docs/state.md` | **Modify** (per CLAUDE.md mandate): record skill installation + new dispatch-automation capability + ADR-035 + cross-link to Brief 181 as the network-scale follow-up. |
 | `docs/insights/` | **Create new insight if discoveries emerge** during build (likely candidate: "Bold-line content edit on a shared branch is sufficient as a distributed mutex; non-fast-forward rejection makes git the lock manager"). Capture in `docs/insights/NNN-mutex-via-bold-line-edit.md` per `000-template.md`. Not mandatory — only if the build surfaces something genuinely new. |
 | `docs/briefs/188-cross-brief-autopilot.md` | **Modify**: `Status: draft → ready` after architect/human review; → `in_progress` (with `**PR:**` line) when `/drain-queue` claims it (eating its own dogfood); → `complete` when the GC pass observes the merge. |
@@ -165,8 +180,8 @@ These are Claude Code skills (filesystem-resident SKILL.md files at `.catalyst/s
 15. [ ] All script invocations across the three skills use the correct Ditto names. `grep -rn "pnpm typecheck" .catalyst/skills/{drain-queue,autobuild,dev-review} .claude/skills/{drain-queue,autobuild,dev-review}` returns zero. `grep -rn "pnpm lint" .catalyst/skills/{drain-queue,autobuild,dev-review} .claude/skills/{drain-queue,autobuild,dev-review}` returns zero. `grep -rn "origin/master" .catalyst/skills/{drain-queue,autobuild,dev-review} .claude/skills/{drain-queue,autobuild,dev-review}` returns zero. `grep -rn "project/agentcrm-app-dev" .catalyst/skills/{drain-queue,autobuild,dev-review} .claude/skills/{drain-queue,autobuild,dev-review}` returns zero.
 16. [ ] No skill uses `--force`, `--no-verify`, or `reset --hard`. The only "discard local state" operation is `git checkout -B claim-tmp origin/main`, scoped to race-loss recovery (and re-used identically for GC race-loss).
 17. [ ] `docs/dev-process.md` includes a §Autopilot section covering: when to use `/drain-queue` vs invoking roles, the maker-checker invariants (fresh subagents for reviewers), the trust-boundary note (cross-reference ADR-035), the pre-flight hard-stop list. `docs/state.md` records the new capability per CLAUDE.md.
-18. [ ] `docs/adrs/035-brief-status-as-dispatch-mutex.md` exists, follows `000-template.md`, documents the three claims (mutex, trust boundary, narrow dependency model).
-19. [ ] Existing `/dev-review` skill remains usable standalone (invoking it directly works) and is updated only for the two patches in §What Changes (`pnpm typecheck` → `pnpm run type-check`; `origin/master` → `origin/main`).
+18. [ ] `docs/adrs/035-brief-state-doctrine.md` exists, follows `000-template.md`, documents the three claims (mutex, trust boundary, narrow dependency model).
+19. [ ] Existing `/dev-review` skill remains usable standalone (invoking it directly works) and is updated only for the two TYPES of substitution in §What Changes — `pnpm typecheck` → `pnpm run type-check` (3 sites: lines 9 + 40 of SKILL.md, line 176 of the checklist) and `origin/master` → `origin/main` (1 site: line 26 of SKILL.md). Total: 4 substitutions across 2 files.
 20. [ ] Builder ran the smoke test in §Smoke Test below and pasted the output into the handoff (Insight-038). Includes the concurrency race smoke test if the Builder has a second Conductor workspace available; if not, explicitly notes that and asks the human to run it before merging this brief.
 
 ## Review Process
@@ -269,7 +284,8 @@ To test a real same-brief race, the queue must contain a `Status: ready` brief t
 # Step 1: re-seed brief 999 to Status: ready (this is the "reset" step — the only repeatable
 # way to get a fresh ready brief without inventing a 998, 997, ... naming chain)
 git checkout -b reseed/999-for-concurrency-test origin/main
-# Edit docs/briefs/999-autopilot-smoke-test.md: flip **Status:** complete → ready, remove **PR:** line
+sed -i '' 's/^\*\*Status:\*\* complete$/**Status:** ready/' docs/briefs/999-autopilot-smoke-test.md
+sed -i '' '/^\*\*PR:\*\*/d' docs/briefs/999-autopilot-smoke-test.md
 git commit -am "test: re-seed brief 999 for concurrency smoke test"
 git push -u origin reseed/999-for-concurrency-test
 gh pr create --base main --title "test: re-seed brief 999 for concurrency smoke test" --body "Reset brief 999 to Status: ready so /drain-queue race can be retried."
@@ -333,7 +349,7 @@ gh pr create --base main --title "chore: remove brief 999 + smoke-test marker" -
 ---
 
 **Reference docs checked / updated** (per `docs/insights/043-knowledge-maintenance-at-point-of-contact.md`):
-- Read: `docs/architecture.md` (no drift relevant to meta-tooling — but see §Open Question on whether the trust-boundary doctrine should also land in architecture.md, not just ADR-035), `docs/review-checklist.md` (12-point checklist + extensions 13-15), `docs/personas.md` (no UX surface, not directly applicable), `docs/dev-process.md` (will be modified — see §What Changes), `docs/briefs/000-template.md`, `.claude/commands/dev-builder.md` (line 27 = caller-impact MUST; lines 81-86 = full verify list), `.claude/commands/dev-reviewer.md`, `.claude/skills/dev-review/SKILL.md` (existing 3-key pointer file format), `.catalyst/skills/dev-review/SKILL.md` (3 sites of `pnpm typecheck` + 1 of `origin/master` to patch), `docs/adrs/030-deployment-mode-flag.md` and `docs/adrs/031-oauth-credential-platform.md` (closest existing ADRs; no conflict)
+- Read: `docs/architecture.md` (no drift relevant to meta-tooling — but see §Open Question on whether the trust-boundary doctrine should also land in architecture.md, not just ADR-035), `docs/review-checklist.md` (12-point checklist + extensions 13-15), `docs/personas.md` (no UX surface, not directly applicable), `docs/dev-process.md` (will be modified — see §What Changes), `docs/briefs/000-template.md`, `.claude/commands/dev-builder.md` (line 27 = caller-impact MUST; lines 81-86 = full verify list), `.claude/commands/dev-reviewer.md`, `.claude/skills/dev-review/SKILL.md` (existing 3-key pointer file format), `.catalyst/skills/dev-review/SKILL.md` (3 sites of `pnpm typecheck` + 1 of `origin/master` to patch), `docs/adrs/030-deployment-mode-flag.md`, `docs/adrs/031-oauth-credential-platform.md`, `docs/adrs/033-network-scale-rsi-architecture.md` (Brief 188 is its non-recursive prerequisite — no doctrinal conflict), `docs/adrs/034-release-distribution-model.md` (sibling of 033; no conflict)
 - Insights consulted (with full filenames to disambiguate Insight-180 collision and archived locations):
   - `docs/insights/archived/004-brief-sizing.md` — sizing budget (20 ACs is at upper bound; one integration seam keeps within bounds)
   - `docs/insights/017-security-is-architectural-not-a-role.md` — drove ADR-035

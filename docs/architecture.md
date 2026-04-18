@@ -1218,6 +1218,27 @@ All configured providers are loaded simultaneously. `createCompletion({ purpose:
 
 ---
 
+## Cross-Cutting Governance
+
+Trust boundaries that don't fit cleanly inside a single layer.
+
+### Dispatch-Authorization Trust Boundary
+
+The agent-execution trust tiers (§Trust Tiers above) govern *how an agent is allowed to act once it's running a process step*. There is a separate, orthogonal trust surface: *who is allowed to authorize an agent to start running on a brief in the first place*. With the introduction of the autopilot skills (`/drain-queue` + `/autobuild`, see Brief 188), this becomes an architectural concern.
+
+**The doctrine:** flipping a brief's `**Status:**` bold-line from `draft` to `ready` in `docs/briefs/NNN-*.md` IS the dispatch-authorization trust boundary. Once the autopilot is installed, marking a brief `ready` is functionally equivalent to authorizing `/dev-builder` to implement it autonomously and open a PR against `main`. The autopilot does not introduce a new privilege — running `/dev-builder` manually on the same brief is the same authorization. The autopilot only removes the per-step dispatch friction.
+
+**What this means in practice:**
+
+- Reviewers approving briefs for `ready` SHOULD scan §What Changes for high-blast-radius patterns: `package.json` `dependencies`/`devDependencies`, `.github/workflows/*.yml`, `.env*`, `next.config.*`, `vite.config.*`, `tsconfig.*`, new scripts in `package.json` "scripts" field. Either reject the flip or hand-build instead of leaving for the autopilot.
+- The autopilot's pre-flight hard-stops cover **DB-related risk only** (`drizzle/*`, `pnpm db:*`, `supabase db push`). Everything else relies on the human at the `Status: ready` gate.
+- No autonomous path bypasses this gate. `/drain-queue` only operates on `Status: ready` briefs. `/dev-pm` does not auto-promote `draft` → `ready`. `/autobuild` does not auto-merge PRs.
+- This dispatch-authorization trust is **orthogonal to the agent-execution trust tiers**. The autopilot does not modify trust-tier configuration; brief implementations that change trust constants do so under `/dev-builder`'s normal constraints.
+
+Full doctrine — including the dispatch mutex (atomic-push of `**Status:**` line to `origin/main`) and the narrow `Brief NNN` dependency model — lives in **ADR-035 (`docs/adrs/035-brief-state-doctrine.md`)**. Implementation: Brief 188 (`docs/briefs/188-cross-brief-autopilot.md`). Operational guide: `docs/dev-process.md` §Autopilot.
+
+---
+
 ## References
 
 | Source | What we took |
