@@ -76,8 +76,9 @@ COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/cognitive ./cognitive
 COPY --from=builder /app/docs/ditto-character.md ./docs/ditto-character.md
 
-# Copy drizzle config for schema sync
+# Copy drizzle config and migrations for schema sync
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/drizzle ./drizzle
 
 # Install production dependencies for engine (better-sqlite3, drizzle, etc.)
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
