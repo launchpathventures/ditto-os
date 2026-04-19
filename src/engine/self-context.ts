@@ -15,6 +15,7 @@ import { eq, ne, and, desc, gte } from "drizzle-orm";
 import { updateWorkingPatterns } from "./user-model";
 import { buildInteractionSummary } from "./interaction-events";
 import { findPersonByEmailGlobal } from "./people";
+import { writeMemory, updateMemory } from "./legibility/write-memory";
 
 const CHARS_PER_TOKEN = 4;
 
@@ -539,17 +540,13 @@ export async function recordSelfCorrection(
     .limit(1);
 
   if (existing) {
-    await db
-      .update(schema.memories)
-      .set({
-        reinforcementCount: existing.reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        confidence: Math.min(0.9, 0.3 + existing.reinforcementCount * 0.15),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, existing.id));
+    await updateMemory(db, existing.id, {
+      reinforcementCount: existing.reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      confidence: Math.min(0.9, 0.3 + existing.reinforcementCount * 0.15),
+    });
   } else {
-    await db.insert(schema.memories).values({
+    await writeMemory(db, {
       scopeType: "self",
       scopeId: userId,
       type: "correction",

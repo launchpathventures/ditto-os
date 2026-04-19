@@ -1,6 +1,13 @@
 /**
  * Tests for network seed export and import.
  * Provenance: Brief 089 AC 1-5, 9-10.
+ *
+ * Brief 198 test-file exemption: this file writes to `schema.memories`
+ * directly via `db.insert(...)` instead of `writeMemory()` because the tests
+ * are seeding DB state to verify seed export/import behaviour at the DB layer.
+ * The `writeMemory()` chokepoint in `src/engine/legibility/write-memory.ts`
+ * is reserved for non-test engine code; tests may bypass it by design.
+ * See `src/engine/legibility/README.md` for the full exemption rationale.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

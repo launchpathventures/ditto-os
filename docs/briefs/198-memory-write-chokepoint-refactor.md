@@ -1,7 +1,7 @@
 # Brief 198: Memory Write Chokepoint Refactor
 
 **Date:** 2026-04-20
-**Status:** ready
+**Status:** in_progress
 **Depends on:** none (pure refactor of existing code)
 **Unlocks:** Brief 199 (memories projection + safety filter), plus any future memory-related observability, trust-gate instrumentation, or event-emission work
 

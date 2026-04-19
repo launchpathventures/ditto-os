@@ -18,6 +18,7 @@
 
 import { db, schema } from "../db";
 import { eq, and, desc, gte, count, inArray } from "drizzle-orm";
+import { writeMemory } from "./legibility/write-memory";
 import type {
   PersonVisibility,
   JourneyLayer,
@@ -420,17 +421,14 @@ export async function addPersonMemory(input: {
   source?: schema.MemorySource;
   metadata?: Record<string, unknown>;
 }) {
-  const [memory] = await db
-    .insert(schema.memories)
-    .values({
-      scopeType: "person",
-      scopeId: input.personId,
-      type: input.type,
-      content: input.content,
-      source: input.source ?? "system",
-      metadata: input.metadata,
-    })
-    .returning();
+  const memory = await writeMemory(db, {
+    scopeType: "person",
+    scopeId: input.personId,
+    type: input.type,
+    content: input.content,
+    source: input.source ?? "system",
+    metadata: input.metadata,
+  });
   return memory;
 }
 
