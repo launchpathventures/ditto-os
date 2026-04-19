@@ -1,7 +1,7 @@
 # Brief 180: Voice Context-Push Hardening
 
 **Date:** 2026-04-17
-**Status:** draft
+**Status:** complete (shipped 2026-04-17 in commit 06b3d9f)
 **Depends on:** Brief 150 (Voice Harness Tightening — complete)
 **Unlocks:** Voice-as-smart-as-text parity, reliable async guidance injection, foundation for Brief 148 (voice briefings)
 

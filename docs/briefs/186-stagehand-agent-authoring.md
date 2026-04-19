@@ -53,6 +53,7 @@ A self-tool that takes `(url, goal)` and returns a draft process YAML using the 
 8. `docs/insights/163-find-or-build-orchestration.md` — the architectural frame for "missing capability = build signal."
 9. `docs/adrs/032-browser-integration-protocol.md` — `browser.*` vocabulary is defined here; the authored YAML targets it.
 10. `docs/insights/180-steprun-guard-for-side-effecting-functions.md` — applies to any side-effecting function added here (exploration launches browser; needs a guard).
+11. `docs/research/browserbase-product-family.md` §Product 4 (Director) — prior-art UX reference for the "NL → browser agent with visual playback + exportable code" pattern. Director is not a Ditto dependency; its shape is a data point for Designer input if (once §Decision Criterion flips to build) the exploration-progress SSE narration needs richer feedback than default.
 
 ## Constraints
 

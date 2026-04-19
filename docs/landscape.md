@@ -525,19 +525,38 @@ AI SDR market in correction: 50-70% churn within 3 months. Hybrid (AI+human) mod
 
 **Decision (ADR-031):** Build core OAuth inside the Network Service for top-5 providers (Gmail, Google Calendar, Google Drive, Slack, Notion). Top-5 is small enough that building is cheaper than integrating. Re-evaluate Nango when coverage demand exceeds engineering patience. Keep the integration-handler shape provider-agnostic so a Nango-backed handler can slot in later without re-architecture.
 
-### Browser Automation (2026-04-13, extended 2026-04-17)
+### Browser Automation (2026-04-13, extended 2026-04-17, Browserbase products detailed 2026-04-19)
 
-**Stagehand** — github.com/browserbase/stagehand (8k+ stars, TypeScript, MIT)
-- AI browser SDK built on Playwright. Four primitives: `act`, `extract`, `observe`, `agent`. Supports Anthropic, OpenAI, Gemini via Vercel AI SDK. Production cloud option via Browserbase ($99/mo). Local mode uses headless Chromium.
-- **Classification:** ADOPT — TypeScript-first, MIT license, clean API, actively maintained. Best fit for Ditto's stack. Young project (startup-backed, 8k stars) — validation step included.
-- **Ditto usage:** `browse_web` self-tool (Brief 134). READ-only: `extract` primitive for research and data extraction. No `act` (write operations blocked by design). SSRF guard blocks private/internal network addresses. Token budget hard-enforced. Model configurable via `STAGEHAND_MODEL` env var.
-- **WRITE/act modality status (2026-04-17):** unexplored in Ditto. `act` / `agent` / `observe` primitives available in the library but not surfaced in any self-tool; `WRITE_INTENT_PATTERNS` at `src/engine/self-tools/browser-tools.ts:52-79` blocks write intent at the tool boundary. Extending to writes is an open architecture question.
-- **Full evaluation:** `docs/research/linkedin-ghost-mode-and-browser-automation.md` (READ/LinkedIn context), `docs/research/authenticated-saas-browser-automation.md` (WRITE/authenticated-SaaS context).
+**Stagehand SDK** — github.com/browserbase/stagehand (8k+ stars, TypeScript + Python, MIT)
+- AI browser SDK built on Playwright. Four primitives: `act`, `extract`, `observe`, `agent`. Supports Anthropic, OpenAI, Gemini via Vercel AI SDK. Runtime modes: `env: "LOCAL"` (local headless Chromium) and `env: "BROWSERBASE"` (remote Chromium via CDP).
+- **Classification:** ADOPT — TypeScript-first, MIT license, clean API, actively maintained. Young project (startup-backed, 8k stars) — adoption validated in Brief 134 READ-only use.
+- **Ditto usage:** `browse_web` self-tool (Brief 134). READ-only: `extract` primitive. Configured `env: "LOCAL"` (no Browserbase cloud dependency). SSRF guard blocks private/internal addresses. Token budget hard-enforced. Model configurable via `STAGEHAND_MODEL` env var.
+- **WRITE/act modality status (2026-04-17):** unexplored in Ditto. `act` / `agent` / `observe` primitives available but not surfaced; `WRITE_INTENT_PATTERNS` at `src/engine/self-tools/browser-tools.ts:52-79` blocks writes at the tool boundary. Brief 182 family scopes WRITE via **direct Playwright**, not Stagehand — keeps self-tool vs integration tracks separate.
+- **Full evaluation:** `docs/research/linkedin-ghost-mode-and-browser-automation.md` (READ/LinkedIn), `docs/research/authenticated-saas-browser-automation.md` (WRITE/authenticated-SaaS), `docs/research/browserbase-product-family.md` (Browserbase peripherals).
+
+**Browserbase Cloud Runtime** — browserbase.com (Added 2026-04-19)
+- Hosted Chromium-over-CDP service. Replaces the local headless-Chromium transport used by Stagehand or Playwright without changing caller code. **Pricing as checked 2026-04-19 — verify at the pricing page before any adoption decision:** Free $0 (3 concurrent, 1 hr, 15-min sessions, no captcha/stealth); Developer $20/mo (25 concurrent, 100 hr, basic stealth, captcha); Startup $99/mo (100 concurrent, 500 hr, 5 GB proxies, basic stealth); Scale custom (250+ concurrent, advanced stealth, HIPAA BAA, DPA, SSO).
+- **Classification:** DEPEND CANDIDATE — evaluated, not adopted. Brief 182 line 85 explicitly excludes cloud runtime from sub-briefs 183–185 ("MUST NOT require Browserbase cloud"). Candidate for a future `BrowserRuntimeBrowserbase` implementation of the Brief 183 interface seam when Network deployment or anti-bot fingerprinting creates a real trigger.
+- **Ditto relevance:** MEDIUM-HIGH when Network Service becomes multi-tenant (per-tenant isolation, no Chromium on the hub) and/or when datacenter IPs get blocked by target SaaS. LOW while single-user / local-CLI.
+- **Open Question 1** in Brief 182 (Runtime isolation for Network) is the decision gate that would re-surface this.
+- **Full evaluation:** `docs/research/browserbase-product-family.md` §Product 2.
+
+**Browserbase Browse CLI (`bb`)** — `@browserbasehq/cli` (Added 2026-04-19)
+- OSS terminal CLI for coding agents. Commands: `bb fetch` (URL → clean content), `bb search`, `bb browse open`, `bb sessions list/logs`, `bb functions init/dev/publish`. Session persistence via Browserbase cloud contexts (cookies + localStorage survive across invocations). Positioned for Claude Code / Cursor / Codex integration.
+- **Classification:** PATTERN CANDIDATE — shape overlaps Brief 184's planned `pnpm cli browser auth <service>` session-capture command. Not a depend candidate: subprocess boundary, session persistence tied to Browserbase account rather than Ditto vault, Functions deploy path forks Ditto's runtime.
+- **Ditto relevance:** LOW as dependency; MEDIUM as prior art for CLI session-capture UX.
+- **Full evaluation:** `docs/research/browserbase-product-family.md` §Product 3.
+
+**Browserbase Director** — browserbase.com/director (Added 2026-04-19)
+- Hosted UI for building browser agents from natural language. NL task description → executable Stagehand code export; real-time visual playback; mid-execution NL corrections; scheduled / parallel-scaled runs; 1Password integration for credentials. Free trial tier; production runs meter against the tenant's Browserbase usage budget.
+- **Classification:** PATTERN CANDIDATE only — UI product, not a library. Closest prior art for Brief 186 (deferred `stagehand-agent-authoring.md`). Export format ("Stagehand code") is the primary study artefact.
+- **Ditto relevance:** LOW as dependency; MEDIUM as UX reference if/when Brief 186 is scheduled.
+- **Full evaluation:** `docs/research/browserbase-product-family.md` §Product 4.
 
 **Playwright MCP (Microsoft)** — github.com/microsoft/playwright-mcp (TypeScript, Apache-2.0, Added 2026-04-17)
 - Official Microsoft MCP server wrapping Playwright. Exposes tools: `browser_navigate`, `browser_click`, `browser_type`, `browser_snapshot` (accessibility-tree, not pixels), `browser_select_option`, `browser_wait_for`, `browser_pdf_save`, `browser_file_upload`, and others. Snapshot-based (a11y-tree rather than vision).
-- **Classification:** UNEVALUATED — candidate for DEPEND or ADOPT if write-capable browser modality proceeds. Maps cleanly to ADR-005's existing MCP protocol slot; `--user-data-dir` flag supports persistent auth sessions.
-- **Ditto relevance:** HIGH if Ditto adds WRITE browser capability — provider-neutral, structured rather than vision-based, fits existing MCP infrastructure.
+- **Classification:** UNEVALUATED — candidate for DEPEND or ADOPT if Ditto's MCP handler ships. Maps cleanly to ADR-005's existing MCP protocol slot; `--user-data-dir` flag supports persistent auth sessions. Brief 183's `BrowserRuntime` interface permits a future `BrowserRuntimePlaywrightMcp` implementation without caller changes.
+- **Ditto relevance:** HIGH if a second MCP-server use case arrives and justifies building the generic MCP handler. Otherwise MEDIUM while direct Playwright covers the WRITE path.
 - **Full evaluation:** `docs/research/authenticated-saas-browser-automation.md` §Modality 3.
 
 **Anthropic Computer Use** — part of Anthropic SDK (Added 2026-04-17)
@@ -546,7 +565,9 @@ AI SDR market in correction: 50-70% churn within 3 months. Hybrid (AI+human) mod
 - **Ditto relevance:** MEDIUM — handles any visual UI but Claude-only (violates ADR-026 multi-provider goal); expensive per step (vision tokens per screenshot).
 - **Full evaluation:** `docs/research/authenticated-saas-browser-automation.md` §Modality 2.
 
-**browser-use / Skyvern / Browserbase Director / Steel / Airtop / Anchor / Hyperbrowser / AgentQL / Firecrawl-actions / Gumloop / n8n / OpenAI Operator** — surveyed but not individually evaluated in landscape. See `docs/research/authenticated-saas-browser-automation.md` §Modality 4 for context. Most are candidate dependencies only if hosted-browser or non-TypeScript agent approach is chosen.
+**Hosted-browser alternatives to Browserbase:** Steel Browser (github.com/steel-dev/steel-browser, OSS self-hostable), Anchor Browser (anchorbrowser.io), Hyperbrowser (hyperbrowser.ai), Airtop (airtop.ai). Catalogued but not individually evaluated. Any would be a candidate if Brief 183's `BrowserRuntime` interface gains a hosted implementation; comparative research is a separate Researcher invocation. See `docs/research/authenticated-saas-browser-automation.md:119-125` and `docs/research/browserbase-product-family.md` §Alternatives.
+
+**browser-use / Skyvern / AgentQL / Firecrawl-actions / Gumloop / n8n / OpenAI Operator** — surveyed but not individually evaluated. See `docs/research/authenticated-saas-browser-automation.md` §Modality 4.
 
 ### Hub-and-Spoke Deployment (2026-04-06)
 
