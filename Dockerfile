@@ -49,6 +49,10 @@ FROM node:22-alpine AS runner
 
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 
+# su-exec drops privileges from root (needed to chown the mounted volume)
+# to the non-root runtime user in the entrypoint.
+RUN apk add --no-cache su-exec
+
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -85,10 +89,13 @@ COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 RUN pnpm install --frozen-lockfile --prod
 
-# Create data directory for SQLite volume mount
+# Create data directory (entrypoint will chown the mounted volume at runtime)
 RUN mkdir -p /app/data && chown ditto:ditto /app/data
 
-USER ditto
+# Copy entrypoint that chowns the mounted volume then drops to the ditto user.
+# Runtime uid is managed by the entrypoint, so we don't USER-switch here.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 
@@ -101,4 +108,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "packages/web/server.js"]

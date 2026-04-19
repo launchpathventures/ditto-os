@@ -43,5 +43,13 @@ export const PROJECT_ROOT = findProjectRoot();
 /** Absolute path to the data directory (DB, config) */
 export const DATA_DIR = path.join(PROJECT_ROOT, "data");
 
-/** Absolute path to the SQLite database */
-export const DB_PATH = path.join(DATA_DIR, "ditto.db");
+/**
+ * Absolute path to the SQLite database.
+ * Honors DATABASE_PATH env var so platforms (Railway, Fly, docker-compose)
+ * can point the DB at a mounted volume regardless of PROJECT_ROOT resolution.
+ */
+export const DB_PATH = process.env.DATABASE_PATH
+  ? path.isAbsolute(process.env.DATABASE_PATH)
+    ? process.env.DATABASE_PATH
+    : path.join(PROJECT_ROOT, process.env.DATABASE_PATH)
+  : path.join(DATA_DIR, "ditto.db");

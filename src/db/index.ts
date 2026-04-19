@@ -15,11 +15,12 @@ import crypto from "crypto";
 import path from "path";
 import fs from "fs";
 import * as schema from "./schema";
-import { DB_PATH, DATA_DIR, PROJECT_ROOT } from "../paths.js";
+import { DB_PATH, PROJECT_ROOT } from "../paths.js";
 
-// Auto-create data directory
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Auto-create the DB's parent directory (honors DATABASE_PATH override)
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
 }
 
 const sqlite = new Database(DB_PATH);
