@@ -14,6 +14,7 @@
  */
 
 import { db, schema } from "../db";
+import { writeMemory } from "./legibility/write-memory";
 import { eq, and, gte, desc, notInArray, sql } from "drizzle-orm";
 import type { TrustTier } from "../db/schema";
 import { isOptOutSignal } from "./channel";
@@ -929,7 +930,7 @@ async function handleUserEmail(
         .limit(1);
 
       if (!recentSample) {
-        await db.insert(schema.memories).values({
+        await writeMemory(db, {
           scopeType: "self",
           scopeId: networkUser.id,
           type: "voice_model",
