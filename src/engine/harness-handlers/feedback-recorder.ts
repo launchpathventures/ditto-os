@@ -19,6 +19,7 @@ import { classifyEdit } from "../trust-diff";
 import { evaluateTrust } from "../trust-evaluator";
 import { startSystemAgentRun } from "../heartbeat";
 import { checkSignificanceThreshold } from "../system-agents/knowledge-extractor";
+import { writeMemory, updateMemory } from "../legibility/write-memory";
 
 export const feedbackRecorderHandler: HarnessHandler = {
   name: "feedback-recorder",
@@ -170,22 +171,19 @@ export async function createMemoryFromFeedback(
     // Locked memories (promoted via "Teach this") keep their confidence — only increment count
     const isLocked = metadata.locked === true;
 
-    await db
-      .update(schema.memories)
-      .set({
-        reinforcementCount: existing.reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        // Confidence grows with reinforcement: 0.3 → 0.5 → 0.7 → 0.8 → 0.9 (capped)
-        // Locked memories retain their promoted confidence (0.95)
-        ...(isLocked ? {} : {
-          confidence: Math.min(
-            0.9,
-            0.3 + (existing.reinforcementCount) * 0.15
-          ),
-        }),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, existing.id));
+    await updateMemory(db, existing.id, {
+      reinforcementCount: existing.reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      // Confidence grows with reinforcement: 0.3 → 0.5 → 0.7 → 0.8 → 0.9 (capped)
+      // Locked memories retain their promoted confidence (0.95)
+      ...(isLocked ? {} : {
+        confidence: Math.min(
+          0.9,
+          0.3 + (existing.reinforcementCount) * 0.15
+        ),
+      }),
+      updatedAt: new Date(),
+    });
 
     await db.insert(schema.activities).values({
       action: "memory.reinforced",
@@ -200,18 +198,15 @@ export async function createMemoryFromFeedback(
     });
   } else {
     // Create new memory
-    const [memory] = await db
-      .insert(schema.memories)
-      .values({
-        scopeType: "process",
-        scopeId: processId,
-        type: "correction",
-        content: trimmedContent,
-        source: "feedback",
-        sourceId: feedbackId,
-        confidence: 0.3, // Single observation
-      })
-      .returning();
+    const memory = await writeMemory(db, {
+      scopeType: "process",
+      scopeId: processId,
+      type: "correction",
+      content: trimmedContent,
+      source: "feedback",
+      sourceId: feedbackId,
+      confidence: 0.3, // Single observation
+    });
 
     await db.insert(schema.activities).values({
       action: "memory.created",
@@ -586,17 +581,14 @@ export async function createGuidanceMemory(
   if (matchingMemory) {
     // Reinforce existing guidance — update content if different, increment count
     const metadata = (matchingMemory.metadata as Record<string, unknown>) ?? {};
-    await db
-      .update(schema.memories)
-      .set({
-        content: trimmedGuidance, // Update to latest guidance
-        reinforcementCount: matchingMemory.reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        confidence: Math.min(0.95, 0.5 + matchingMemory.reinforcementCount * 0.15),
-        metadata: { ...metadata, lastStepName: stepName },
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, matchingMemory.id));
+    await updateMemory(db, matchingMemory.id, {
+      content: trimmedGuidance, // Update to latest guidance
+      reinforcementCount: matchingMemory.reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      confidence: Math.min(0.95, 0.5 + matchingMemory.reinforcementCount * 0.15),
+      metadata: { ...metadata, lastStepName: stepName },
+      updatedAt: new Date(),
+    });
 
     await db.insert(schema.activities).values({
       action: "guidance.reinforced",
@@ -607,24 +599,21 @@ export async function createGuidanceMemory(
     });
   } else {
     // Create new guidance memory tagged with failure pattern
-    const [memory] = await db
-      .insert(schema.memories)
-      .values({
-        scopeType: "process",
-        scopeId: processId,
-        type: "guidance",
-        content: trimmedGuidance,
-        source: "escalation_resolution",
-        confidence: 0.5, // Higher initial confidence than corrections — explicit human guidance
-        metadata: {
-          failurePattern,
-          patternTag,
-          stepName,
-          originalError: originalError?.slice(0, 500),
-          createdFrom: "escalation_guidance",
-        },
-      })
-      .returning();
+    const memory = await writeMemory(db, {
+      scopeType: "process",
+      scopeId: processId,
+      type: "guidance",
+      content: trimmedGuidance,
+      source: "escalation_resolution",
+      confidence: 0.5, // Higher initial confidence than corrections — explicit human guidance
+      metadata: {
+        failurePattern,
+        patternTag,
+        stepName,
+        originalError: originalError?.slice(0, 500),
+        createdFrom: "escalation_guidance",
+      },
+    });
 
     await db.insert(schema.activities).values({
       action: "guidance.created",
@@ -725,14 +714,11 @@ export async function acceptCorrectionPattern(
     if (metadata.locked === true && memory.confidence === 0.95) {
       continue;
     }
-    await db
-      .update(schema.memories)
-      .set({
-        confidence: 0.95,
-        metadata: { ...metadata, locked: true },
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, memory.id));
+    await updateMemory(db, memory.id, {
+      confidence: 0.95,
+      metadata: { ...metadata, locked: true },
+      updatedAt: new Date(),
+    });
     promoted++;
   }
 

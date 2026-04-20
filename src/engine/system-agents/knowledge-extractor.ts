@@ -16,6 +16,7 @@ import { createCompletion, extractText, getConfiguredModel } from "../llm";
 import { db, schema } from "../../db";
 import { eq, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { writeMemory, updateMemory, deactivateMemory } from "../legibility/write-memory";
 
 // ============================================================
 // Types
@@ -425,17 +426,14 @@ export async function executeKnowledgeAssembler(
     // AC8: High overlap → update existing memory (reinforce)
     action = "reinforced";
     memoryId = highOverlap.memoryId;
-    await db
-      .update(schema.memories)
-      .set({
-        reinforcementCount: highOverlap.reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        confidence: Math.min(0.9, highOverlap.confidence + 0.1),
-        content: content.length > highOverlap.content.length ? content : highOverlap.content,
-        metadata: metadata as unknown as Record<string, unknown>,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, highOverlap.memoryId));
+    await updateMemory(db, highOverlap.memoryId, {
+      reinforcementCount: highOverlap.reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      confidence: Math.min(0.9, highOverlap.confidence + 0.1),
+      content: content.length > highOverlap.content.length ? content : highOverlap.content,
+      metadata: metadata as unknown as Record<string, unknown>,
+      updatedAt: new Date(),
+    });
   } else {
     // AC8: Moderate or low/none → create new memory
     action = "created";
@@ -446,7 +444,7 @@ export async function executeKnowledgeAssembler(
       metadata.relatedMemoryIds = [moderateOverlap.memoryId];
     }
 
-    await db.insert(schema.memories).values({
+    await writeMemory(db, {
       id: memoryId,
       scopeType: "process",
       scopeId: processId,
@@ -538,10 +536,7 @@ async function supersedeStaleSolutions(
 
     // Supersede if same category + high tag overlap + lower confidence
     if (overlapRatio >= 0.6 && sol.confidence < 0.5) {
-      await db
-        .update(schema.memories)
-        .set({ active: false, updatedAt: new Date() })
-        .where(eq(schema.memories.id, sol.id));
+      await deactivateMemory(db, sol.id);
 
       await db.insert(schema.activities).values({
         action: "knowledge.superseded",
@@ -722,21 +717,15 @@ export async function decaySolutionConfidence(processId: string): Promise<{
 
       if (newConfidence < 0.2) {
         // Prune
-        await db
-          .update(schema.memories)
-          .set({ active: false, updatedAt: new Date() })
-          .where(eq(schema.memories.id, sol.id));
+        await deactivateMemory(db, sol.id);
         pruned++;
       } else {
         // Decay
-        await db
-          .update(schema.memories)
-          .set({
-            confidence: newConfidence,
-            metadata: meta as unknown as Record<string, unknown>,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.memories.id, sol.id));
+        await updateMemory(db, sol.id, {
+          confidence: newConfidence,
+          metadata: meta as unknown as Record<string, unknown>,
+          updatedAt: new Date(),
+        });
         decayed++;
       }
     }

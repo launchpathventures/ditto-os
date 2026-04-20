@@ -22,6 +22,7 @@ import { recordInteraction, optOutPerson, findPersonByEmailGlobal, createPerson 
 import { resumeHumanStep, pauseGoal } from "./heartbeat";
 import { selfConverse } from "./self";
 import { fireEvent } from "./scheduler";
+import { writeMemory } from "./legibility/write-memory";
 
 // ============================================================
 // Types
@@ -929,7 +930,7 @@ async function handleUserEmail(
         .limit(1);
 
       if (!recentSample) {
-        await db.insert(schema.memories).values({
+        await writeMemory(db, {
           scopeType: "self",
           scopeId: networkUser.id,
           type: "voice_model",

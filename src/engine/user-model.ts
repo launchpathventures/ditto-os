@@ -22,6 +22,7 @@
 
 import { db, schema } from "../db";
 import { eq, and, like } from "drizzle-orm";
+import { writeMemory, updateMemory } from "./legibility/write-memory";
 
 export const USER_MODEL_DIMENSIONS = [
   "problems",
@@ -142,19 +143,16 @@ export async function updateUserModel(
 
   if (existing.length > 0) {
     // Update existing entry — replace content, bump reinforcement
-    await db
-      .update(schema.memories)
-      .set({
-        content: memoryContent,
-        reinforcementCount: existing[0].reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        confidence: Math.min(0.95, existing[0].confidence + 0.1),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, existing[0].id));
+    await updateMemory(db, existing[0].id, {
+      content: memoryContent,
+      reinforcementCount: existing[0].reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      confidence: Math.min(0.95, existing[0].confidence + 0.1),
+      updatedAt: new Date(),
+    });
   } else {
     // Create new entry
-    await db.insert(schema.memories).values({
+    await writeMemory(db, {
       scopeType: "self",
       scopeId: userId,
       type: "user_model",
@@ -233,15 +231,12 @@ export async function updateWorkingPatterns(
     // Track most used surface
     patterns.preferredSurface = surface;
 
-    await db
-      .update(schema.memories)
-      .set({
-        content: `working_patterns:${JSON.stringify(patterns)}`,
-        reinforcementCount: existing.reinforcementCount + 1,
-        lastReinforcedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.memories.id, existing.id));
+    await updateMemory(db, existing.id, {
+      content: `working_patterns:${JSON.stringify(patterns)}`,
+      reinforcementCount: existing.reinforcementCount + 1,
+      lastReinforcedAt: new Date(),
+      updatedAt: new Date(),
+    });
   } else {
     patterns = {
       typicalHours: [currentHour],
@@ -250,7 +245,7 @@ export async function updateWorkingPatterns(
       sessionsObserved: 1,
     };
 
-    await db.insert(schema.memories).values({
+    await writeMemory(db, {
       scopeType: "self",
       scopeId: userId,
       type: "context",

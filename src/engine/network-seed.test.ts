@@ -3,6 +3,10 @@
  * Provenance: Brief 089 AC 1-5, 9-10.
  */
 
+// Exempt from writeMemory chokepoint: tests write to DB directly by design (Brief 198).
+// Rationale: tests own their own fixtures and must not depend on the chokepoint
+// they exercise. See src/engine/legibility/README.md for the full exemption policy.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
