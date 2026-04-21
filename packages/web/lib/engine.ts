@@ -66,7 +66,16 @@ export type {
  * skipped — the streaming adapter spawns CLI tools directly.
  */
 export async function getEngine() {
-  const [selfStream, events, llm, feedAssembler, reviewActions, surfaceActions, feedbackRecorder] = await Promise.all([
+  const [
+    selfStream,
+    events,
+    llm,
+    feedAssembler,
+    reviewActions,
+    surfaceActions,
+    feedbackRecorder,
+    chatThreads,
+  ] = await Promise.all([
     import("../../../src/engine/self-stream"),
     import("../../../src/engine/events"),
     import("../../../src/engine/llm"),
@@ -74,6 +83,7 @@ export async function getEngine() {
     import("../../../src/engine/review-actions"),
     import("../../../src/engine/surface-actions"),
     import("../../../src/engine/harness-handlers/feedback-recorder"),
+    import("../../../src/engine/chat-threads"),
   ]);
 
   // Initialize LLM providers. Both streaming and non-streaming paths
@@ -102,5 +112,18 @@ export async function getEngine() {
     promoteToQualityCriteria: feedbackRecorder.promoteToQualityCriteria,
     logTeachAction: feedbackRecorder.logTeachAction,
     dismissInsightPattern: feedbackRecorder.dismissInsightPattern,
+    listThreads: chatThreads.listThreads,
+    createThread: chatThreads.createThread,
+    getThread: chatThreads.getThread,
+    updateThread: chatThreads.updateThread,
+    appendTurns: chatThreads.appendTurns,
+    deleteThread: chatThreads.deleteThread,
   };
 }
+
+// Re-export thread types for client code.
+export type {
+  ChatThreadSummary,
+  ChatThreadDetail,
+  ThreadTurn,
+} from "../../../src/engine/chat-threads";

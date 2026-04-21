@@ -352,7 +352,18 @@ export function DittoConversation() {
       );
       if (!res.ok) return;
       const data = await res.json();
-      if (data.learned) setLearned(data.learned);
+      // Truthy-only merge — the server's snapshot may include nulls for fields
+      // the LLM hasn't captured this poll; a wholesale replace would wipe what
+      // the stream handler already accumulated locally.
+      if (data.learned) {
+        setLearned((prev) => {
+          const out: Record<string, string | null> = { ...(prev ?? {}) };
+          for (const [k, v] of Object.entries(data.learned as Record<string, string | null>)) {
+            if (v != null && v !== "") out[k] = v;
+          }
+          return out;
+        });
+      }
     } catch { /* non-fatal */ }
   }, [sessionId, voiceToken]);
 
@@ -398,11 +409,33 @@ export function DittoConversation() {
     archiveMessagesFor(personaId);
     setPersonaId(picked);
     persistPersonaChoice(picked);
+
+    // Optimistic UI — flip to the interview screen immediately so the picker
+    // doesn't linger during the /persona round-trip. The server call (session
+    // lazy-create + server-side bookkeeping) continues in the background; the
+    // first agent message still has to wait for it, but the user sees the chat
+    // surface right away instead of a stuck "Try Alex" button.
+    const resumed = personaTranscripts[picked];
+    setMessages(resumed);
+    setPhase("interview");
+    // Show the typing indicator during the gap between phase flip and the
+    // first streamed token. sendMessageInMode clears it once deltas arrive.
+    if (resumed.length === 0) setLoading(true);
+
     try {
+      // Include turnstileToken on the first interview-start when no session
+      // exists yet — the server gates lazy session creation on it. Harmless
+      // to send when a session already exists (server ignores it then).
+      const tsToken = sessionId ? null : getTurnstileToken();
       const res = await fetch("/api/v1/network/chat/persona", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, personaId: picked, action: "interview-start" }),
+        body: JSON.stringify({
+          sessionId,
+          personaId: picked,
+          action: "interview-start",
+          ...(tsToken ? { turnstileToken: tsToken } : {}),
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -412,13 +445,12 @@ export function DittoConversation() {
         }
       }
     } catch { /* non-fatal — the UI proceeds either way */ }
-    // Restore any prior transcript we have for this persona (so revisiting resumes).
-    const resumed = personaTranscripts[picked];
-    setMessages(resumed);
-    setPhase("interview");
     setPersonaBusy(false);
     // If there are no prior turns with this persona, prompt the agent to open
-    // the conversation (interview mode, no user message).
+    // the conversation (interview mode, no user message). Fired AFTER the
+    // /persona round-trip completes so the /stream kickoff uses the session
+    // id /persona just created — otherwise /stream would mint a second,
+    // orphan session.
     if (resumed.length === 0) {
       setTimeout(() => kickoffInterview(picked), 50);
     }
@@ -682,10 +714,17 @@ export function DittoConversation() {
               }
               if (event.done) setDone(true);
               if (event.learned) {
-                setLearned((prev) => ({
-                  ...prev,
-                  ...event.learned,
-                }));
+                // Truthy-only merge: the LLM occasionally emits nulls for
+                // fields it didn't capture this turn. A naive spread would
+                // wipe prior non-null values — the "appears then disappears"
+                // flicker the user saw.
+                setLearned((prev) => {
+                  const out: Record<string, string | null> = { ...(prev ?? {}) };
+                  for (const [k, v] of Object.entries(event.learned as Record<string, string | null>)) {
+                    if (v != null && v !== "") out[k] = v;
+                  }
+                  return out;
+                });
               }
               // Multi-question structured input
               if (event.extraQuestions?.length > 0) {
@@ -971,15 +1010,7 @@ export function DittoConversation() {
 
           {/* Brief 152: Persona picker phase — replaces the old Alex-hardcoded intro. */}
           {phase === "picker" && (
-            <PersonaPicker
-              sessionId={sessionId}
-              onSessionId={(id) => {
-                setSessionId(id);
-                if (!testMode) localStorage.setItem(SESSION_KEY, id);
-              }}
-              onSelect={(picked) => handlePersonaPicked(picked)}
-              turnstileToken={getTurnstileToken()}
-            />
+            <PersonaPicker onSelect={(picked) => handlePersonaPicked(picked)} />
           )}
 
           {/* Conversation — flex column: scrollable messages + fixed input at bottom */}

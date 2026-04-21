@@ -38,6 +38,13 @@ export const sessions = sqliteTable("sessions", {
     .$type<SessionStatus>()
     .default("active"),
   summary: text("summary"),
+  /** Human-readable title for the thread — displayed in the sidebar Chats
+   *  section and the chat header. Derived from the first user message. */
+  title: text("title"),
+  /** View scope the thread was opened under ("Today", "Projects", "About
+   *  Priya Desai", "General"). Feeds the Self's intentContext on each send
+   *  so resumed threads stay scoped to the surface they were born on. */
+  scope: text("scope"),
   turns: text("turns", { mode: "json" })
     .notNull()
     .$type<Array<{ role: string; content: string; timestamp: number; surface: string; toolNames?: string[] }>>()

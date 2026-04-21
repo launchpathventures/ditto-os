@@ -96,7 +96,7 @@ describe("buildFrontDoorPrompt — interview mode", () => {
       personaId: "mira",
       promptMode: "interview",
     });
-    expect(prompt).toContain("Your Task: Interview Chat");
+    expect(prompt).toContain("Your Task: First Meeting");
     expect(prompt).not.toContain("Your Task: Front Door Advisor");
     expect(prompt).not.toContain("REFLECT & PROPOSE");
   });

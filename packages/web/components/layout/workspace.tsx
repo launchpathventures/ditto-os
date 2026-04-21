@@ -1,707 +1,1014 @@
 "use client";
 
 /**
- * Ditto — Workspace Layout
+ * Ditto — Workspace (redesigned shell, real streaming)
  *
- * Two layout modes (ADR-024 Tier 1 Scaffold):
- *
- * 1. **Workspace mode** (Brief 047): Sidebar (w-56) + center (flex-1) + right panel (w-72)
- *    Center renders composed ContentBlock[] for canvas intents (Today, Inbox,
- *    Work, Projects, Routines) via composition engine, OR ProcessDetailContainer
- *    for drill-down, OR Settings.
- *
- * 2. **Artifact mode** (Brief 048): Conversation (300px) | Artifact (flex) | Context (320px)
- *    Triggered when Self produces an artifact. Sidebar collapses. Artifact
- *    takes centre stage. Conversation narrows to left column.
- *
- * Provenance: Brief 047 (composition engine), Brief 048 (artifact mode layout),
- * ADR-024 (composable workspace architecture), P36 prototype.
+ * Workspace owns the single `useChat` instance so conversation state
+ * survives mode switches (split ↔ chat-full ↔ artifact). ChatPanel and
+ * ArtifactLayout both render from the same `messages` + `sendMessage`
+ * pair. Threads persist via /api/chat/threads; replay happens on thread
+ * id change only (no stomping in-flight messages with every post-send
+ * persistence). Tool-output parts bubble through `resolveTransition` so
+ * generated-artifact tools flip the center view to artifact mode.
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useProcessList } from "@/lib/process-query";
-import { useFeed } from "@/lib/feed-query";
-import { Sidebar, type NavigationDestination } from "./sidebar";
-import { RightPanel, type PanelContext } from "./right-panel";
-import { ProcessDetailContainer } from "@/components/detail/process-detail";
-import { ComposedCanvas } from "./composed-canvas";
-import { AdaptiveCanvas } from "./adaptive-canvas";
-import { ArtifactLayout } from "./artifact-layout";
-import { ArtifactSheet, FullArtifactSheet } from "./artifact-sheet";
-import { PromptInput } from "@/components/self/prompt-input";
-import { ConnectionsPanel } from "@/components/settings/connections-panel";
-import { ConversationMessage } from "@/components/self/message";
-import { TypingIndicator } from "@/components/self/typing-indicator";
-import { SuggestionPills } from "@/components/self/suggestion-pills";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { resolveTransition } from "@/lib/transition-map";
-import type { ArtifactCenterView } from "@/lib/transition-map";
-import type { CompositionIntent } from "@/lib/compositions";
-import { useInteractionEvent } from "@/hooks/use-interaction-events";
+import { DefaultChatTransport, isToolUIPart, getToolName } from "ai";
+import type { UIMessage } from "ai";
+import { useProcessList } from "@/lib/process-query";
 import { useWorkspaceViews } from "@/hooks/use-workspace-views";
 import { useNetworkPush } from "@/hooks/use-network-push";
+import { resolveTransition, type ArtifactCenterView } from "@/lib/transition-map";
+import { Sidebar, type NavigationDestination } from "./sidebar";
+import { AdaptiveCanvas } from "./adaptive-canvas";
+import { ArtifactLayout } from "./artifact-layout";
+import { TodayView } from "./views/today-view";
+import { InboxView } from "./views/inbox-view";
+import { WorkView } from "./views/work-view";
+import { ProjectsView } from "./views/projects-view";
+import { AgentsView } from "./views/agents-view";
+import { PeopleView } from "./views/people-view";
+import { SettingsView } from "./views/settings-view";
+import { VIEW_META, type ViewId } from "./views/types";
+import { ChatPanel } from "@/components/chat/chat-panel";
+import {
+  threadStore,
+  useThreadStore,
+  type ChatThreadDetail,
+} from "@/components/chat/thread-store";
+import { classifyIntent } from "@/components/chat/intent-router";
+import type { ThreadTurn } from "@/lib/engine";
 
 interface WorkspaceProps {
   userId?: string;
+  userName?: string;
+  orgName?: string;
 }
 
-/**
- * Center view state — canvas, process drill-down, settings, or artifact mode (AC1).
- */
 type CenterView =
-  | { type: "canvas"; intent: CompositionIntent }
+  | { type: "view"; id: ViewId }
   | { type: "adaptive"; slug: string }
-  | { type: "process"; processId: string; runId?: string }
-  | { type: "settings" }
+  | { type: "chat-full" }
   | ArtifactCenterView;
 
-export function Workspace({ userId = "default" }: WorkspaceProps) {
+const VIEW_IDS: ViewId[] = [
+  "today",
+  "inbox",
+  "work",
+  "projects",
+  "agents",
+  "people",
+  "settings",
+];
+
+export function Workspace({ userId = "default", userName, orgName }: WorkspaceProps) {
   const { data } = useProcessList();
-  // Ensure feed data is in React Query cache for composition context
-  useFeed();
-  const { emit: emitInteraction } = useInteractionEvent();
-  // Brief 154: Fetch adaptive workspace views for sidebar + routing
-  const { data: adaptiveViewsData } = useWorkspaceViews();
-  // Brief 154: Listen for workspace push events (blocks, refresh, registration)
+  const workItems = data?.workItems ?? [];
+
+  const { data: adaptiveData } = useWorkspaceViews();
   useNetworkPush();
   const adaptiveViews = useMemo(
-    () => (adaptiveViewsData ?? []).map((v) => ({ slug: v.slug, label: v.label, icon: v.icon })),
-    [adaptiveViewsData],
+    () => (adaptiveData ?? []).map((v) => ({ slug: v.slug, label: v.label, icon: v.icon })),
+    [adaptiveData],
   );
   const adaptiveSlugs = useMemo(
-    () => new Set((adaptiveViewsData ?? []).map((v) => v.slug)),
-    [adaptiveViewsData],
+    () => new Set(adaptiveViews.map((v) => v.slug)),
+    [adaptiveViews],
   );
 
-  const [centerView, setCenterView] = useState<CenterView>({
-    type: "canvas",
-    intent: "today",
+  const { active, pendingSend, clearPending, appendTurns } = useThreadStore(userId);
+
+  const initialView = (() => {
+    if (typeof window === "undefined") return "today";
+    return (window.localStorage.getItem("ditto.view") as ViewId) ?? "today";
+  })();
+  const [center, setCenter] = useState<CenterView>({
+    type: "view",
+    id: VIEW_IDS.includes(initialView as ViewId) ? (initialView as ViewId) : "today",
   });
-  const [panelOverride, setPanelOverride] = useState<PanelContext | null>(null);
-  const [mobileSheet, setMobileSheet] = useState<PanelContext | null>(null);
-  // Store previous view for artifact mode exit (AC8)
-  // Uses ref to avoid stale closure in transition effect (F2 fix)
-  const previousViewRef = useRef<CenterView>({
-    type: "canvas",
-    intent: "today",
-  });
+  const previousViewRef = useRef<CenterView>(center);
+
+  const [split, setSplit] = useState(false);
+  const [splitWidth, setSplitWidth] = useState(440);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [input, setInput] = useState("");
+
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1400,
   );
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle() {
+      setWindowWidth(window.innerWidth);
+    }
+    window.addEventListener("resize", handle);
+    return () => window.removeEventListener("resize", handle);
+  }, []);
 
-  // Chat state — Self conversation via center column input
-  // Brief 073: Pass intentContext so Self knows which composition intent is active
-  const currentIntentContext = centerView.type === "canvas" ? centerView.intent : undefined;
-  const [input, setInput] = useState("");
-  const { messages, status: chatStatus, sendMessage } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: { userId, intentContext: currentIntentContext },
-    }),
+  const isCompactLayout = windowWidth < 1024;
+  const isNarrowSplit = windowWidth < 900;
+
+  useEffect(() => {
+    if (center.type === "view") {
+      window.localStorage.setItem("ditto.view", center.id);
+    }
+  }, [center]);
+
+  /* ======================================================== */
+  /* useChat — lives at the workspace so it survives mode swaps */
+  /* ======================================================== */
+
+  const scope = active?.scope ?? "General";
+
+  // Transport memoised on userId + active thread id; intent scope is
+  // captured at construction so it stays stable for the whole thread.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          userId,
+          intentContext: scope === "General" ? undefined : scope.toLowerCase(),
+        },
+      }),
+    [userId, scope, active?.id],
+  );
+
+  // Replay only on active thread id change — turns-length changes (from
+  // post-send persistence) must NOT stomp the live in-stream messages.
+  const initialMessages = useMemo<UIMessage[]>(
+    () => (active ? turnsToUIMessages(active.turns) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [active?.id],
+  );
+
+  const { messages, status, sendMessage, setMessages } = useChat({
+    id: active?.id,
+    messages: initialMessages,
+    transport,
   });
-  const chatLoading = chatStatus === "submitted" || chatStatus === "streaming";
 
-  // Scan messages for tool-invocation parts and resolve transitions (AC7)
-  const latestTransition = useMemo(() => {
-    if (messages.length === 0) return null;
+  const loading = status === "submitted" || status === "streaming";
 
+  // Reset the in-hook messages when the active thread flips — but never
+  // stomp an in-flight stream: if the user switches threads mid-reply,
+  // we wait for the persistence effect to flush before replaying.
+  useEffect(() => {
+    if (loading) return;
+    setMessages(initialMessages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id, loading]);
+
+  /* -------- Persist finished turns to the server -------- */
+
+  const persistedIndexRef = useRef(0);
+  const persistInFlightRef = useRef(false);
+
+  useEffect(() => {
+    persistedIndexRef.current = initialMessages.length;
+  }, [initialMessages]);
+
+  useEffect(() => {
+    if (!active || loading) return;
+    if (persistInFlightRef.current) return;
+    if (messages.length <= persistedIndexRef.current) return;
+    const slice = messages.slice(persistedIndexRef.current);
+    const target = messages.length;
+    const turns = slice.map(uiMessageToTurn);
+    if (turns.length === 0) return;
+    persistInFlightRef.current = true;
+    appendTurns(active.id, turns)
+      .then((ok) => {
+        if (ok) persistedIndexRef.current = target;
+        // on failure, leave the ref at its old position so the effect
+        // re-runs on the next messages/loading change and retries.
+      })
+      .finally(() => {
+        persistInFlightRef.current = false;
+      });
+  }, [messages, loading, active, appendTurns]);
+
+  /* -------- Cross-surface send bridge -------- */
+
+  const lastNonceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingSend || pendingSend.nonce === lastNonceRef.current) return;
+    lastNonceRef.current = pendingSend.nonce;
+    const text = pendingSend.text;
+    clearPending();
+    sendMessage({ role: "user", parts: [{ type: "text", text }] });
+  }, [pendingSend, clearPending, sendMessage]);
+
+  /* -------- Transition observer (artifact mode reconnect) -------- */
+
+  const lastTransitionIdRef = useRef<string | null>(null);
+  useEffect(() => {
     for (let m = messages.length - 1; m >= 0; m--) {
       const msg = messages[m];
       if (msg.role !== "assistant") continue;
+      const parts = msg.parts ?? [];
+      for (let p = parts.length - 1; p >= 0; p--) {
+        const part = parts[p];
+        if (!isToolUIPart(part)) continue;
+        // We only care about terminal states.
+        const state = (part as { state?: string }).state;
+        if (state !== "output-available") continue;
+        const output = (part as { output?: unknown }).output;
+        if (output === undefined) continue;
+        const toolCallId = (part as { toolCallId?: string }).toolCallId;
+        const id = toolCallId ?? `${m}-${p}`;
+        if (id === lastTransitionIdRef.current) return;
+        lastTransitionIdRef.current = id;
+        const toolName = getToolName(part);
+        const transition = resolveTransition(toolName, output);
+        if (!transition) return;
+        if (transition.target === "center") {
+          setCenter((current) => {
+            previousViewRef.current = current;
+            return transition.view;
+          });
+          setSplit(false);
+        }
+        // Panel-target transitions are ignored — the right panel was
+        // retired in this redesign. If we bring it back, re-wire here.
+        return;
+      }
+    }
+  }, [messages]);
 
-      for (let p = msg.parts.length - 1; p >= 0; p--) {
-        const part = msg.parts[p];
-        if (
-          "type" in part &&
-          (part as { type: string }).type === "tool-invocation" &&
-          (part as { state: string }).state === "result"
-        ) {
-          const toolPart = part as {
-            toolName: string;
-            output: unknown;
-            state: string;
-          };
-          const transition = resolveTransition(toolPart.toolName, toolPart.output);
-          if (transition) return transition;
+  /* ======================================================== */
+  /* Navigation                                                */
+  /* ======================================================== */
+
+  const navigate = useCallback(
+    (dest: NavigationDestination) => {
+      if (dest === "chatPage") {
+        void (async () => {
+          if (!threadStore.snapshot().active) {
+            await threadStore.create();
+          }
+          previousViewRef.current = center;
+          setCenter({ type: "chat-full" });
+        })();
+        return;
+      }
+      if (adaptiveSlugs.has(dest as string)) {
+        setCenter({ type: "adaptive", slug: dest as string });
+        setSplit(false);
+        return;
+      }
+      if (VIEW_IDS.includes(dest as ViewId)) {
+        setCenter({ type: "view", id: dest as ViewId });
+        setSplit(false);
+        return;
+      }
+      setCenter({ type: "view", id: "today" });
+      setSplit(false);
+    },
+    [adaptiveSlugs, center],
+  );
+
+  const newChat = useCallback(() => {
+    void (async () => {
+      await threadStore.create();
+      previousViewRef.current = center;
+      setCenter({ type: "chat-full" });
+      setSplit(false);
+    })();
+  }, [center]);
+
+  const openThread = useCallback(
+    (id: string) => {
+      void (async () => {
+        await threadStore.setActive(id);
+        if (center.type !== "chat-full") {
+          setSplit(true);
+        }
+      })();
+    },
+    [center],
+  );
+
+  useEffect(() => {
+    function handle(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        newChat();
+      } else if (e.key === "Escape") {
+        if (center.type === "chat-full" || center.type === "artifact") {
+          setCenter(previousViewRef.current);
+        } else {
+          setSplit(false);
         }
       }
     }
-    return null;
-  }, [messages]);
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [newChat, center]);
 
-  // Apply transitions — panel overrides OR center view changes (AC7)
-  useEffect(() => {
-    if (!latestTransition) return;
+  /* ======================================================== */
+  /* Universal chatbar + intent routing                        */
+  /* ======================================================== */
 
-    if (latestTransition.target === "panel") {
-      const isCompact = windowWidth < 1024;
-      if (isCompact && latestTransition.context.type === "artifact-review") {
-        setMobileSheet(latestTransition.context);
-      } else {
-        setPanelOverride(latestTransition.context);
-      }
-    } else if (latestTransition.target === "center") {
-      // Artifact mode transition — store current view for exit (AC8)
-      setCenterView((current) => {
-        previousViewRef.current = current;
-        return latestTransition.view;
+  const currentViewMeta =
+    center.type === "view" ? VIEW_META[center.id] : undefined;
+
+  const openScopedSplit = useCallback(async (scope: string) => {
+    const existing = threadStore.snapshot().active;
+    if (!existing || existing.scope !== scope) {
+      await threadStore.create({
+        title: `About ${scope.toLowerCase()}`,
+        scope,
       });
-      setPanelOverride(null);
     }
-  }, [latestTransition, windowWidth]);
-
-  // Self speaks first — static welcome message (Brief 057 AC14)
-  // No LLM call needed for the greeting. The Self's personality comes through
-  // in subsequent real conversations. This avoids stream lifecycle race conditions.
-  const [welcomeMessage] = useState(() => {
-    if (typeof window === "undefined") return null;
-    const dayZeroSeen = localStorage.getItem("ditto-day-zero-seen") === "true";
-    if (!dayZeroSeen) return null;
-    const alreadyGreeted = sessionStorage.getItem("ditto-greeted") === "true";
-    if (alreadyGreeted) return null;
-    sessionStorage.setItem("ditto-greeted", "true");
-    return "Hi. I'm ready when you are — ask me anything, give me a task, or tell me about your work.";
-  });
-
-  // Auto-scroll to latest message (workspace mode only)
-  useEffect(() => {
-    if (centerView.type !== "artifact") {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, chatLoading, centerView.type]);
-
-  // Track window width for responsive breakpoints
-  useEffect(() => {
-    function handleResize() {
-      setWindowWidth(window.innerWidth);
-    }
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    setSplit(true);
   }, []);
 
-  // Navigation — exits artifact mode (AC8)
-  const handleNavigate = useCallback((destination: NavigationDestination) => {
-    // Brief 056 AC8: Emit composition_navigated event
-    const fromIntent = centerView.type === "canvas" ? centerView.intent : centerView.type;
-    emitInteraction("composition_navigated", destination, {
-      intent: destination,
-      fromIntent,
-    });
-
-    if (destination === "settings") {
-      setCenterView({ type: "settings" });
-    } else if (adaptiveSlugs.has(destination)) {
-      // Brief 154: Adaptive view slug — route to adaptive canvas
-      setCenterView({ type: "adaptive", slug: destination });
-    } else {
-      setCenterView({ type: "canvas", intent: destination as CompositionIntent });
-    }
-    setPanelOverride(null);
-  }, [centerView, emitInteraction, adaptiveSlugs]);
-
-  const handleSelectProcess = useCallback((processId: string) => {
-    setCenterView({ type: "process", processId });
-    setPanelOverride(null);
+  const askAbout = useCallback(async (subject: string) => {
+    const title = subject.charAt(0).toUpperCase() + subject.slice(1);
+    await threadStore.create({ title, scope: `About ${subject}` });
+    setSplit(true);
+    threadStore.requestSend(`Tell me about ${subject}`, `About ${subject}`);
   }, []);
 
-  // Exit artifact mode — restore previous view (AC8, F2 fix: read from ref)
-  const handleExitArtifact = useCallback(() => {
-    setCenterView(previousViewRef.current);
-    setPanelOverride(null);
-  }, []);
-
-  const handleBack = useCallback(() => {
-    setCenterView({ type: "canvas", intent: "today" });
-    setPanelOverride(null);
-  }, []);
-
-  const handleChatSubmit = useCallback(() => {
-    if (input.trim()) {
-      sendMessage({ role: "user", parts: [{ type: "text", text: input }] });
-      setInput("");
-    }
-  }, [input, sendMessage, setInput]);
-
-  // Handle block actions from content blocks — both in compositions and messages
-  const handleBlockAction = useCallback(
-    (actionId: string, payload?: Record<string, unknown>) => {
-      // Process drill-down from composition (e.g., "view-process-xxx")
-      if (actionId.startsWith("view-process-")) {
-        const processId = actionId.replace("view-process-", "");
-        handleSelectProcess(processId);
-        return;
-      }
-
-      // Brief 079 Layer 3: Open document viewer in right panel
-      if (actionId === "open-document-viewer") {
-        setPanelOverride({
-          type: "document-viewer",
-          documentHash: payload?.documentHash as string,
-          highlightChunkId: payload?.chunkId as string,
-          page: payload?.page as number | undefined,
+  const sendFromBar = useCallback(
+    (text: string, onAmbiguous: (verdict: "new" | "ambiguous") => void) => {
+      if (!currentViewMeta) return;
+      const verdict = classifyIntent(text, currentViewMeta.scope);
+      if (verdict === "related") {
+        void openScopedSplit(currentViewMeta.scope).then(() => {
+          threadStore.requestSend(text, currentViewMeta.scope);
         });
-        return;
+      } else {
+        onAmbiguous(verdict);
       }
-
-      // Open artifact from ArtifactBlock "Open" button (Brief 050)
-      if (actionId.startsWith("open-artifact-")) {
-        const artifactId = actionId.replace("open-artifact-", "");
-        const processSlug = (payload?.processSlug as string) ?? "unknown";
-        setCenterView((current) => {
-          previousViewRef.current = current;
-          return {
-            type: "artifact",
-            artifactType: "document",
-            artifactId,
-            processId: processSlug,
-            runId: artifactId,
-          };
-        });
-        setPanelOverride(null);
-        return;
-      }
-
-      // Brief 055: Scope selection from roadmap composition
-      if (actionId.startsWith("select-brief-")) {
-        const briefNumber = actionId.replace("select-brief-", "");
-        const briefName = (payload?.briefName as string) ?? "";
-        const briefStatus = (payload?.briefStatus as string) ?? "ready";
-        const padded = briefNumber.padStart(3, "0");
-        const prefix = briefStatus === "draft" ? "Plan" : "Build";
-        const text = `${prefix} Brief ${padded}: ${briefName}`;
-
-        // Brief 056 AC10: Emit brief_selected event
-        emitInteraction("brief_selected", `brief-${briefNumber}`, {
-          briefNumber: parseInt(briefNumber, 10),
-          action: briefStatus === "draft" ? "plan" : "build",
-        });
-
-        setInput(text);
-        return;
-      }
-
-      // Brief 073: Empty state action buttons — start conversation with Self using intent context
-      if (actionId.startsWith("empty-")) {
-        const intentActionMessages: Record<string, string> = {
-          "empty-today-start": "What would you like to work on?",
-          "empty-today-start-project": "I'd like to start a new project.",
-          "empty-today-start-routine": "I'd like to set up a routine.",
-          "empty-today-ask": "I have a question.",
-          "empty-inbox-create-routine": "I'd like to create a routine.",
-          "empty-work-start": "What do I need to get done?",
-          "empty-work-create-task": "I need to create a task.",
-          "empty-work-set-goal": "I'd like to set a goal.",
-          "empty-projects-start": "I'd like to start a project.",
-          "empty-projects-describe": "I'd like to start a project.",
-          "empty-routines-create": "I'd like to create a routine.",
-          "empty-routines-describe": "I'd like to create a routine.",
-          "empty-roadmap-start": "I'd like to start a project.",
-          "empty-roadmap-start-project": "I'd like to start a project.",
-        };
-        const text = intentActionMessages[actionId] ?? "I'd like to get started.";
-        sendMessage({ role: "user", parts: [{ type: "text", text }] });
-        return;
-      }
-
-      // Brief 073: Navigate between intents via action blocks
-      if (actionId === "navigate-inbox") {
-        handleNavigate("inbox");
-        return;
-      }
-
-      // Suggestion actions — Accept or Dismiss
-      if (actionId.startsWith("suggest-accept-")) {
-        const content = (payload?.content as string) ?? "";
-        sendMessage({
-          role: "user",
-          parts: [{ type: "text", text: content ? `I'd like to set that up — ${content}` : "I'd like to set that up." }],
-        });
-        return;
-      }
-      if (actionId.startsWith("suggest-dismiss-")) {
-        // Record dismissal via API (30-day cooldown)
-        fetch("/api/actions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actionId, payload }),
-        }).catch(() => {/* best-effort */});
-        sendMessage({
-          role: "user",
-          parts: [{ type: "text", text: "Not right now, thanks." }],
-        });
-        return;
-      }
-
-      // Standard action messages to Self
-      const actionMessages: Record<string, string> = {
-        "knowledge-confirm": "That looks right.",
-        "knowledge-correct": payload?.corrections
-          ? `Let me correct that: ${payload.corrections}`
-          : "I'd like to fix something.",
-        "proposal-approve": "Looks good — let's try it.",
-        "proposal-adjust": "I'd change something about that.",
-      };
-      const text = actionMessages[actionId] ?? `Action: ${actionId}`;
-      sendMessage({ role: "user", parts: [{ type: "text", text }] });
     },
-    [sendMessage, handleSelectProcess, emitInteraction],
+    [currentViewMeta, openScopedSplit],
   );
 
-  const processes = data?.processes ?? [];
-  const workItems = data?.workItems ?? [];
+  const confirmIntent = useCallback(
+    (text: string, choice: "current" | "new" | "full") => {
+      const scope = currentViewMeta?.scope ?? "General";
+      if (choice === "current") {
+        void openScopedSplit(scope).then(() => {
+          threadStore.requestSend(text, scope);
+        });
+      } else if (choice === "new") {
+        void (async () => {
+          await threadStore.create();
+          setSplit(true);
+          threadStore.requestSend(text, "General");
+        })();
+      } else {
+        void (async () => {
+          await threadStore.create();
+          previousViewRef.current = center;
+          setCenter({ type: "chat-full" });
+          setSplit(false);
+          threadStore.requestSend(text, "General");
+        })();
+      }
+    },
+    [currentViewMeta, openScopedSplit, center],
+  );
 
-  // Responsive modes
-  const isFullLayout = windowWidth >= 1280;
-  const isMediumLayout = windowWidth >= 1024 && windowWidth < 1280;
-  const isCompactLayout = windowWidth < 1024;
+  /* ======================================================== */
+  /* Drag resize                                               */
+  /* ======================================================== */
 
-  // Is artifact mode active?
-  const isArtifactMode = centerView.type === "artifact";
-
-  // Active navigation destination for sidebar highlight
-  const activeDestination: NavigationDestination =
-    centerView.type === "canvas"
-      ? centerView.intent
-      : centerView.type === "adaptive"
-        ? centerView.slug
-        : centerView.type === "settings"
-          ? "settings"
-          : centerView.type === "process"
-            ? "routines" // Process drill-down highlights Routines
-            : "today"; // Artifact mode — no specific highlight
-
-  // Right panel context — reactive to center view
-  const panelContext: PanelContext =
-    centerView.type === "process"
-      ? { type: "process", processId: centerView.processId }
-      : { type: "feed" };
-
-
-  const hasMessages = messages.length > 0;
-
-  // Suggestion pills — context-aware conversation starters
-  const suggestionPills = useMemo(() => {
-    if (chatLoading || hasMessages) return [];
-    if (centerView.type === "adaptive") {
-      // Brief 154: Default pills for adaptive views
-      return ["What's the latest?", "Show me everything"];
-    }
-    if (centerView.type !== "canvas") return [];
-    const pillsByIntent: Record<string, string[]> = {
-      today: ["What needs my attention?", "Show me my week", "Any new leads?"],
-      inbox: ["Walk me through reviews", "Anything urgent?"],
-      work: ["What should I focus on?", "Show active tasks"],
-      projects: ["How are my projects going?", "Start a new project"],
-      growth: ["How should we grow?", "What's working?"],
-      library: ["What can you do?", "Set up a new capability"],
-      routines: ["Need a new routine", "How are routines performing?"],
-      roadmap: ["What should we build next?", "Show priorities"],
+  const mainRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const startDrag = useCallback(() => setDragging(true), []);
+  useEffect(() => {
+    if (!dragging) return;
+    const handleMove = (e: MouseEvent) => {
+      const rect = mainRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const leftW = Math.min(Math.max(e.clientX - rect.left, 380), rect.width - 320);
+      const chatW = rect.width - leftW;
+      setSplitWidth(chatW);
     };
-    return pillsByIntent[centerView.intent] ?? [];
-  }, [chatLoading, hasMessages, centerView]);
+    const handleUp = () => setDragging(false);
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [dragging]);
 
-  // ==========================================
-  // Artifact mode — full artifact layout (AC2)
-  // ==========================================
-  if (isArtifactMode && !isCompactLayout) {
-    return (
-      <div className="h-screen flex flex-col bg-background">
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar: icon rail at ≥1440px, hidden at 1024-1439px (AC3) */}
-          {/* ArtifactLayout handles its own icon rail and back button */}
-          <ArtifactLayout
-            artifactType={centerView.artifactType}
-            artifactId={centerView.artifactId}
-            processId={centerView.processId}
-            runId={centerView.runId}
-            messages={messages}
-            chatLoading={chatLoading}
-            input={input}
-            onInputChange={setInput}
-            onSubmit={handleChatSubmit}
-            onAction={handleBlockAction}
-            onExit={handleExitArtifact}
-            onNavigate={handleNavigate}
-            windowWidth={windowWidth}
-          />
-        </div>
-      </div>
-    );
-  }
+  /* ======================================================== */
+  /* Chat submit helpers                                       */
+  /* ======================================================== */
 
-  // Artifact mode on mobile — full-screen artifact with swipe (AC9, F3 fix)
-  if (isArtifactMode && isCompactLayout) {
+  // ChatPanel owns its own input so parent re-renders aren't triggered
+  // on every keystroke. Only the ArtifactLayout still uses workspace-
+  // owned input (its chat column takes controlled input props).
+  const sendText = useCallback(
+    (text: string) => {
+      const clean = text.trim();
+      if (!clean) return;
+      sendMessage({ role: "user", parts: [{ type: "text", text: clean }] });
+    },
+    [sendMessage],
+  );
+
+  // ArtifactLayout's controlled input — stable through an inputRef read.
+  const inputRef = useRef("");
+  inputRef.current = input;
+  const submitArtifactInput = useCallback(() => {
+    const clean = inputRef.current.trim();
+    if (!clean) return;
+    setInput("");
+    sendMessage({ role: "user", parts: [{ type: "text", text: clean }] });
+  }, [sendMessage]);
+
+  /* ======================================================== */
+  /* Render                                                    */
+  /* ======================================================== */
+
+  const headerTitle =
+    center.type === "view"
+      ? VIEW_META[center.id].title
+      : center.type === "adaptive"
+        ? adaptiveViews.find((v) => v.slug === center.slug)?.label ?? "View"
+        : center.type === "artifact"
+          ? "Artifact"
+          : "Chat";
+
+  const activeDestination: NavigationDestination =
+    center.type === "view"
+      ? center.id
+      : center.type === "adaptive"
+        ? center.slug
+        : center.type === "chat-full"
+          ? "chatPage"
+          : "today";
+
+  const chatFull = center.type === "chat-full";
+  const splitActive = split && !chatFull && center.type !== "artifact";
+
+  if (center.type === "artifact") {
     return (
-      <FullArtifactSheet
-        artifactType={centerView.artifactType}
-        artifactId={centerView.artifactId}
-        processId={centerView.processId}
-        runId={centerView.runId}
+      <ArtifactLayout
+        artifactType={center.artifactType}
+        artifactId={center.artifactId}
+        processId={center.processId}
+        runId={center.runId}
         messages={messages}
-        chatLoading={chatLoading}
+        chatLoading={loading}
         input={input}
         onInputChange={setInput}
-        onSubmit={handleChatSubmit}
-        onAction={handleBlockAction}
-        onExit={handleExitArtifact}
+        onSubmit={submitArtifactInput}
+        onAction={(action) => {
+          if (!action) return;
+          if (VIEW_IDS.includes(action as ViewId)) {
+            setCenter({ type: "view", id: action as ViewId });
+            setSplit(false);
+          }
+        }}
+        onExit={() => setCenter(previousViewRef.current)}
+        onNavigate={navigate}
+        windowWidth={windowWidth}
       />
     );
   }
 
-  // ==========================================
-  // Workspace mode — standard layout (AC11)
-  // ==========================================
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        {!isCompactLayout ? (
-          <Sidebar
-            processes={processes}
-            workItems={workItems}
-            activeDestination={activeDestination}
-            onNavigate={handleNavigate}
-            onSelectProcess={handleSelectProcess}
-            adaptiveViews={adaptiveViews}
-            collapsed
-          />
-        ) : (
-          <MobileMenuButton
-            processes={processes}
-            workItems={workItems}
-            activeDestination={activeDestination}
-            onNavigate={handleNavigate}
-            onSelectProcess={handleSelectProcess}
-            adaptiveViews={adaptiveViews}
-          />
-        )}
-
-        {/* Center panel — composed canvas or process detail + conversation + input */}
-        <div data-testid="center-panel" className="flex-1 flex flex-col overflow-hidden">
-          {/* Content area */}
-          <div className="flex-1 overflow-y-auto">
-            {centerView.type === "process" ? (
-              /* Scaffold layout mode — ProcessDetailContainer */
-              <ProcessDetailContainer
-                processId={centerView.processId}
-                runId={centerView.runId}
-                onBack={handleBack}
-              />
-            ) : centerView.type === "settings" ? (
-              /* Settings page — connections, integrations, preferences */
-              <div className="p-6 max-w-2xl mx-auto">
-                <h2 className="text-lg font-semibold text-text-primary mb-6">Settings</h2>
-                <ConnectionsPanel />
-              </div>
-            ) : centerView.type === "adaptive" ? (
-              /* Brief 154: Adaptive view — data-driven composition */
-              <div className="max-w-[720px] mx-auto" style={{ padding: "48px 24px 24px" }}>
-                <AdaptiveCanvas
-                  slug={centerView.slug}
-                  onAction={handleBlockAction}
-                />
-
-                {/* Conversation messages */}
-                {hasMessages && (
-                  <div className="mt-6 space-y-4">
-                    {messages.map((message, _idx, arr) => (
-                      <ConversationMessage
-                        key={message.id}
-                        message={message}
-                        isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
-                        onAction={handleBlockAction}
-                      />
-                    ))}
-                    {chatLoading && <TypingIndicator />}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-
-                {!hasMessages && chatLoading && (
-                  <div className="mt-4">
-                    <TypingIndicator />
-                  </div>
-                )}
-
-                {suggestionPills.length > 0 && (
-                  <div className="mt-6 max-w-[720px] mx-auto">
-                    <SuggestionPills
-                      pills={suggestionPills}
-                      onSelect={(pill) => {
-                        setInput(pill);
-                        handleChatSubmit();
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : centerView.type === "canvas" ? (
-              /* Canvas — composed blocks (P00: 720px centred, generous padding) */
-              <div className="max-w-[720px] mx-auto" style={{ padding: "48px 24px 24px" }}>
-                {/* Composed ContentBlock[] from composition engine */}
-                <ComposedCanvas
-                  intent={centerView.intent}
-                  onAction={handleBlockAction}
-                />
-
-                {/* Welcome message — static Self greeting for first visit */}
-                {welcomeMessage && !hasMessages && !chatLoading && (
-                  <div className="mt-6 animate-fade-in-slow">
-                    <div className="max-w-[720px] mx-auto flex gap-3 py-3">
-                      <div className="flex-shrink-0 mt-1.5">
-                        <div className="w-2 h-2 rounded-full bg-vivid" />
-                      </div>
-                      <div className="flex-1 text-xl font-semibold tracking-tight text-text-primary">
-                        {welcomeMessage}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Conversation messages */}
-                {hasMessages && (
-                  <div className="mt-6 space-y-4">
-                    {messages.map((message, _idx, arr) => (
-                      <ConversationMessage
-                        key={message.id}
-                        message={message}
-                        isStreaming={chatLoading && message.role === "assistant" && message === arr[arr.length - 1]}
-                        onAction={handleBlockAction}
-                      />
-                    ))}
-
-                    {chatLoading && <TypingIndicator />}
-
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-
-                {/* Typing indicator when no messages yet but loading */}
-                {!hasMessages && chatLoading && (
-                  <div className="mt-4">
-                    <TypingIndicator />
-                  </div>
-                )}
-
-                {/* Suggestion pills — conversation starters */}
-                {suggestionPills.length > 0 && (
-                  <div className="mt-6 max-w-[720px] mx-auto">
-                    <SuggestionPills
-                      pills={suggestionPills}
-                      onSelect={(pill) => {
-                        setInput(pill);
-                        handleChatSubmit();
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : null /* artifact mode handled by early return above */}
-          </div>
-
-          {/* Fade gradient above input */}
-          <div className="h-6 bg-gradient-to-t from-background to-transparent pointer-events-none" />
-
-          {/* Chat input — persistent at bottom of center column (P00 input bar) */}
-          <div className="bg-background" style={{ padding: "12px 24px 24px" }}>
-            <div>
-              <PromptInput
-                value={input}
-                onChange={setInput}
-                onSubmit={handleChatSubmit}
-                isLoading={chatLoading}
-                placeholder={
-                  chatLoading
-                    ? "Jump in anytime..."
-                    : centerView.type === "adaptive"
-                      ? "Ask about this view..."
-                      : centerView.type === "canvas"
-                        ? ({
-                            today: "What's on your mind?",
-                            inbox: "Ask about any of these...",
-                            work: "What do you need to get done?",
-                            projects: "Tell me about a project...",
-                            growth: "How should we grow?",
-                            library: "Need a new capability?",
-                            routines: "Need a new routine?",
-                            roadmap: "What should we build next?",
-                          } as Record<string, string>)[centerView.intent]
-                        : undefined
-                }
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right panel — contextual intelligence + tool-driven overrides */}
-        {!isCompactLayout && (
-          <RightPanel context={panelContext} panelOverride={panelOverride} onAction={handleBlockAction} />
-        )}
-      </div>
-
-      {/* Mobile bottom sheet for artifact review */}
-      {isCompactLayout && mobileSheet && (
-        <ArtifactSheet
-          context={mobileSheet}
-          onClose={() => setMobileSheet(null)}
+    <div
+      style={{
+        height: "100vh",
+        display: "grid",
+        gridTemplateColumns: `${isCompactLayout ? 0 : sidebarCollapsed ? 56 : 248}px 1fr`,
+        transition: "grid-template-columns 220ms ease",
+        background: "var(--color-background)",
+        color: "var(--color-text-primary)",
+        fontFamily: "var(--font-sans)",
+        overflow: "hidden",
+      }}
+    >
+      {!isCompactLayout && (
+        <Sidebar
+          workItems={workItems}
+          activeDestination={activeDestination}
+          onNavigate={navigate}
+          onOpenThread={openThread}
+          onNewChat={newChat}
+          collapsed={sidebarCollapsed}
+          userId={userId}
+          userName={userName}
+          orgName={orgName}
+          adaptiveViews={adaptiveViews}
+          onCollapseToggle={() => setSidebarCollapsed((c) => !c)}
         />
       )}
+
+      <main
+        ref={mainRef}
+        style={{
+          display: "grid",
+          gridTemplateColumns: chatFull
+            ? "1fr"
+            : splitActive && !isNarrowSplit
+              ? `1fr ${splitWidth}px`
+              : splitActive && isNarrowSplit
+                ? `0 1fr`
+                : "1fr 0",
+          overflow: "hidden",
+          background: "var(--color-background)",
+          minWidth: 0,
+          transition: dragging
+            ? "none"
+            : "grid-template-columns 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+          position: "relative",
+        }}
+      >
+        {!chatFull && (
+          <section
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              minWidth: 0,
+              borderRight: splitActive ? "1px solid var(--color-border)" : "none",
+            }}
+          >
+            <CenterHeader title={headerTitle} onNewChat={newChat} />
+            <div style={{ flex: 1, overflowY: "auto", padding: "40px 32px 24px" }}>
+              <div style={{ maxWidth: splitActive ? 640 : 760, margin: "0 auto" }}>
+                {renderCenterView(center, { askAbout, navigate })}
+              </div>
+            </div>
+            {currentViewMeta && (
+              <UniversalChatbar
+                meta={currentViewMeta}
+                onSend={sendFromBar}
+                onConfirm={confirmIntent}
+              />
+            )}
+          </section>
+        )}
+
+        {splitActive && !isNarrowSplit && (
+          <div
+            onMouseDown={startDrag}
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: `calc(100% - ${splitWidth + 3}px)`,
+              width: 6,
+              cursor: "col-resize",
+              zIndex: 5,
+              background: dragging ? "var(--color-vivid)" : "transparent",
+              transition: dragging ? "none" : "background 150ms ease",
+            }}
+          />
+        )}
+
+        {(splitActive || chatFull) && (
+          <ChatPanel
+            mode={chatFull ? "full" : "split"}
+            activeThread={active}
+            messages={messages}
+            loading={loading}
+            onSend={sendText}
+            onSendStarter={sendText}
+            starters={
+              currentViewMeta && !chatFull ? currentViewMeta.starters : undefined
+            }
+            userName={userName}
+            onClose={() => setSplit(false)}
+            onExpand={() => {
+              previousViewRef.current = center;
+              setCenter({ type: "chat-full" });
+              setSplit(false);
+            }}
+            onBlockAction={(action) => {
+              if (!action) return;
+              if (VIEW_IDS.includes(action as ViewId)) {
+                setCenter({ type: "view", id: action as ViewId });
+                setSplit(false);
+              }
+            }}
+          />
+        )}
+      </main>
     </div>
   );
 }
 
-/**
- * Mobile hamburger menu button with sidebar drawer overlay.
- */
-function MobileMenuButton({
-  processes,
-  workItems,
-  activeDestination,
-  onNavigate,
-  onSelectProcess,
-  adaptiveViews,
-}: {
-  processes: import("@/lib/process-query").ProcessSummary[];
-  workItems: import("@/lib/process-query").WorkItemSummary[];
-  activeDestination: NavigationDestination;
-  onNavigate: (destination: NavigationDestination) => void;
-  onSelectProcess: (id: string) => void;
-  adaptiveViews?: import("./sidebar").AdaptiveViewNavItem[];
-}) {
-  const [open, setOpen] = useState(false);
+/* ============================================================= */
+/* Replay helpers                                                */
+/* ============================================================= */
 
+function turnsToUIMessages(turns: ThreadTurn[]): UIMessage[] {
+  return turns.map((t, i) => ({
+    id: `turn-${i}-${t.timestamp}`,
+    role: t.role === "user" ? "user" : "assistant",
+    parts: [{ type: "text", text: t.content }],
+  }));
+}
+
+function uiMessageToTurn(m: UIMessage): ThreadTurn {
+  let text = "";
+  const toolNames: string[] = [];
+  for (const part of m.parts ?? []) {
+    const p = part as { type: string; text?: string; toolName?: string };
+    if (p.type === "text" && typeof p.text === "string") {
+      text += p.text;
+    } else if (p.type?.startsWith("tool-") || p.type === "dynamic-tool") {
+      const n = p.toolName;
+      if (n && !toolNames.includes(n)) toolNames.push(n);
+    }
+  }
+  return {
+    role: m.role === "user" ? "user" : "assistant",
+    content: text,
+    timestamp: Date.now(),
+    surface: "web",
+    ...(toolNames.length > 0 ? { toolNames } : {}),
+  };
+}
+
+/* ============================================================= */
+/* Center view dispatcher                                        */
+/* ============================================================= */
+
+function renderCenterView(
+  center: CenterView,
+  cbs: {
+    askAbout: (subject: string) => void;
+    navigate: (dest: NavigationDestination) => void;
+  },
+) {
+  if (center.type === "adaptive") {
+    return (
+      <AdaptiveCanvas
+        slug={center.slug}
+        onAction={(actionId, payload) => {
+          if (actionId === "navigate-inbox") return cbs.navigate("inbox");
+          if (actionId.startsWith("empty-")) {
+            const subject = (payload?.content as string) ?? actionId;
+            cbs.askAbout(subject);
+          }
+        }}
+      />
+    );
+  }
+  if (center.type === "chat-full" || center.type === "artifact") {
+    return null;
+  }
+  switch (center.id) {
+    case "today":
+      return <TodayView onAskAbout={cbs.askAbout} />;
+    case "inbox":
+      return <InboxView onAskAbout={cbs.askAbout} />;
+    case "work":
+      return <WorkView onAskAbout={cbs.askAbout} />;
+    case "projects":
+      return <ProjectsView onSelectProject={() => {}} onAskAbout={cbs.askAbout} />;
+    case "agents":
+      return <AgentsView onSelectAgent={() => {}} onAskAbout={cbs.askAbout} />;
+    case "people":
+      return <PeopleView onAskAbout={cbs.askAbout} />;
+    case "settings":
+      return <SettingsView />;
+  }
+}
+
+/* ============================================================= */
+/* Center header                                                 */
+/* ============================================================= */
+
+function CenterHeader({ title, onNewChat }: { title: string; onNewChat: () => void }) {
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed top-4 left-4 z-40 w-10 h-10 rounded-lg bg-surface-raised shadow-[var(--shadow-medium)] flex items-center justify-center"
+    <div
+      style={{
+        padding: "12px 32px",
+        borderBottom: "1px solid var(--color-border)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "var(--color-background)",
+        flexShrink: 0,
+        height: 56,
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          letterSpacing: "-0.005em",
+          margin: 0,
+          color: "var(--color-text-primary)",
+        }}
       >
-        <svg width="18" height="14" viewBox="0 0 18 14" fill="none" className="text-text-primary">
-          <path d="M1 1h16M1 7h16M1 13h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="w-64 bg-surface shadow-[var(--shadow-large)]">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <span className="text-sm font-semibold text-text-primary">Navigation</span>
-              <button onClick={() => setOpen(false)} className="text-text-muted hover:text-text-primary transition-colors text-sm">×</button>
-            </div>
-            <Sidebar
-              processes={processes}
-              workItems={workItems}
-              activeDestination={activeDestination}
-              onNavigate={(dest) => { onNavigate(dest); setOpen(false); }}
-              onSelectProcess={(id) => { onSelectProcess(id); setOpen(false); }}
-              adaptiveViews={adaptiveViews}
-            />
-          </div>
-          <div className="flex-1 bg-black/20" onClick={() => setOpen(false)} />
-        </div>
-      )}
-    </>
+        {title}
+      </h1>
+      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <button
+          onClick={onNewChat}
+          title="New chat (⌘K)"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 6,
+            background: "transparent",
+            border: "1px solid transparent",
+            color: "var(--color-text-secondary)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            padding: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--color-surface)";
+            e.currentTarget.style.color = "var(--color-text-primary)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--color-text-secondary)";
+          }}
+        >
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }
+
+/* ============================================================= */
+/* Universal chatbar                                             */
+/* ============================================================= */
+
+function UniversalChatbar({
+  meta,
+  onSend,
+  onConfirm,
+}: {
+  meta: (typeof VIEW_META)[ViewId];
+  onSend: (text: string, onAmbiguous: (verdict: "new" | "ambiguous") => void) => void;
+  onConfirm: (text: string, choice: "current" | "new" | "full") => void;
+}) {
+  const [input, setInput] = useState("");
+  const [pending, setPending] = useState<{ text: string; verdict: "new" | "ambiguous" } | null>(
+    null,
+  );
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
+
+  const submit = () => {
+    const clean = input.trim();
+    if (!clean) return;
+    onSend(clean, (verdict) => setPending({ text: clean, verdict }));
+    setInput("");
+  };
+
+  const confirm = (choice: "current" | "new" | "full") => {
+    if (!pending) return;
+    onConfirm(pending.text, choice);
+    setPending(null);
+  };
+
+  return (
+    <div
+      style={{
+        padding: "10px 32px 20px",
+        background:
+          "linear-gradient(to bottom, transparent, var(--color-background) 30%)",
+        flexShrink: 0,
+        position: "relative",
+      }}
+    >
+      {pending && (
+        <div
+          style={{
+            maxWidth: 760,
+            margin: "0 auto 8px",
+            background: "var(--color-surface-raised)",
+            border: "1px solid #E6D4AA",
+            borderRadius: 10,
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+          }}
+        >
+          <span
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: "var(--color-caution)",
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 10,
+              fontWeight: 700,
+              flexShrink: 0,
+              marginTop: 1,
+            }}
+          >
+            A
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              style={{
+                margin: "0 0 8px",
+                fontSize: 13,
+                color: "var(--color-text-primary)",
+                lineHeight: 1.5,
+              }}
+            >
+              {pending.verdict === "new" ? (
+                <>
+                  That sounds like a <b>new thread</b> — not really about{" "}
+                  {meta.scope.toLowerCase()}. Keep it here, or start fresh?
+                </>
+              ) : (
+                <>
+                  Is this about <b>{meta.scope.toLowerCase()}</b>, or something
+                  else?
+                </>
+              )}
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <BtnSm primary onClick={() => confirm("current")}>
+                Keep it here
+              </BtnSm>
+              <BtnSm onClick={() => confirm("new")}>Start new thread</BtnSm>
+              <BtnSm ghost onClick={() => confirm("full")}>
+                Open full chat
+              </BtnSm>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          background: "var(--color-surface-raised)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 14,
+          padding: "10px 12px 8px",
+          boxShadow: "var(--shadow-subtle)",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 8,
+        }}
+      >
+        <div
+          title="Alex will scope to this view"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "4px 9px",
+            background: "var(--color-vivid-subtle)",
+            border: "1px solid #D1F4E1",
+            borderRadius: 999,
+            fontSize: 11,
+            color: "var(--color-vivid-deep)",
+            fontWeight: 500,
+            marginBottom: 2,
+          }}
+        >
+          <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}>
+            <circle cx={12} cy={12} r={4} />
+          </svg>
+          <span>{meta.scope}</span>
+        </div>
+        <textarea
+          ref={inputRef}
+          rows={1}
+          placeholder={meta.placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          style={{
+            flex: 1,
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            fontFamily: "inherit",
+            fontSize: 14.5,
+            color: "var(--color-text-primary)",
+            resize: "none",
+            minHeight: 24,
+            maxHeight: 160,
+            lineHeight: 1.5,
+            padding: "4px 2px",
+          }}
+        />
+        <button
+          onClick={submit}
+          aria-label="Send"
+          disabled={!input.trim()}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            background: "var(--color-vivid)",
+            border: "none",
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: input.trim() ? "pointer" : "default",
+            flexShrink: 0,
+            opacity: input.trim() ? 1 : 0.35,
+            marginBottom: 1,
+          }}
+        >
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2}>
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </button>
+      </div>
+      <div
+        style={{
+          maxWidth: 760,
+          margin: "6px auto 0",
+          fontSize: 11.5,
+          color: "var(--color-text-muted)",
+          textAlign: "center",
+        }}
+      >
+        Enter to send · Alex routes your question to the right place
+      </div>
+    </div>
+  );
+}
+
+function BtnSm({
+  children,
+  onClick,
+  primary,
+  ghost,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  primary?: boolean;
+  ghost?: boolean;
+}) {
+  const bg = primary
+    ? "var(--color-vivid)"
+    : ghost
+      ? "transparent"
+      : "var(--color-surface-raised)";
+  const color = primary ? "#fff" : "var(--color-text-primary)";
+  const border = primary
+    ? "var(--color-vivid)"
+    : ghost
+      ? "transparent"
+      : "var(--color-border-strong)";
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "5px 11px",
+        borderRadius: 8,
+        fontSize: 12.5,
+        fontWeight: 500,
+        border: `1px solid ${border}`,
+        background: bg,
+        color,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Re-export for convenience if anything outside this file needs it.
+export type { ChatThreadDetail };

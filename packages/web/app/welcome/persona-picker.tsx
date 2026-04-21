@@ -3,131 +3,96 @@
 /**
  * PersonaPicker — Brief 152 persona selection screen.
  *
- * Two cards side by side (Alex, Mira). Each card streams a self-introduction
- * from the backend in parallel. The visitor taps a card to enter that persona's
- * interview stage; the parent handles the actual state transition.
+ * Two cards side by side (Alex, Mira). Each card reveals a canned
+ * self-introduction with a simulated typewriter effect so both sides feel
+ * alive instantly (no backend round-trip). The visitor taps a card to enter
+ * that persona's interview stage; the parent handles the state transition.
  *
- * The intro stream uses the existing `/api/v1/network/chat/stream` endpoint
- * with `promptMode: "intro"`. The server gates intro mode so the LLM only
- * produces a greeting (no name/email asks, no tool flags).
+ * Intros are matched in length so the two cards stay visually balanced while
+ * typing and settle at the same final height.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Mic } from "lucide-react";
 import { PersonaPortrait } from "./persona-portrait";
 import { PERSONAS, type PersonaId, PERSONA_IDS } from "@/lib/persona";
 
 interface PersonaPickerProps {
-  sessionId: string | null;
-  onSessionId: (id: string) => void;
   onSelect: (personaId: PersonaId) => void;
-  turnstileToken: string | null;
 }
 
 interface CardStreamState {
   text: string;
-  status: "idle" | "streaming" | "complete" | "error";
+  status: "idle" | "streaming" | "complete";
 }
 
-export function PersonaPicker({ sessionId, onSessionId, onSelect, turnstileToken }: PersonaPickerProps) {
-  const [streams, setStreams] = useState<Record<PersonaId, CardStreamState>>({
-    alex: { text: "", status: "idle" },
-    mira: { text: "", status: "idle" },
-  });
-  // Guard against double-fire in React 18 strict mode development.
-  const startedRef = useRef(false);
+// Both strings are the same character length so the two cards grow in lockstep
+// and settle at the same final height. If you edit one, re-balance the other.
+// Positioning: capability-led, no title, real-advisor posture. The opener
+// hints at the two pathways — door-opening (connector) and staying on to run
+// the AI work (embedded sales/marketing/CoS). Don't name "Ditto" here — the
+// product is in the chrome around this card.
+const INTROS: Record<PersonaId, string> = {
+  alex:
+    "G'day, I'm Alex. I open doors — the right clients, the right partners, the right conversations. If it suits you, I stay on and run the AI side so your business actually gets the outcome. Say something — see if we click.",
+  mira:
+    "Hello, I'm Mira. I cut through the noise — sharper strategy, better openings, an angle most people miss. If it suits you, I stay on and run the AI side so your business gets the outcome. Say something — see if we click.",
+};
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+// Simulated stream pacing. ~130 chars/sec — fast enough to finish the whole
+// intro in well under two seconds, slow enough to still feel like typing.
+const TYPE_INTERVAL_MS = 15;
+const CHARS_PER_TICK = 2;
+// Pre-seed the first N chars of each intro into the initial state so the
+// greeting is on screen the instant the cards paint — no skeleton flash,
+// no wait-for-first-timer-tick delay. 16 chars covers "G'day, I'm Alex." and
+// "Hello, I'm Mira." so the visitor immediately sees who they're meeting.
+const INITIAL_SEED_CHARS = 16;
 
-    // Both personas share ONE session (the picker is session-scoped — the eventual
-    // `commit` call resolves which persona to lock in on this session).
-    // To avoid racing two parallel session-creations, we fire Alex first; the
-    // Mira stream kicks off as soon as Alex's stream yields a session id.
-    (async () => {
-      const id = await streamIntro("alex", sessionId);
-      if (id) {
-        void streamIntro("mira", id);
-      } else {
-        // Fallback: Alex failed to return a session. Start Mira with whatever we had.
-        void streamIntro("mira", sessionId);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /**
-   * Stream an intro for the given persona. Returns the sessionId observed on the
-   * stream (null if none surfaced). Safe to call concurrently for different personas
-   * once a sessionId is known.
-   */
-  async function streamIntro(personaId: PersonaId, currentSessionId: string | null): Promise<string | null> {
-    setStreams((prev) => ({ ...prev, [personaId]: { text: "", status: "streaming" } }));
-    let observedSessionId: string | null = currentSessionId;
-    try {
-      const res = await fetch("/api/v1/network/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Intro mode uses a synthetic user prompt on the server; we pass
-          // an empty string to signal the route should generate its own.
-          message: "",
-          sessionId: currentSessionId,
-          context: "front-door",
-          personaId,
-          promptMode: "intro",
-          ...(turnstileToken ? { turnstileToken } : {}),
-        }),
-      });
-      if (!res.ok || !res.body) {
-        setStreams((prev) => ({ ...prev, [personaId]: { text: prev[personaId].text, status: "error" } }));
-        return observedSessionId;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6);
-          if (!json) continue;
-          try {
-            const event = JSON.parse(json);
-            if (event.type === "session" && event.sessionId) {
-              observedSessionId = event.sessionId;
-              onSessionId(event.sessionId);
-            }
-            if (event.type === "text-delta" && event.text) {
-              setStreams((prev) => ({
-                ...prev,
-                [personaId]: { text: prev[personaId].text + event.text, status: "streaming" },
-              }));
-            }
-            if (event.type === "done") {
-              setStreams((prev) => ({
-                ...prev,
-                [personaId]: { text: prev[personaId].text, status: "complete" },
-              }));
-            }
-          } catch {
-            // Skip malformed lines
-          }
-        }
-      }
-    } catch {
-      setStreams((prev) => ({
-        ...prev,
-        [personaId]: { text: prev[personaId].text, status: "error" },
-      }));
+export function PersonaPicker({ onSelect }: PersonaPickerProps) {
+  const [streams, setStreams] = useState<Record<PersonaId, CardStreamState>>(() => {
+    // Lazy initializer so the seed is computed once, before the first paint.
+    const out: Record<PersonaId, CardStreamState> = {
+      alex: { text: "", status: "streaming" },
+      mira: { text: "", status: "streaming" },
+    };
+    for (const personaId of PERSONA_IDS) {
+      const full = INTROS[personaId];
+      out[personaId] = {
+        text: full.slice(0, Math.min(INITIAL_SEED_CHARS, full.length)),
+        status: "streaming",
+      };
     }
-    return observedSessionId;
-  }
+    return out;
+  });
+  useEffect(() => {
+    // In React strict mode this effect runs twice; each pass starts fresh
+    // timers and cleans up its own. Safe because the typewriter is idempotent —
+    // each pass resumes from the seeded starting point.
+    const timers: ReturnType<typeof setInterval>[] = [];
+    for (const personaId of PERSONA_IDS) {
+      const full = INTROS[personaId];
+      let idx = Math.min(INITIAL_SEED_CHARS, full.length);
+      if (idx >= full.length) {
+        // Edge case: intro is shorter than the seed — nothing to stream.
+        setStreams((prev) => ({ ...prev, [personaId]: { text: full, status: "complete" } }));
+        continue;
+      }
+      const timer = setInterval(() => {
+        idx = Math.min(idx + CHARS_PER_TICK, full.length);
+        const done = idx >= full.length;
+        setStreams((prev) => ({
+          ...prev,
+          [personaId]: { text: full.slice(0, idx), status: done ? "complete" : "streaming" },
+        }));
+        if (done) clearInterval(timer);
+      }, TYPE_INTERVAL_MS);
+      timers.push(timer);
+    }
+    return () => {
+      for (const t of timers) clearInterval(t);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hidden">
@@ -202,11 +167,6 @@ function PersonaCard({
           </p>
         ) : (
           <SkeletonLines />
-        )}
-        {stream.status === "error" && !hasStarted && (
-          <p className="text-sm text-text-muted">
-            Couldn&apos;t load {meta.name}&apos;s intro — give it a click anyway, we&apos;ll catch up in the chat.
-          </p>
         )}
       </div>
 

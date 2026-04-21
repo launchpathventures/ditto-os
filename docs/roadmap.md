@@ -1,7 +1,7 @@
 # Ditto — Roadmap
 
-**Last updated:** 2026-04-16
-**Current phase:** Phase 10 **complete**. Phase 14 **in progress** (Network Agent — engine code complete, Briefs 071+097+098a+098b+099a+099b+099c+108+110+114+119+120+121+124+125+126+127+128+129+130+131 all complete. Brief 115 Operating Cycle Archetype designed — split into sub-briefs 116-118, all complete. Briefs 119-141 complete. GTM pipeline fully tooled). Phase 15 **complete** (Managed Workspace Infrastructure — Briefs 090+091+100 all complete). Phase 11 **in progress** (Briefs 101-104+107+135 complete). Phases 12-13 **future**. 1797 unit tests (new total) + 14 e2e tests (4 spec files). 32 process templates. Front door conversational experience live. **Meta-process robustness: ALL COMPLETE (2026-04-16).** All 10 meta processes (MP-1 through MP-10), 44 work items, 11 briefs (145-148, 155-165). See `docs/meta-process-roadmap.md`. **User-journey P0 residuals closed (2026-04-16):** Brief 169 parent + sub-briefs 170-178 landed, covering shell-injection, credential-leak via tool output, budget pre-dispatch guard, YAML round-trip validation, definitionOverride cleanup, memory dropout observability, briefing query efficiency, ambiguous-intent clarification, stale-escalation ladder primitive. Dev-reviewer: CONDITIONAL PASS, follow-ups tracked in Brief 179 (3 P0 + 4 P1).
+**Last updated:** 2026-04-20
+**Current phase:** Phase 9 **in progress** (Recursive Self-Improvement — Briefs 189-196 ready; 189 builder-claimable). **User-Facing Legibility phase in progress** (2026-04-20) — parent Brief 197 + sub-briefs 198/199/200 ready; 198 + 200 builder-claimable in parallel, 199 waits for 198. Phase 10 **complete**. Phase 14 **in progress** (Network Agent — engine code complete, Briefs 071+097+098a+098b+099a+099b+099c+108+110+114+119+120+121+124+125+126+127+128+129+130+131 all complete. Brief 115 Operating Cycle Archetype designed — split into sub-briefs 116-118, all complete. Briefs 119-141 complete. GTM pipeline fully tooled). Phase 15 **complete** (Managed Workspace Infrastructure — Briefs 090+091+100 all complete). Phase 11 **in progress** (Briefs 101-104+107+135 complete; browser-write Briefs 182-185 ready, 183 builder-claimable). Phases 12-13 **future**. 1797 unit tests + 14 e2e tests (4 spec files). 32 process templates. Front door conversational experience live. **Meta-process robustness: ALL COMPLETE (2026-04-16).** All 10 meta processes (MP-1 through MP-10), 44 work items, 11 briefs (145-148, 155-165). See `docs/meta-process-roadmap.md`. **User-journey P0 residuals closed (2026-04-16):** Brief 169 parent + sub-briefs 170-178 landed, covering shell-injection, credential-leak via tool output, budget pre-dispatch guard, YAML round-trip validation, definitionOverride cleanup, memory dropout observability, briefing query efficiency, ambiguous-intent clarification, stale-escalation ladder primitive. Dev-reviewer: CONDITIONAL PASS, follow-ups tracked in Brief 179 (3 P0 + 4 P1).
 **Major reframe (ADR-010):** Roadmap restructured around workspace interaction model. Ditto is a living workspace where work evolves through governed meta-processes, not an automation platform. See ADR-010 for the full rationale.
 
 This is the complete capability map for Ditto. Every item traces back to the architecture spec, human-layer design, or landscape analysis. Status is tracked per item. Nothing is silently omitted — deferred items have explicit re-entry conditions.
@@ -522,6 +522,33 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 **Downstream prerequisites:** 198 starts (no deps); 200 can build in parallel (no deps); 199 depends on 198. Pilot demonstrable end-to-end once all three ship. Category 1-3 sub-briefs require a dedicated research pass on artefact canonicalisation before they can be designed.
 
 **Compensating control owed (Brief 199):** fresh-context Designer re-review on `memories-legibility-ux.md` was **waived by user authorization 2026-04-20** on status promotion to `ready`. AC #18 in Brief 199 remains as principle; waiver documented in brief header.
+
+### Hire a Specialist — Activate L2 Agent Primitive (2026-04-20, adjacent to User-Facing Legibility)
+
+**Re-entry condition:** Paperclip re-evaluation surfaced that Ditto's L2 Agent primitive + UI primitive #10 Agent Card (spec'd in `human-layer.md`) have been dormant for ~18 months with no activation path. Persona Nadia ("Team Manager Supporting Specialists with Agents") has been effectively unserved.
+
+**Key principle:** Self manages the agents. The user may converse directly with any hired agent; Self observes every turn and has standing authority to Ask / Flag / Pause / Escalate / Propose (five interjection verbs, closed enumeration). Observation rate is trust-tier-driven per ADR-007 + ADR-038.
+
+**Key design calls (parent Brief 201):**
+- Hired Agent as a user-facing hirable specialist primitive — YAML-primary storage, conversational hire as default, DB mirror for query.
+- No `reports_to`, no `company_id`, no corporate vocabulary. Self is the sole manager; agents are peers under Self.
+- Three-voice conversation UX (user / agent / Self) — novel axis, no prior art in surveyed systems.
+- Memory scoped per hired agent; Self reads all; default isolation between agents; cross-share deferred.
+- Trust tiers use ADR-007's four-tier enum; ADR-038 introduces observation-rate bands mapped from tier + time-in-tier.
+
+| Capability | Status | Source doc | Build from |
+|---|---|---|---|
+| ADR-036 — Database Tier Strategy (substrate) | proposed | `docs/adrs/036-database-tier-strategy.md` | Original (extends ADR-001); closes architecture.md:1205 multi-tenancy open question |
+| ADR-037 — Hired Agents Primitive | proposed | `docs/adrs/037-hired-agents-primitive.md` | Paperclip `agents` schema (adopt, minus `reports_to` and `company_id`); YAML-primary storage extends Ditto process pattern |
+| ADR-038 — Self-Supervised Agent Dialogue | proposed | `docs/adrs/038-self-supervised-agent-dialogue.md` | Maker-checker dev-process pattern (extend); three-voice UX (original) |
+| ADR-039 — Hired-Agent Memory Scope | proposed | `docs/adrs/039-hired-agent-memory-scope.md` | Extends ADR-003; new `hired-agent` scope_type + access-control matrix |
+| Brief 201 — Hire a Specialist (parent) | **draft (2026-04-20)** | `docs/briefs/201-hire-a-specialist-phase.md` | Paperclip (adopt schema + pattern UX), ADR-016 + ADR-007 + ADR-003 (extend) |
+| **Pre-build UX pass** | owed | `docs/research/hire-a-specialist-ux.md` | `/dev-designer` covering Agent Card (#10), Agent Detail, three-voice conversation surface |
+| **Sub-briefs 202-206** (not yet drafted) | outlined in parent | — | Schema/YAML (202) → hire flow (203) → Agent Card (204) → detail page (205) → supervision (206) |
+
+**Downstream prerequisites:** (a) ADRs 036-039 move `proposed → accepted`, (b) `/dev-designer` produces `docs/research/hire-a-specialist-ux.md`, (c) sub-briefs 202-206 drafted before build. Build order: 202 → 203 → 204 → 205 → 206 (205 and 206 parallelizable if reviewer bandwidth allows).
+
+**Deferred (post-phase):** Multi-user workspace access (Nadia's EA delegation); agent-to-agent delegation; harness-legibility view (reimagined OrgChart); integrations-management surface; workspace-multi-user.
 
 ### Phase 10: Web Dashboard — The Living Workspace
 

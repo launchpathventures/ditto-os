@@ -214,6 +214,9 @@ These principles from the original ADR-009 remain valid and unchanged:
 - [ ] Evaluate A2UI v1.0+ when multi-platform rendering is needed (carried from v1)
 - [ ] Design the work surface layout — how outputs, process state, and conversation coexist (feeds Phase 10 app design)
 
+**Activations of this ADR:**
+- **ADR-040 (2026-04-21)** activates the `external` output type declared in §1 as a first-class primitive called *App*. Apps use the same json-render catalog substrate adopted in §3 (with a second, external-app registry per ADR-040 §3), extend the trust-tier delivery model from §4 to user-facing outbound auto-responses, and resolve the "Output versioning" item listed in §8 as deferred. See `docs/adrs/040-user-facing-apps-primitive.md`.
+
 ## Reference Docs Updated
 
 - `docs/architecture.md` — Layer 1 process definition updated with output schema structure (ADR-009 v2 annotation). Layer 4 output propagation updated with typed contract reference. Output Viewer primitive updated to clarify presentation types vs destination types.
