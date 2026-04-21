@@ -22,14 +22,49 @@
 - **Limitation:** Enterprise features are paid. Monolithic — you adopt its opinions. No built-in trust tiers or maker-checker.
 
 **Paperclip** — github.com/paperclipai/paperclip
-- 28.1k stars | Active March 2026 | TypeScript 96%
-- Heartbeat cycle (wake, execute, sleep). Adapter interface (`invoke/status/cancel`). Atomic task checkout. Budget controls. Immutable audit log. Governance rollback.
-- Goal ancestry: every task carries full goal chain (mission → project → task). Agents see the "why."
-- Org chart as primary navigation with real-time agent status. Delegation up/down/across.
-- Tickets as universal work unit. Structured communication, not chat.
-- **Ditto relevance:** HIGH — architecture borrows heavily (Layer 2). Goal ancestry pattern adopted for work items (ADR-010). Org chart pattern informs process graph as primary navigation.
-- **Limitation:** Uses PostgreSQL. Full platform, not a library. React UI tightly coupled. Designed for "zero-human companies" — human interaction model is thin (board-of-directors oversight).
-- **Maturity note:** Launched early 2026, 14.2K stars in first week. Production-ready org chart + ticket system. Goal cascade well-implemented.
+- **56.4k stars (doubled in 6 weeks)** | Pushed 2026-04-20 | TypeScript 97%+ | MIT | Node 20+ | PostgreSQL (embedded or hosted) | Drizzle ORM
+- **Already adopted:** Heartbeat cycle (wake/execute/sleep), adapter interface (`invoke/status/cancel`), event-sourced cost aggregation, activity logging, atomic task checkout. Provenance tracked in `src/engine/heartbeat.ts`, `src/adapters/*`, `src/engine/trust.ts`, `src/engine/harness-handlers/*`.
+- **Primitive catalog** (65 tables, monorepo, `server/`+`ui/`+`packages/*`):
+  - *Tenancy:* `companies`, `company_memberships` (multi-user shipped 2026-04-17 PR #3784), `invites`, `join_requests`
+  - *Actors:* `agents` (name, role, adapter, model, reports_to, budget, skills), `agent_runtime_state` (lifetime cost rollup), `agent_task_sessions` (scoped resumable sessions), `agent_wakeup_requests` (**coalescing queue with idempotency**), `agent_config_revisions`, `agent_api_keys`
+  - *Work:* `issues` (ticket with checkout_run_id + execution_workspace_id), `issue_work_products` (PRs/artifacts with health), `issue_approvals`, `issue_comments`, `issue_relations`, `documents`+`document_revisions` (plan/design/notes keys)
+  - *Goals/projects:* `goals` (4-level tree), `projects` (with scoped `env`), `project_workspaces`
+  - *Execution:* `heartbeat_runs` (PID + process_group_id + log_store pointer + sha256 hash + retry chain + issue_comment_status), `heartbeat_run_events`, `execution_workspaces` (git worktree lifecycle), `workspace_runtime_services` (long-running dev-server-per-workspace)
+  - *Finance:* `cost_events` (with cached_input_tokens, biller, billing_type), `finance_events` (currency-aware ledger, invoices), `budget_policies` (generalized: scope/metric/window/warn%/hard_stop), `budget_incidents`
+  - *Governance:* `approvals` (hire_agent, approve_ceo_strategy), `activity_log`, `company_secrets`+`versions`, `principal_permission_grants`
+  - *Scheduling:* `routines`+`routine_triggers`+`routine_runs` (cron + webhook, concurrency policies, coalescing, idempotency)
+  - *Plugins (8 tables):* `plugins`, `plugin_config`, `plugin_company_settings`, `plugin_state`, `plugin_entities`, `plugin_jobs`+`runs`, `plugin_webhook_deliveries`, `plugin_logs` — sandboxed plugin runtime with SDK
+  - *Feedback:* `feedback_votes`, `feedback_exports` (trace bundles, consent-gated)
+- **Adapter contract (evolved beyond what Ditto borrowed):** `packages/adapter-utils/src/types.ts` now defines `ServerAdapterModule` with `execute/testEnvironment/listSkills/syncSkills/getQuotaWindows/detectModel`. `AdapterExecutionContext` carries streaming `onLog/onMeta/onSpawn` callbacks + workspace + runtime services. `AdapterExecutionResult` returns structured usage (inc. cachedInputTokens), billing type (api/subscription/bedrock), session params, and `question?` for adapter-asks-human. Ditto's `invoke/status/cancel` is now a subset.
+- **Adapters shipped (7 first-party + 2 external):** claude_local, codex_local, cursor, gemini_local, opencode_local, pi_local, openclaw_gateway + hermes_local/droid_local as external plugins. Plus `process` (shell) and `http` built-ins. Registry supports override-and-pause pattern + external `~/.paperclip/adapter-plugins.json`.
+- **UX surface (~57 pages):** Dashboard (4 MetricCards + 4 Charts), Inbox (heterogeneous items with j/k/a/r keyboard + swipe-to-archive), IssueDetail (Chat/Activity/Docs/Workspace), AgentDetail (6 tabs), OrgChart (SVG pan/zoom), Kanban (7 cols), Approvals (persisted gates with typed payload), Costs (Overview/Providers/Billers/Finance + BudgetPolicy editor), RunTranscriptView (normalized NDJSON → collapsible semantic groups with Nice/Raw toggle), Routines (cron + webhook triggers as UI). Mobile bottom nav + swipe triage. **Zero voice code.**
+- **Ditto relevance — HIGH, differentiated per layer:**
+  - *Substrate* — patterns already adopted; re-sync adapter contract (Paperclip's evolved, ours is stale). See `.context/paperclip-deep-dive.md`.
+  - *Operator-density layer (Inbox, Transcript, Approval-as-item, PingDot)* — reference-quality patterns. Lift to Ditto's L6 for month-2+ surfaces. See `.context/paperclip-ux-deep-dive.md`.
+  - *Hired-role mechanic* — the `agents` table shape + `NewAgent` config form + `AgentDetail` (6 tabs) is the clearest blueprint for activating Ditto's L2 Agent primitive. See ADR-037.
+  - *Supervisory model* — Paperclip agents are autonomous; Ditto adds Self-as-supervisor. Our novel axis. See ADR-038, Insight-203.
+  - *Conversational + voice + first-run* — **not** portable. Paperclip leads with configuration; Ditto leads with conversation.
+- **Limitations for Ditto:** PostgreSQL-native (we stay SQLite-per-workspace, see ADR-036). Multi-company tenancy is row-level in one DB (Ditto uses file-per-workspace). "Zero-human companies" framing is marketing — actual product is a single-tenant, multi-company, ticket-system control plane. Hire-flow is a flat form (Ditto will use conversational hire). Mobile is responsive, not mobile-first.
+- **Anti-patterns to avoid porting:** `companies` tenancy + `goals` 4-level hierarchy + `org_chart` reports_to tree + "CEO/CTO" role vocabulary + PostgreSQL multi-tenant row-filter pattern + the entire Paperclip first-run onboarding (staff an empty company before anything happens).
+- **Deep-dive research:** `.context/paperclip-deep-dive.md` (schema + adapters, 18KB, 15 annotated file pointers), `.context/paperclip-ux-deep-dive.md` (UX surface, 9KB, 9 sections). `docs/research/tool-surface-landscape.md` (2026-04-21) covers Paperclip's skills sub-surface (below) in Part B.1.
+- **Skills sub-surface (added 2026-04-21 via `tool-surface-landscape.md`):**
+  - Skills = **Anthropic/agentskills.io-format folders** (`SKILL.md` + `scripts/`/`references/`/`assets/`). Shipped: `skills/paperclip/`, `skills/paperclip-create-agent/`, `skills/paperclip-create-plugin/`, `skills/para-memory-files/`.
+  - Storage: `company_skills` row (`packages/shared/src/types/company-skill.ts`) — per-company scoping, with `sourceType: "local_path" | "github" | "url" | "catalog" | "skills_sh"`, `trustLevel: "markdown_only" | "assets" | "scripts_executables"`, `compatibility: "compatible" | "unknown" | "invalid"`, `fileInventory[]`, `origin: "company_managed" | "paperclip_required" | "user_installed" | "external_unknown"`.
+  - Adapter contract: `listSkills(ctx) → AgentSkillSnapshot`, `syncSkills(ctx, { desiredSkills: string[] })` = **set-based replace** returning an updated `AgentSkillSnapshot`. `mode: "unsupported" | "persistent" | "ephemeral"`. Defined in `packages/shared/src/types/adapter-skills.ts`; Zod-validated at `packages/shared/src/validators/adapter-skills.ts`.
+  - LLM surfacing: skills are **context/instructions**, not tool-call schemas. Adapter materializes files on disk (e.g. `~/.claude/skills/*/SKILL.md`); the host CLI does progressive disclosure itself.
+  - UI: `CompanySkills` admin screen + per-agent Skills tab with `desired: boolean` checklist. `CompanySkillListItem` surfaces `attachedAgentCount`, `sourceBadge`.
+  - Import sources (5): `local_path`, `github`, `url`, `catalog`, `skills_sh` (agentskills.io). Project-workspace scan auto-imports from `skills/`, `skills/.curated`, `skills/.experimental`, `skills/.system`, `.agents/skills/`, `.claude/skills/`.
+  - **Ditto relevance:** pattern reference for Insight-069 (skills packages as agent capabilities). Paperclip's `company_skills` + trust-level enum + adapter `syncSkills` shape is the most mature existing implementation of per-agent skill governance. Ditto currently has no equivalent surface — see `docs/research/tool-surface-landscape.md` §B.3.
+
+**agentskills.io** — agentskills.io
+- 2026 | Specification + logo directory (not a registry, not a framework) | Free / open format
+- **What it is:** A published spec for "skill" folders (`SKILL.md` with YAML frontmatter + Markdown body + optional `scripts/`, `references/`, `assets/`). Format origin: Anthropic, released as open standard. Spec site links to the validator (`github.com/agentskills/agentskills/tree/main/skills-ref`) and an adoption carousel of 35+ compatible products (Claude Code, Cursor, Gemini CLI, Goose, Kiro, Letta, etc.).
+- **Frontmatter fields:** `name` (required, 1–64 chars, lowercase `a-z0-9-`, must match dir name), `description` (required, 1–1024 chars), `license`, `compatibility` (≤500 chars env requirements), `metadata` (free-form), `allowed-tools` (experimental, space-separated pre-approved tools).
+- **Progressive disclosure (core principle):** (1) metadata loaded at startup (~100 tokens per skill), (2) full `SKILL.md` body on activation (<5000 tokens recommended, cap 500 lines), (3) `scripts/`/`references/`/`assets/` on demand.
+- **No browseable catalog of individual skills on agentskills.io itself.** "Example skills" link redirects to `github.com/anthropics/skills`. No categorization, tagging, or search surface.
+- **Ditto relevance:** pattern reference (not a build-from target). The spec is the one agentskills.io-compatible CLIs already consume; Paperclip treats agentskills.io as a first-class import source (`sourceType: "skills_sh"`). Relevant to Insight-069 (external domain expertise packages as agent capabilities) if Ditto adopts a skills-package surface. Classified as **pattern**, not adopt — no code to lift.
+- **Limitations:** not a registry (no discoverability), no versioning field in the spec (authors put versions in `metadata`), no input/output schemas (skills are instructions, not tools).
+- **Provenance for this entry:** `docs/research/tool-surface-landscape.md` §B.2 (2026-04-21).
 
 **Vercel AI SDK** — github.com/vercel/ai
 - Active March 2026 | TypeScript
@@ -58,6 +93,7 @@
 - Flat spec format (`{ root, elements: { id: { type, props, children } } }`) designed for LLM streaming — partial specs render progressively. Actions as first-class (predefined, not arbitrary handlers). State adapters (Redux, Zustand, Jotai, XState). MCP integration built in.
 - Cross-platform from one catalog: React, React Native, Vue, Svelte, SolidJS, React PDF, React Email, Remotion (video), React Three Fiber, Satori (OG images). 36 pre-built shadcn/ui components.
 - **Ditto relevance:** HIGH for rendered-view output type (Insight-066). Catalog-constrained rendering maps to trust-tier-governed output richness. One-catalog-many-registries enables multi-surface output rendering from a single process output schema. Flat spec format enables progressive rendering of dynamic outputs as processes execute. Evaluate as primary candidate for rendered-view output infrastructure. Supersedes OpenUI evaluation — more mature, richer ecosystem, Vercel backing.
+- **Adoption status (2026-04-21):** substrate is the foundation for ADR-009 (view-type outputs, workspace-internal registry) AND ADR-040 (App primitive, external-app registry). **Two registries on one catalog** validates the architecture's one-catalog-many-registries promise. Composition level: adopt (already adopted per ADR-009 §3); second registry added by Brief 209 sub-brief 210 sits on the same adopted codebase.
 - **Limitation:** UI rendering only — one output type among many (Insight-066). No orchestration, trust, or governance.
 
 **Impeccable** — impeccable.style
@@ -823,6 +859,72 @@ Added to support Brief 199 (git auto-commit on memory writes) and Brief 200 (Dit
 - **Spike test gate (Insight-180):** Brief 200 requires a real-client `git clone` roundtrip spike test BEFORE the rest of the brief builds; if `@isomorphic-git/http-node` Smart HTTP helpers are insufficient for the protocol version modern git clients use, pivot to `node-git-server` documented in the brief's retrospective.
 - **Limitation:** `@isomorphic-git/http-node` Smart HTTP server helpers are less battle-tested than gitea-class Go implementations; the spike test is load-bearing.
 - **Alternatives catalogued:** `node-git-server` (smaller surface, MIT), `simple-git` (system-binary wrapper; needs git installed in container — less portable). Evaluated during Brief 200 design; not adopted.
+
+---
+
+## App-Building Catalogs & Component Registries (2026-04-21)
+
+**Context:** ADR-040 + Brief 209 activate ADR-009's `external` output type as an App primitive; sub-brief 210 needs a concrete v1 component catalog. Per user steer (2026-04-21), Ditto maintains its own lightweight framework — scouts below are **pattern references, not adoption candidates**. Deep scout at `docs/research/app-component-catalog-patterns.md`.
+
+### AI App-Builders bucket (pattern-only)
+
+**v0.app (Vercel)** — v0.app/docs | Code-generator (React/Next/Tailwind/shadcn-biased), not catalog-constrained spec-generator. Catalog-constraint via **prompt + machine-readable component docs (shadcn "skills", March 2026 CLI v4 release)**. Unbounded output — LLM can still write arbitrary JSX. Pattern relevance: medium — informs "what does a shadcn-anchored ceiling look like" but not Ditto's architecture (Ditto is spec-based, not code-gen).
+
+**Lovable (lovable.dev)** — Code-generator, React + TypeScript + Vite + Tailwind + **shadcn/ui ~40+ components default** + Radix. Forms default to react-hook-form + Zod + shadcn `<Form>`. Constraint: prompt-only + boilerplate steering. First-class Supabase/Stripe/Resend integrations. Pattern relevance: medium — shadcn-floor reference.
+
+**Bolt.new (StackBlitz, github.com/stackblitz/bolt.new)** — Open-source. **Pure code-generator, zero intrinsic catalog.** Constraint mechanism: XML artifact envelope (`<boltArtifact>/<boltAction>`) + WebContainer runtime sandbox. Pattern relevance: low for catalog design (no catalog); useful reference for prompt-engineered output constraints.
+
+**Replit Agent (docs.replit.com/replitai/agent)** — Code-generator. Multi-agent architecture (manager/editor/verifier); verifier runs code + reads stderr for self-correction. Notable: **explicit per-step checkpoints with UI rollback** — this is the single strongest rollback-UX pattern scouted and informs ADR-040's `current.json` pointer-switch model.
+
+**Firebase Studio (firebase.google.com/docs/studio)** — **Being sunset 2027-03-22** (deprecation announced 2026). Code-generator with templates; full framework coverage. Pattern relevance: low (sunsetting).
+
+**Cursor Agent** — Out of scope; pure coding agent on existing repos, no app-generation catalog.
+
+**Ditto relevance for the bucket:** HIGH-for-patterns-only. Replit Agent's per-step checkpoint rollback model is the key adoption-worthy pattern (already implicit in ADR-040 §4). shadcn/ui's March-2026 "skills" format is a watch-item for machine-readable component docs that might align with Ditto's Zod catalog export (open question in research report).
+
+### OSS Schema-Driven Form Libraries bucket (pattern-only)
+
+**SurveyJS (github.com/surveyjs/survey-library)** — 4.7k stars, v2.5.10 (2026-02-12), MIT. Class-based serializer (`Serializer.addClass()` + `QuestionFactory.registerQuestion()`). ~32 question types + composites. Rich property vocabulary (`visibleIf/enableIf` expression strings). 56 locale files, first-class i18n. Constraint: registry by type-string + class instantiation; unknown types return null. Pattern relevance: HIGH for rich property vocabulary (matrix, paneldynamic, calculated values, expression-driven properties).
+
+**Formily (github.com/alibaba/formily)** — 12.5k stars, v2.3.6 (2025-05, cadence slowed). JSON Schema + `x-*` extensions (`x-component`, `x-reactions`, `x-display`, `x-pattern`). Single-tree. **Explicit code-execution surface** — `new Function()` compilation of `{{expressions}}`. Pattern relevance: medium — informs x-extension-on-JSON-Schema pattern; Ditto's Zod-first is cleaner.
+
+**JSON Forms (github.com/eclipsesource/jsonforms)** — 2.7k stars, v3.7.0 (2025-11-28), MIT. **Dual-tree: JSON Schema for data + UI Schema for layout**. Ranked-tester renderer resolution. `UnknownRenderer` fail-open fallback ("No applicable renderer found"). ~30+ material renderers. Pattern relevance: HIGH for catalog-extensibility pattern (tester functions) and fail-open fallback design.
+
+**react-jsonschema-form / RJSF (github.com/rjsf-team/react-jsonschema-form)** — 15.7k stars, v6.5.1 (2026-04-18), Apache-2.0 — most active scouted. JSON Schema + UI Schema. 12 fields + 19 widgets in core; 10 theme packages (antd, chakra, daisyui, fluentui, mantine, mui, primereact, bootstrap, semantic, **shadcn**). `disableParsingRawHTML: true` forced on markdown — security-by-default. Pattern relevance: HIGH for field/widget/template triple registry shape and theme-swap pattern.
+
+**Formio (formio.js, github.com/formio/formio.js)** — 2.1k stars, MIT. Proprietary class hierarchy; 38 component folders. **Richest property vocabulary scouted** (`Component.js:32-200` base schema ~40+ properties). Every rendered string passes through DOMPurify. Wrapped submission envelope `{data, metadata, state}`. Pattern relevance: HIGH for property vocabulary reference + DOMPurify-on-every-render security pattern.
+
+**Ditto relevance for the bucket:** HIGH-for-patterns. json-render (already adopted per ADR-009 §3) is Zod-first — none of these use Zod. The bucket informs property vocabulary (consensus: `label / description / defaultValue / required / visibility`), validation conventions, and constraint-enforcement models. No adoption; Ditto's existing json-render substrate is unchallenged by this scout.
+
+### Code-First Component Registration bucket
+
+**Plasmic (github.com/plasmicapp/plasmic)** — 6.7k stars, MIT (main) / AGPL (platform/). `registerComponent(component, meta)` with typed `PropType<P>` discriminated union (17 variants: string/number/boolean/choice/array/object/dataSource/dataPicker/exprEditor/formValidationRules/eventHandler/slot/custom/code/richText/color/dateString/class/imageUrl). Slot-level `allowedComponents` whitelist. **Strongest typed-property-metadata pattern scouted.** `isLocalizable` marker for translation. Pattern relevance: HIGH for future extensibility (when v1 fixed catalog opens to third-party registration, Plasmic's PropType shape is the natural pattern).
+
+**Builder.io (github.com/BuilderIO/builder)** — 8.7k stars, MIT. `ComponentInfo` TypeScript interface; 13 core blocks (accordion, button, columns, custom-code, embed, form, fragment, image, img, personalization-container, raw-text, section, slot, symbol, tabs, text, video). Explicit escape hatches (`custom-code`, `embed`). **`serializeIncludingFunctions` converts functions to strings for remote `new Function()` eval at edit time** — explicit code-execution channel. Visual Copilot pipeline: AI → Mitosis IR → framework-specific codegen. Pattern relevance: medium — BYO-components pattern instructive; code-eval channel incompatible with Ditto's ADR-040 §9.
+
+**Craft.js (github.com/prevwong/craft.js)** — 8.6k stars, v0.2.7 (2025-02-14), MIT. Pure framework (zero built-in components); `Component.craft = { rules, related, props }` static registration. `resolver` map is allow-list by design — `invariant(resolvedName, ERROR_NOT_IN_RESOLVER)`. Pattern relevance: LOW for Ditto (Ditto builds its own editor, not drag-drop); reference for fail-fast constraint enforcement.
+
+### Form/Portal Builder bucket (field-vocabulary + submission-shape reference)
+
+Compact reference for field-type vocabulary + submission-shape conventions. Not evaluated for adoption (closed-source or competing products); cited in `docs/research/app-component-catalog-patterns.md` for every vocabulary + shape claim.
+
+**Form-builders:** Typeform, Tally, Fillout, Jotform, Paperform, Google Forms, Microsoft Forms. **Submission BaaS:** Formspree, Getform, Basin, Netlify Forms. **Portal/no-code:** Softr (portal on Airtable), Glide (app-on-spreadsheet), Framer Forms, Webflow Forms.
+
+**Key findings relevant to Ditto v1 catalog:**
+- **Universal 10 field types** (present in every mainstream form-builder): short-text, long-text, email, number, dropdown, radio, checkbox, date, file-upload, rating. v1 table-stakes.
+- **Submission-shape conventions** cluster into three shapes: ordered-fields-array (Typeform/Tally/Fillout — self-describing, type-tagged), flat-KV (Formspree/Netlify/Webflow — simple), schema-nested (RJSF/JSON Forms — typed).
+- **Anti-spam default stack:** honeypot + rate-limit + optional captcha (reCAPTCHA/hCaptcha/Turnstile). Universal.
+- **Webhook signing:** HMAC-SHA-256 (Tally, Webflow). Standard.
+- **File delivery:** URLs, never base64, universally.
+- **Form versioning:** Essentially nobody offers true form versioning — stable field IDs + label snapshotting preserves historical submissions across schema edits.
+
+**Ditto relevance for the bucket:** MEDIUM — informs field-vocabulary + submission-shape + anti-spam defaults. Not adoption candidates (closed-source commercial products).
+
+### Already-evaluated in this landscape (cross-reference)
+
+- **OpenUI** (thesysdev/openui) — §"Multi-Agent Orchestration Frameworks" above. Catalog-constrained spec generator; strongest constraint mechanism scouted (level 8 of 8: catalog + Zod + library-driven prompt + streaming parser). Pattern relevance: HIGH.
+- **json-render** (vercel-labs/json-render) — §"Multi-Agent Orchestration Frameworks" above. Already adopted per ADR-009 §3; confirmed by this scout as the strongest Zod-first option. Pattern relevance: ALREADY ADOPTED.
+- **AI Elements** (vercel/ai-elements) — §"Multi-Agent Orchestration Frameworks" above. Adopted for internal Ditto workspace chrome (15 components, Brief 058/061). Not an external-app-registry candidate but cross-referenced for shared Radix/shadcn substrate.
 
 ---
 

@@ -26,38 +26,89 @@ const VALID_ACTIONS = new Set(["interview-start", "commit", "reset"]);
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, personaId, action } = body as {
-      sessionId?: string;
+    const { sessionId: rawSessionId, personaId, action, turnstileToken } = body as {
+      sessionId?: string | null;
       personaId?: string;
       action?: string;
+      turnstileToken?: string;
     };
 
-    if (!sessionId) {
-      return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
-    }
     if (!action || !VALID_ACTIONS.has(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
     if (action !== "reset" && (!personaId || !VALID_PERSONAS.has(personaId))) {
       return NextResponse.json({ error: "Invalid personaId" }, { status: 400 });
     }
+    // Brief 152: interview-start is allowed to run without a pre-existing session.
+    // The picker no longer pre-warms a session (we ship canned intros), so the
+    // first server round-trip happens when the visitor taps a card. Lazy-create
+    // here so we skip an otherwise-wasted extra round-trip.
+    if (action !== "interview-start" && !rawSessionId) {
+      return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
+    }
 
     const { db, schema } = await import("../../../../../../../../src/db");
     const { eq, sql, and } = await import("drizzle-orm");
-    const { recordFunnelEvent } = await import("../../../../../../../../src/engine/network-chat");
+    const { recordFunnelEvent, loadOrCreateSession, hashIp, checkIpRateLimit } = await import(
+      "../../../../../../../../src/engine/network-chat"
+    );
 
-    const [session] = await db
-      .select()
-      .from(schema.chatSessions)
-      .where(
-        and(
-          eq(schema.chatSessions.sessionId, sessionId),
-          sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
-        ),
+    let session: typeof schema.chatSessions.$inferSelect | null = null;
+    if (rawSessionId) {
+      const [existing] = await db
+        .select()
+        .from(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.sessionId, rawSessionId),
+            sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
+          ),
+        );
+      session = existing ?? null;
+    }
+
+    // Lazy-create for interview-start if we have no valid session.
+    // This path is the visitor's first server touch (picker ships canned intros
+    // with no round-trip), so it has to carry the same bot/abuse gates the
+    // /stream route used to apply at session creation time: Turnstile + IP rate
+    // limit. Existing-session callers skip both — they're gated by having a
+    // session that was created through this same branch.
+    if (!session && action === "interview-start") {
+      const forwarded = request.headers.get("x-forwarded-for");
+      const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
+
+      const { verifyTurnstileToken } = await import(
+        "../../../../../../../../src/engine/turnstile"
       );
+      const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstile.ok) {
+        return NextResponse.json(
+          { error: "Bot verification failed. Please refresh and try again." },
+          { status: 403 },
+        );
+      }
+
+      const ipHash = hashIp(ip);
+      const ipAllowed = await checkIpRateLimit(ipHash);
+      if (!ipAllowed) {
+        return NextResponse.json(
+          { error: "Too many requests. Please try again later." },
+          { status: 429 },
+        );
+      }
+
+      const created = await loadOrCreateSession(null, "front-door", ipHash);
+      const [row] = await db
+        .select()
+        .from(schema.chatSessions)
+        .where(eq(schema.chatSessions.sessionId, created.sessionId));
+      session = row ?? null;
+    }
+
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
+    const sessionId = session.sessionId;
 
     const persona = personaId as "alex" | "mira" | undefined;
     const currentTranscripts: Partial<Record<"alex" | "mira", Array<{ role: string; content: string }>>> =

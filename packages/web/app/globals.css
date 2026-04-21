@@ -51,12 +51,14 @@ button:disabled, [type="submit"]:disabled {
  */
 
 @theme {
-  /* Foundation — Cool Grey Canvas */
-  --color-background: #EDEDF0;
-  --color-surface: #E2E2E6;
-  --color-surface-raised: #F9F9FB;
-  --color-border: #D5D5DA;
-  --color-border-strong: #BBBBC2;
+  /* Foundation — White canvas matching front-door. Pre-Workspace-redesign
+   * (2026-04) these were cool-grey (#EDEDF0 / #E2E2E6 / #D5D5DA / #BBBBC2);
+   * redesign moved surfaces to white with tinted border + raised fill. */
+  --color-background: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FAFAFB;
+  --color-border: #E8E8ED;
+  --color-border-strong: #C8C8CE;
 
   /* Text */
   --color-text-primary: #111118;

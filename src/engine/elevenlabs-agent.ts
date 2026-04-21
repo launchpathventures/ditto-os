@@ -42,9 +42,15 @@ function getConfig(): ElevenLabsConfig | null {
 
   if (!apiKey) return null;
 
+  // Empty string when no voice_id env var is set. The old "default" fallback
+  // was a footgun: ElevenLabs rejects "default" as a non-existent voice,
+  // which caused the whole PATCH (prompt + tools + voice) to fail — leaving
+  // the agent with stale config (no get_context tool registered → greeting
+  // repeats on ambiguous input). With an empty string we omit `tts` from
+  // the payload entirely and the agent keeps whatever voice it had.
   return {
     apiKey,
-    voiceId: voiceId || "default",
+    voiceId: voiceId || "",
     serverUrl: serverUrl?.replace(/\/api\/v1\/voice\/respond$/, "") || "",
   };
 }
@@ -276,7 +282,11 @@ export async function ensureAgent(personaId: PersonaId = "alex"): Promise<string
     },
   ];
 
-  const conversationConfig = {
+  // Only include `tts` when we have a real voice_id — ElevenLabs rejects
+  // PATCH/CREATE if voice_id is bogus. Omitting the block entirely lets an
+  // existing agent keep its current voice (PATCH) or forces the caller to
+  // configure ELEVENLABS_VOICE_ID before we can create a new one (CREATE).
+  const conversationConfig: Record<string, unknown> = {
     agent: {
       prompt: {
         prompt: `${persona.systemPrompt}\n\n<!-- config-version:${PROMPT_CONFIG_VERSION} -->`,
@@ -287,11 +297,17 @@ export async function ensureAgent(personaId: PersonaId = "alex"): Promise<string
       first_message: persona.firstMessage,
       language: "en",
     },
-    tts: {
+  };
+  if (voiceId) {
+    conversationConfig.tts = {
       model_id: "eleven_turbo_v2",
       voice_id: voiceId,
-    },
-  };
+    };
+  } else {
+    console.warn(
+      `[elevenlabs-agent] ELEVENLABS_VOICE_ID not set — ${personaId} agent will keep its existing voice. Set ELEVENLABS_VOICE_ID to change it.`,
+    );
+  }
 
   try {
     const headers = { "xi-api-key": config.apiKey, "Content-Type": "application/json" };
@@ -299,7 +315,7 @@ export async function ensureAgent(personaId: PersonaId = "alex"): Promise<string
     // If we have an ID, update via REST (SDK doesn't handle tools correctly)
     const existingId = cachedAgentIds[personaId];
     if (existingId) {
-      console.log(`[elevenlabs-agent] Updating agent ${existingId} (${personaId}) with ${tools.length} tools, voice: ${voiceId}`);
+      console.log(`[elevenlabs-agent] Updating agent ${existingId} (${personaId}) with ${tools.length} tools, voice: ${voiceId || "(unchanged)"}`);
       const res = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${existingId}`, {
         method: "PATCH",
         headers,
@@ -315,8 +331,18 @@ export async function ensureAgent(personaId: PersonaId = "alex"): Promise<string
       const data = await res.json();
       const agentTools = data.conversation_config?.agent?.prompt?.tools;
       configSynced[personaId] = true;
-      console.log(`[elevenlabs-agent] Updated ${personaId}. Tools: ${agentTools?.length || 0}, voice: ${voiceId}`);
+      console.log(`[elevenlabs-agent] Updated ${personaId}. Tools: ${agentTools?.length || 0}, voice: ${voiceId || "(unchanged)"}`);
       return existingId;
+    }
+
+    // Creating a new agent requires a valid voice_id — ElevenLabs won't
+    // accept a create call without one. Fail fast with a clear error instead
+    // of sending a broken request.
+    if (!voiceId) {
+      console.error(
+        `[elevenlabs-agent] Cannot create ${personaId} agent — ELEVENLABS_VOICE_ID is required to create a new agent.`,
+      );
+      return null;
     }
 
     // Create new agent via REST
@@ -333,7 +359,7 @@ export async function ensureAgent(personaId: PersonaId = "alex"): Promise<string
     const data = await res.json();
     cachedAgentIds[personaId] = data.agent_id;
     configSynced[personaId] = true;
-    console.log(`[elevenlabs-agent] Created agent for ${personaId}: ${data.agent_id} (voice: ${voiceId})`);
+    console.log(`[elevenlabs-agent] Created agent for ${personaId}: ${data.agent_id} (voice: ${voiceId || "(unchanged)"})`);
     return data.agent_id;
   } catch (err) {
     console.error(`[elevenlabs-agent] Failed for ${personaId}:`, (err as Error).message);

@@ -102,6 +102,13 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
   // Harness guidance cache — populated eagerly on user speech, consumed by client tool
   const pendingGuidanceRef = useRef<{ guidance: string; stage: string } | null>(null);
   const guidanceAbortRef = useRef<AbortController | null>(null); // Cancel in-flight guidance fetches
+  // Track the last guidance string we actually pushed to the agent. Multiple
+  // triggers (user_final, agent_turn_end, poll, ElevenLabs tool calls) can fan
+  // out into parallel /voice/guidance requests that all return the same text.
+  // Without this, each caller fires its own sendContextualUpdate and the agent
+  // re-delivers the same line that many times.
+  const lastPushedGuidanceRef = useRef<string | null>(null);
+  const lastPushedAtRef = useRef<number>(0);
   // Brief 180 AC 4 + 15: remember the most recent ETag so polling + push can
   // ask the server "changed?" with If-None-Match and skip work on 304.
   const lastGuidanceEtagRef = useRef<string | null>(null);
@@ -180,16 +187,37 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
         return data;
       })
       .then((data) => {
-        if (data?.guidance) {
-          pendingGuidanceRef.current = data;
-          conversationRef.current?.sendContextualUpdate(`SYSTEM INSTRUCTION: ${data.guidance}`);
-          emitTelemetry("push_fired", {
-            trigger,
-            stage: data.stage,
-            validateRewrote: !!data.validateRewrote,
-          });
-          console.log(`[voice-call] Pushed guidance (${trigger}): ${data.guidance.slice(0, 80)}...`);
+        if (!data?.guidance) return;
+        // Dedup: if this guidance is textually identical to what we just
+        // pushed, skip. The server-level runOrJoin dedups the LLM call but
+        // still returns the same guidance to every concurrent caller; that's
+        // how the agent ended up hearing "ask for name" 4x in a row.
+        if (data.guidance === lastPushedGuidanceRef.current) {
+          emitTelemetry("push_deduped", { trigger, stage: data.stage });
+          return;
         }
+        // Throttle: low-priority triggers (agent_turn_end, poll) that fire
+        // within 1.5s of a recent push get dropped. user_final always wins —
+        // a new user utterance is real state movement and must push.
+        // Without this, agent_turn_end (which fires right after the agent
+        // finishes speaking) keeps pushing near-identical-but-not-identical
+        // LLM-generated guidance, making the agent rephrase / re-ask.
+        const now = Date.now();
+        const MIN_PUSH_INTERVAL_MS = 1500;
+        if (trigger !== "user_final" && now - lastPushedAtRef.current < MIN_PUSH_INTERVAL_MS) {
+          emitTelemetry("push_deduped", { trigger, stage: data.stage, throttled: true });
+          return;
+        }
+        lastPushedGuidanceRef.current = data.guidance;
+        lastPushedAtRef.current = now;
+        pendingGuidanceRef.current = data;
+        conversationRef.current?.sendContextualUpdate(`SYSTEM INSTRUCTION: ${data.guidance}`);
+        emitTelemetry("push_fired", {
+          trigger,
+          stage: data.stage,
+          validateRewrote: !!data.validateRewrote,
+        });
+        console.log(`[voice-call] Pushed guidance (${trigger}): ${data.guidance.slice(0, 80)}...`);
       })
       .catch(() => { /* aborted or network error */ });
   }, [sessionId, voiceToken, emitTelemetry]);
@@ -334,7 +362,8 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
       // First message: the harness reply IS what Alex would say in text mode
       // Use it directly as the first voice message context
       let firstMessageContext: string;
-      if (harnessGuidance && harnessGuidance.length > 20) {
+      const bakedIntoFirstMessage = !!(harnessGuidance && harnessGuidance.length > 20);
+      if (bakedIntoFirstMessage) {
         // The harness knows exactly what to say — use it
         firstMessageContext = `good to switch to voice. You can also type in the chat to add context. ${harnessGuidance}`;
       } else {
@@ -346,9 +375,18 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
         ? `${sessionContext}\n\nSYSTEM INSTRUCTION: ${harnessGuidance}`
         : sessionContext;
 
-      // Seed the guidance cache with the initial evaluation so the first
-      // get_context client tool call returns real guidance instantly.
-      if (harnessGuidance) {
+      // Seed the guidance cache so the first get_context tool call returns
+      // instantly. If the guidance was already baked into the spoken first
+      // message, the agent must NOT re-deliver it — prime with a post-greeting
+      // directive instead. Otherwise the agent speaks the opener, immediately
+      // calls get_context, gets the same text back, and repeats itself.
+      if (bakedIntoFirstMessage) {
+        pendingGuidanceRef.current = {
+          guidance:
+            "You just delivered the opening — including any ask or question in it. Do NOT repeat it. Wait for the user's reply, then react with substance to what they said and ask ONE natural follow-up question.",
+          stage: auth.evaluation?.stage || "gathering",
+        };
+      } else if (harnessGuidance) {
         pendingGuidanceRef.current = {
           guidance: harnessGuidance,
           stage: auth.evaluation?.stage || "gathering",

@@ -176,7 +176,33 @@ export function buildVoiceFallbackGuidance(learned: Record<string, string | null
  * This is the pre-call guidance — no extra LLM call needed,
  * just deterministic state inspection.
  */
+/**
+ * Merge a new learned snapshot into an existing one without clobbering known
+ * fields with nulls/blanks. The LLM is told to resend cumulative state each
+ * turn, but in practice it sometimes emits `{business: null}` for a field it
+ * hasn't captured this turn — which, under a naive spread, wipes an earlier
+ * value from the UI. Truthy-only merge preserves what we've actually learned.
+ */
+function mergeLearned(
+  prev: Record<string, string | null> | LearnedContext | null | undefined,
+  next: Record<string, string | null> | LearnedContext | null | undefined,
+): Record<string, string | null> {
+  const out: Record<string, string | null> = { ...(prev as Record<string, string | null> ?? {}) };
+  if (!next) return out;
+  for (const [k, v] of Object.entries(next as Record<string, string | null | undefined>)) {
+    if (v != null && v !== "") out[k] = v;
+  }
+  return out;
+}
+
 function buildStateDirective(session: ChatSession): string {
+  // Interview mode follows its own cadence (learn → nudge → close). The
+  // front-door gate ladder (name → business → target → location → email)
+  // does not apply until the visitor commits to a persona.
+  if (session.stage === "interview") {
+    return buildInterviewDirective(session);
+  }
+
   const learned = session.learned;
   // Use != null to avoid false negatives from empty strings
   const hasName = learned?.name != null && learned.name !== "";
@@ -196,10 +222,75 @@ function buildStateDirective(session: ChatSession): string {
   } else if (!hasLocation) {
     lines.push(`You know ${learned!.name}, their business, and target. Set requestLocation to true. Ask where they're based so you can target the right market — the location input appears below your text. Ask ONLY about location — nothing else.`);
   } else if (!hasEmail) {
-    lines.push(`You have name, business, target, and location. This turn: set requestEmail to true and explain why you need their email — briefings, approvals, and communication happen there.`);
+    // REFLECT & PROPOSE — before email. The visitor must see concrete value
+    // ("here's what Ditto will actually do for me") before we ask for an email.
+    // The LLM itself decides when to escalate to the email ask: if the visitor
+    // engages with the proposal this turn, set requestEmail=true; otherwise
+    // keep refining the plan.
+    lines.push(
+      `You have ${learned!.name}, their business (${learned!.business}), target, and location. DO NOT jump to the email ask yet — the visitor hasn't heard what you'll actually do for them.`,
+      `This turn: REFLECT & PROPOSE. Reflect back what you've heard in their words, then propose a concrete, specific plan — what YOU (as Ditto) will do for them, first step and why. Set the "plan" tool field with that proposal text. End with an invitation to push back, refine, or greenlight.`,
+      `ONLY escalate to the email ask when the visitor has engaged with your proposal (confirmed it, refined it, asked how to start). In that case, set requestEmail=true and explain briefly that briefings and approvals happen at their email. If the visitor hasn't seen or engaged with a proposal yet, leave requestEmail=false — no matter how many turns have passed.`,
+    );
   } else {
-    lines.push(`You have all context. Reflect back what you've heard using THEIR words — confirm you got it right. Propose your approach as an option they can accept or modify. Get explicit consent before activating. Remember: confirm, never assume.`);
+    lines.push(`You have all context and an email. Finalise: confirm the approach using THEIR words, get explicit consent, then set done=true to activate. Remember: confirm, never assume.`);
   }
+
+  return lines.join("\n");
+}
+
+/**
+ * Interview cadence: this is a FIRST MEETING, not the main work. Three turns
+ * max. Every reply after turn 1 MUST make a concrete statement about how
+ * {persona} would help — not just collect more facts. By turn 3 the commit
+ * ask is the ONLY question on the table. Real problem-solving, plans,
+ * email-capture, and detailed fact-gathering belong in the post-commit
+ * front door — not here.
+ */
+function buildInterviewDirective(session: ChatSession): string {
+  const personaId = (session.personaId ?? "alex") as "alex" | "mira";
+  const selfName = personaId === "alex" ? "Alex" : "Mira";
+  const otherName = personaId === "alex" ? "Mira" : "Alex";
+  // Count genuine user turns — exclude synthetic system prompts like
+  // "[INTERVIEW_START]" / "[PERSONA_COMMITTED]" which are engine artifacts.
+  const userTurns = (session.messages ?? []).filter(
+    (m) => m.role === "user" && !m.content.startsWith("["),
+  ).length;
+
+  const lines: string[] = ["\n\n## THIS TURN — first-meeting cadence (this OVERRIDES the reaction-then-question pattern in your voice spec)"];
+  lines.push(
+    `You are in INTERVIEW mode. This is a first meeting, not the main work. The UI shows "Continue with ${selfName}" and "Try ${otherName}" buttons above the chat. The actual front-door work (understanding their business, proposing a plan, asking for email) starts ONLY after they click "Continue with ${selfName}". Do NOT start that work here.`,
+  );
+
+  if (userTurns <= 1) {
+    lines.push(
+      `TURN 1 — OPEN. Reply shape: one warm reaction sentence + ONE light opening question. Don't interrogate. Don't sketch pathways yet. Don't propose.`,
+    );
+  } else if (userTurns === 2) {
+    lines.push(
+      `TURN 2 — SHOW YOUR VALUE, THEN NUDGE. Your reply MUST follow this shape and order:`,
+      `  1. One sentence reacting to what they said.`,
+      `  2. One sentence of "here's how I'd probably help someone in your spot" in EVERYDAY LANGUAGE — concrete, tied to THEIR situation. Pick from: opening doors / introductions, running outreach, or stepping in on operations. Speak to the frustration a busy non-technical person has with AI: they don't want to learn prompting, wire up tools, or babysit a chatbot. Frame it as "you tell me what you want, I go do it" — not "you prompt me and I help you think". Use their words, not jargon (no "leverage", "optimise", "AI agents", "workflows"). One or two clauses, max.`,
+      `  3. ONE soft nudge toward the decision — e.g. "Reckon we click, or want a go with ${otherName} first?" (your voice). That's your ONLY question this turn.`,
+      `Your "question" field = that soft nudge. Your "suggestions" field = ["Let's keep going", "Try ${otherName}", "Tell me more first"]. Do NOT ask another fact-finding question. Do NOT keep probing their business.`,
+      `Good examples of the sentence-2 framing (tone, not template — make it specific to THIS visitor):`,
+      `  • "For someone running a shop like yours, I'd just go find the right buyers and line up the meetings for you — you wouldn't have to touch the AI bit at all."`,
+      `  • "Most people I work with don't have time to figure out prompts — they tell me what good looks like and I handle the rest."`,
+      `  • "I'd take 'I want more of X' and go make X happen, rather than talking you through how to do it yourself."`,
+    );
+  } else {
+    // Turn 3+ — commit ask is mandatory
+    lines.push(
+      `TURN ${userTurns} — COMMIT ASK (mandatory). The first meeting has run its course. Reply shape:`,
+      `  1. One short sentence reflecting what you've picked up about them.`,
+      `  2. Your commit question — e.g. "Keen to keep going with me, or want to try ${otherName} first?" in your voice. This is your ONE AND ONLY question.`,
+      `Your "question" field MUST be that commit question. Your "suggestions" field MUST be: ["Continue with ${selfName}", "Try ${otherName}", "Need a moment"]. Under NO circumstances ask another fact-finding or exploratory question — if they hedge, be warmer but firmer. A short advisor earns trust by asking for the decision, not by piling on more questions.`,
+    );
+  }
+
+  lines.push(
+    "Hard constraints: this is a first meeting. requestName=false, requestLocation=false, requestEmail=false, done=false, detectedMode=null, searchQuery=null, fetchUrl=null, plan=null. Do NOT propose detailed plans. Do NOT gather email / location / deep business facts — that happens after commit. The server will strip any of these flags if set.",
+  );
 
   return lines.join("\n");
 }
@@ -556,7 +647,7 @@ export interface ChatPipelineOptions {
   promptMode?: PromptMode;
 }
 
-async function loadOrCreateSession(
+export async function loadOrCreateSession(
   sessionId: string | null,
   context: ChatContext,
   ipHash: string,
@@ -763,7 +854,7 @@ async function evaluateVoiceCore(
 
     // Merge learned into session — SAME as text chat
     if (rawExtracted.learned) {
-      session.learned = { ...(session.learned || {}), ...rawExtracted.learned };
+      session.learned = mergeLearned(session.learned, rawExtracted.learned);
     }
 
     // Run stage gates — SAME as text chat
@@ -1295,7 +1386,7 @@ export async function handleChatTurn(
   const rawExtracted = extractAlexResponse(response.content);
   // Update session.learned BEFORE gate enforcement so gates see this turn's context
   if (rawExtracted.learned) {
-    session.learned = { ...(session.learned || {}), ...rawExtracted.learned };
+    session.learned = mergeLearned(session.learned, rawExtracted.learned);
   }
   const extracted = enforceStageGates(rawExtracted, session);
   let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
@@ -1387,7 +1478,7 @@ export async function handleChatTurn(
       recordFrontDoorSpend(followUp.costCents);
       const followUpRaw = extractAlexResponse(followUp.content);
       if (followUpRaw.learned) {
-        session.learned = { ...(session.learned || {}), ...followUpRaw.learned };
+        session.learned = mergeLearned(session.learned, followUpRaw.learned);
       }
       const followUpGated = enforceStageGates(followUpRaw, session);
       reply = followUpGated.reply;
@@ -1729,7 +1820,7 @@ export async function* handleChatTurnStreaming(
   const streamRawExtracted = extractAlexResponse(thinkContent);
   // Update session.learned BEFORE gate enforcement so gates see this turn's context
   if (streamRawExtracted.learned) {
-    session.learned = { ...(session.learned || {}), ...streamRawExtracted.learned };
+    session.learned = mergeLearned(session.learned, streamRawExtracted.learned);
   }
   const streamExtracted = enforceStageGates(streamRawExtracted, session);
   let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
@@ -1836,7 +1927,7 @@ export async function* handleChatTurnStreaming(
         const followUpRaw = extractAlexResponse(followUp.content);
         if (followUpRaw.learned) {
           learned = followUpRaw.learned;
-          session.learned = { ...(session.learned || {}), ...learned };
+          session.learned = mergeLearned(session.learned, learned);
         }
         const followUpGated = enforceStageGates(followUpRaw, session);
         reply = followUpGated.reply;

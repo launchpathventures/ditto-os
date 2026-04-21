@@ -64,6 +64,13 @@
       "when": 1776396466688,
       "tag": "0009_voice_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1776711709330,
+      "tag": "0010_thread_titles",
+      "breakpoints": true
     }
   ]
 }

@@ -30,11 +30,16 @@ export async function POST(request: Request) {
       config({ path: path.resolve(process.cwd(), "../../.env") });
     } catch { /* env vars may be set via platform */ }
 
-    const body = await request.json();
-    const { sessionId, voiceToken } = body as {
-      sessionId?: string;
-      voiceToken?: string;
-    };
+    // Browsers occasionally fire POSTs with an empty body (CORS preflight
+     // retries, abort-and-retry races). Parse defensively so those don't
+    // surface as "Unexpected end of JSON input" in the server logs.
+    let body: { sessionId?: string; voiceToken?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Missing body" }, { status: 400 });
+    }
+    const { sessionId, voiceToken } = body;
 
     if (!sessionId || !voiceToken) {
       return NextResponse.json({ error: "Missing sessionId or voiceToken" }, { status: 400 });

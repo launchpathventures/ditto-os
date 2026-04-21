@@ -1,7 +1,8 @@
 # Brief 188: Cross-Brief Autopilot — Drain-Queue + Autobuild Adapted to Ditto
 
 **Date:** 2026-04-17
-**Status:** ready
+**Status:** complete
+**Closed:** 2026-04-21 — skills landed on `main` via PR #29 (commit 382e6f3). §Setup verification (5 static greps) passed clean 2026-04-21 (no stale `pnpm typecheck` / `pnpm lint` / `origin/master` / `project/agentcrm-app-dev` / YAML-parser refs). §Single-workspace functional test, §Concurrency smoke test, and §GC-pass smoke test remain UNRUN — first real `/drain-queue 1` invocation against the live queue serves as de facto functional smoke. If that produces a clean PR, the brief stays complete. If not, reopen and re-mark `in_progress`.
 **Depends on:** Existing dev-role pipeline (`/dev-pm`, `/dev-architect`, `/dev-builder`, `/dev-reviewer`, `/dev-documenter`); existing `/dev-review` skill at `.catalyst/skills/dev-review/` (already installed identically to Catalyst source). No Brief NNN dependencies — the dev-role pipeline is the substrate, not a brief.
 **Unlocks:** Hands-off execution of the `Status: ready` brief queue. Human stays on planning + merge-time taste; dispatch between roles becomes machine work. Enables N parallel Conductor workspaces to drain the queue concurrently. Non-recursive prerequisite for Brief 181 (Recursive Self-Improvement).
 

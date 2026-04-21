@@ -1,25 +1,34 @@
 "use client";
 
 /**
- * Ditto — Sidebar Navigation
+ * Ditto — Sidebar Navigation (Workspace redesign)
  *
- * Eight destinations: Today / Inbox / Work / Projects / Growth / Routines / Roadmap / Settings
- * per ADR-024 Section 2 and .impeccable.md nav label table.
+ * Seven destinations: Today · Inbox · Work · Projects · Agents · People ·
+ * Settings, with a "Chats" section showing recent threads (localStorage-
+ * backed) and a primary "New chat" CTA. Mirrors the design handoff's
+ * Workspace.html layout.
  *
- * Inbox shows count badge when items need attention.
- * Settings is scaffold (fixed page), all others are composition intents.
- *
- * Brief 047 AC4 + Brief 055 AC6: Sidebar navigation items.
- * Provenance: original (ADR-024, P00 v2 prototype, .impeccable.md).
+ * Provenance: original (design handoff 2026-04-21), ADR-024 Section 2,
+ * user-requested nav reshape (rename Routines → Agents; add People; drop
+ * Growth/Library/Roadmap from nav — composition intents still exist and
+ * are reachable via Self).
  */
 
 import React, { useMemo } from "react";
-import type { ProcessSummary, WorkItemSummary } from "@/lib/process-query";
-import type { CompositionIntent } from "@/lib/compositions";
+import type { WorkItemSummary } from "@/lib/process-query";
+import { useThreadStore, relativeMinutes } from "@/components/chat/thread-store";
 
-export type NavigationDestination = CompositionIntent | "settings" | (string & {});
+export type NavigationDestination =
+  | "today"
+  | "inbox"
+  | "work"
+  | "projects"
+  | "agents"
+  | "people"
+  | "settings"
+  | "chatPage"
+  | (string & {});
 
-/** Adaptive view metadata for sidebar rendering (Brief 154) */
 export interface AdaptiveViewNavItem {
   slug: string;
   label: string;
@@ -27,167 +36,118 @@ export interface AdaptiveViewNavItem {
 }
 
 interface SidebarProps {
-  processes: ProcessSummary[];
   workItems: WorkItemSummary[];
   activeDestination: NavigationDestination;
   onNavigate: (destination: NavigationDestination) => void;
-  onSelectProcess: (processId: string) => void;
+  onOpenThread: (threadId: string) => void;
+  onNewChat: () => void;
   collapsed?: boolean;
-  /** Registered adaptive workspace views (Brief 154) */
+  /** Used to scope the thread list so resumed conversations belong to the
+   *  right user — not just the "default" fallback. */
+  userId?: string;
+  userName?: string;
+  orgName?: string;
   adaptiveViews?: AdaptiveViewNavItem[];
+  onCollapseToggle?: () => void;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Lucide-style inline SVG icons (stroke-based, 20×20, strokeWidth 1.5)       */
-/* -------------------------------------------------------------------------- */
+/* ============================================================= */
+/* Icons — stroke-based inline SVG, 17×17 visual, 1.5 stroke       */
+/* ============================================================= */
 
-function IconHome() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" />
-      <path d="M9 21V12h6v9" />
+const icons = {
+  today: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+      <circle cx={12} cy={12} r={4} />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
     </svg>
-  );
-}
-
-function IconInbox() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  ),
+  inbox: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
       <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
       <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
     </svg>
-  );
-}
-
-function IconCheckSquare() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  ),
+  work: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
       <polyline points="9 11 12 14 22 4" />
       <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
-  );
-}
-
-function IconFolder() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  ),
+  projects: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
-  );
-}
-
-function IconTrendingUp() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-      <polyline points="17 6 23 6 23 12" />
-    </svg>
-  );
-}
-
-function IconZap() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  );
-}
-
-function IconGitBranch() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="6" y1="3" x2="6" y2="15" />
-      <circle cx="18" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
+  ),
+  agents: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+      <line x1={6} y1={3} x2={6} y2={15} />
+      <circle cx={18} cy={6} r={3} />
+      <circle cx={6} cy={18} r={3} />
       <path d="M18 9a9 9 0 0 1-9 9" />
     </svg>
-  );
-}
-
-function IconMap() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-      <line x1="8" y1="2" x2="8" y2="18" />
-      <line x1="16" y1="6" x2="16" y2="22" />
+  ),
+  people: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx={9} cy={7} r={4} />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
-  );
-}
-
-function IconSettings() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
+  ),
+  settings: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+      <circle cx={12} cy={12} r={3} />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
-  );
-}
-
-function IconChevronsLeft() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  ),
+  chevronLeft: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6}>
       <polyline points="11 17 6 12 11 7" />
       <polyline points="18 17 13 12 18 7" />
     </svg>
-  );
-}
-
-function IconChevronsRight() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="13 17 18 12 13 7" />
-      <polyline points="6 17 11 12 6 7" />
+  ),
+  plus: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9}>
+      <path d="M12 5v14M5 12h14" />
     </svg>
-  );
-}
-
-/** Default icon for adaptive views (Brief 154) — grid/squares */
-function IconGrid() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
+  ),
+  grid: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}>
+      <rect x={3} y={3} width={7} height={7} />
+      <rect x={14} y={3} width={7} height={7} />
+      <rect x={14} y={14} width={7} height={7} />
+      <rect x={3} y={14} width={7} height={7} />
     </svg>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Nav item definitions                                                        */
-/* -------------------------------------------------------------------------- */
-
-type NavItemDef = {
-  id: NavigationDestination;
-  label: string;
-  Icon: () => React.ReactElement;
+  ),
 };
 
-const MAIN_NAV: NavItemDef[] = [
-  { id: "today",    label: "Today",    Icon: IconHome },
-  { id: "inbox",    label: "Inbox",    Icon: IconInbox },
-  { id: "work",     label: "Work",     Icon: IconCheckSquare },
-  { id: "projects", label: "Projects", Icon: IconFolder },
-  { id: "growth",   label: "Growth",   Icon: IconTrendingUp },
-  { id: "library",  label: "Capabilities", Icon: IconZap },
-  { id: "routines", label: "Routines", Icon: IconGitBranch },
-  { id: "roadmap",  label: "Roadmap",  Icon: IconMap },
+const NAV_ITEMS: Array<{ id: NavigationDestination; label: string; icon: React.ReactNode }> = [
+  { id: "today", label: "Today", icon: icons.today },
+  { id: "inbox", label: "Inbox", icon: icons.inbox },
+  { id: "work", label: "Work", icon: icons.work },
 ];
 
-/* -------------------------------------------------------------------------- */
-/* Sidebar component                                                           */
-/* -------------------------------------------------------------------------- */
+const ONGOING_ITEMS: Array<{ id: NavigationDestination; label: string; icon: React.ReactNode }> = [
+  { id: "projects", label: "Projects", icon: icons.projects },
+  { id: "agents", label: "Agents", icon: icons.agents },
+];
+
+/* ============================================================= */
 
 export function Sidebar({
-  processes,
   workItems,
   activeDestination,
   onNavigate,
-  onSelectProcess,
-  collapsed,
+  onOpenThread,
+  onNewChat,
+  collapsed = false,
+  userId = "default",
+  userName,
+  orgName,
   adaptiveViews,
+  onCollapseToggle,
 }: SidebarProps) {
-  // Inbox badge count — action-required items
   const inboxCount = useMemo(
     () =>
       workItems.filter(
@@ -196,327 +156,682 @@ export function Sidebar({
     [workItems],
   );
 
-  /* ---- Collapsed state: icons only, 56px wide, centered ---- */
+  const { threads, activeId } = useThreadStore(userId);
+  const recentThreads = useMemo(() => threads.slice(0, 8), [threads]);
+
+  /* ---- Collapsed rail ---- */
 
   if (collapsed) {
     return (
-      <div
-        className="flex-shrink-0 bg-background flex flex-col items-center py-4 gap-1 shadow-[var(--shadow-subtle)]"
-        style={{ width: 56 }}
+      <aside
+        style={{
+          flexShrink: 0,
+          width: 56,
+          background: "var(--color-surface)",
+          borderRight: "1px solid var(--color-border)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          padding: "14px 0 10px",
+          gap: 6,
+          overflow: "hidden",
+          height: "100%",
+        }}
       >
-        {/* Wordmark placeholder — just a dot in collapsed state */}
-        <div
-          className="w-8 h-8 flex items-center justify-center mb-2 text-text-muted"
-          style={{ fontSize: 11, fontWeight: 600, letterSpacing: "-0.02em", fontFamily: "var(--font-sans)" }}
-        >
-          D
-        </div>
-
-        {/* Main nav */}
-        {MAIN_NAV.map(({ id, label, Icon }) => {
-          const isActive = activeDestination === id;
-          return (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              title={label}
-              className={`relative flex items-center justify-center transition-all duration-200 ${
-                isActive
-                  ? "text-text-primary opacity-100"
-                  : "text-text-muted opacity-60 hover:opacity-100 hover:bg-surface-raised hover:text-text-primary"
-              }`}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: isActive ? 0 : "var(--radius-md)",
-                borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
-              }}
-            >
-              <Icon />
-              {id === "inbox" && inboxCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 bg-negative text-white flex items-center justify-center"
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    minWidth: 16,
-                    height: 16,
-                    borderRadius: "var(--radius-full)",
-                    paddingLeft: 4,
-                    paddingRight: 4,
-                    lineHeight: 1,
-                  }}
-                >
-                  {inboxCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Adaptive views — below built-in nav, after divider (Brief 154) */}
-        {adaptiveViews && adaptiveViews.length > 0 && (
+        <WordmarkMark />
+        <NewChatIconOnly onClick={onNewChat} />
+        <div style={{ height: 6 }} />
+        {[...NAV_ITEMS, ...ONGOING_ITEMS].map((item) => (
+          <IconNavButton
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={activeDestination === item.id}
+            onClick={() => onNavigate(item.id)}
+            badge={item.id === "inbox" && inboxCount > 0 ? inboxCount : undefined}
+          />
+        ))}
+        {adaptiveViews?.length ? (
           <>
-            <div className="w-8 border-t border-border my-2" />
-            {adaptiveViews.map((view) => {
-              const isActive = activeDestination === view.slug;
-              return (
-                <button
-                  key={view.slug}
-                  onClick={() => onNavigate(view.slug)}
-                  title={view.label}
-                  className={`relative flex items-center justify-center transition-all duration-200 ${
-                    isActive
-                      ? "text-text-primary opacity-100"
-                      : "text-text-muted opacity-60 hover:opacity-100 hover:bg-surface-raised hover:text-text-primary"
-                  }`}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: isActive ? 0 : "var(--radius-md)",
-                    borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
-                  }}
-                >
-                  <IconGrid />
-                </button>
-              );
-            })}
+            <Divider />
+            {adaptiveViews.map((v) => (
+              <IconNavButton
+                key={v.slug}
+                icon={icons.grid}
+                label={v.label}
+                active={activeDestination === v.slug}
+                onClick={() => onNavigate(v.slug)}
+              />
+            ))}
           </>
-        )}
-
-        {/* Settings — at bottom */}
-        <div className="mt-auto flex flex-col items-center pt-3 w-full border-t border-border">
-          <button
-            onClick={() => onNavigate("settings")}
-            title="Settings"
-            className={`flex items-center justify-center transition-colors ${
-              activeDestination === "settings"
-                ? "text-text-primary"
-                : "text-text-muted hover:bg-surface-raised hover:text-text-primary"
-            }`}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: activeDestination === "settings" ? 0 : "var(--radius-md)",
-              borderLeft: activeDestination === "settings" ? "2px solid var(--vivid)" : undefined,
-            }}
-          >
-            <IconSettings />
-          </button>
-        </div>
-      </div>
+        ) : null}
+        <div style={{ flex: 1 }} />
+        <IconNavButton
+          icon={icons.people}
+          label="People"
+          active={activeDestination === "people"}
+          onClick={() => onNavigate("people")}
+        />
+        <IconNavButton
+          icon={icons.settings}
+          label="Settings"
+          active={activeDestination === "settings"}
+          onClick={() => onNavigate("settings")}
+        />
+      </aside>
     );
   }
 
-  /* ---- Expanded state: 240px, wordmark + labels ---- */
+  /* ---- Full 248px sidebar ---- */
 
   return (
-    <div
-      className="flex-shrink-0 border-r border-border bg-surface flex flex-col h-full overflow-y-auto"
-      style={{ width: 240 }}
+    <aside
+      style={{
+        flexShrink: 0,
+        width: 248,
+        background: "var(--color-surface)",
+        borderRight: "1px solid var(--color-border)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        height: "100%",
+        fontFamily: "var(--font-sans)",
+      }}
     >
-      {/* Header — "Ditto" wordmark + collapse affordance */}
+      {/* Header — wordmark + collapse */}
       <div
-        className="flex items-center justify-between px-4 border-b border-border"
-        style={{ height: 52, flexShrink: 0 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 16px",
+          height: 56,
+          borderBottom: "1px solid var(--color-border)",
+          flexShrink: 0,
+        }}
       >
         <span
-          className="text-text-primary select-none"
           style={{
             fontSize: 20,
-            fontWeight: 600,
-            letterSpacing: "-0.02em",
-            fontFamily: "var(--font-sans)",
+            fontWeight: 700,
+            letterSpacing: "-0.025em",
+            color: "var(--color-vivid)",
+            textTransform: "lowercase",
           }}
         >
-          Ditto
+          ditto
         </span>
-        {/* Collapse button — wired externally via onNavigate if needed; no-op placeholder */}
+        {onCollapseToggle && (
+          <button
+            onClick={onCollapseToggle}
+            aria-label="Collapse sidebar"
+            style={{
+              width: 26,
+              height: 26,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 6,
+              border: "none",
+              background: "transparent",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ width: 14, height: 14 }}>{icons.chevronLeft}</span>
+          </button>
+        )}
+      </div>
+
+      {/* New chat CTA */}
+      <div style={{ padding: 12 }}>
         <button
-          className="text-text-muted hover:text-text-primary transition-colors"
-          style={{ padding: 4, borderRadius: "var(--radius-sm)" }}
-          aria-label="Collapse sidebar"
+          onClick={onNewChat}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 10px",
+            background: "var(--color-vivid)",
+            border: "1px solid var(--color-vivid)",
+            borderRadius: 8,
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#fff",
+            fontFamily: "inherit",
+            width: "100%",
+            whiteSpace: "nowrap",
+            transition: "background 150ms ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--color-accent-hover)";
+            e.currentTarget.style.borderColor = "var(--color-accent-hover)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "var(--color-vivid)";
+            e.currentTarget.style.borderColor = "var(--color-vivid)";
+          }}
         >
-          <IconChevronsLeft />
+          <span style={{ width: 15, height: 15 }}>{icons.plus}</span>
+          <span>New chat</span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontFamily: "var(--font-mono)",
+              fontSize: 10.5,
+              padding: "1px 5px",
+              border: "1px solid rgba(255,255,255,0.3)",
+              borderRadius: 4,
+              background: "rgba(0,0,0,0.1)",
+              flexShrink: 0,
+            }}
+          >
+            ⌘K
+          </span>
         </button>
       </div>
 
-      {/* Main nav */}
-      <nav className="flex flex-col px-2 pt-2 flex-1">
-        {MAIN_NAV.map(({ id, label, Icon }) => {
-          const isActive = activeDestination === id;
-          return (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              className={`w-full flex items-center text-left transition-colors ${
-                isActive
-                  ? "text-text-primary"
-                  : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-              }`}
-              style={{
-                gap: 12,
-                padding: isActive ? "8px 12px 8px 10px" : "8px 12px",
-                borderRadius: isActive ? 0 : "var(--radius-md)",
-                fontWeight: isActive ? 500 : 400,
-                fontSize: 14,
-                lineHeight: "20px",
-                borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
-                marginBottom: 2,
-              }}
-            >
-              <span className="flex-shrink-0">{Icon && <Icon />}</span>
-              <span className="flex-1 truncate">{label}</span>
-              {id === "inbox" && inboxCount > 0 && (
-                <span
-                  className="bg-negative text-white flex items-center justify-center flex-shrink-0"
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    minWidth: 18,
-                    height: 18,
-                    borderRadius: "var(--radius-full)",
-                    paddingLeft: 5,
-                    paddingRight: 5,
-                    marginLeft: "auto",
-                    lineHeight: 1,
-                  }}
-                >
-                  {inboxCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Scroll area */}
+      <nav
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "0 10px",
+        }}
+      >
+        {NAV_ITEMS.map((item) => (
+          <NavItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={activeDestination === item.id}
+            onClick={() => onNavigate(item.id)}
+            count={item.id === "inbox" && inboxCount > 0 ? inboxCount : undefined}
+            countAttention={item.id === "inbox"}
+          />
+        ))}
 
-        {/* Routines sub-list — show active process list when Routines is selected */}
-        {activeDestination === "routines" && processes.length > 0 && (
-          <div className="pt-2 pb-1">
-            <p
-              className="text-text-muted uppercase tracking-wider px-3 mb-1"
-              style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em" }}
-            >
-              Your routines
-            </p>
-            {processes
-              .filter((p) => !p.system && p.status === "active")
-              .map((proc) => {
-                const isError =
-                  proc.lastRunStatus === "failed" ||
-                  proc.lastRunStatus === "rejected";
-                const isUnstarted = proc.recentRunCount === 0;
+        <SectionLabel>Ongoing</SectionLabel>
+        {ONGOING_ITEMS.map((item) => (
+          <NavItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={activeDestination === item.id}
+            onClick={() => onNavigate(item.id)}
+          />
+        ))}
 
-                const statusColor = isError
-                  ? "text-caution"
-                  : isUnstarted
-                    ? "text-text-muted"
-                    : "text-positive";
-
-                const StatusDot = isError ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                ) : isUnstarted ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 8 12 12 14 14" />
-                  </svg>
-                ) : (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                );
-
-                return (
-                  <button
-                    key={proc.id}
-                    onClick={() => onSelectProcess(proc.id)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised transition-colors"
-                    style={{
-                      borderRadius: "var(--radius-md)",
-                      fontSize: 13,
-                    }}
-                  >
-                    <span className={`flex-shrink-0 ${statusColor}`}>
-                      {StatusDot}
-                    </span>
-                    <span className="truncate text-text-secondary">
-                      {proc.name}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
+        {adaptiveViews && adaptiveViews.length > 0 && (
+          <>
+            {adaptiveViews.map((v) => (
+              <NavItem
+                key={v.slug}
+                icon={icons.grid}
+                label={v.label}
+                active={activeDestination === v.slug}
+                onClick={() => onNavigate(v.slug)}
+              />
+            ))}
+          </>
         )}
 
-        {/* Adaptive views — below built-in nav, after divider (Brief 154) */}
-        {adaptiveViews && adaptiveViews.length > 0 && (
-          <div className="pt-2 pb-1 mt-1 border-t border-border">
-            {adaptiveViews.map((view) => {
-              const isActive = activeDestination === view.slug;
-              return (
-                <button
-                  key={view.slug}
-                  onClick={() => onNavigate(view.slug)}
-                  className={`w-full flex items-center text-left transition-colors ${
-                    isActive
-                      ? "text-text-primary"
-                      : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-                  }`}
-                  style={{
-                    gap: 12,
-                    padding: isActive ? "8px 12px 8px 10px" : "8px 12px",
-                    borderRadius: isActive ? 0 : "var(--radius-md)",
-                    fontWeight: isActive ? 500 : 400,
-                    fontSize: 14,
-                    lineHeight: "20px",
-                    borderLeft: isActive ? "2px solid var(--vivid)" : undefined,
-                    marginBottom: 2,
-                  }}
-                >
-                  <span className="flex-shrink-0"><IconGrid /></span>
-                  <span className="flex-1 truncate">{view.label}</span>
-                </button>
-              );
-            })}
+        <SectionLabel
+          right={
+            <button
+              onClick={() => onNavigate("chatPage")}
+              style={{
+                fontSize: 10,
+                color: "var(--color-text-muted)",
+                cursor: "pointer",
+                border: "none",
+                background: "none",
+                padding: 0,
+                fontFamily: "inherit",
+              }}
+            >
+              See all
+            </button>
+          }
+        >
+          Chats
+        </SectionLabel>
+
+        {recentThreads.length === 0 ? (
+          <div
+            style={{
+              padding: "4px 10px",
+              fontSize: 11.5,
+              color: "var(--color-text-muted)",
+              fontStyle: "italic",
+            }}
+          >
+            No chats yet
           </div>
+        ) : (
+          recentThreads.map((t) => (
+            <ThreadRow
+              key={t.id}
+              title={t.title}
+              time={relativeMinutes(t.lastActiveAt)}
+              active={t.id === activeId}
+              onClick={() => onOpenThread(t.id)}
+            />
+          ))
         )}
       </nav>
 
-      {/* Footer — Settings separated by border-top */}
-      <div className="px-2 pb-2 pt-2 border-t border-border flex-shrink-0">
-        <button
+      {/* Footer — People + Settings + user chip */}
+      <div
+        style={{
+          padding: 10,
+          borderTop: "1px solid var(--color-border)",
+          flexShrink: 0,
+        }}
+      >
+        <NavItem
+          icon={icons.people}
+          label="People"
+          active={activeDestination === "people"}
+          onClick={() => onNavigate("people")}
+        />
+        <NavItem
+          icon={icons.settings}
+          label="Settings"
+          active={activeDestination === "settings"}
           onClick={() => onNavigate("settings")}
-          className={`w-full flex items-center text-left transition-colors ${
-            activeDestination === "settings"
-              ? "text-text-primary"
-              : "text-text-secondary hover:bg-surface-raised hover:text-text-primary"
-          }`}
+        />
+        <UserChip userName={userName} orgName={orgName} />
+      </div>
+    </aside>
+  );
+}
+
+/* ============================================================= */
+/* Primitives                                                     */
+/* ============================================================= */
+
+function NavItem({
+  icon,
+  label,
+  active,
+  onClick,
+  count,
+  countAttention,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  count?: number;
+  countAttention?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 11,
+        padding: "7px 10px",
+        borderRadius: 6,
+        color: active ? "var(--color-vivid-deep)" : "var(--color-text-secondary)",
+        fontSize: 13.5,
+        fontWeight: active ? 500 : 400,
+        cursor: "pointer",
+        background: active ? "var(--color-vivid-subtle)" : "none",
+        border: "none",
+        fontFamily: "inherit",
+        width: "100%",
+        textAlign: "left",
+        marginBottom: 1,
+        transition: "background 120ms ease, color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "var(--color-surface-raised)";
+          e.currentTarget.style.color = "var(--color-text-primary)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--color-text-secondary)";
+        }
+      }}
+    >
+      <span style={{ width: 17, height: 17, flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+      {count != null && count > 0 && (
+        <span
           style={{
-            gap: 12,
-            padding:
-              activeDestination === "settings"
-                ? "8px 12px 8px 10px"
-                : "8px 12px",
-            borderRadius:
-              activeDestination === "settings" ? 0 : "var(--radius-md)",
-            fontWeight: activeDestination === "settings" ? 500 : 400,
-            fontSize: 14,
-            lineHeight: "20px",
-            borderLeft:
-              activeDestination === "settings"
-                ? "2px solid var(--vivid)"
-                : undefined,
+            marginLeft: "auto",
+            fontSize: 11,
+            fontWeight: 500,
+            background: countAttention ? "var(--color-caution)" : "var(--color-border)",
+            color: countAttention ? "#fff" : "var(--color-text-secondary)",
+            padding: "1px 7px",
+            borderRadius: 9999,
+            minWidth: 20,
+            textAlign: "center",
           }}
         >
-          <span className="flex-shrink-0">
-            <IconSettings />
-          </span>
-          <span className="flex-1 truncate">Settings</span>
-        </button>
-      </div>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SectionLabel({
+  children,
+  right,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: "var(--color-text-muted)",
+        padding: "14px 10px 6px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <span>{children}</span>
+      {right}
     </div>
+  );
+}
+
+function ThreadRow({
+  title,
+  time,
+  active,
+  onClick,
+}: {
+  title: string;
+  time: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 10px",
+        borderRadius: 6,
+        color: active ? "var(--color-vivid-deep)" : "var(--color-text-secondary)",
+        fontSize: 12.75,
+        cursor: "pointer",
+        marginBottom: 1,
+        background: active ? "var(--color-vivid-subtle)" : "none",
+        border: "none",
+        fontFamily: "inherit",
+        width: "100%",
+        textAlign: "left",
+        lineHeight: 1.35,
+        fontWeight: active ? 500 : 400,
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "var(--color-surface-raised)";
+          e.currentTarget.style.color = "var(--color-text-primary)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--color-text-secondary)";
+        }
+      }}
+    >
+      <span
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: active ? "var(--color-vivid)" : "var(--color-border-strong)",
+          flexShrink: 0,
+        }}
+      />
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {title}
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 10.5,
+          color: "var(--color-text-muted)",
+          flexShrink: 0,
+        }}
+      >
+        {time}
+      </span>
+    </button>
+  );
+}
+
+function UserChip({ userName, orgName }: { userName?: string; orgName?: string }) {
+  const initials = (userName ?? "You")
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <button
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 8px",
+        borderRadius: 8,
+        cursor: "pointer",
+        width: "100%",
+        border: "none",
+        background: "none",
+        fontFamily: "inherit",
+        textAlign: "left",
+        marginTop: 4,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--color-surface-raised)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <span
+        style={{
+          width: 28,
+          height: 28,
+          minWidth: 28,
+          borderRadius: "50%",
+          background: "linear-gradient(135deg, #059669, #3D5A48)",
+          color: "#fff",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          fontWeight: 600,
+        }}
+      >
+        {initials}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: "var(--color-text-primary)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {userName ?? "You"}
+        </div>
+        {orgName && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {orgName}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function Divider() {
+  return (
+    <div
+      style={{ width: 32, borderTop: "1px solid var(--color-border)", margin: "6px 0" }}
+    />
+  );
+}
+
+function WordmarkMark() {
+  return (
+    <span
+      style={{
+        width: 28,
+        height: 28,
+        marginBottom: 2,
+        borderRadius: 8,
+        background: "var(--color-vivid)",
+        color: "#fff",
+        fontSize: 13,
+        fontWeight: 700,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        letterSpacing: "-0.02em",
+      }}
+    >
+      d
+    </span>
+  );
+}
+
+function IconNavButton({
+  icon,
+  label,
+  active,
+  onClick,
+  badge,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  badge?: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      style={{
+        width: 36,
+        height: 36,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        background: active ? "var(--color-vivid-subtle)" : "transparent",
+        color: active ? "var(--color-vivid-deep)" : "var(--color-text-muted)",
+        border: "none",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background 120ms ease, color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "var(--color-surface-raised)";
+          e.currentTarget.style.color = "var(--color-text-primary)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--color-text-muted)";
+        }
+      }}
+    >
+      <span style={{ width: 17, height: 17 }}>{icon}</span>
+      {badge != null && badge > 0 && (
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            right: 2,
+            minWidth: 16,
+            height: 16,
+            background: "var(--color-caution)",
+            color: "#fff",
+            fontSize: 10,
+            fontWeight: 600,
+            borderRadius: 9999,
+            padding: "0 4px",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
+          }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function NewChatIconOnly({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="New chat (⌘K)"
+      style={{
+        width: 36,
+        height: 36,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        background: "var(--color-vivid)",
+        color: "#fff",
+        border: "none",
+        cursor: "pointer",
+      }}
+    >
+      <span style={{ width: 15, height: 15 }}>{icons.plus}</span>
+    </button>
   );
 }
