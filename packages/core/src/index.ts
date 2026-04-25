@@ -148,3 +148,48 @@ export {
 // Content blocks
 // ============================================================
 export * from "./content-blocks.js";
+
+// ============================================================
+// Bridge — Workspace Local Bridge wire types + state machine (Brief 212)
+// ============================================================
+export {
+  // state machine
+  bridgeJobStateValues,
+  bridgeJobEventValues,
+  isTerminal,
+  transition,
+  type BridgeJobState,
+  type BridgeJobEvent,
+  type TransitionOk,
+  type TransitionError,
+  type TransitionResult,
+  // wire
+  BRIDGE_METHODS,
+  BRIDGE_NOTIFICATIONS,
+  request as bridgeRequest,
+  notification as bridgeNotification,
+  success as bridgeSuccess,
+  errorResponse as bridgeErrorResponse,
+  isRequest as isBridgeRequest,
+  isNotification as isBridgeNotification,
+  isSuccess as isBridgeSuccess,
+  isError as isBridgeError,
+  type BridgeMethod,
+  type BridgeNotification,
+  type JsonRpcRequest,
+  type JsonRpcNotification,
+  type JsonRpcSuccess,
+  type JsonRpcError,
+  type JsonRpcFrame,
+  // types
+  type BridgeJob,
+  type BridgeJobKind,
+  type BridgePayload,
+  type BridgeExecPayload,
+  type BridgeTmuxSendPayload,
+  type BridgeFrame,
+  type BridgeStreamFrame,
+  type BridgeResultFrame,
+  type RegisteredDevice,
+  type LocalBridge,
+} from "./bridge/index.js";

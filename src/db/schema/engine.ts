@@ -8,7 +8,8 @@
  * Tables: processes, processDependencies, agents, processRuns, stepRuns,
  * processOutputs, harnessDecisions, trustChanges, trustSuggestions,
  * feedback, memories, improvements, workItems, activities, credentials,
- * outboundActions, schedules, delayedRuns, workspaceViews, processVersions
+ * outboundActions, schedules, delayedRuns, workspaceViews, processVersions,
+ * bridgeDevices, bridgePairingCodes, bridgeJobs (Brief 212)
  */
 
 export {
@@ -53,6 +54,14 @@ export {
   type WorkItemSource,
   delayedRunStatusValues,
   type DelayedRunStatus,
+  bridgeDeviceStatusValues,
+  type BridgeDeviceStatus,
+  bridgeJobStateColumnValues,
+  type BridgeJobStateColumn,
+  bridgeJobKindColumnValues,
+  type BridgeJobKindColumn,
+  bridgeJobRoutedAsValues,
+  type BridgeJobRoutedAs,
 
   // Tables
   processes,
@@ -75,4 +84,7 @@ export {
   delayedRuns,
   workspaceViews,
   processVersions,
+  bridgeDevices,
+  bridgePairingCodes,
+  bridgeJobs,
 } from "@ditto/core";

@@ -10,7 +10,7 @@
  * Provenance: Extracted from src/db/schema.ts — Ditto monorepo
  */
 
-import { sqliteTable, text, integer, real, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, unique, index } from "drizzle-orm/sqlite-core";
 import { randomUUID } from "crypto";
 
 // ============================================================
@@ -792,4 +792,115 @@ export const processVersions = sqliteTable("process_versions", {
     .$defaultFn(() => new Date()),
 }, (table) => ({
   uniqueVersionPerProcess: unique().on(table.processId, table.version),
+}));
+
+// ============================================================
+// Local Bridge — paired devices + job queue (Brief 212)
+// ============================================================
+
+export const bridgeDeviceStatusValues = ["active", "revoked", "rotated"] as const;
+export type BridgeDeviceStatus = (typeof bridgeDeviceStatusValues)[number];
+
+export const bridgeJobStateColumnValues = [
+  "queued",
+  "dispatched",
+  "running",
+  "succeeded",
+  "failed",
+  "orphaned",
+  "cancelled",
+  "revoked",
+] as const;
+export type BridgeJobStateColumn = (typeof bridgeJobStateColumnValues)[number];
+
+export const bridgeJobKindColumnValues = ["exec", "tmux.send"] as const;
+export type BridgeJobKindColumn = (typeof bridgeJobKindColumnValues)[number];
+
+export const bridgeJobRoutedAsValues = ["primary", "fallback", "queued_for_primary"] as const;
+export type BridgeJobRoutedAs = (typeof bridgeJobRoutedAsValues)[number];
+
+export const bridgeDevices = sqliteTable("bridge_devices", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workspaceId: text("workspace_id").notNull(),
+  deviceName: text("device_name").notNull(),
+  /** bcrypt hash of the issued JWT — never store the JWT itself. */
+  jwtTokenHash: text("jwt_token_hash").notNull(),
+  /** Wire protocol version this device negotiated at pairing time. */
+  protocolVersion: text("protocol_version").notNull().default("1.0.0"),
+  pairedAt: integer("paired_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  lastDialAt: integer("last_dial_at", { mode: "timestamp_ms" }),
+  lastIp: text("last_ip"),
+  status: text("status").notNull().$type<BridgeDeviceStatus>().default("active"),
+  revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  revokedReason: text("revoked_reason"),
+}, (table) => ({
+  byWorkspace: index("bridge_devices_workspace_idx").on(table.workspaceId),
+  byStatus: index("bridge_devices_status_idx").on(table.workspaceId, table.status),
+}));
+
+export const bridgePairingCodes = sqliteTable("bridge_pairing_codes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workspaceId: text("workspace_id").notNull(),
+  /** bcrypt hash of the 6-char base32 code; raw code never stored. */
+  codeHash: text("code_hash").notNull(),
+  /** Optional device-name hint chosen at code-generation time. */
+  deviceNameHint: text("device_name_hint"),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  /** Set on consumption — points at the device row produced. */
+  consumedDeviceId: text("consumed_device_id").references(() => bridgeDevices.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  byWorkspace: index("bridge_pairing_codes_workspace_idx").on(table.workspaceId),
+}));
+
+export const bridgeJobs = sqliteTable("bridge_jobs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  /** The device this job is targeted at (after fallback resolution). */
+  deviceId: text("device_id")
+    .references(() => bridgeDevices.id)
+    .notNull(),
+  /** Originally-requested primary device — only differs from deviceId when fallback routing kicked in. */
+  requestedDeviceId: text("requested_device_id").references(() => bridgeDevices.id),
+  routedAs: text("routed_as").notNull().$type<BridgeJobRoutedAs>().default("primary"),
+  processRunId: text("process_run_id")
+    .references(() => processRuns.id)
+    .notNull(),
+  stepRunId: text("step_run_id")
+    .references(() => stepRuns.id)
+    .notNull(),
+  kind: text("kind").notNull().$type<BridgeJobKindColumn>(),
+  /** Discriminated by `kind` per packages/core/src/bridge/types.ts. */
+  payload: text("payload", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>(),
+  state: text("state").notNull().$type<BridgeJobStateColumn>().default("queued"),
+  queuedAt: integer("queued_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  dispatchedAt: integer("dispatched_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  /** Updated every 60s from daemon pong frames; staleness sweeper checks this. */
+  lastHeartbeatAt: integer("last_heartbeat_at", { mode: "timestamp_ms" }),
+  exitCode: integer("exit_code"),
+  stdoutBytes: integer("stdout_bytes").notNull().default(0),
+  stderrBytes: integer("stderr_bytes").notNull().default(0),
+  truncated: integer("truncated", { mode: "boolean" }).notNull().default(false),
+  terminationSignal: text("termination_signal"),
+  /** Error frame from the daemon (e.g., "tmux session 'X' does not exist"). */
+  errorMessage: text("error_message"),
+}, (table) => ({
+  byDeviceState: index("bridge_jobs_device_state_idx").on(table.deviceId, table.state),
+  byStepRun: index("bridge_jobs_step_run_idx").on(table.stepRunId),
+  byHeartbeat: index("bridge_jobs_heartbeat_idx").on(table.state, table.lastHeartbeatAt),
 }));
