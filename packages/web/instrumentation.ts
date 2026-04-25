@@ -25,9 +25,23 @@ export async function register() {
     // Next.js does not expose its server reference. Two-pronged strategy:
     //   1. Hook http.Server.prototype.listen so future listen() calls attach.
     //   2. Walk process._getActiveHandles() to find any HTTP server already
-    //      listening (Next dev binds before instrumentation completes in some
-    //      versions). Whichever fires first wins; subsequent attaches are
-    //      no-ops (attachBridgeWebSocketServer is idempotent).
+    //      listening (Next dev binds before register() returns — the prototype
+    //      patch arrives too late on its own). Whichever fires first wins;
+    //      subsequent attaches are no-ops (attachBridgeWebSocketServer is
+    //      idempotent via a module-scoped flag).
+    //
+    // Fragility note: process._getActiveHandles is a Node-internal API. If it
+    // ever changes shape, the discovery branch breaks silently — bridge dials
+    // would then time out. Spike test (src/engine/bridge-server.spike.test.ts)
+    // is the canary: it boots `next dev` and asserts a real WebSocket roundtrip
+    // succeeds, so a regression in the hook will fail that test.
+    //
+    // Pivot path if the discovery breaks: switch to a custom Next.js server
+    // (packages/web/server.ts wrapping http.createServer + next.getRequestHandler)
+    // — that's the supported Next.js extension surface for "I want my own
+    // HTTP server with my own upgrade handling". Brief 212 AC #1 deliberately
+    // avoided this so the deployment shape stays `next start` for now.
+    //
     // Brief 212 AC #1 spike validates this end-to-end.
     try {
       const http = await import("http");

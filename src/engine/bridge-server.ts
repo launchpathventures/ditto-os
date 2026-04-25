@@ -75,7 +75,18 @@ let attached = false;
  * Attach the bridge WebSocket server to a running Node HTTP server.
  *
  * Idempotent — a second call is a no-op so module re-evaluation under
- * Next.js HMR doesn't double-attach.
+ * Next.js HMR (and the multi-pronged discovery in instrumentation.ts)
+ * doesn't double-attach. The flag is module-scoped, so a fresh import
+ * (different worker, different test) starts clean.
+ *
+ * Caller is `packages/web/instrumentation.ts`, which uses two strategies
+ * to find the HTTP server (see that file for the why and the failure modes):
+ *   1. Patch `http.Server.prototype.listen` so future listen() calls attach.
+ *   2. Walk `process._getActiveHandles()` for an already-listening Server —
+ *      necessary because `next dev` binds before `register()` returns.
+ * The brittle path is (2): `_getActiveHandles` is a Node-internal API. If
+ * Node ever changes it, the discovery breaks; at that point a more durable
+ * hook (Next-exposed server reference, or a custom server) is needed.
  */
 export function attachBridgeWebSocketServer(httpServer: HttpServer): void {
   if (attached) return;
