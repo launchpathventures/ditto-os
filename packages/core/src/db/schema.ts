@@ -1154,6 +1154,14 @@ export const runnerDispatches = sqliteTable("runner_dispatches", {
   stepRunId: text("step_run_id")
     .references(() => stepRuns.id)
     .notNull(),
+  /**
+   * Brief 216 §D3 — bcrypt(cost=12) hash of a per-dispatch ephemeral callback
+   * token. Plaintext exists only in the prompt sent to the cloud runner; null
+   * for runners that don't compose prompts (e.g., local-mac-mini, github-action).
+   * The status webhook accepts EITHER `projects.runnerBearerHash` (long-lived)
+   * OR this column for ephemeral per-dispatch acceptance.
+   */
+  callbackTokenHash: text("callback_token_hash"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

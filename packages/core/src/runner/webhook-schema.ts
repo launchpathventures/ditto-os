@@ -6,16 +6,30 @@
  * placeholder is `z.unknown()` here — sub-briefs 216-218 tighten when their
  * adapters land.
  *
- * The endpoint at `POST /api/v1/work-items/:id/status` (Brief 223 owns the
- * route) parses inbound bodies through this schema, then dispatches by
- * `runner_kind` to the kind-specific persistence path.
+ * Brief 216 fills the `claude-code-routine` placeholder per §D9. The shape is
+ * the runner-state callback the in-prompt directive in the Routine session
+ * posts back to Ditto; it is intentionally narrower than the work-item brief-
+ * state schema in `@ditto/core/work-items`. The state-mapping table below
+ * documents how a webhook `state` value collapses onto `runner_dispatches.status`.
+ *
+ * | Webhook `state` | Webhook `error` field      | `runner_dispatches.status` |
+ * |-----------------|----------------------------|----------------------------|
+ * | `running`       | n/a                        | `running`                  |
+ * | `succeeded`     | n/a                        | `succeeded`                |
+ * | `cancelled`     | n/a                        | `cancelled`                |
+ * | `failed`        | (absent or generic)        | `failed`                   |
+ * | `failed`        | matches `/rate.?limit/i`   | `rate_limited`             |
+ * | `failed`        | matches `/timeout|timed.?out/i` | `timed_out`           |
+ *
+ * `revoked`, `queued`, and `dispatched` are dispatcher-internal states; the
+ * webhook never asserts them.
  */
 
 import { z } from "zod";
 import { runnerKindValues } from "./kinds.js";
 
 // ============================================================
-// Per-kind payload schemas (placeholders for cloud kinds)
+// Per-kind payload schemas
 // ============================================================
 
 /**
@@ -37,7 +51,27 @@ export const localMacMiniStatusPayload = z.object({
   orphaned: z.boolean().optional(),
 });
 
-/** Cloud-kind placeholders — sub-briefs 216-218 tighten. */
+/**
+ * Brief 216 §D9 — the in-prompt callback payload. The routine session POSTs
+ * this body back to `POST /api/v1/work-items/:id/status` on terminal state.
+ */
+export const routineCallbackStateValues = [
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const;
+export type RoutineCallbackState = (typeof routineCallbackStateValues)[number];
+
+export const claudeCodeRoutineStatusPayload = z.object({
+  state: z.enum(routineCallbackStateValues),
+  prUrl: z.string().url().optional(),
+  error: z.string().max(2_000).optional(),
+  stepRunId: z.string().min(1),
+  externalRunId: z.string().min(1),
+});
+
+/** Remaining cloud-kind placeholders — sub-briefs 217-218 tighten. */
 const placeholderPayload = z.unknown();
 
 // ============================================================
@@ -52,8 +86,11 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
   }),
   z.object({
     runner_kind: z.literal("claude-code-routine"),
-    dispatch_id: z.string(),
-    payload: placeholderPayload,
+    state: z.enum(routineCallbackStateValues),
+    prUrl: z.string().url().optional(),
+    error: z.string().max(2_000).optional(),
+    stepRunId: z.string().min(1),
+    externalRunId: z.string().min(1),
   }),
   z.object({
     runner_kind: z.literal("claude-managed-agent"),
@@ -73,6 +110,32 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
 ]);
 
 export type RunnerWebhookPayload = z.infer<typeof runnerWebhookSchema>;
+export type ClaudeCodeRoutineStatusPayload = z.infer<typeof claudeCodeRoutineStatusPayload>;
+
+/**
+ * Brief 216 §D9 — map a routine callback state + optional error to the
+ * runner_dispatches.status enum value. Pure, cross-runner-reusable.
+ */
+export function routineStateToDispatchStatus(
+  state: RoutineCallbackState,
+  error?: string,
+):
+  | "running"
+  | "succeeded"
+  | "cancelled"
+  | "failed"
+  | "rate_limited"
+  | "timed_out" {
+  if (state === "running") return "running";
+  if (state === "succeeded") return "succeeded";
+  if (state === "cancelled") return "cancelled";
+  if (state === "failed") {
+    if (error && /rate.?limit/i.test(error)) return "rate_limited";
+    if (error && /(timeout|timed.?out)/i.test(error)) return "timed_out";
+    return "failed";
+  }
+  return "failed";
+}
 
 // ============================================================
 // Type guards / helpers
