@@ -37,6 +37,44 @@ import type {
 } from "@ditto/core";
 import { scrubCredentialsFromValue } from "../integration-handlers/scrub";
 
+/**
+ * Pattern-based credential redaction for the `command` audit field.
+ * scrub.ts redacts only known explicit secrets — for the bridge audit row
+ * we ALSO need to mask credential-shaped substrings the workspace doesn't
+ * know about (third-party tokens passed via env, ad-hoc bearer tokens
+ * etc.). The patterns below match the common shapes; matches are replaced
+ * with `[REDACTED:pattern]` before the explicit-secret pass.
+ */
+const CREDENTIAL_PATTERNS: Array<{ re: RegExp; label: string }> = [
+  { re: /(--token[= ]\s*)\S+/gi, label: "token-flag" },
+  { re: /(--password[= ]\s*)\S+/gi, label: "password-flag" },
+  { re: /(--api[-_]?key[= ]\s*)\S+/gi, label: "api-key-flag" },
+  { re: /(--secret[= ]\s*)\S+/gi, label: "secret-flag" },
+  { re: /(Authorization:\s*Bearer\s+)\S+/gi, label: "bearer" },
+  { re: /\b(sk-[A-Za-z0-9_-]{16,})\b/g, label: "openai-key" },
+  { re: /\b(ghp_[A-Za-z0-9]{20,})\b/g, label: "github-pat" },
+  { re: /\b(github_pat_[A-Za-z0-9_]{40,})\b/g, label: "github-pat" },
+  { re: /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/g, label: "slack-token" },
+  { re: /\b(AKIA[0-9A-Z]{16})\b/g, label: "aws-access-key" },
+  { re: /\b([A-Za-z0-9_-]{20,})\.([A-Za-z0-9_-]{20,})\.([A-Za-z0-9_-]{20,})\b/g, label: "jwt-shaped" },
+];
+
+function scrubCommandText(text: string, knownSecrets: string[] = []): string {
+  let out = text;
+  for (const { re, label } of CREDENTIAL_PATTERNS) {
+    out = out.replace(re, (_m, prefix) => {
+      // For flag-style patterns, preserve the flag prefix so reviewers see
+      // intent without the secret value.
+      if (typeof prefix === "string" && prefix.length > 0) {
+        return `${prefix}[REDACTED:${label}]`;
+      }
+      return `[REDACTED:${label}]`;
+    });
+  }
+  // Then apply the explicit-secret-list pass (vault values etc).
+  return scrubCredentialsFromValue(out, knownSecrets, "vault");
+}
+
 const TEST_MODE = process.env.DITTO_TEST_MODE === "true";
 
 /** Online window — a device is "online" if its WebSocket is connected
@@ -138,10 +176,21 @@ function buildReviewDetailsBridge(
   if (payload.kind === "exec") {
     const execPayload = payload as BridgeExecPayload;
     const fullCommand = [execPayload.command, ...(execPayload.args ?? [])].join(" ");
-    // scrub.ts redacts an *explicit* secret list — Brief 212 AC #13 expects
-    // pattern-style scrubbing here. Until the vault-fetch follow-on lands,
-    // this is a no-op pass-through; flagged for Architect (Insight-043).
-    base.command = scrubCredentialsFromValue(fullCommand, [], "bridge-cmd");
+    // Two-pass scrub for AC #13: pattern-based redaction of credential-
+    // shaped substrings + scrub.ts's explicit-secret pass for known vault
+    // values. The vault-known list is not yet fetched here (workspace-wide
+    // credential enumeration is a follow-on); patterns cover the common
+    // shapes in the meantime.
+    base.command = scrubCommandText(fullCommand);
+    if (execPayload.env) {
+      // Don't surface env values verbatim — they often carry tokens. Mask
+      // each value through the same scrubber.
+      const scrubbedEnv: Record<string, string> = {};
+      for (const [k, v] of Object.entries(execPayload.env)) {
+        scrubbedEnv[k] = scrubCommandText(v);
+      }
+      base.env = scrubbedEnv;
+    }
   } else {
     base.tmuxSession = payload.tmuxSession;
   }

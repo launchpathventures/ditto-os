@@ -1119,15 +1119,27 @@ const builtInTools: Record<string, BuiltInTool> = {
               keys: input.keys as string,
             };
 
-      // (4) Call the dispatcher. Trust action defaults to `pause` for
-      // supervised, `advance` for autonomous, etc. — but the trust-gate
-      // hasn't fired yet at tool-call time. We map the *tier* to a
-      // conservative default action; the gate may downgrade later.
+      // (4) Call the dispatcher. Trust gate runs POST step-execution, so
+      // the action is precomputed here from the (tier, sampling-hash)
+      // pair per Brief 212 Constraints §"Trust integration":
+      //   supervised        → pause
+      //   spot_checked-in   → sample_pause
+      //   spot_checked-out  → sample_advance
+      //   autonomous        → advance
+      //   critical          → already rejected above
       const trustTier = execContext?.trustTier ?? "supervised";
-      const trustAction =
-        trustTier === "autonomous"
-          ? ("advance" as const)
-          : ("pause" as const);
+      const { computeSamplingHash, shouldSample } = await import(
+        "./harness-handlers/trust-gate"
+      );
+      let trustAction: "pause" | "advance" | "sample_pause" | "sample_advance";
+      if (trustTier === "autonomous") {
+        trustAction = "advance";
+      } else if (trustTier === "spot_checked") {
+        const hash = computeSamplingHash(processRunId ?? "", executionStepRunId ?? "");
+        trustAction = shouldSample(hash) ? "sample_pause" : "sample_advance";
+      } else {
+        trustAction = "pause";
+      }
 
       const { sendBridgeFrame, isDeviceConnected } = await import("./bridge-server");
       const outcome = await dispatchBridgeJob(
