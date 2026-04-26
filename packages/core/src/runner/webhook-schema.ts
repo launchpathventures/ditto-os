@@ -6,8 +6,11 @@
  * placeholder is `z.unknown()` here — sub-briefs 216-218 tighten when their
  * adapters land.
  *
- * Brief 216 fills the `claude-code-routine` placeholder per §D9. The shape is
- * the runner-state callback the in-prompt directive in the Routine session
+ * Brief 216 fills the `claude-code-routine` placeholder per §D9. Brief 217
+ * fills the `claude-managed-agent` placeholder per §D10 with the same inline
+ * shape (the optional in-prompt callback path mirrors Brief 216's contract).
+ *
+ * The shape is the runner-state callback the in-session prompt directive
  * posts back to Ditto; it is intentionally narrower than the work-item brief-
  * state schema in `@ditto/core/work-items`. The state-mapping table below
  * documents how a webhook `state` value collapses onto `runner_dispatches.status`.
@@ -52,26 +55,41 @@ export const localMacMiniStatusPayload = z.object({
 });
 
 /**
- * Brief 216 §D9 — the in-prompt callback payload. The routine session POSTs
- * this body back to `POST /api/v1/work-items/:id/status` on terminal state.
+ * Brief 216 §D9 / Brief 217 §D10 — the in-prompt callback payload. Both
+ * cloud runner kinds (claude-code-routine, claude-managed-agent) post the
+ * same shape on terminal state; the discriminator branch differs only in
+ * the `runner_kind` literal.
  */
-export const routineCallbackStateValues = [
+export const cloudRunnerCallbackStateValues = [
   "running",
   "succeeded",
   "failed",
   "cancelled",
 ] as const;
-export type RoutineCallbackState = (typeof routineCallbackStateValues)[number];
+export type CloudRunnerCallbackState =
+  (typeof cloudRunnerCallbackStateValues)[number];
+
+/** Backwards-compatible alias — Brief 216's name. */
+export const routineCallbackStateValues = cloudRunnerCallbackStateValues;
+export type RoutineCallbackState = CloudRunnerCallbackState;
 
 export const claudeCodeRoutineStatusPayload = z.object({
-  state: z.enum(routineCallbackStateValues),
+  state: z.enum(cloudRunnerCallbackStateValues),
   prUrl: z.string().url().optional(),
   error: z.string().max(2_000).optional(),
   stepRunId: z.string().min(1),
   externalRunId: z.string().min(1),
 });
 
-/** Remaining cloud-kind placeholders — sub-briefs 217-218 tighten. */
+export const claudeManagedAgentStatusPayload = z.object({
+  state: z.enum(cloudRunnerCallbackStateValues),
+  prUrl: z.string().url().optional(),
+  error: z.string().max(2_000).optional(),
+  stepRunId: z.string().min(1),
+  externalRunId: z.string().min(1),
+});
+
+/** Remaining cloud-kind placeholders — sub-brief 218 tightens. */
 const placeholderPayload = z.unknown();
 
 // ============================================================
@@ -86,7 +104,7 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
   }),
   z.object({
     runner_kind: z.literal("claude-code-routine"),
-    state: z.enum(routineCallbackStateValues),
+    state: z.enum(cloudRunnerCallbackStateValues),
     prUrl: z.string().url().optional(),
     error: z.string().max(2_000).optional(),
     stepRunId: z.string().min(1),
@@ -94,8 +112,11 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
   }),
   z.object({
     runner_kind: z.literal("claude-managed-agent"),
-    dispatch_id: z.string(),
-    payload: placeholderPayload,
+    state: z.enum(cloudRunnerCallbackStateValues),
+    prUrl: z.string().url().optional(),
+    error: z.string().max(2_000).optional(),
+    stepRunId: z.string().min(1),
+    externalRunId: z.string().min(1),
   }),
   z.object({
     runner_kind: z.literal("github-action"),
@@ -110,14 +131,21 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
 ]);
 
 export type RunnerWebhookPayload = z.infer<typeof runnerWebhookSchema>;
-export type ClaudeCodeRoutineStatusPayload = z.infer<typeof claudeCodeRoutineStatusPayload>;
+export type ClaudeCodeRoutineStatusPayload = z.infer<
+  typeof claudeCodeRoutineStatusPayload
+>;
+export type ClaudeManagedAgentStatusPayload = z.infer<
+  typeof claudeManagedAgentStatusPayload
+>;
 
 /**
- * Brief 216 §D9 — map a routine callback state + optional error to the
- * runner_dispatches.status enum value. Pure, cross-runner-reusable.
+ * Brief 216 §D9 / Brief 217 §D10 — map a cloud-runner callback state +
+ * optional error to the runner_dispatches.status enum value. Pure;
+ * cross-runner-reusable (the mapping is identical for claude-code-routine
+ * and claude-managed-agent).
  */
-export function routineStateToDispatchStatus(
-  state: RoutineCallbackState,
+export function cloudRunnerStateToDispatchStatus(
+  state: CloudRunnerCallbackState,
   error?: string,
 ):
   | "running"
@@ -136,6 +164,13 @@ export function routineStateToDispatchStatus(
   }
   return "failed";
 }
+
+/**
+ * Backwards-compatible alias — Brief 216's name. Kept as a re-export so
+ * existing imports continue to compile after Brief 217's kind-agnostic
+ * rename per §D14.
+ */
+export const routineStateToDispatchStatus = cloudRunnerStateToDispatchStatus;
 
 // ============================================================
 // Type guards / helpers

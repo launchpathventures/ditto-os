@@ -1,17 +1,21 @@
 /**
- * webhook-schema tests — Brief 216 AC #7 + cross-runner sanity.
+ * webhook-schema tests — Brief 216 AC #7 + Brief 217 AC #5 + cross-runner sanity.
  *
  * Verifies:
  *  - claude-code-routine variant accepts a valid payload
+ *  - claude-managed-agent variant accepts a valid payload (Brief 217 §D10)
  *  - rejects on missing required fields, unknown state values, malformed prUrl
  *  - local-mac-mini envelope still parses (non-regression on Brief 215)
  *  - state-mapping function returns the documented runner_dispatches.status
+ *  - the kind-agnostic helper alias (cloudRunnerStateToDispatchStatus) is
+ *    identical to routineStateToDispatchStatus (Brief 217 §D14 rename)
  */
 
 import { describe, it, expect } from "vitest";
 import {
   runnerWebhookSchema,
   routineStateToDispatchStatus,
+  cloudRunnerStateToDispatchStatus,
 } from "./webhook-schema.js";
 
 describe("runnerWebhookSchema — claude-code-routine", () => {
@@ -76,6 +80,65 @@ describe("runnerWebhookSchema — claude-code-routine", () => {
   });
 });
 
+describe("runnerWebhookSchema — claude-managed-agent (Brief 217 §D10)", () => {
+  const happy = {
+    runner_kind: "claude-managed-agent" as const,
+    state: "succeeded" as const,
+    prUrl: "https://github.com/owner/repo/pull/42",
+    stepRunId: "sr_01abc",
+    externalRunId: "session_01xyz",
+  };
+
+  it("accepts a happy-path payload", () => {
+    const r = runnerWebhookSchema.safeParse(happy);
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a minimal payload (no prUrl, no error)", () => {
+    const r = runnerWebhookSchema.safeParse({
+      runner_kind: "claude-managed-agent",
+      state: "running",
+      stepRunId: "sr_01abc",
+      externalRunId: "session_01xyz",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects on missing stepRunId", () => {
+    const { stepRunId: _omit, ...partial } = happy;
+    void _omit;
+    const r = runnerWebhookSchema.safeParse(partial);
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on missing externalRunId", () => {
+    const { externalRunId: _omit, ...partial } = happy;
+    void _omit;
+    const r = runnerWebhookSchema.safeParse(partial);
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on unknown state value", () => {
+    const r = runnerWebhookSchema.safeParse({ ...happy, state: "exploded" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on malformed prUrl", () => {
+    const r = runnerWebhookSchema.safeParse({ ...happy, prUrl: "not a url" });
+    expect(r.success).toBe(false);
+  });
+
+  it("does NOT accept the legacy { dispatch_id, payload } envelope shape", () => {
+    // Brief 217 §D10 — placeholder `payload: z.unknown()` wrapper is dropped.
+    const r = runnerWebhookSchema.safeParse({
+      runner_kind: "claude-managed-agent",
+      dispatch_id: "d_01",
+      payload: { whatever: true },
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("runnerWebhookSchema — local-mac-mini regression", () => {
   it("still accepts the Brief 212 envelope shape", () => {
     const r = runnerWebhookSchema.safeParse({
@@ -131,5 +194,21 @@ describe("routineStateToDispatchStatus", () => {
 
   it("maps failed + generic error → failed", () => {
     expect(routineStateToDispatchStatus("failed", "auth blew up")).toBe("failed");
+  });
+});
+
+describe("cloudRunnerStateToDispatchStatus (kind-agnostic alias, Brief 217 §D14)", () => {
+  it("is the same function as routineStateToDispatchStatus", () => {
+    expect(cloudRunnerStateToDispatchStatus).toBe(routineStateToDispatchStatus);
+  });
+
+  it("produces identical mappings", () => {
+    expect(cloudRunnerStateToDispatchStatus("succeeded")).toBe("succeeded");
+    expect(cloudRunnerStateToDispatchStatus("failed", "rate limit")).toBe(
+      "rate_limited",
+    );
+    expect(cloudRunnerStateToDispatchStatus("failed", "timed out")).toBe(
+      "timed_out",
+    );
   });
 });

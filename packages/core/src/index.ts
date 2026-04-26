@@ -202,12 +202,21 @@ export {
   runnerWebhookSchema,
   localMacMiniStatusPayload,
   claudeCodeRoutineStatusPayload,
+  claudeManagedAgentStatusPayload,
+  cloudRunnerCallbackStateValues,
   routineCallbackStateValues,
+  cloudRunnerStateToDispatchStatus,
   routineStateToDispatchStatus,
   isKnownRunnerKind,
   type RunnerWebhookPayload,
   type ClaudeCodeRoutineStatusPayload,
+  type ClaudeManagedAgentStatusPayload,
+  type CloudRunnerCallbackState,
   type RoutineCallbackState,
+  // poll cadences
+  pollCadenceMs,
+  getPollCadenceMs,
+  pollableKinds,
 } from "./runner/index.js";
 
 // ============================================================
