@@ -13,7 +13,7 @@ import { use, useEffect, useState } from "react";
 
 const RUNNER_KINDS = [
   { value: "local-mac-mini", label: "Local Mac mini", note: null as string | null },
-  { value: "claude-code-routine", label: "Claude Code Routine", note: "Claude Routine — coming in sub-brief 216" },
+  { value: "claude-code-routine", label: "Claude Code Routine", note: null as string | null },
   { value: "claude-managed-agent", label: "Claude Managed Agent", note: "Managed Agents — coming in sub-brief 217" },
   { value: "github-action", label: "GitHub Action", note: "GitHub Actions — coming in sub-brief 218" },
   { value: "e2b-sandbox", label: "E2B sandbox", note: "E2B sandbox — deferred" },
@@ -183,6 +183,11 @@ function AddRunnerForm(props: {
   const [sshHost, setSshHost] = useState("");
   const [sshUser, setSshUser] = useState("");
   const [credentialId, setCredentialId] = useState("");
+  // Brief 216 — claude-code-routine form fields.
+  const [routineEndpoint, setRoutineEndpoint] = useState("");
+  const [routineBearer, setRoutineBearer] = useState("");
+  const [routineRepo, setRoutineRepo] = useState("");
+  const [routineBranch, setRoutineBranch] = useState("main");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -200,7 +205,14 @@ function AddRunnerForm(props: {
               sshUser: sshUser || undefined,
               credentialId: credentialId || undefined,
             }
-          : {};
+          : kind === "claude-code-routine"
+            ? {
+                endpoint_url: routineEndpoint,
+                bearer: routineBearer,
+                default_repo: routineRepo,
+                default_branch: routineBranch || "main",
+              }
+            : {};
       const r = await fetch(`/api/v1/projects/${props.slug}/runners`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -313,6 +325,65 @@ function AddRunnerForm(props: {
               value={credentialId}
               onChange={(e) => setCredentialId(e.target.value)}
               placeholder="optional — pointer into credential vault"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+        </div>
+      )}
+
+      {kind === "claude-code-routine" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Routine endpoint URL</span>
+            <input
+              required
+              type="url"
+              value={routineEndpoint}
+              onChange={(e) => setRoutineEndpoint(e.target.value)}
+              placeholder="https://api.anthropic.com/v1/claude_code/routines/<trigger_id>/fire"
+              className="mt-1 block w-full overflow-x-auto rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              Copy from the Anthropic Routines page after you create the trigger.
+            </span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Bearer token</span>
+            <input
+              required
+              type="password"
+              autoComplete="off"
+              value={routineBearer}
+              onChange={(e) => setRoutineBearer(e.target.value)}
+              placeholder="sk-ant-oat01-…"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              Stored encrypted in the credential vault. Plaintext is never persisted.
+            </span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Default repo</span>
+            <input
+              required
+              type="text"
+              value={routineRepo}
+              onChange={(e) => setRoutineRepo(e.target.value)}
+              placeholder="owner/repo"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Default branch</span>
+            <input
+              type="text"
+              value={routineBranch}
+              onChange={(e) => setRoutineBranch(e.target.value)}
+              placeholder="main"
               className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
               style={{ minHeight: 44 }}
             />

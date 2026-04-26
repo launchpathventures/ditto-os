@@ -99,6 +99,10 @@ export async function POST(
   const { verifyBearerToken } = await import(
     "../../../../../../../../../src/engine/project-credentials"
   );
+  // Brief 216 — ephemeral per-dispatch token verification (claude-code-routine).
+  const { verifyEphemeralCallbackToken } = await import(
+    "../../../../../../../../../src/engine/runner-status-handlers/routine"
+  );
 
   // Look up work item + project bearer hash.
   const wiRows = await db
@@ -118,12 +122,26 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const wi = wiRows[0];
-  if (!wi.projectId || !wi.bearerHash) {
+  if (!wi.projectId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ok = await verifyBearerToken(presented, wi.bearerHash);
-  if (!ok) {
+  // Brief 216 §AC #8 — accept EITHER an ephemeral per-dispatch callback token
+  // OR the long-lived project bearer. Ephemeral first (more specific), fall
+  // back to project bearer.
+  let bearerSource: "ephemeral" | "project" | "none" = "none";
+  let matchedDispatchId: string | undefined;
+
+  const ephemeral = await verifyEphemeralCallbackToken(presented, id);
+  if (ephemeral.ok) {
+    bearerSource = "ephemeral";
+    matchedDispatchId = ephemeral.dispatchId;
+  } else if (wi.bearerHash) {
+    const projectMatch = await verifyBearerToken(presented, wi.bearerHash);
+    if (projectMatch) bearerSource = "project";
+  }
+
+  if (bearerSource === "none") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -208,7 +226,8 @@ export async function POST(
     }
 
     // Audit + conversation-post: activities row. Insight-180 bounded waiver
-    // sets metadata.guardWaived when no stepRunId was supplied.
+    // sets metadata.guardWaived when no stepRunId was supplied. Brief 216
+    // adds bearerSource (ephemeral vs project) for forensic auditability.
     tx.insert(activities)
       .values({
         action: "work_item_status_update",
@@ -227,6 +246,8 @@ export async function POST(
             externalRunId: data.externalRunId,
             stepRunId: data.stepRunId ?? null,
             guardWaived,
+            bearerSource,
+            ...(matchedDispatchId ? { matchedDispatchId } : {}),
           },
           ...(dispatchTransitioned ? { dispatchTransitioned } : {}),
         },
@@ -238,6 +259,7 @@ export async function POST(
     ok: true,
     workItemId: id,
     briefState: data.state,
+    bearerSource,
     ...(dispatchTransitioned ? { dispatchTransitioned } : {}),
     ...(guardWaived ? { guardWaived: true } : {}),
   });

@@ -34,13 +34,14 @@ import type {
   WorkItemRef,
 } from "@ditto/core";
 
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db as appDb } from "../db";
 import * as schema from "../db/schema";
 import { runnerDispatches, projects } from "../db/schema";
 import { getCredentialById } from "../engine/credential-vault";
 import { composePrompt } from "./routine-prompt";
 
-type AnyDb = typeof appDb;
+type AnyDb = BetterSQLite3Database<typeof schema>;
 
 // ============================================================
 // Config schema (project_runners.config_json)

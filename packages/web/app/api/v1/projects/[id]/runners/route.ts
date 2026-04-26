@@ -43,6 +43,19 @@ const localMacMiniConfig = z.object({
   credentialId: z.string().optional(),
 });
 
+/**
+ * Brief 216 — claude-code-routine config form. The bearer is accepted as
+ * plaintext at the boundary, written to the credential vault as a project-
+ * scoped credential, and replaced with `bearer_credential_id` before persist.
+ */
+const claudeCodeRoutineConfigForm = z.object({
+  endpoint_url: z.string().url(),
+  bearer: z.string().min(20),
+  default_repo: z.string().regex(/^[^/]+\/[^/]+$/),
+  default_branch: z.string().min(1).default("main"),
+  beta_header: z.string().optional(),
+});
+
 const createRunnerBody = z.object({
   kind: z.enum([
     "local-mac-mini",
@@ -58,7 +71,7 @@ const createRunnerBody = z.object({
 
 const NOT_YET_IMPLEMENTED: Record<RunnerKind, string | null> = {
   "local-mac-mini": null,
-  "claude-code-routine": "Runner kind not yet implemented (sub-brief 216).",
+  "claude-code-routine": null, // Brief 216 — adapter wired
   "claude-managed-agent": "Runner kind not yet implemented (sub-brief 217).",
   "github-action": "Runner kind not yet implemented (sub-brief 218).",
   "e2b-sandbox": "Runner kind not yet implemented (deferred).",
@@ -119,12 +132,75 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  // Brief 216 — claude-code-routine: validate the form shape, then encrypt
+  // the bearer into the credential vault and replace plaintext with id.
+  let routineCredentialId: string | null = null;
+  let routineFinalConfig: Record<string, unknown> | null = null;
+  if (kind === "claude-code-routine") {
+    const cfg = claudeCodeRoutineConfigForm.safeParse(data.config);
+    if (!cfg.success) {
+      return NextResponse.json(
+        { error: "Config validation failed", details: cfg.error.format() },
+        { status: 400 }
+      );
+    }
+    // Verify the routine adapter accepts the resulting persisted shape.
+    const { routineConfigSchema } = await import(
+      "../../../../../../../../../src/adapters/claude-code-routine"
+    );
+    const { storeProjectCredential } = await import(
+      "../../../../../../../../../src/engine/credential-vault"
+    );
+    routineCredentialId = await storeProjectCredential(
+      `routine.<projectSlug>.bearer`,
+      cfg.data.bearer,
+    );
+    routineFinalConfig = {
+      endpoint_url: cfg.data.endpoint_url,
+      bearer_credential_id: routineCredentialId,
+      default_repo: cfg.data.default_repo,
+      default_branch: cfg.data.default_branch,
+      ...(cfg.data.beta_header ? { beta_header: cfg.data.beta_header } : {}),
+    };
+    const adapterValidation = routineConfigSchema.safeParse(routineFinalConfig);
+    if (!adapterValidation.success) {
+      return NextResponse.json(
+        {
+          error: "Routine adapter rejected the constructed config",
+          details: adapterValidation.error.format(),
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const { db } = await import("../../../../../../../../../src/db");
   const { projectRunners } = await import(
     "../../../../../../../../../src/db/schema"
   );
   const projectId = await resolveProjectId(id);
   if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+
+  // Re-key the credential service to use the project slug for clarity in audit.
+  if (kind === "claude-code-routine" && routineCredentialId) {
+    const { projects: projectsTable } = await import(
+      "../../../../../../../../../src/db/schema"
+    );
+    const projRow = await db
+      .select({ slug: projectsTable.slug })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+    if (projRow.length > 0) {
+      const { credentials } = await import(
+        "../../../../../../../../../src/db/schema"
+      );
+      await db
+        .update(credentials)
+        .set({ service: `routine.${projRow[0].slug}.bearer` })
+        .where(eq(credentials.id, routineCredentialId));
+    }
+  }
 
   // Reject duplicate (projectId, kind) up front for a clean 409 — UNIQUE
   // constraint would otherwise surface as a 500.
@@ -142,6 +218,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
+  const persistedConfig =
+    kind === "claude-code-routine" && routineFinalConfig
+      ? routineFinalConfig
+      : data.config;
+  const persistedCredentialIds =
+    kind === "claude-code-routine" && routineCredentialId
+      ? [routineCredentialId, ...data.credentialIds]
+      : data.credentialIds;
+
   const inserted = await db
     .insert(projectRunners)
     .values({
@@ -149,8 +234,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       kind,
       mode: kindToMode(kind),
       enabled: data.enabled,
-      configJson: data.config,
-      credentialIds: data.credentialIds,
+      configJson: persistedConfig,
+      credentialIds: persistedCredentialIds,
       lastHealthStatus: "unknown",
     })
     .returning();

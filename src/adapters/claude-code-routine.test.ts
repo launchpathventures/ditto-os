@@ -111,7 +111,13 @@ async function seedFixtures() {
   });
 }
 
-function fakeFetch(response: Partial<Response> & { json?: unknown; text?: string; status?: number }) {
+interface FakeFetchResponse {
+  json?: unknown;
+  text?: string;
+  status?: number;
+}
+
+function fakeFetch(response: FakeFetchResponse) {
   return async (): Promise<Response> => {
     const status = response.status ?? 200;
     const ok = status >= 200 && status < 300;

@@ -145,17 +145,28 @@ export async function register() {
 
     // Brief 215 — register the local-mac-mini RunnerAdapter into the in-process
     // registry. Brief 212 shipped — wire its primitives into a `LocalBridge`
-    // instance via `createLocalBridge()` and pass into the adapter. Cloud
-    // adapters (sub-briefs 216-218) register here too when they land.
+    // instance via `createLocalBridge()` and pass into the adapter. Brief 216
+    // adds the claude-code-routine adapter alongside; sub-briefs 217-218 add
+    // managed-agent + github-action when they land.
     try {
       const { registerAdapter, hasAdapter } = await import("../../src/engine/runner-registry");
       const { createLocalMacMiniAdapter } = await import("../../src/adapters/local-mac-mini");
       const { createLocalBridge } = await import("../../src/engine/local-bridge");
+      const { createRoutineAdapter, primeHarnessTypeCacheFromDb } = await import(
+        "../../src/adapters/claude-code-routine"
+      );
       if (!hasAdapter("local-mac-mini")) {
         const bridge = createLocalBridge();
         registerAdapter(createLocalMacMiniAdapter({ bridge }));
         console.log(
           "[instrumentation] Runner registry: local-mac-mini adapter registered (bridge wired to Brief 212 LocalBridge)."
+        );
+      }
+      if (!hasAdapter("claude-code-routine")) {
+        registerAdapter(createRoutineAdapter());
+        await primeHarnessTypeCacheFromDb();
+        console.log(
+          "[instrumentation] Runner registry: claude-code-routine adapter registered (Brief 216)."
         );
       }
     } catch (error) {
