@@ -155,6 +155,9 @@ export async function register() {
       const { createRoutineAdapter, primeHarnessTypeCacheFromDb } = await import(
         "../../src/adapters/claude-code-routine"
       );
+      const { createManagedAgentAdapter } = await import(
+        "../../src/adapters/claude-managed-agent"
+      );
       if (!hasAdapter("local-mac-mini")) {
         const bridge = createLocalBridge();
         registerAdapter(createLocalMacMiniAdapter({ bridge }));
@@ -168,6 +171,23 @@ export async function register() {
         console.log(
           "[instrumentation] Runner registry: claude-code-routine adapter registered (Brief 216)."
         );
+      }
+      if (!hasAdapter("claude-managed-agent")) {
+        registerAdapter(createManagedAgentAdapter());
+        console.log(
+          "[instrumentation] Runner registry: claude-managed-agent adapter registered (Brief 217)."
+        );
+      }
+      // Brief 217 — start the cross-runner poll cron (only kinds with
+      // registered cadences are walked; routines stay GitHub-events-only).
+      try {
+        const { startRunnerPollCron } = await import(
+          "../../src/engine/runner-poll-cron"
+        );
+        startRunnerPollCron();
+        console.log("[instrumentation] Runner poll cron started (Brief 217).");
+      } catch (cronErr) {
+        console.error("[instrumentation] Runner poll cron start failed:", cronErr);
       }
     } catch (error) {
       console.error("[instrumentation] Runner registry init failed:", error);
