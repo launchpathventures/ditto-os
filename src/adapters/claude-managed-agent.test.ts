@@ -376,7 +376,7 @@ describe("createManagedAgentAdapter — execute()", () => {
       db: testDb,
       fetch: fetchImpl,
       statusWebhookUrlFor: (id) => `https://test/api/v1/work-items/${id}/status`,
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
       resolveCredential: async () => ({
         value: "sk-ant-key",
         service: "runner.agent-crm.api_key",
@@ -438,7 +438,7 @@ describe("createManagedAgentAdapter — execute()", () => {
       db: testDb,
       fetch: fetchImpl,
       statusWebhookUrlFor: (id) => `https://test/api/v1/work-items/${id}/status`,
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
       resolveCredential: async () => ({
         value: "sk-ant-key",
         service: "runner.agent-crm.api_key",
@@ -484,7 +484,7 @@ describe("createManagedAgentAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 429, text: "rate limit" }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r429 = await adapter429.execute(
       buildCtx({ dispatchId }),
@@ -498,7 +498,7 @@ describe("createManagedAgentAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 408, text: "timeout" }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r408 = await adapter408.execute(
       buildCtx({ dispatchId }),
@@ -520,7 +520,7 @@ describe("createManagedAgentAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 200, json: { not_id: "x" } }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r = await adapter.execute(
       buildCtx({ dispatchId }),
@@ -550,7 +550,7 @@ describe("createManagedAgentAdapter — execute()", () => {
     const adapter = createManagedAgentAdapter({
       db: testDb,
       fetch: fetchImpl,
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
       resolveCredential: async () => ({ value: "tok", service: "x" }),
     });
     await adapter.execute(buildCtx({ dispatchId }), WORK_ITEM_REF, PROJECT_REF, {

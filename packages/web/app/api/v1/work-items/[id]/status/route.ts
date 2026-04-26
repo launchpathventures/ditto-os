@@ -103,6 +103,12 @@ export async function POST(
   const { verifyEphemeralCallbackToken } = await import(
     "../../../../../../../../../src/engine/runner-status-handlers/routine"
   );
+  // Brief 217 §What Changes — ephemeral verification for claude-managed-agent.
+  // Filters on runnerKind so a routine-bound token cannot satisfy a
+  // managed-agent dispatch and vice versa (forensic-grade kind isolation).
+  const { verifyManagedAgentEphemeralCallbackToken } = await import(
+    "../../../../../../../../../src/engine/runner-status-handlers/managed-agent"
+  );
 
   // Look up work item + project bearer hash.
   const wiRows = await db
@@ -126,19 +132,28 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Brief 216 §AC #8 — accept EITHER an ephemeral per-dispatch callback token
-  // OR the long-lived project bearer. Ephemeral first (more specific), fall
-  // back to project bearer.
+  // Brief 216 §AC #8 + Brief 217 §What Changes — accept EITHER an ephemeral
+  // per-dispatch callback token (routine OR managed-agent) OR the long-lived
+  // project bearer. Try the routine path first, then managed-agent, then
+  // fall back to project bearer. Each ephemeral verifier filters on its own
+  // runnerKind so cross-kind tokens cannot satisfy each other.
   let bearerSource: "ephemeral" | "project" | "none" = "none";
   let matchedDispatchId: string | undefined;
 
-  const ephemeral = await verifyEphemeralCallbackToken(presented, id);
-  if (ephemeral.ok) {
+  const ephemeralRoutine = await verifyEphemeralCallbackToken(presented, id);
+  if (ephemeralRoutine.ok) {
     bearerSource = "ephemeral";
-    matchedDispatchId = ephemeral.dispatchId;
-  } else if (wi.bearerHash) {
-    const projectMatch = await verifyBearerToken(presented, wi.bearerHash);
-    if (projectMatch) bearerSource = "project";
+    matchedDispatchId = ephemeralRoutine.dispatchId;
+  } else {
+    const ephemeralManagedAgent =
+      await verifyManagedAgentEphemeralCallbackToken(presented, id);
+    if (ephemeralManagedAgent.ok) {
+      bearerSource = "ephemeral";
+      matchedDispatchId = ephemeralManagedAgent.dispatchId;
+    } else if (wi.bearerHash) {
+      const projectMatch = await verifyBearerToken(presented, wi.bearerHash);
+      if (projectMatch) bearerSource = "project";
+    }
   }
 
   if (bearerSource === "none") {

@@ -354,3 +354,94 @@ describe("Brief 216 — ephemeral callback token bearer path", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("Brief 217 — managed-agent ephemeral callback token bearer path", () => {
+  async function seedManagedAgentDispatchWithEphemeralToken(opts: {
+    workItemId: string;
+    projectId: string;
+  }): Promise<{ token: string; dispatchId: string }> {
+    const bcrypt = (await import("bcryptjs")).default;
+    const {
+      runnerDispatches,
+      processes,
+      processRuns,
+      stepRuns,
+    } = await import("../../../../../../../../../src/db/schema");
+
+    await testDb.insert(processes).values({
+      id: "p_01",
+      name: "test",
+      slug: "p_01",
+      description: "t",
+      definition: {},
+    });
+    await testDb.insert(processRuns).values({
+      id: "pr_01",
+      processId: "p_01",
+      status: "running",
+      triggeredBy: "test",
+    });
+    await testDb.insert(stepRuns).values({
+      id: "sr_01",
+      processRunId: "pr_01",
+      stepId: "dispatch",
+      status: "running",
+      executorType: "rules",
+    });
+    const token = "managed-agent-ephemeral-secret-9999";
+    const hash = await bcrypt.hash(token, 12);
+    const inserted = await testDb
+      .insert(runnerDispatches)
+      .values({
+        workItemId: opts.workItemId,
+        projectId: opts.projectId,
+        runnerKind: "claude-managed-agent",
+        runnerMode: "cloud",
+        attemptIndex: 0,
+        stepRunId: "sr_01",
+        status: "running",
+        callbackTokenHash: hash,
+      })
+      .returning({ id: runnerDispatches.id });
+    return { token, dispatchId: inserted[0].id };
+  }
+
+  it("accepts a managed-agent ephemeral token (callback_mode='in-prompt' path)", async () => {
+    const { projectId } = await seedProjectWithBearer();
+    const wid = await seedWorkItem(projectId);
+    const { token, dispatchId } =
+      await seedManagedAgentDispatchWithEphemeralToken({
+        workItemId: wid,
+        projectId,
+      });
+
+    const { POST } = await loadRoute();
+    const res = await POST(
+      jsonReq("http://t/api/v1/work-items/x/status", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: {
+          state: "review",
+          runnerKind: "claude-managed-agent",
+          externalRunId: "session_ma_01",
+          stepRunId: "sr_01",
+          prUrl: "https://github.com/x/y/pull/2",
+        },
+      }),
+      { params: Promise.resolve({ id: wid }) },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.bearerSource).toBe("ephemeral");
+
+    const { activities } = await import(
+      "../../../../../../../../../src/db/schema"
+    );
+    const acts = await testDb.select().from(activities);
+    const meta = acts[0].metadata as {
+      webhook?: { bearerSource?: string; matchedDispatchId?: string };
+    };
+    expect(meta.webhook?.bearerSource).toBe("ephemeral");
+    expect(meta.webhook?.matchedDispatchId).toBe(dispatchId);
+  });
+});

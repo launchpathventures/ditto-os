@@ -197,7 +197,7 @@ function readDevReviewSkill(overridePath?: string): SkillRead {
     const truncated = truncateUtf8(raw, DEV_REVIEW_INLINE_CAP_BYTES) + TRUNCATE_MARKER;
     // eslint-disable-next-line no-console
     console.warn(
-      `[routine-prompt] dev-review skill exceeds ${DEV_REVIEW_INLINE_CAP_BYTES} bytes — truncating. Re-architect prompt to use progressive disclosure.`,
+      `[cloud-runner-prompt] dev-review skill exceeds ${DEV_REVIEW_INLINE_CAP_BYTES} bytes — truncating. Re-architect prompt to use progressive disclosure.`,
     );
     return { ok: true, text: truncated, truncated: true };
   } catch (e) {

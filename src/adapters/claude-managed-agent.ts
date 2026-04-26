@@ -22,6 +22,17 @@
  * In-prompt callback is OPTIONAL (callback_mode='in-prompt'). Default is
  * polling-only; no ephemeral token generated, no INTERNAL section in the
  * prompt, `runner_dispatches.callback_token_hash` stays NULL.
+ *
+ * AC #11 deferral note (Brief 217 §D13): the `observe_events` config flag
+ * is accepted by the schema and persisted, but the SSE event-stream
+ * subscription itself is NOT yet implemented at adapter runtime. The
+ * polling-primary path (status() + GitHub fallback) is the correctness
+ * channel; SSE was specified as a UX enhancement (live activity-log
+ * stream) that requires a stateful subscription manager + allowlist
+ * filter + graceful downgrade — non-trivial scope deferred to a follow-up
+ * polish brief. Setting `observe_events=true` today is a no-op at
+ * runtime; the field round-trips through config so the future SSE
+ * implementation can read it without a schema change.
  */
 
 import { z } from "zod";
@@ -45,7 +56,7 @@ import type {
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db as appDb } from "../db";
 import * as schema from "../db/schema";
-import { runnerDispatches } from "../db/schema";
+import { runnerDispatches, projects } from "../db/schema";
 import { getCredentialById } from "../engine/credential-vault";
 import { composePrompt } from "./cloud-runner-prompt";
 
@@ -161,8 +172,17 @@ export interface ManagedAgentAdapterDeps {
   fetch?: typeof globalThis.fetch;
   /** Override for tests — resolves the status webhook URL. */
   statusWebhookUrlFor?: (workItemId: string) => string;
-  /** Override for tests — the harness type lookup. */
-  harnessTypeFor?: (project: ProjectRef) => "catalyst" | "native" | "none";
+  /**
+   * Override for tests — the harness type lookup. Production default reads
+   * from `projects.harnessType` with a per-project memoization map (matches
+   * the routine adapter pattern). Native projects need this to be honest so
+   * the prompt composer inlines the dev-review skill text instead of
+   * relying on a cloned working tree.
+   */
+  harnessTypeFor?: (
+    project: ProjectRef,
+    db: AnyDb,
+  ) => Promise<"catalyst" | "native" | "none">;
   /** Override for tests — defaults to the app db singleton. */
   db?: AnyDb;
   /** Override for tests — defaults to credential-vault's getCredentialById. */
@@ -182,7 +202,7 @@ export function createManagedAgentAdapter(
   const dbImpl = deps.db ?? appDb;
   const resolveCredential = deps.resolveCredential ?? getCredentialById;
   const statusWebhookUrlFor = deps.statusWebhookUrlFor ?? defaultStatusWebhookUrlFor;
-  const harnessTypeFor = deps.harnessTypeFor ?? (() => "catalyst");
+  const harnessTypeFor = deps.harnessTypeFor ?? defaultManagedAgentHarnessTypeFor;
   const now = deps.now ?? (() => new Date());
 
   return {
@@ -236,7 +256,7 @@ export function createManagedAgentAdapter(
         ephemeralHash = await bcrypt.hash(ephemeralToken, BCRYPT_COST);
       }
 
-      const harnessType = harnessTypeFor(project);
+      const harnessType = await harnessTypeFor(project, dbImpl);
       const promptResult = composePrompt({
         workItemBody: workItem.content,
         harnessType,
@@ -711,6 +731,37 @@ function defaultStatusWebhookUrlFor(workItemId: string): string {
     process.env.NEXT_PUBLIC_BASE_URL ??
     "http://localhost:3000";
   return `${base.replace(/\/$/, "")}/api/v1/work-items/${workItemId}/status`;
+}
+
+let cachedManagedAgentHarnessTypes:
+  | Map<string, "catalyst" | "native" | "none">
+  | null = null;
+
+async function defaultManagedAgentHarnessTypeFor(
+  project: ProjectRef,
+  db: AnyDb,
+): Promise<"catalyst" | "native" | "none"> {
+  const cached = cachedManagedAgentHarnessTypes?.get(project.id);
+  if (cached) return cached;
+  const rows = await db
+    .select({ harnessType: projects.harnessType })
+    .from(projects)
+    .where(eq(projects.id, project.id))
+    .limit(1);
+  const value = (rows[0]?.harnessType ?? "native") as
+    | "catalyst"
+    | "native"
+    | "none";
+  if (!cachedManagedAgentHarnessTypes) {
+    cachedManagedAgentHarnessTypes = new Map();
+  }
+  cachedManagedAgentHarnessTypes.set(project.id, value);
+  return value;
+}
+
+/** Test-only — clear the cache so DB-fallback paths can be exercised. */
+export function _clearManagedAgentHarnessTypeCacheForTests(): void {
+  cachedManagedAgentHarnessTypes = null;
 }
 
 /**
