@@ -201,8 +201,13 @@ export {
   // webhook
   runnerWebhookSchema,
   localMacMiniStatusPayload,
+  claudeCodeRoutineStatusPayload,
+  routineCallbackStateValues,
+  routineStateToDispatchStatus,
   isKnownRunnerKind,
   type RunnerWebhookPayload,
+  type ClaudeCodeRoutineStatusPayload,
+  type RoutineCallbackState,
 } from "./runner/index.js";
 
 // ============================================================
