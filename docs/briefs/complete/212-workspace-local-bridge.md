@@ -1,7 +1,7 @@
 # Brief 212: Workspace Local Bridge — Cloud → Laptop Dispatch
 
 **Date:** 2026-04-25
-**Status:** ready
+**Status:** complete (2026-04-26 — 14 commits on `launchpathventures/local-bridge-question`; 54 bridge unit tests + 3 spike tests + 2 Playwright e2e tests passing; all 18 ACs covered, AC #16 with documented deviation flagged for Architect)
 **Depends on:** none (functionally standalone; cross-references Brief 200 for the `ditto.you` URL topology but does not block on it)
 **Unlocks:** `runner=local-mac-mini` for the user's agent-crm pipeline + every future Ditto capability that requires execution on the user's hardware (local Claude Code CLI, locally-installed dev tools, machine-specific scripts, on-prem data access). Companion to Brief 200 (file projection one-way) by adding execution dispatch (two-way).
 
