@@ -1,5 +1,5 @@
 /**
- * GitHub fallback handler tests — Brief 216 AC #10.
+ * GitHub fallback handler tests — Brief 216 AC #10 + Brief 217 §D6 (kind-agnostic).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -9,7 +9,9 @@ import {
   handlePullRequestEvent,
   handleWorkflowRunEvent,
   handleDeploymentStatusEvent,
-} from "./routine-fallback";
+  deepLinkForDispatch,
+} from "./cloud-runner-fallback";
+import type { RunnerKind } from "@ditto/core";
 import {
   processes,
   processRuns,
@@ -36,7 +38,14 @@ afterEach(() => {
   delete process.env.DITTO_TEST_MODE;
 });
 
-async function seedActiveDispatch(opts: { status?: "dispatched" | "running" } = {}) {
+async function seedActiveDispatch(
+  opts: {
+    status?: "dispatched" | "running";
+    runnerKind?: RunnerKind;
+    externalRunId?: string;
+  } = {},
+) {
+  const kind = opts.runnerKind ?? "claude-code-routine";
   await testDb.insert(processes).values({
     id: "p_01",
     name: "test",
@@ -78,7 +87,7 @@ async function seedActiveDispatch(opts: { status?: "dispatched" | "running" } = 
   });
   await testDb.insert(projectRunners).values({
     projectId: "proj_01",
-    kind: "claude-code-routine",
+    kind,
     mode: "cloud",
     enabled: true,
     configJson: {},
@@ -89,11 +98,12 @@ async function seedActiveDispatch(opts: { status?: "dispatched" | "running" } = 
     .values({
       workItemId: "wi_01",
       projectId: "proj_01",
-      runnerKind: "claude-code-routine",
+      runnerKind: kind,
       runnerMode: "cloud",
       attemptIndex: 0,
       stepRunId: "sr_01",
       status: opts.status ?? "running",
+      externalRunId: opts.externalRunId ?? null,
     })
     .returning({ id: runnerDispatches.id });
   return inserted[0].id;
@@ -461,5 +471,142 @@ describe("fallback decoupling", () => {
       .from(runnerDispatches)
       .where(eq(runnerDispatches.id, dispatchId));
     expect(rows[0].status).toBe("succeeded");
+  });
+});
+
+// ============================================================
+// Brief 217 §D6 — kind-routing for claude-managed-agent
+// ============================================================
+
+describe("kind-routing — claude-managed-agent dispatches", () => {
+  it("matches a managed-agent dispatch on PR opened and emits managed_agent_pr_opened activity", async () => {
+    const dispatchId = await seedActiveDispatch({
+      runnerKind: "claude-managed-agent",
+      externalRunId: "session_01abc",
+    });
+    const r = await handlePullRequestEvent(
+      {
+        action: "opened",
+        pull_request: {
+          html_url: "https://github.com/owner/agent-crm/pull/7",
+          head: { ref: "claude/x" },
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("pr-opened");
+    if (r.kind !== "pr-opened") throw new Error("unreachable");
+    expect(r.dispatchId).toBe(dispatchId);
+
+    const acts = await testDb.select().from(activities);
+    const a = acts.find((x) => x.action === "managed_agent_pr_opened");
+    expect(a).toBeDefined();
+    const meta = (a!.metadata ?? {}) as Record<string, unknown>;
+    expect(meta.runnerKind).toBe("claude-managed-agent");
+    expect(meta.sessionUrl).toBe(
+      "https://platform.claude.com/sessions/session_01abc",
+    );
+  });
+
+  it("transitions managed-agent dispatch to succeeded on PR merged", async () => {
+    const dispatchId = await seedActiveDispatch({
+      runnerKind: "claude-managed-agent",
+      externalRunId: "session_02xyz",
+    });
+    const r = await handlePullRequestEvent(
+      {
+        action: "closed",
+        pull_request: {
+          html_url: "https://github.com/owner/agent-crm/pull/9",
+          head: { ref: "claude/y" },
+          merged: true,
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("pr-merged");
+
+    const rows = await testDb
+      .select()
+      .from(runnerDispatches)
+      .where(eq(runnerDispatches.id, dispatchId));
+    expect(rows[0].status).toBe("succeeded");
+
+    const acts = await testDb.select().from(activities);
+    expect(acts.find((a) => a.action === "managed_agent_pr_merged")).toBeDefined();
+  });
+
+  it("emits managed_agent_preview_ready for non-prod deploy on managed-agent dispatch", async () => {
+    await seedActiveDispatch({
+      runnerKind: "claude-managed-agent",
+      externalRunId: "session_03",
+    });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "success",
+          environment: "Preview",
+          environment_url: "https://preview-z.vercel.app",
+        },
+        deployment: { ref: "claude/z" },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("preview-ready");
+    const acts = await testDb.select().from(activities);
+    expect(acts.find((a) => a.action === "managed_agent_preview_ready")).toBeDefined();
+  });
+
+  it("emits managed_agent_workflow_completed for completed CI on managed-agent dispatch", async () => {
+    await seedActiveDispatch({ runnerKind: "claude-managed-agent" });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          conclusion: "success",
+          head_branch: "claude/x",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/1",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-completed");
+    const acts = await testDb.select().from(activities);
+    expect(
+      acts.find((a) => a.action === "managed_agent_workflow_completed"),
+    ).toBeDefined();
+  });
+});
+
+describe("deepLinkForDispatch — kind-aware (Brief 217 §D6)", () => {
+  it("returns Anthropic platform URL for claude-managed-agent", () => {
+    expect(deepLinkForDispatch("claude-managed-agent", "session_01")).toBe(
+      "https://platform.claude.com/sessions/session_01",
+    );
+  });
+
+  it("returns code.claude.com URL for claude-code-routine when no fallback", () => {
+    expect(deepLinkForDispatch("claude-code-routine", "session_42")).toBe(
+      "https://code.claude.com/session/session_42",
+    );
+  });
+
+  it("respects fallback URL for claude-code-routine", () => {
+    expect(
+      deepLinkForDispatch(
+        "claude-code-routine",
+        "session_42",
+        "https://code.claude.com/specific/url",
+      ),
+    ).toBe("https://code.claude.com/specific/url");
+  });
+
+  it("returns null when externalRunId is missing and no fallback", () => {
+    expect(deepLinkForDispatch("claude-managed-agent", null)).toBeNull();
   });
 });

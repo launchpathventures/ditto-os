@@ -1,24 +1,30 @@
 /**
- * GitHub fallback handler for claude-code-routine — Brief 216 §D4.
+ * GitHub fallback handler — Brief 216 §D4 + Brief 217 §D6 (kind-agnostic).
  *
  * Pure function callable by a webhook listener (or directly from tests).
  * Subscribes to the `pull_request`, `workflow_run`, and `deployment_status`
- * events on every repo configured in any project_runner of kind
- * `claude-code-routine`. Provides terminal-state resolution for the runner
- * even when the in-prompt callback never fires (e.g., Ditto down at session
- * end, beta API drift, network failure).
+ * events on every repo configured in any project_runner of a cloud kind
+ * (`claude-code-routine`, `claude-managed-agent`). Provides terminal-state
+ * resolution for the runner even when the in-prompt callback never fires
+ * (e.g., Ditto down at session end, beta API drift, network failure).
  *
- * Branch matching: routines open PRs on `claude/*` branches by Anthropic
- * default. The handler matches by (repo, branch-prefix, dispatch-status) —
- * not by an exact branch name, since the routine session id and the GitHub
- * branch name are separate identifiers.
+ * Branch matching: cloud runner sessions open PRs on `claude/*` branches by
+ * Anthropic default (true for both Routines and Managed Agents). The handler
+ * matches by (repo, branch-prefix, dispatch-status) — not by an exact branch
+ * name, since the session id and the GitHub branch name are separate
+ * identifiers.
+ *
+ * Brief 217 §D6 — kind-routing is per-row (the matched dispatch's `runnerKind`
+ * column drives the deep-link URL only). Behaviour is otherwise identical
+ * across the two cloud kinds.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   transitionDispatch,
   type RunnerDispatchStatus,
+  type RunnerKind,
 } from "@ditto/core";
 import { db as appDb } from "../../db";
 import * as schema from "../../db/schema";
@@ -107,10 +113,15 @@ export async function handlePullRequestEvent(
     event.repository.full_name,
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no active routine dispatch for repo" };
+    return { kind: "no-match", reason: "no active cloud-runner dispatch for repo" };
   }
 
   const prUrl = truncate(event.pull_request.html_url, URL_CAP);
+
+  const sessionUrl = deepLinkForDispatch(
+    dispatch.runnerKind,
+    dispatch.externalRunId,
+  );
 
   if (event.action === "opened" || event.action === "synchronize") {
     await dbImpl
@@ -118,10 +129,16 @@ export async function handlePullRequestEvent(
       .set({ externalUrl: prUrl })
       .where(eq(runnerDispatches.id, dispatch.id));
     await insertActivity(dbImpl, {
-      action: "routine_pr_opened",
-      description: `Routine PR opened: ${prUrl}`,
+      action: `${activityPrefix(dispatch.runnerKind)}_pr_opened`,
+      description: `${labelFor(dispatch.runnerKind)} PR opened: ${prUrl}`,
       workItemId: dispatch.workItemId,
-      metadata: { fallback: "pull_request.opened", prUrl, dispatchId: dispatch.id },
+      metadata: {
+        fallback: "pull_request.opened",
+        prUrl,
+        dispatchId: dispatch.id,
+        runnerKind: dispatch.runnerKind,
+        sessionUrl,
+      },
     });
     return { kind: "pr-opened", dispatchId: dispatch.id, prUrl };
   }
@@ -138,16 +155,22 @@ export async function handlePullRequestEvent(
           .set({ status: tr.to, finishedAt: new Date() })
           .where(eq(runnerDispatches.id, dispatch.id));
         await insertActivity(dbImpl, {
-          action: "routine_pr_merged",
-          description: `Routine PR merged: ${prUrl}`,
+          action: `${activityPrefix(dispatch.runnerKind)}_pr_merged`,
+          description: `${labelFor(dispatch.runnerKind)} PR merged: ${prUrl}`,
           workItemId: dispatch.workItemId,
-          metadata: { fallback: "pull_request.merged", prUrl, dispatchId: dispatch.id },
+          metadata: {
+            fallback: "pull_request.merged",
+            prUrl,
+            dispatchId: dispatch.id,
+            runnerKind: dispatch.runnerKind,
+            sessionUrl,
+          },
         });
         return { kind: "pr-merged", dispatchId: dispatch.id, prUrl };
       }
       // Late callback / illegal transition — log & return no-match-shape.
       await insertActivity(dbImpl, {
-        action: "routine_late_callback_rejected",
+        action: `${activityPrefix(dispatch.runnerKind)}_late_callback_rejected`,
         description: `Late PR-merged signal rejected (illegal SM transition from ${dispatch.status})`,
         workItemId: dispatch.workItemId,
         metadata: {
@@ -155,6 +178,7 @@ export async function handlePullRequestEvent(
           rejected: true,
           fromStatus: dispatch.status,
           prUrl,
+          runnerKind: dispatch.runnerKind,
         },
       });
       return { kind: "no-match", reason: `illegal SM transition from ${dispatch.status}` };
@@ -186,19 +210,20 @@ export async function handleWorkflowRunEvent(
     event.repository.full_name,
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no active routine dispatch for repo" };
+    return { kind: "no-match", reason: "no active cloud-runner dispatch for repo" };
   }
 
   const conclusion = event.workflow_run.conclusion ?? "unknown";
   await insertActivity(dbImpl, {
-    action: "routine_workflow_completed",
-    description: `Routine CI: ${conclusion}`,
+    action: `${activityPrefix(dispatch.runnerKind)}_workflow_completed`,
+    description: `${labelFor(dispatch.runnerKind)} CI: ${conclusion}`,
     workItemId: dispatch.workItemId,
     metadata: {
       fallback: "workflow_run.completed",
       conclusion,
       runUrl: truncate(event.workflow_run.html_url, URL_CAP),
       dispatchId: dispatch.id,
+      runnerKind: dispatch.runnerKind,
     },
   });
   return { kind: "workflow-completed", dispatchId: dispatch.id, conclusion };
@@ -222,7 +247,7 @@ export async function handleDeploymentStatusEvent(
     event.repository.full_name,
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no active routine dispatch for repo" };
+    return { kind: "no-match", reason: "no active cloud-runner dispatch for repo" };
   }
 
   const env = event.deployment_status.environment;
@@ -241,7 +266,7 @@ export async function handleDeploymentStatusEvent(
   }
 
   await insertActivity(dbImpl, {
-    action: "routine_preview_ready",
+    action: `${activityPrefix(dispatch.runnerKind)}_preview_ready`,
     description: `Vercel preview ready: ${previewUrl}`,
     workItemId: dispatch.workItemId,
     metadata: {
@@ -249,6 +274,7 @@ export async function handleDeploymentStatusEvent(
       environment: env,
       previewUrl: truncate(previewUrl, URL_CAP),
       dispatchId: dispatch.id,
+      runnerKind: dispatch.runnerKind,
     },
   });
   return {
@@ -267,7 +293,14 @@ interface DispatchRow {
   workItemId: string;
   projectId: string;
   status: string;
+  runnerKind: RunnerKind;
+  externalRunId: string | null;
 }
+
+const CLOUD_RUNNER_KINDS: ReadonlyArray<RunnerKind> = [
+  "claude-code-routine",
+  "claude-managed-agent",
+];
 
 async function findActiveDispatchForRepo(
   dbImpl: AnyDb,
@@ -282,31 +315,63 @@ async function findActiveDispatchForRepo(
 
   const projectIds = projectRows.map((p) => p.id);
 
-  // Find an active routine dispatch for any of those projects. "Active" =
-  // status in {dispatched, running} — we don't act on terminal rows.
+  // Find an active cloud-runner dispatch for any of those projects, across
+  // both cloud kinds (Brief 217 §D6 — kind-routing per row). "Active" =
+  // status in {dispatched, running}.
   const rows = await dbImpl
     .select({
       id: runnerDispatches.id,
       workItemId: runnerDispatches.workItemId,
       projectId: runnerDispatches.projectId,
       status: runnerDispatches.status,
+      runnerKind: runnerDispatches.runnerKind,
+      externalRunId: runnerDispatches.externalRunId,
       createdAt: runnerDispatches.createdAt,
     })
     .from(runnerDispatches)
     .where(
       and(
         inArray(runnerDispatches.projectId, projectIds),
-        eq(runnerDispatches.runnerKind, "claude-code-routine"),
+        inArray(runnerDispatches.runnerKind, [...CLOUD_RUNNER_KINDS]),
       ),
     );
 
   // Pick the most recent active dispatch (loose match — branch correlation
-  // would require tracking the routine's GitHub branch on dispatch, which
-  // Anthropic's preview API doesn't expose at fire time).
+  // would require tracking the session's GitHub branch on dispatch, which
+  // Anthropic's preview APIs don't expose at fire time).
   const active = rows
     .filter((r) => r.status === "dispatched" || r.status === "running")
     .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
-  return active[0] ?? null;
+  if (active.length === 0) return null;
+  const row = active[0];
+  return {
+    id: row.id,
+    workItemId: row.workItemId,
+    projectId: row.projectId,
+    status: row.status,
+    runnerKind: row.runnerKind as RunnerKind,
+    externalRunId: row.externalRunId ?? null,
+  };
+}
+
+/**
+ * Brief 217 §D6 — per-kind deep-link to the live session URL. Only the
+ * URL shape differs across cloud runner kinds.
+ */
+export function deepLinkForDispatch(
+  runnerKind: RunnerKind,
+  externalRunId: string | null,
+  fallbackUrl?: string | null,
+): string | null {
+  if (!externalRunId) return fallbackUrl ?? null;
+  switch (runnerKind) {
+    case "claude-code-routine":
+      return fallbackUrl ?? `https://code.claude.com/session/${externalRunId}`;
+    case "claude-managed-agent":
+      return `https://platform.claude.com/sessions/${externalRunId}`;
+    default:
+      return fallbackUrl ?? null;
+  }
 }
 
 interface ActivityWrite {
@@ -334,33 +399,56 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max)}…`;
 }
 
+/** Brief 217 §D6 — kind-aware activity-action prefix (preserves Brief 216 names). */
+function activityPrefix(kind: RunnerKind): string {
+  if (kind === "claude-managed-agent") return "managed_agent";
+  return "routine";
+}
+
+/** Kind-aware label for human-readable activity descriptions. */
+function labelFor(kind: RunnerKind): string {
+  if (kind === "claude-managed-agent") return "Managed Agent";
+  return "Routine";
+}
+
 // ============================================================
 // Webhook subscription registration helper
 // ============================================================
 
 /**
- * Brief 216 §D4 — collect the subscription declaration. Boot code calls
- * this to know which events to register with the GitHub integration.
+ * Brief 216 §D4 / Brief 217 §D6 — collect the subscription declaration.
+ * Boot code calls this to know which events to register with the GitHub
+ * integration. Identical event set across both cloud kinds.
  */
-export const ROUTINE_FALLBACK_EVENTS = [
+export const CLOUD_RUNNER_FALLBACK_EVENTS = [
   "pull_request",
   "workflow_run",
   "deployment_status",
 ] as const;
 
+/** Backwards-compatible alias — Brief 216 name. */
+export const ROUTINE_FALLBACK_EVENTS = CLOUD_RUNNER_FALLBACK_EVENTS;
+
 /**
- * Returns true when at least one project_runner of kind `claude-code-routine`
- * exists. Boot code can short-circuit subscription registration if no project
- * has a routine configured.
+ * Returns true when at least one project_runner of a cloud kind
+ * (claude-code-routine OR claude-managed-agent) exists.
  */
-export async function hasAnyRoutineRunnerConfigured(
+export async function hasAnyCloudRunnerConfigured(
   options: { db?: AnyDb } = {},
 ): Promise<boolean> {
   const dbImpl = options.db ?? appDb;
   const rows = await dbImpl
     .select({ id: projectRunners.id })
     .from(projectRunners)
-    .where(eq(projectRunners.kind, "claude-code-routine"))
+    .where(
+      or(
+        eq(projectRunners.kind, "claude-code-routine"),
+        eq(projectRunners.kind, "claude-managed-agent"),
+      ),
+    )
     .limit(1);
   return rows.length > 0;
 }
+
+/** Backwards-compatible alias — Brief 216 helper. */
+export const hasAnyRoutineRunnerConfigured = hasAnyCloudRunnerConfigured;
