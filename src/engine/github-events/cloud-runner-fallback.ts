@@ -108,15 +108,21 @@ export async function handlePullRequestEvent(
     return { kind: "no-match", reason: "branch is not claude/*" };
   }
 
-  const dispatch = await findActiveDispatchForRepo(
+  const prUrl = truncate(event.pull_request.html_url, URL_CAP);
+
+  // Lookup strategy depends on the action. Merged-close considers terminal
+  // rows so the late-callback warning can fire (Brief 216 §D4); all paths
+  // prefer a row whose externalUrl already matches to avoid cross-wiring.
+  const includeTerminal =
+    event.action === "closed" && event.pull_request.merged === true;
+  const dispatch = await findDispatchForRepo(
     dbImpl,
     event.repository.full_name,
+    { includeTerminal, preferUrl: prUrl },
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no active cloud-runner dispatch for repo" };
+    return { kind: "no-match", reason: "no cloud-runner dispatch for repo" };
   }
-
-  const prUrl = truncate(event.pull_request.html_url, URL_CAP);
 
   const sessionUrl = deepLinkForDispatch(
     dispatch.runnerKind,
@@ -168,7 +174,8 @@ export async function handlePullRequestEvent(
         });
         return { kind: "pr-merged", dispatchId: dispatch.id, prUrl };
       }
-      // Late callback / illegal transition — log & return no-match-shape.
+      // Late callback / illegal transition — reachable now that the lookup
+      // includes terminal rows for merged-close (Brief 216 §D4).
       await insertActivity(dbImpl, {
         action: `${activityPrefix(dispatch.runnerKind)}_late_callback_rejected`,
         description: `Late PR-merged signal rejected (illegal SM transition from ${dispatch.status})`,
@@ -178,10 +185,14 @@ export async function handlePullRequestEvent(
           rejected: true,
           fromStatus: dispatch.status,
           prUrl,
+          dispatchId: dispatch.id,
           runnerKind: dispatch.runnerKind,
         },
       });
-      return { kind: "no-match", reason: `illegal SM transition from ${dispatch.status}` };
+      return {
+        kind: "no-match",
+        reason: `illegal SM transition from ${dispatch.status}`,
+      };
     }
     return { kind: "pr-closed-unmerged", dispatchId: dispatch.id, prUrl };
   }
@@ -295,6 +306,7 @@ interface DispatchRow {
   status: string;
   runnerKind: RunnerKind;
   externalRunId: string | null;
+  externalUrl: string | null;
 }
 
 const CLOUD_RUNNER_KINDS: ReadonlyArray<RunnerKind> = [
@@ -302,11 +314,18 @@ const CLOUD_RUNNER_KINDS: ReadonlyArray<RunnerKind> = [
   "claude-managed-agent",
 ];
 
-async function findActiveDispatchForRepo(
+interface FindDispatchOptions {
+  /** Include terminal rows (Brief 216 §D4 late-callback warning path). */
+  includeTerminal?: boolean;
+  /** Prefer a row whose externalUrl already matches — branch correlation. */
+  preferUrl?: string;
+}
+
+async function findDispatchForRepo(
   dbImpl: AnyDb,
   repoFullName: string,
+  options: FindDispatchOptions = {},
 ): Promise<DispatchRow | null> {
-  // Find projects matching the repo name (githubRepo column).
   const projectRows = await dbImpl
     .select({ id: projects.id })
     .from(projects)
@@ -315,9 +334,6 @@ async function findActiveDispatchForRepo(
 
   const projectIds = projectRows.map((p) => p.id);
 
-  // Find an active cloud-runner dispatch for any of those projects, across
-  // both cloud kinds (Brief 217 §D6 — kind-routing per row). "Active" =
-  // status in {dispatched, running}.
   const rows = await dbImpl
     .select({
       id: runnerDispatches.id,
@@ -326,6 +342,7 @@ async function findActiveDispatchForRepo(
       status: runnerDispatches.status,
       runnerKind: runnerDispatches.runnerKind,
       externalRunId: runnerDispatches.externalRunId,
+      externalUrl: runnerDispatches.externalUrl,
       createdAt: runnerDispatches.createdAt,
     })
     .from(runnerDispatches)
@@ -336,23 +353,51 @@ async function findActiveDispatchForRepo(
       ),
     );
 
-  // Pick the most recent active dispatch (loose match — branch correlation
-  // would require tracking the session's GitHub branch on dispatch, which
-  // Anthropic's preview APIs don't expose at fire time).
+  const toRow = (r: (typeof rows)[number]): DispatchRow => ({
+    id: r.id,
+    workItemId: r.workItemId,
+    projectId: r.projectId,
+    status: r.status,
+    runnerKind: r.runnerKind as RunnerKind,
+    externalRunId: r.externalRunId ?? null,
+    externalUrl: r.externalUrl ?? null,
+  });
+
+  // Branch correlation: prefer a dispatch whose externalUrl already matches
+  // the PR url. Mitigates cross-wiring when concurrent dispatches share a repo.
+  if (options.preferUrl) {
+    const exactActive = rows.find(
+      (r) =>
+        r.externalUrl === options.preferUrl &&
+        (r.status === "dispatched" || r.status === "running"),
+    );
+    if (exactActive) return toRow(exactActive);
+    if (options.includeTerminal) {
+      const exactAny = rows.find((r) => r.externalUrl === options.preferUrl);
+      if (exactAny) return toRow(exactAny);
+    }
+  }
+
   const active = rows
     .filter((r) => r.status === "dispatched" || r.status === "running")
     .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
-  if (active.length === 0) return null;
-  const row = active[0];
-  return {
-    id: row.id,
-    workItemId: row.workItemId,
-    projectId: row.projectId,
-    status: row.status,
-    runnerKind: row.runnerKind as RunnerKind,
-    externalRunId: row.externalRunId ?? null,
-  };
+  if (active.length > 0) return toRow(active[0]);
+
+  if (options.includeTerminal) {
+    const recent = rows.sort(
+      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+    );
+    if (recent.length > 0) return toRow(recent[0]);
+  }
+
+  return null;
 }
+
+/** Back-compat alias — kept so existing callers don't need to be updated. */
+const findActiveDispatchForRepo = (
+  dbImpl: AnyDb,
+  repoFullName: string,
+): Promise<DispatchRow | null> => findDispatchForRepo(dbImpl, repoFullName);
 
 /**
  * Brief 217 §D6 — per-kind deep-link to the live session URL. Only the
