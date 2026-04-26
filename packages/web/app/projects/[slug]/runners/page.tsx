@@ -14,7 +14,7 @@ import { use, useEffect, useState } from "react";
 const RUNNER_KINDS = [
   { value: "local-mac-mini", label: "Local Mac mini", note: null as string | null },
   { value: "claude-code-routine", label: "Claude Code Routine", note: null as string | null },
-  { value: "claude-managed-agent", label: "Claude Managed Agent", note: "Managed Agents — coming in sub-brief 217" },
+  { value: "claude-managed-agent", label: "Claude Managed Agent", note: null as string | null },
   { value: "github-action", label: "GitHub Action", note: "GitHub Actions — coming in sub-brief 218" },
   { value: "e2b-sandbox", label: "E2B sandbox", note: "E2B sandbox — deferred" },
 ] as const;
@@ -58,6 +58,21 @@ export default function ProjectRunnersPage({
   async function onTestDispatch(kind: string) {
     try {
       const r = await fetch(`/api/v1/projects/${slug}/runners/${kind}/test`, {
+        method: "POST",
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error ?? `HTTP ${r.status}`);
+      }
+      await loadRunners();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onVerifyWithApi(kind: string) {
+    try {
+      const r = await fetch(`/api/v1/projects/${slug}/runners/${kind}/verify`, {
         method: "POST",
       });
       if (!r.ok) {
@@ -142,13 +157,24 @@ export default function ProjectRunnersPage({
                     </label>
                   </div>
 
-                  <button
-                    onClick={() => onTestDispatch(r.kind)}
-                    className="mt-3 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-text-primary"
-                    style={{ minHeight: 44 }}
-                  >
-                    Test dispatch
-                  </button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => onTestDispatch(r.kind)}
+                      className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-text-primary"
+                      style={{ minHeight: 44 }}
+                    >
+                      Test dispatch
+                    </button>
+                    {r.kind === "claude-managed-agent" && (
+                      <button
+                        onClick={() => onVerifyWithApi(r.kind)}
+                        className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-text-primary"
+                        style={{ minHeight: 44 }}
+                      >
+                        Verify with API
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -188,6 +214,17 @@ function AddRunnerForm(props: {
   const [routineBearer, setRoutineBearer] = useState("");
   const [routineRepo, setRoutineRepo] = useState("");
   const [routineBranch, setRoutineBranch] = useState("main");
+  // Brief 217 — claude-managed-agent form fields.
+  const [maAgentId, setMaAgentId] = useState("");
+  const [maAgentVersion, setMaAgentVersion] = useState("");
+  const [maEnvironmentId, setMaEnvironmentId] = useState("");
+  const [maVaultIds, setMaVaultIds] = useState("");
+  const [maRepo, setMaRepo] = useState("");
+  const [maBranch, setMaBranch] = useState("main");
+  const [maApiKey, setMaApiKey] = useState("");
+  const [maObserveEvents, setMaObserveEvents] = useState(false);
+  const [maCallbackMode, setMaCallbackMode] =
+    useState<"polling" | "in-prompt">("polling");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,7 +249,24 @@ function AddRunnerForm(props: {
                 default_repo: routineRepo,
                 default_branch: routineBranch || "main",
               }
-            : {};
+            : kind === "claude-managed-agent"
+              ? {
+                  agent_id: maAgentId,
+                  agent_version: maAgentVersion ? Number(maAgentVersion) : undefined,
+                  environment_id: maEnvironmentId,
+                  vault_ids: maVaultIds
+                    ? maVaultIds
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0)
+                    : undefined,
+                  default_repo: maRepo,
+                  default_branch: maBranch || "main",
+                  api_key: maApiKey,
+                  callback_mode: maCallbackMode,
+                  observe_events: maObserveEvents,
+                }
+              : {};
       const r = await fetch(`/api/v1/projects/${props.slug}/runners`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -387,6 +441,143 @@ function AddRunnerForm(props: {
               className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
               style={{ minHeight: 44 }}
             />
+          </label>
+        </div>
+      )}
+
+      {kind === "claude-managed-agent" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Agent ID</span>
+            <input
+              required
+              type="text"
+              value={maAgentId}
+              onChange={(e) => setMaAgentId(e.target.value)}
+              placeholder="agt_…"
+              className="mt-1 block w-full overflow-x-auto rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              Create the Agent in Anthropic&rsquo;s web UI or via the <code>ant</code> CLI, then paste the ID here.
+            </span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Agent version (optional)</span>
+            <input
+              type="number"
+              min={1}
+              value={maAgentVersion}
+              onChange={(e) => setMaAgentVersion(e.target.value)}
+              placeholder="recommended for stability"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Environment ID</span>
+            <input
+              required
+              type="text"
+              value={maEnvironmentId}
+              onChange={(e) => setMaEnvironmentId(e.target.value)}
+              placeholder="env_…"
+              className="mt-1 block w-full overflow-x-auto rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Vault IDs (optional, comma-separated)</span>
+            <input
+              type="text"
+              value={maVaultIds}
+              onChange={(e) => setMaVaultIds(e.target.value)}
+              placeholder="vault_a, vault_b"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Default repo</span>
+            <input
+              required
+              type="text"
+              value={maRepo}
+              onChange={(e) => setMaRepo(e.target.value)}
+              placeholder="owner/repo"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Default branch</span>
+            <input
+              type="text"
+              value={maBranch}
+              onChange={(e) => setMaBranch(e.target.value)}
+              placeholder="main"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Anthropic API key</span>
+            <input
+              required
+              type="password"
+              autoComplete="off"
+              value={maApiKey}
+              onChange={(e) => setMaApiKey(e.target.value)}
+              placeholder="sk-ant-…"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              Stored encrypted in the credential vault. Plaintext is never persisted.
+            </span>
+          </label>
+          <fieldset>
+            <legend className="text-sm font-medium text-text-secondary">Callback mode</legend>
+            <div className="mt-2 space-y-2">
+              {[
+                { value: "polling", label: "Polling (default)" },
+                { value: "in-prompt", label: "In-prompt callback (advanced)" },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                    maCallbackMode === opt.value
+                      ? "border-vivid bg-vivid-subtle"
+                      : "border-border bg-white"
+                  }`}
+                  style={{ minHeight: 44 }}
+                >
+                  <input
+                    type="radio"
+                    name="ma-callback-mode"
+                    value={opt.value}
+                    checked={maCallbackMode === opt.value}
+                    onChange={() =>
+                      setMaCallbackMode(opt.value as "polling" | "in-prompt")
+                    }
+                  />
+                  <span className="text-sm">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label
+            className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2"
+            style={{ minHeight: 44 }}
+          >
+            <input
+              type="checkbox"
+              checked={maObserveEvents}
+              onChange={(e) => setMaObserveEvents(e.target.checked)}
+            />
+            <span className="text-sm text-text-secondary">
+              Stream session events into the activity log (SSE; off by default)
+            </span>
           </label>
         </div>
       )}

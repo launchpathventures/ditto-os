@@ -60,6 +60,25 @@ const claudeCodeRoutineConfigForm = z.object({
   beta_header: z.string().optional(),
 });
 
+/**
+ * Brief 217 — claude-managed-agent config form. The Anthropic API key is
+ * accepted as plaintext at the boundary, written to the credential vault
+ * keyed `runner.<projectSlug>.api_key`, and replaced with
+ * `bearer_credential_id` before persist.
+ */
+const claudeManagedAgentConfigForm = z.object({
+  agent_id: z.string().regex(/^agt_[a-zA-Z0-9_-]+$/),
+  agent_version: z.coerce.number().int().positive().optional(),
+  environment_id: z.string().regex(/^env_[a-zA-Z0-9_-]+$/),
+  vault_ids: z.array(z.string().min(1)).optional(),
+  default_repo: z.string().regex(/^[^/]+\/[^/]+$/),
+  default_branch: z.string().min(1).default("main"),
+  api_key: z.string().min(20),
+  beta_header: z.string().optional(),
+  callback_mode: z.enum(["polling", "in-prompt"]).optional(),
+  observe_events: z.coerce.boolean().optional(),
+});
+
 const createRunnerBody = z.object({
   kind: z.enum([
     "local-mac-mini",
@@ -76,7 +95,7 @@ const createRunnerBody = z.object({
 const NOT_YET_IMPLEMENTED: Record<RunnerKind, string | null> = {
   "local-mac-mini": null,
   "claude-code-routine": null, // Brief 216 — adapter wired
-  "claude-managed-agent": "Runner kind not yet implemented (sub-brief 217).",
+  "claude-managed-agent": null, // Brief 217 — adapter wired
   "github-action": "Runner kind not yet implemented (sub-brief 218).",
   "e2b-sandbox": "Runner kind not yet implemented (deferred).",
 };
@@ -155,6 +174,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     routineFormParsed = cfg.data;
   }
 
+  // Brief 217 — claude-managed-agent: same pattern.
+  let managedAgentCredentialId: string | null = null;
+  let managedAgentFinalConfig: Record<string, unknown> | null = null;
+  let managedAgentFormParsed:
+    | (typeof claudeManagedAgentConfigForm)["_output"]
+    | null = null;
+  if (kind === "claude-managed-agent") {
+    const cfg = claudeManagedAgentConfigForm.safeParse(data.config);
+    if (!cfg.success) {
+      return NextResponse.json(
+        { error: "Config validation failed", details: cfg.error.format() },
+        { status: 400 }
+      );
+    }
+    managedAgentFormParsed = cfg.data;
+  }
+
   const { db } = await import("../../../../../../../../../src/db");
   const { projectRunners, projects: projectsTable } = await import(
     "../../../../../../../../../src/db/schema"
@@ -212,6 +248,57 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  if (kind === "claude-managed-agent" && managedAgentFormParsed) {
+    const { managedAgentConfigSchema } = await import(
+      "../../../../../../../../../src/adapters/claude-managed-agent"
+    );
+    const { storeProjectCredential } = await import(
+      "../../../../../../../../../src/engine/credential-vault"
+    );
+    managedAgentCredentialId = await storeProjectCredential(
+      `runner.${projectSlug}.api_key`,
+      managedAgentFormParsed.api_key,
+    );
+    managedAgentFinalConfig = {
+      agent_id: managedAgentFormParsed.agent_id,
+      ...(managedAgentFormParsed.agent_version
+        ? { agent_version: managedAgentFormParsed.agent_version }
+        : {}),
+      environment_id: managedAgentFormParsed.environment_id,
+      ...(managedAgentFormParsed.vault_ids
+        ? { vault_ids: managedAgentFormParsed.vault_ids }
+        : {}),
+      default_repo: managedAgentFormParsed.default_repo,
+      default_branch: managedAgentFormParsed.default_branch,
+      bearer_credential_id: managedAgentCredentialId,
+      ...(managedAgentFormParsed.beta_header
+        ? { beta_header: managedAgentFormParsed.beta_header }
+        : {}),
+      ...(managedAgentFormParsed.callback_mode
+        ? { callback_mode: managedAgentFormParsed.callback_mode }
+        : {}),
+      ...(managedAgentFormParsed.observe_events !== undefined
+        ? { observe_events: managedAgentFormParsed.observe_events }
+        : {}),
+    };
+    const adapterValidation = managedAgentConfigSchema.safeParse(
+      managedAgentFinalConfig,
+    );
+    if (!adapterValidation.success) {
+      const { deleteCredentialById } = await import(
+        "../../../../../../../../../src/engine/credential-vault"
+      );
+      await deleteCredentialById(managedAgentCredentialId).catch(() => {});
+      return NextResponse.json(
+        {
+          error: "Managed-agent adapter rejected the constructed config",
+          details: adapterValidation.error.format(),
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Reject duplicate (projectId, kind) up front for a clean 409 — UNIQUE
   // constraint would otherwise surface as a 500.
   const existing = await db
@@ -231,11 +318,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const persistedConfig =
     kind === "claude-code-routine" && routineFinalConfig
       ? routineFinalConfig
-      : data.config;
+      : kind === "claude-managed-agent" && managedAgentFinalConfig
+        ? managedAgentFinalConfig
+        : data.config;
   const persistedCredentialIds =
     kind === "claude-code-routine" && routineCredentialId
       ? [routineCredentialId, ...data.credentialIds]
-      : data.credentialIds;
+      : kind === "claude-managed-agent" && managedAgentCredentialId
+        ? [managedAgentCredentialId, ...data.credentialIds]
+        : data.credentialIds;
 
   const inserted = await db
     .insert(projectRunners)
