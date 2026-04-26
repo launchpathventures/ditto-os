@@ -33,13 +33,13 @@ const SAMPLING_SALT = process.env.DITTO_SAMPLING_SALT || "ditto-default-salt-v1"
  * Deterministic hash-based sampling.
  * Same processRunId + stepId + salt always produces the same decision.
  */
-function computeSamplingHash(processRunId: string, stepId: string): string {
+export function computeSamplingHash(processRunId: string, stepId: string): string {
   return createHash("sha256")
     .update(`${processRunId}:${stepId}:${SAMPLING_SALT}`)
     .digest("hex");
 }
 
-function shouldSample(samplingHash: string): boolean {
+export function shouldSample(samplingHash: string): boolean {
   // Use first 8 hex chars as a 32-bit number, normalize to 0-1
   const value = parseInt(samplingHash.slice(0, 8), 16) / 0xffffffff;
   return value < SPOT_CHECK_RATE;

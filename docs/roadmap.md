@@ -523,6 +523,36 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 
 **Compensating control owed (Brief 199):** fresh-context Designer re-review on `memories-legibility-ux.md` was **waived by user authorization 2026-04-20** on status promotion to `ready`. AC #18 in Brief 199 remains as principle; waiver documented in brief header.
 
+### Cloud Execution Runners (2026-04-25, Phase 9+ substrate)
+
+**Re-entry condition:** Brief 212 (Workspace Local Bridge) is in flight; the local-mac-mini runner is the local arm. Brief 214 (`docs/briefs/214-cloud-execution-runners-phase.md`) is the parent phase that adds the four cloud peers around it (`claude-code-routine`, `claude-managed-agent`, `github-action`, `e2b-sandbox` deferred). End-state: phone-only operation of intake → triage → approve → dispatch → PR → review → checks → ready-to-deploy → deploy across any project.
+
+**Key principle (Brief 214 §D1):** Runner is a *work-item-level dispatch primitive*, not a step.executor value. Step.executor stays unchanged for Ditto's per-step loop; runners hand the whole work item to an external execution surface.
+
+| Capability | Status | Source doc | Build from |
+|---|---|---|---|
+| **Substrate (this brief)** | | | |
+| Brief 215 — Projects + Runner Registry schema + dispatcher resolution + admin scaffold | **complete (2026-04-26)** | `docs/briefs/complete/215-projects-and-runner-registry.md` | Original schema + adopted bridge state-machine pattern (adapted to 9 dispatch states); runner resolution algorithm has no surveyed equivalent (Brief 214 §D5) |
+| `projects` + `project_runners` + `runner_dispatches` tables + `processes.projectId` FK + `workItems.runnerOverride/ModeRequired` columns | done | Brief 215 schema additions in `packages/core/src/db/schema.ts` | Drizzle migration `0012_projects_runners.sql` (idx=11) |
+| Engine-core runner module: kinds, 9-state SM, `RunnerAdapter` interface, pure resolver, Zod webhook discriminated-union | done | `packages/core/src/runner/` | Original |
+| Pure project status-transition invariants (`analysing`→`active` requires defaultRunnerKind + enabled row) | done | `packages/core/src/projects/invariants.ts` | Original (Brief 224 will call) |
+| In-process runner registry + dispatcher (chain walk + per-attempt audit + `harness_decisions` row tagged `reviewPattern: ["runner-dispatch"]`) | done | `src/engine/runner-registry.ts`, `src/engine/runner-dispatcher.ts` | Original; adopts Insight-180 stepRunId-guard pattern |
+| `local-mac-mini` `RunnerAdapter` over Brief 212's `LocalBridge`; engine-boot wiring composes Brief 212 primitives into the interface | done (2026-04-26 — Brief 212 complete) | `src/adapters/local-mac-mini.ts`, `src/engine/local-bridge.ts`, `packages/web/instrumentation.ts` | Brief 212's `dispatchBridgeJob` + `sendBridgeFrame` + `revokeDeviceConnection` + `bridgeDevices` query composed into `LocalBridge` interface |
+| Idempotent project seed at boot (`agent-crm` + `ditto`) wrapped in transaction | done | `src/engine/projects/seed-{data,on-boot}.ts` | Original |
+| `/projects` admin scaffold (index / new / detail / runners) — mobile-first, kind-selector with disabled cloud kinds + tooltips | done | `packages/web/app/projects/`, `packages/web/app/api/v1/projects/` | Original |
+| **Sub-briefs (downstream of Brief 215)** | | | |
+| Brief 216 — `claude-code-routine` adapter | draft | `docs/briefs/216-routine-dispatcher.md` | Anthropic Routine HTTP `/fire` |
+| Brief 217 — `claude-managed-agent` adapter | not yet written | — | Anthropic Managed Agents SDK |
+| Brief 218 — `github-action` adapter | not yet written | — | GitHub `workflow_dispatch` + `workflow_run` webhook |
+| Brief 219 — Optional Greptile/Argos integrations (per-project detected) | not yet written | — | Greptile + Argos APIs (cloud SaaS only at MVP) |
+| Brief 220 — Mobile deploy-gate UX | not yet written | — | Original |
+| Brief 221 — Mobile pill / "Run on:" selector + runner metrics admin | not yet written | — | Original |
+| **Adjacent — Battle-Ready Project Onboarding (Insight-205, depends on this substrate)** | | | |
+| Brief 223 — Projects brief-equivalent workItems extension + status webhook + CRUD | rescoped per Brief 215 collision reconciliation | `docs/briefs/223-projects-schema-and-crud.md` | Brief 215 substrate |
+| Brief 224 — Project Onboarding & Battle-Readiness (parent) | not yet detailed | `docs/briefs/224-project-onboarding-and-battle-readiness.md` | Insight-205 |
+
+**Downstream prerequisites:** Brief 215 substrate done. Sub-briefs 216-218 unblocked — each registers an adapter into the in-process registry and ships its kind-specific `configSchema` Zod tightening on `webhook-schema.ts`. Brief 212's cloud dispatcher landing closes AC #11 wiring obligation (swap `bridge: null` for the real `LocalBridge` instance in `instrumentation.ts`).
+
 ### Hire a Specialist — Activate L2 Agent Primitive (2026-04-20, adjacent to User-Facing Legibility)
 
 **Re-entry condition:** Paperclip re-evaluation surfaced that Ditto's L2 Agent primitive + UI primitive #10 Agent Card (spec'd in `human-layer.md`) have been dormant for ~18 months with no activation path. Persona Nadia ("Team Manager Supporting Specialists with Agents") has been effectively unserved.

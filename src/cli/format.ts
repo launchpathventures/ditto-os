@@ -32,6 +32,12 @@ export function workItemTypeLabel(type: WorkItemType): string {
     goal: "Goal",
     insight: "Insight",
     outcome: "Outcome",
+    // Brief 223 — brief-equivalent types
+    feature: "Feature",
+    fix: "Fix",
+    refactor: "Refactor",
+    content: "Content",
+    spike: "Spike",
   };
   return labels[type] || type;
 }

@@ -627,6 +627,80 @@ New category for Insight-152 (Network Service is centralized). Full report: `doc
 
 ---
 
+## Workspace Local Bridge — cloud → laptop dispatch (2026-04-25)
+
+Building blocks for Brief 212 (Workspace Local Bridge — cloud-hosted Ditto reaches user's laptop). Full report: `docs/research/local-bridge.md`.
+
+**GitHub Actions Runner Listener** — github.com/actions/runner
+- 6k stars | MIT | C# | v2.334.0 (2026-04-21)
+- Pattern: just-in-time RSA key → JWT-signed OAuth bearer → `POST /sessions` returns `sessionId` → `GET /message` long-poll up to 50s → `RunnerJobRequest` → `acquirejob` within 2 min → `renewjob` heartbeat every 60s. Subprocess Worker.
+- **Ditto relevance:** HIGH (pattern) — gold-standard "register/poll/execute/renew" cycle for Brief 212 bridge daemon. Session model and lock-renewal cadence transferable.
+- **Limitation:** C#, Azure-DevOps-flavored API. Pattern only.
+
+**Buildkite Agent** — github.com/buildkite/agent
+- 972 stars | MIT | Go | v3.123.1 (2026-04-17)
+- Token-auth Go daemon. Polls Buildkite for jobs; handles artifact upload + log streaming. Cleaner reference than `actions/runner` if Go pattern preferred.
+- **Ditto relevance:** MEDIUM (pattern) — alternative reference for the dial-out worker shape.
+
+**Inngest Connect** — inngest.com (cross-ref above)
+- WebSocket persistent connection from worker to central. `INNGEST_SIGNING_KEY` + `INNGEST_EVENT_KEY` auth. TypeScript-native.
+- **Ditto relevance:** HIGH (pattern) — confirms WebSocket as the right wire for a Node bridge daemon. Bidirectional by default.
+
+**Tailscale Funnel + Tailscale SSH** — tailscale.com
+- Managed mesh VPN. Funnel exposes a local service via encrypted TCP relay (HTTPS-only, ports 443/8443/10000). SSH replaces OpenSSH key management with WireGuard device identity. Both available on free tier.
+- **Ditto relevance:** HIGH (escape-hatch infra) — opt-in mode for "make my workspace reachable" without writing tunnel code. Tailscale SSH directly satisfies the user's `runner=local-mac-mini` SSH+tmux ask without managing keys.
+- **Limitation:** Vendor dependency. Free tier capped at 100 devices. HTTPS only via Funnel.
+
+**Cloudflare Tunnel (cloudflared)** — github.com/cloudflare/cloudflared
+- 14k stars | Apache-2.0 | Go
+- Daemon dials outbound to Cloudflare edge. Supports HTTP, WebSocket, arbitrary TCP (incl. SSH passthrough). Free tier exists.
+- **Ditto relevance:** MEDIUM (escape-hatch infra) — vendor-neutral alternative to Tailscale; useful when raw TCP needed.
+- **Limitation:** Requires Cloudflare account ownership of a domain.
+
+**bore** — github.com/ekzhang/bore
+- 11.1k stars | MIT | Rust | ~400 LOC
+- Self-hostable simple TCP tunnel. Implicit control port 7835; `Hello` → server-issued UUID → second TCP stream `Accept` → bridge. No TLS by default.
+- **Ditto relevance:** LOW (pattern-only) — wire-protocol reference if Ditto ever needs its own tunnel server for self-hosted Track B users. Rust/Node runtime mismatch precludes "adopt"; would be a TS reimplementation. Not required for managed-cloud MVP.
+- **Limitation:** No TLS without wrapper. Rust binary would be a sidecar in a Node engine.
+
+**ngrok JavaScript Agent SDK** — github.com/ngrok/ngrok-javascript
+- 127 stars (small wrapper around ngrok-rust agent) | Apache-2.0 + MIT | Node-embeddable
+- One-line: `ngrok.forward({ addr: 8080, authtoken_from_env: true })` returns a public listener URL.
+- **Ditto relevance:** LOW (depend) — could be embedded inside the bridge daemon to expose a local port without separate cloudflared/Tailscale install.
+- **Limitation:** ngrok free tier rate-limits and rotates URLs; not durable.
+
+**asciicast v2 file format** — asciinema.org spec
+- Newline-delimited JSON. Header `{version:2, width, height}`; events `[time, code, data]` with codes `o` (output, UTF-8 string), `i` (input), `m` (marker), `r` (resize). Real-time streaming friendly.
+- **Ditto relevance:** HIGH (pattern, future) — wire shape for `pty.frame` JSON-RPC notifications when live-PTY view in web UI is built. Browser playback via `xterm.js` or `asciinema-player`.
+
+**ttyd** — github.com/tsl0922/ttyd
+- 11.5k stars | MIT | C | libuv + WebGL2
+- WebSocket terminal-share. Read-only by default; `--writable` enables input. Basic + header auth.
+- **Ditto relevance:** LOW (pattern reference, future) — concept reference for stand-alone PTY share. Wire format not documented for custom clients; we'd reimplement in TS regardless.
+
+**sshx** — github.com/ekzhang/sshx — *framework not a fit*
+- 7.4k stars | MIT | Rust | gRPC + e2e Argon2/AES. Collaborative cursor UX. **Not self-hostable** by author's stated policy. Pattern-only inspiration; no adoption path.
+
+### Bridge Runtime Dependencies (added with Brief 212)
+
+**ws** — github.com/websockets/ws
+- ~21k stars | MIT | TypeScript-friendly Node WebSocket library. Zero-config in Node 18+; works under Next.js's underlying Node HTTP server via the `upgrade` event.
+- **Ditto relevance:** HIGH (depend) — wire transport for the bridge. Both daemon (`packages/bridge-cli/`) and cloud server (`src/engine/bridge-server.ts`) consume `ws` directly. No alternative considered — `ws` is the de-facto standard.
+- **Limitation:** None material at our scale. Native deps for `bufferutil`/`utf-8-validate` are optional perf addons; not required.
+
+**jsonrpc-lite** — github.com/teambition/jsonrpc-lite
+- ~150 LOC | MIT | TypeScript-native | Spec-correct JSON-RPC 2.0 helpers (request, notify, response, errorResponse, parse). Validates message shape; emits typed errors for malformed input.
+- **Ditto relevance:** HIGH (depend) — wire-format helper for the bridge. Used on both daemon and cloud sides.
+- **Alternative considered:** writing ~30 lines ourselves. Rejected because the spec edge cases (notification vs request, batch handling, error code semantics) are easy to get wrong; `jsonrpc-lite` is small enough to audit and mature enough to trust.
+- **Limitation:** Lightly maintained — last release 2023. No active issues; spec hasn't changed. Acceptable for a stable spec implementation.
+
+**node-pty** — github.com/microsoft/node-pty (deferred — future PTY-streaming brief)
+- ~6k stars | MIT | TypeScript + native (libuv-based) | Cross-platform PTY (pseudo-terminal) creation; wraps `forkpty(3)` on Unix and ConPTY on Windows.
+- **Ditto relevance:** MEDIUM (depend, future) — reserved for the follow-on PTY-streaming brief. Pre-emptively listed here so the planned dependency is not a surprise when that brief lands.
+- **Limitation:** Native compilation needed; some platforms (Alpine Linux) require additional system packages. Not required for Brief 212 MVP.
+
+---
+
 ## Managed Agent Infrastructure (2026-04-09)
 
 ### Claude Managed Agents (Anthropic, beta)
@@ -925,6 +999,62 @@ Compact reference for field-type vocabulary + submission-shape conventions. Not 
 - **OpenUI** (thesysdev/openui) — §"Multi-Agent Orchestration Frameworks" above. Catalog-constrained spec generator; strongest constraint mechanism scouted (level 8 of 8: catalog + Zod + library-driven prompt + streaming parser). Pattern relevance: HIGH.
 - **json-render** (vercel-labs/json-render) — §"Multi-Agent Orchestration Frameworks" above. Already adopted per ADR-009 §3; confirmed by this scout as the strongest Zod-first option. Pattern relevance: ALREADY ADOPTED.
 - **AI Elements** (vercel/ai-elements) — §"Multi-Agent Orchestration Frameworks" above. Adopted for internal Ditto workspace chrome (15 components, Brief 058/061). Not an external-app-registry candidate but cross-referenced for shared Radix/shadcn substrate.
+
+---
+
+## Cloud Execution Runners (2026-04-25)
+
+Added to support the cloud-runners brief (companion to Brief 212 local-bridge). Runners are additive peers — the local-bridge `local-mac-mini` runner from Brief 212 stays, and these are cloud-mode siblings selectable per-project, per-work-item, with a fallback chain. Full evaluation in `docs/research/cloud-runners.md`.
+
+### Anthropic Claude Code Routines — code.claude.com/docs/en/routines (research preview, launched 2026-04-14, Added 2026-04-25)
+- Saved Claude Code configuration (prompt + repos + connectors + environment + triggers) executed on Anthropic-managed cloud infrastructure. API trigger: `POST https://api.anthropic.com/v1/claude_code/routines/{trigger_id}/fire` with bearer token, `anthropic-beta: experimental-cc-routine-2026-04-01` header, body `{"text": "…"}`. Returns `{claude_code_session_id, claude_code_session_url}` synchronously. Triggers also support cron schedule and GitHub events (Claude GitHub App). Account-bound (per-user); commits/PRs appear under user's GitHub identity. Default branch-push restriction to `claude/*`; `Allow unrestricted branch pushes` toggle removes per repo. Per-account daily run cap; per-routine + per-account hourly caps on GitHub events.
+- **Classification:** DEPEND — service, no SDK to vendor. Pro/Max/Team/Enterprise plans.
+- **Ditto usage:** Default cloud runner kind (`runner=claude-code-routine`) per `docs/research/cloud-runners.md`. Status back-channel via in-prompt POST + GitHub `workflow_run`/`pull_request` webhooks (no native completion webhook documented at preview).
+- **Limitations:** Single-user account binding, single freeform `text` body field (multi-field input requires serialization convention), beta surface (breaking changes behind dated headers, two most recent valid). No public session-status REST endpoint at preview.
+
+### GitHub Actions workflow_dispatch — docs.github.com/en/rest/actions/workflows (Added 2026-04-25)
+- `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches` with `{ref, inputs}`. As of 2026-02-19 returns the new run ID synchronously (previously 204). `repository_dispatch` alternative for org-scoped triggers via `client_payload`. Status via `workflow_run` (`requested`/`in_progress`/`completed`), `pull_request`, `check_run`/`check_suite` webhooks. Logs as `.zip` via `GET /actions/runs/{id}/logs`. Cancellation via `POST /actions/runs/{id}/cancel`.
+- **Classification:** DEPEND via `@octokit/rest` (already in stack).
+- **Ditto usage:** `runner=github-action` kind. Long-running tasks (≤6h/job, 35d/workflow), custom env via Actions secrets, native deploy gate via Environments. Cleanest fit for `vercel deploy --prod` because Actions OIDC is what Vercel/Netlify already consume.
+- **Limitations:** Actions minutes metered for private repos. Webhook-only status (recovery = poll the run by ID). Cross-repo dispatch needs multi-repo-scoped token.
+
+### E2B sandbox + Claude Agent SDK — e2b.dev (DEFERRED per user input, Added 2026-04-25)
+- Firecracker microVM, ~150 ms boot, hardware-isolated kernel per VM. Template-based (`Dockerfile`-like spec); pre-shipped `'claude-code'` template installs `@anthropic-ai/claude-code@latest`. Pattern: `Sandbox.create('claude-code', { envs: { ANTHROPIC_API_KEY } })` → `sandbox.commands.run('claude --dangerously-skip-permissions -p "<task>"', { onStdout, timeoutMs })` → `sandbox.kill()`. Output formats: `text`, `json`, `stream-json` (JSONL). Sessions resumable via `claude --resume`.
+- **Classification:** DEPEND-eligible via `e2b` npm package; **DEFERRED** until needed (post-Routines + Managed Agents + GitHub Actions stable).
+- **Ditto usage:** Future `runner=e2b-sandbox` kind. Fallback when Routines rate-limit; bespoke environment + custom packages.
+- **Limitations:** Per-minute compute meter (cost grows with long-running sessions). Persistence/snapshot model less mature than Managed Agents at the public Claude Code template page.
+
+(Anthropic Claude Managed Agents already evaluated in §"Managed Agent Infrastructure (2026-04-09)" above; cross-linked here as the `runner=claude-managed-agent` kind. Routines vs. Managed Agents trade-off: Routines are simpler "fire and forget"; Managed Agents earn complexity when steering events, tool confirmations, or outcomes grading are needed.)
+
+---
+
+## Cloud Code Review + Visual Diff (2026-04-25)
+
+Cross-cutting cloud-runner substrate; mode-agnostic (works whether the PR was opened by a cloud or local runner).
+
+### Greptile — greptile.com (Added 2026-04-25)
+- AI code-review SaaS. GitHub App per repo; reviews PRs by indexing the full repo as a code graph, traces dependencies, multi-hop investigation. v3 (late 2025) uses Anthropic Claude Agent SDK. Review delivery: PR summary comment + inline comments with "Fix with your Agent" buttons; "Fix All" summary button. SOC2 Type II SaaS or self-hosted (Docker Compose / Helm / air-gapped).
+- **Classification:** DEPEND — service, GitHub App + per-seat subscription.
+- **Pricing (2026):** $30 / active developer / month, 50 reviews/seat, $1/additional. 14-day full trial. Enterprise custom.
+- **Ditto usage:** Cloud-side AI review on every PR (cross-runner). Read review state via GitHub `issue_comment.created` / `pull_request_review` events.
+- **Limitations:** No native completion webhook documented at the public docs surface. No native `approved-by-greptile` label — must be applied by Ditto-owned automation reading PR comments. Per-seat pricing (developer count, not run count).
+
+### Argos — argos-ci.com (Added 2026-04-25)
+- Visual-regression SaaS. GitHub App per repo; receives screenshots from Playwright/Cypress/Storybook; reports diffs as a GitHub check (pass/fail) + summary comment with side-by-side diff links. `@argos-ci/playwright` npm package on the test side.
+- **Classification:** DEPEND — service, GitHub App.
+- **Pricing (2026):** Hobby plan $0 forever, 5,000 screenshots, GitHub & GitLab integration. Pro $100/mo, 35,000 screenshots, $0.004 overage ($0.0015 Storybook). GitHub SSO add-on $50/mo. Real free tier, not a trial.
+- **Ditto usage:** Visual-diff gate signal for review→ready-to-deploy. Read via `check_run.completed` event with `name: "argos-ci"`.
+- **Limitations:** Diff-review UI lives at Argos (link out from /review/[token], not embed). Screenshot meter — high-frequency pipelines exhaust the free tier.
+
+---
+
+## Mobile-First Deploy Gate (2026-04-25)
+
+### GitHub Environments + required reviewers + GitHub Mobile — docs.github.com (Added 2026-04-25)
+- Per-repo `Environments` (e.g., `production`) with `Required reviewers` (≤6 users/teams; one approval suffices). Workflow job referencing `environment: production` pauses until approval. GitHub Mobile push notification → tap → deployment-review dialog → approve/reject. `deployment_status` webhook on `queued`/`in_progress`/`success`/`failure`/`error`.
+- **Classification:** DEPEND — pure GitHub config + webhook subscription, no code to vendor.
+- **Ditto usage:** Mobile-first deploy gate for `vercel deploy --prod` (or any prod deploy step). Ditto reads `deployment_status` to close the work item on success or surface retry on failure.
+- **Limitations:** Approval is GitHub-account-scoped (must be the same user attached to Ditto's GitHub integration, or an explicit team). Webhook-only status → recovery via deployment-by-ID polling.
 
 ---
 

@@ -502,6 +502,25 @@ export default function AdminTeammatePage() {
       </nav>
 
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-8">
+        {/* Projects card — Brief 215 substrate; admin entry to /projects */}
+        <div className="mb-6">
+          <Link
+            href="/projects"
+            className="block rounded-xl border border-border bg-white p-5 hover:border-vivid"
+            style={{ minHeight: 44 }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-text-primary">Projects</h2>
+                <p className="text-sm text-text-secondary">
+                  Configure runners and dispatch surface for each project.
+                </p>
+              </div>
+              <ArrowRight size={18} className="text-text-muted" />
+            </div>
+          </Link>
+        </div>
+
         {/* Summary stats */}
         {data && (
           <div className="mb-8 grid grid-cols-3 gap-4">

@@ -1,0 +1,37 @@
+{
+  "name": "ditto-bridge",
+  "version": "0.1.0",
+  "description": "Ditto Bridge daemon — outbound-dial worker that runs commands on the user's laptop on behalf of a cloud-hosted Ditto workspace.",
+  "type": "module",
+  "bin": {
+    "ditto-bridge": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@clack/prompts": "^1.1.0",
+    "@ditto/core": "workspace:*",
+    "citty": "^0.2.1",
+    "jsonrpc-lite": "^2.2.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

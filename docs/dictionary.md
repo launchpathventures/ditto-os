@@ -835,3 +835,105 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Step-Run Guard** — Functions that produce external side effects (social publishing, payments, webhooks, `sendAndRecord`) must require a `stepRunId` parameter as proof the call originates from within harness pipeline step execution. Programmatic guard — the function rejects calls without a valid step-run context (except in test mode).
 - Layer: 2 (Agent) / Cross-cutting
 - Related: Invocation Guard, Tool Resolver, stepRunId
+
+### Projects + Runner Registry (Brief 215)
+
+**Project** — Workspace-scoped row in `projects`: a code repo Ditto can dispatch work to. Carries slug, github_repo, harness_type, default+fallback runner, optional runner_chain, status, deploy_target, runnerBearerHash. `processes.projectId` FKs into this. One user, n projects.
+- Layer: 1 (Process)
+- Related: Project Status, Harness Type, Runner Kind, Brief 224 onboarding
+
+**Runner** — Work-item-level dispatch primitive that hands a whole work item to an external execution surface. Sibling to step.executor; runners sit ABOVE the step loop. Each runner has a kind, mode, and `RunnerAdapter` contract: `{ execute, status, cancel, healthCheck }`.
+- Layer: 3 (Harness)
+- Related: Step Executor, Adapter, Brief 214 cloud runners phase
+
+**Runner Kind** — One of `local-mac-mini | claude-code-routine | claude-managed-agent | github-action | e2b-sandbox`. Each kind ships its own adapter (sub-briefs 216-218) and config schema. The kind determines the mode.
+- Layer: 3 (Harness)
+- Related: Runner Mode, RunnerAdapter
+
+**Runner Mode** — `local | cloud`. Pre-computed from kind via `kindToMode()`. Filters the chain when work-item `mode_required` is set (`local`, `cloud`, or `any`).
+- Layer: 3 (Harness)
+- Related: Mode-Required Constraint, Runner Chain
+
+**Runner Chain** — Ordered list of runner kinds the dispatcher walks for a work item. Built from `[default, fallback]` or the project's explicit `runner_chain` JSON, prepended with the work-item override. Filtered by mode + enabled + healthy. On `failed`/`rate_limited`/`timed_out` the dispatcher advances to the next kind.
+- Layer: 3 (Harness)
+- Related: resolveChain, Mode-Required Constraint
+
+**Runner Dispatch** — One row in `runner_dispatches` per chain attempt. Lifecycle: `queued → dispatched → running → {succeeded | failed | timed_out | rate_limited | cancelled | revoked}`. FK'd to workItem, project, stepRunId. `attemptIndex` distinguishes primary vs fallbacks.
+- Layer: 3 (Harness)
+- Related: Runner Chain, harness_decisions, Insight-180
+
+**Mode-Required Constraint** — Optional column on workItems (`runner_mode_required`: `local | cloud | any`). Soft constraint filtering the chain. `any` (or null) imposes no constraint. Set when a work item must run on/off the user's machine for a specific reason.
+- Layer: 1 (Process)
+- Related: Runner Mode, resolveChain
+
+**Fallback Runner** — `projects.fallbackRunnerKind`. The simple-chain alternative when only default + fallback are needed. Overridden when `runnerChain` JSON is present.
+- Layer: 1 (Process)
+- Related: Runner Chain, Default Runner
+
+**Harness Type** — `projects.harnessType`: `catalyst | native | none`. `catalyst` = Catalyst-built repo (Ditto-driven external project). `native` = Ditto's own codebase. `none` = the BEFORE-flow case where no harness scaffolding exists yet (Brief 224 territory).
+- Layer: 1 (Process)
+- Related: Project, Brief 224 onboarding
+
+**Brief Source** — `projects.briefSource`: `filesystem | ditto_native | github_issues`. Where the project's brief artefacts live; the analyser pass uses this to find work to dispatch.
+- Layer: 1 (Process)
+- Related: Project, Brief 224 onboarding
+
+**Deploy Target** — `projects.deployTarget`: `vercel | fly | manual`. The deploy surface the deploy-gate (sub-brief 220) wires up.
+- Layer: 1 (Process)
+- Related: Project, Brief 220 deploy-gate
+
+**Project Status** — `projects.status`: `analysing | active | paused | archived`. New rows default to `analysing` (Brief 224 BEFORE-flow). Transition `analysing → active` requires `defaultRunnerKind` set + an enabled `project_runners` row for that kind. Archive is one-way.
+- Layer: 1 (Process)
+- Related: validateStatusTransition (engine-core), Project
+
+### Projects CRUD + Brief-Equivalent WorkItems (Brief 223)
+
+**Project Slug** — `projects.slug`. Lowercase `[a-z][a-z0-9-]{1,63}` URL-safe identifier. The CRUD endpoints accept either id or slug at `:id` route segment. Unique per workspace.
+- Layer: 1 (Process)
+- Related: Project, /api/v1/projects/:id
+
+**Runner Config** — Per-(project × runner-kind) JSON shape stored on `project_runners.config_json`. Validated by each adapter's `RunnerAdapter.configSchema`. The `POST /api/v1/projects` convenience accepts an optional `runnerConfig: { kind, config, credentialIds }` and inserts the first `project_runners` row in the same transaction.
+- Layer: 3 (Harness) / 1 (Process API)
+- Related: Project Runner, RunnerAdapter
+
+**Runner Bearer** — Per-project plaintext token surfaced ONCE on `POST /api/v1/projects` and on `PATCH …/projects/:id { rotateBearer: true }` with `bearerOnceWarning: true`. bcrypt(cost=12) hashed at rest in `projects.runnerBearerHash` (column landed by Brief 215, populated by Brief 223). Used for inbound webhook auth (Authorization: Bearer …). Rotation writes an `activities` row with `actorType='admin-cookie'` for forensic auditability.
+- Layer: 1 (Process API)
+- Related: Status Webhook, Insight-017 security checklist
+
+**Bearer-Once Warning** — Response shape on bearer-issuing endpoints: `{ project, bearerToken, bearerOnceWarning: true }`. Subsequent `GET /api/v1/projects/:id` does NOT return the bearer (only the hash). The plaintext is the caller's only chance to capture.
+- Layer: 1 (Process API)
+- Related: Runner Bearer
+
+**Brief State** — `work_items.briefState`: `backlog | approved | active | review | shipped | blocked | archived`. Project-flavored work-item lifecycle, coexisting with the existing `status` field (`intake | routed | …`) on the same table. Partitioned by `projectId` via DB-level CHECK constraint: non-project rows can never hold a `briefState`; project rows must declare `projectId`.
+- Layer: 1 (Process)
+- Related: WorkItem, Status Webhook
+
+**Status Webhook** — `POST /api/v1/work-items/:id/status`. Bearer-token gated against `projects.runnerBearerHash` of the work item's project. Updates `briefState`, `stateChangedAt`, optionally `linkedProcessRunId`. Bridges `runner_dispatches` lifecycle when `runnerKind` + `externalRunId` provided. Writes `activities` row with `action='work_item_status_update'`. Insight-180 bounded waiver: missing `stepRunId` is allowed but recorded as `metadata.webhook.guardWaived = true`.
+- Layer: 1 (Process API)
+- Related: Brief State, Insight-180, Runner Dispatch
+
+## Workspace Local Bridge (Brief 212)
+
+**Bridge Daemon** — `ditto-bridge`, the outbound-dial worker that runs on the user's laptop / Mac mini. Connects out to a cloud-hosted Ditto workspace via WebSocket. Transport only — no agent code runs on user hardware. Lives in `packages/bridge-cli/`.
+- Layer: 6 (Human / harness extension)
+- Related: Bridge Pairing Code, Device JWT, Bridge Dispatch
+
+**Bridge Pairing Code** — A 6-character base32 code (Crockford-style alphabet, ≥30 bits entropy) shown once in the Devices admin page. 15-minute TTL, single-use, atomically consumed, bcrypt cost-12 hashed at rest. Daemon exchanges the code for a Device JWT via `POST /api/v1/bridge/pair`.
+- Layer: 6 (Human / pairing UX)
+- Related: Bridge Daemon, Device JWT
+
+**Device JWT** — HS256-signed token (key: `BRIDGE_JWT_SIGNING_KEY` env, ≥16 chars). Carries `{ deviceId, workspaceId, protocolVersion: "1.0.0" }`. Persisted on the device at `~/.ditto/bridge.json` mode 0600. Verified on every WebSocket upgrade. Major-version mismatches reject HTTP 426. Revocable via `DELETE /api/v1/bridge/devices/[id]`.
+- Layer: 6 / Layer 3 (Harness)
+- Related: Bridge Pairing Code, Bridge Daemon
+
+**Bridge Dispatch** — `dispatchBridgeJob()` in `src/engine/harness-handlers/bridge-dispatch.ts`. Cloud-side function that resolves the target device (with optional fallback chain), persists a `bridge_jobs` row, sends the JSON-RPC `exec` or `tmux.send` request over the wire if trust says advance, and writes one `harness_decisions` row keyed on stepRunId per Insight-180. Callable from process YAML via the `bridge.dispatch` built-in tool.
+- Layer: 3 (Harness)
+- Related: Bridge Job, stepRunId guard (Insight-180)
+
+**Bridge Job** — A row in `bridge_jobs`. State machine: `queued | dispatched | running | succeeded | failed | orphaned | cancelled | revoked`. Discriminated payload by `kind: 'exec' | 'tmux.send'`. Records the actual executor in `deviceId` and (when fallback routing kicked in) the originally-requested primary in `requestedDeviceId`. Audit trail in `harness_decisions.reviewDetails.bridge`.
+- Layer: 3 (Harness)
+- Related: Bridge Dispatch, Orphaned Job
+
+**Orphaned Job** — A `bridge_jobs` row that was `running` but whose `lastHeartbeatAt` exceeded `ORPHAN_STALENESS_MS` (10 min). Transitioned to `orphaned` by the cloud-side staleness sweeper. Writes a `harness_decisions` row with `trustAction='pause'` + `reviewDetails.bridge.orphaned=true` so the review surface knows to flag it for human attention. The pause action is the existing-enum signal, NOT a new "escalate" value.
+- Layer: 3 (Harness)
+- Related: Bridge Job, Sweeper

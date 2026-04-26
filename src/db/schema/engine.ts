@@ -8,7 +8,9 @@
  * Tables: processes, processDependencies, agents, processRuns, stepRuns,
  * processOutputs, harnessDecisions, trustChanges, trustSuggestions,
  * feedback, memories, improvements, workItems, activities, credentials,
- * outboundActions, schedules, delayedRuns, workspaceViews, processVersions
+ * outboundActions, schedules, delayedRuns, workspaceViews, processVersions,
+ * bridgeDevices, bridgePairingCodes, bridgeJobs (Brief 212),
+ * projects, projectRunners, runnerDispatches (Brief 215)
  */
 
 export {
@@ -51,8 +53,37 @@ export {
   type WorkItemStatus,
   workItemSourceValues,
   type WorkItemSource,
+  briefStateValues,
+  type BriefState,
   delayedRunStatusValues,
   type DelayedRunStatus,
+  bridgeDeviceStatusValues,
+  type BridgeDeviceStatus,
+  bridgeJobStateColumnValues,
+  type BridgeJobStateColumn,
+  bridgeJobKindColumnValues,
+  type BridgeJobKindColumn,
+  bridgeJobRoutedAsValues,
+  type BridgeJobRoutedAs,
+  // Brief 215 — Projects + Runner Registry
+  runnerKindValues,
+  type RunnerKindValue,
+  runnerModeValues,
+  type RunnerModeValue,
+  runnerModeRequiredValues,
+  type RunnerModeRequiredValue,
+  runnerDispatchStatusValues,
+  type RunnerDispatchStatusValue,
+  runnerHealthStatusValues,
+  type RunnerHealthStatusValue,
+  harnessTypeValues,
+  type HarnessTypeValue,
+  briefSourceValues,
+  type BriefSourceValue,
+  deployTargetValues,
+  type DeployTargetValue,
+  projectStatusValues,
+  type ProjectStatusValue,
 
   // Tables
   processes,
@@ -75,4 +106,10 @@ export {
   delayedRuns,
   workspaceViews,
   processVersions,
+  bridgeDevices,
+  bridgePairingCodes,
+  bridgeJobs,
+  projects,
+  projectRunners,
+  runnerDispatches,
 } from "@ditto/core";

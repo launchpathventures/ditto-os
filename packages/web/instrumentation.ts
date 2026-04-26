@@ -21,6 +21,71 @@ export async function register() {
       // dotenv may not be installed — env vars may be set via platform (Railway, Fly, etc.)
     }
 
+    // Attach the Bridge WebSocket server to Next.js's underlying HTTP server.
+    // Next.js does not expose its server reference. Two-pronged strategy:
+    //   1. Hook http.Server.prototype.listen so future listen() calls attach.
+    //   2. Walk process._getActiveHandles() to find any HTTP server already
+    //      listening (Next dev binds before register() returns — the prototype
+    //      patch arrives too late on its own). Whichever fires first wins;
+    //      subsequent attaches are no-ops (attachBridgeWebSocketServer is
+    //      idempotent via a module-scoped flag).
+    //
+    // Fragility note: process._getActiveHandles is a Node-internal API. If it
+    // ever changes shape, the discovery branch breaks silently — bridge dials
+    // would then time out. Spike test (src/engine/bridge-server.spike.test.ts)
+    // is the canary: it boots `next dev` and asserts a real WebSocket roundtrip
+    // succeeds, so a regression in the hook will fail that test.
+    //
+    // Pivot path if the discovery breaks: switch to a custom Next.js server
+    // (packages/web/server.ts wrapping http.createServer + next.getRequestHandler)
+    // — that's the supported Next.js extension surface for "I want my own
+    // HTTP server with my own upgrade handling". Brief 212 AC #1 deliberately
+    // avoided this so the deployment shape stays `next start` for now.
+    //
+    // Brief 212 AC #1 spike validates this end-to-end.
+    try {
+      const http = await import("http");
+      const { attachBridgeWebSocketServer } = await import("../../src/engine/bridge-server");
+      console.log("[instrumentation] Installing bridge WebSocket hook...");
+
+      const originalListen = http.Server.prototype.listen;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      http.Server.prototype.listen = function (this: import("http").Server, ...args: any[]) {
+        try {
+          attachBridgeWebSocketServer(this);
+        } catch (err) {
+          console.error("[instrumentation] Bridge WebSocket attach (listen) failed:", err);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (originalListen as any).apply(this, args);
+      };
+
+      // Fallback: discover an already-listening server via active handles.
+      // We poll a few times because the server may not have bound yet at this
+      // exact moment in dev mode startup.
+      const tryDiscover = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handles = (process as any)._getActiveHandles?.() ?? [];
+        for (const h of handles) {
+          if (h && h.constructor && h.constructor.name === "Server" && typeof h.on === "function") {
+            try {
+              attachBridgeWebSocketServer(h as import("http").Server);
+            } catch (err) {
+              console.error("[instrumentation] Bridge WebSocket attach (discovery) failed:", err);
+            }
+          }
+        }
+      };
+      // Run a few times across early startup.
+      tryDiscover();
+      setTimeout(tryDiscover, 250).unref?.();
+      setTimeout(tryDiscover, 1500).unref?.();
+      setTimeout(tryDiscover, 5000).unref?.();
+    } catch (error) {
+      console.error("[instrumentation] Bridge WebSocket hook setup failed:", error);
+      // Non-fatal — bridge dispatches will fail loudly at use-time
+    }
+
     try {
       // Ensure database schema is up to date
       const { ensureSchema } = await import("../../src/db");
@@ -76,6 +141,64 @@ export async function register() {
     } catch (error) {
       console.error("[instrumentation] Pulse start failed:", error);
       // Non-fatal — pulse can be started manually
+    }
+
+    // Brief 215 — register the local-mac-mini RunnerAdapter into the in-process
+    // registry. Brief 212 shipped — wire its primitives into a `LocalBridge`
+    // instance via `createLocalBridge()` and pass into the adapter. Cloud
+    // adapters (sub-briefs 216-218) register here too when they land.
+    try {
+      const { registerAdapter, hasAdapter } = await import("../../src/engine/runner-registry");
+      const { createLocalMacMiniAdapter } = await import("../../src/adapters/local-mac-mini");
+      const { createLocalBridge } = await import("../../src/engine/local-bridge");
+      if (!hasAdapter("local-mac-mini")) {
+        const bridge = createLocalBridge();
+        registerAdapter(createLocalMacMiniAdapter({ bridge }));
+        console.log(
+          "[instrumentation] Runner registry: local-mac-mini adapter registered (bridge wired to Brief 212 LocalBridge)."
+        );
+      }
+    } catch (error) {
+      console.error("[instrumentation] Runner registry init failed:", error);
+      // Non-fatal — registry is in-process; missing adapter surfaces at dispatch time
+    }
+
+    // Brief 215 AC #19 — idempotent seed of agent-crm + ditto projects.
+    try {
+      const { seedProjectsOnBoot } = await import("../../src/engine/projects/seed-on-boot");
+      const result = await seedProjectsOnBoot();
+      if (result.seeded) {
+        console.log(`[instrumentation] Seeded ${result.inserted} projects on first boot.`);
+      }
+    } catch (error) {
+      console.error("[instrumentation] Project seed failed:", error);
+      // Non-fatal — projects can be created via /projects/new
+    }
+
+    // Brief 215 AC #2 — post-migration audit: if any processes had a non-null
+    // project_id that the FK-tightening migration NULL'd out, surface a warning.
+    // The migration is idempotent (the UPDATE only fires when projects table is
+    // empty during the migration step), so this only meaningfully triggers on
+    // the first run after deploy.
+    try {
+      const { db } = await import("../../src/db");
+      const { processes } = await import("../../src/db/schema");
+      const { isNull, and, sql } = await import("drizzle-orm");
+      // Count processes with FK-tightened-orphan markers — there isn't a perfect
+      // signal post-migration, so we report processes with null project_id +
+      // a non-null updatedAt diff vs createdAt as a heuristic. Cheap, advisory.
+      const rows = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(processes)
+        .where(and(isNull(processes.projectId), sql`${processes.updatedAt} > ${processes.createdAt}`));
+      const cnt = rows[0]?.count ?? 0;
+      if (cnt > 0) {
+        console.warn(
+          `[instrumentation] Brief 215 migration: ${cnt} processes have null project_id (some may have been NULL'd by the FK-tightening migration if their old project_id had no matching project row).`
+        );
+      }
+    } catch {
+      // Non-fatal — advisory check only
     }
 
     // Validate workspace auth configuration

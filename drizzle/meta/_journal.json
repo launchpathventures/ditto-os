@@ -71,6 +71,27 @@
       "when": 1776711709330,
       "tag": "0010_thread_titles",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1777115903529,
+      "tag": "0011_local_bridge",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1777117090163,
+      "tag": "0012_projects_runners",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777199022872,
+      "tag": "0013_workitems_brief_extension",
+      "breakpoints": true
     }
   ]
 }

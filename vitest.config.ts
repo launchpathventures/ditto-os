@@ -5,7 +5,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts", "packages/core/src/**/*.test.ts", "packages/web/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "packages/core/src/**/*.test.ts",
+      "packages/web/**/*.test.ts",
+      "packages/bridge-cli/src/**/*.test.ts",
+    ],
     // Mock the Anthropic SDK at module level to prevent import-time failures
     // without ANTHROPIC_API_KEY. This is NOT mocking the database — the
     // "no mocks" constraint applies to SQLite, not external API clients.

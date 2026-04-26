@@ -58,6 +58,7 @@ const BASE_PUBLIC_PREFIXES = [
   "/api/v1/network",
   "/api/v1/chat",
   "/api/v1/voice",
+  "/api/v1/bridge/_dial",
   "/api/v1/workspace/request-link",
   "/api/v1/workspace/session",
   "/_next",

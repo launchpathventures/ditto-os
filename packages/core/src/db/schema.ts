@@ -10,7 +10,8 @@
  * Provenance: Extracted from src/db/schema.ts — Ditto monorepo
  */
 
-import { sqliteTable, text, integer, real, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, unique, index, check } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 // ============================================================
@@ -147,8 +148,30 @@ export const workItemTypeValues = [
   "goal",
   "insight",
   "outcome",
+  // Brief 223 — brief-equivalent layer (additive)
+  "feature",
+  "fix",
+  "refactor",
+  "content",
+  "spike",
 ] as const;
 export type WorkItemType = (typeof workItemTypeValues)[number];
+
+/**
+ * Brief 223 — brief-equivalent lifecycle for project-flavored work items.
+ * Coexists with `workItemStatusValues` (intake/routing); partitioned by
+ * `workItems.projectId` via DB-level CHECK constraint.
+ */
+export const briefStateValues = [
+  "backlog",
+  "approved",
+  "active",
+  "review",
+  "shipped",
+  "blocked",
+  "archived",
+] as const;
+export type BriefState = (typeof briefStateValues)[number];
 
 export const workItemStatusValues = [
   "intake",
@@ -167,6 +190,63 @@ export const workItemSourceValues = [
   "system_generated",
 ] as const;
 export type WorkItemSource = (typeof workItemSourceValues)[number];
+
+// ============================================================
+// Brief 215 — Projects + Runner Registry — type unions
+// ============================================================
+
+// Single source of truth for runner enum constants lives in `runner/kinds.ts`.
+// Schema-side aliases (`*Value` suffix) preserve backward compatibility for
+// consumers that import the constants under the original names — but they
+// point at the same arrays now, so adding a kind in one place suffices.
+export {
+  runnerKindValues,
+  runnerModeValues,
+  runnerModeRequiredValues,
+  runnerDispatchStatusValues,
+  runnerHealthStatusValues,
+} from "../runner/kinds.js";
+import type {
+  RunnerKind,
+  RunnerMode,
+  RunnerModeRequired,
+  RunnerDispatchStatus,
+  RunnerHealthStatus,
+} from "../runner/kinds.js";
+export type RunnerKindValue = RunnerKind;
+export type RunnerModeValue = RunnerMode;
+export type RunnerModeRequiredValue = RunnerModeRequired;
+export type RunnerDispatchStatusValue = RunnerDispatchStatus;
+export type RunnerHealthStatusValue = RunnerHealthStatus;
+
+/**
+ * Brief 215 — `harness_type` for projects. `none` covers the BEFORE-flow
+ * case where a project has no harness scaffolding yet (Brief 224 territory).
+ * Renamed from `harnessKind` per pipeline-spec / collision reconciliation.
+ */
+export const harnessTypeValues = ["catalyst", "native", "none"] as const;
+export type HarnessTypeValue = (typeof harnessTypeValues)[number];
+
+/** Brief 215 — where a project's brief artefacts live (Brief 224 absorbed). */
+export const briefSourceValues = [
+  "filesystem",
+  "ditto_native",
+  "github_issues",
+] as const;
+export type BriefSourceValue = (typeof briefSourceValues)[number];
+
+/** Brief 215 — project deploy target (Brief 224 absorbed). */
+export const deployTargetValues = ["vercel", "fly", "manual"] as const;
+export type DeployTargetValue = (typeof deployTargetValues)[number];
+
+/** Brief 215 — project lifecycle. New rows default to `analysing`. */
+export const projectStatusValues = [
+  "analysing",
+  "active",
+  "paused",
+  "archived",
+] as const;
+export type ProjectStatusValue = (typeof projectStatusValues)[number];
 
 // ============================================================
 // Layer 1: Process Layer
@@ -195,7 +275,8 @@ export const processes = sqliteTable("processes", {
     .$type<{ service: string; action: string; params: Record<string, unknown>; intervalMs: number } | null>(),
   outputDelivery: text("output_delivery", { mode: "json" })
     .$type<{ service: string; action: string; params: Record<string, unknown> } | null>(),
-  projectId: text("project_id"),
+  /** Brief 215 tightens: FK to projects.id (still nullable). Migration NULLs out unmatched values. */
+  projectId: text("project_id").references((): any => projects.id),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -607,6 +688,31 @@ export const workItems = sqliteTable("work_items", {
   context: text("context", { mode: "json" })
     .$type<Record<string, unknown>>()
     .default({}),
+  /** Brief 215 — overrides project's chain for this work item (runner kind value). */
+  runnerOverride: text("runner_override").$type<RunnerKindValue>(),
+  /** Brief 215 — soft constraint filtering the chain at resolution time. `any` ≡ null (no constraint). */
+  runnerModeRequired: text("runner_mode_required").$type<RunnerModeRequiredValue>(),
+  // Brief 223 — brief-equivalent layer (additive nullable columns)
+  /** FK to projects.id (Brief 215 substrate). NULL = legacy intake-flavored row. */
+  projectId: text("project_id").references((): any => projects.id),
+  /** Brief-equivalent canonical title. Coexists with `content` via CHECK constraint. */
+  title: text("title"),
+  /** Brief-equivalent canonical body. Coexists with `content` via CHECK constraint. */
+  body: text("body"),
+  /** Brief-equivalent lifecycle. Partitioned with status by projectId via CHECK. */
+  briefState: text("brief_state").$type<BriefState>(),
+  /** 0–100 risk score from analyser; NULL allowed. */
+  riskScore: integer("risk_score"),
+  /** 0.0–1.0 confidence from analyser; NULL allowed. */
+  confidence: real("confidence"),
+  /** Routing assignment from triage (haiku/sonnet/opus/gemini). */
+  modelAssignment: text("model_assignment"),
+  /** FK-soft pointer to a capture row. */
+  linkedCaptureId: text("linked_capture_id"),
+  /** FK to process_runs.id when a runner kicks off a process for this item. */
+  linkedProcessRunId: text("linked_process_run_id").references((): any => processRuns.id),
+  /** Most recent briefState transition timestamp. */
+  stateChangedAt: integer("state_changed_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -614,7 +720,23 @@ export const workItems = sqliteTable("work_items", {
     .notNull()
     .$defaultFn(() => new Date()),
   completedAt: integer("completed_at", { mode: "timestamp_ms" }),
-});
+}, (table) => ({
+  // Brief 223 — title-or-content invariant: legacy intake rows use content,
+  // brief-flavored rows use title+body. Migrations must preserve all existing
+  // rows (which have content not null, title null).
+  titleOrContent: check(
+    "work_items_title_or_content",
+    sql`(${table.title} IS NULL AND ${table.content} IS NOT NULL) OR (${table.title} IS NOT NULL AND ${table.body} IS NOT NULL)`
+  ),
+  // Brief 223 — projectId-partitions-state-machine invariant: non-project items
+  // can never accidentally hold a briefState; project items must declare projectId.
+  projectIdPartitionsBriefState: check(
+    "work_items_project_id_partitions_brief_state",
+    sql`(${table.projectId} IS NULL AND ${table.briefState} IS NULL) OR (${table.projectId} IS NOT NULL)`
+  ),
+  byProject: index("work_items_project_idx").on(table.projectId),
+  byBriefState: index("work_items_brief_state_idx").on(table.briefState),
+}));
 
 // ============================================================
 // Activities — audit log
@@ -792,4 +914,251 @@ export const processVersions = sqliteTable("process_versions", {
     .$defaultFn(() => new Date()),
 }, (table) => ({
   uniqueVersionPerProcess: unique().on(table.processId, table.version),
+}));
+
+// ============================================================
+// Local Bridge — paired devices + job queue (Brief 212)
+// ============================================================
+
+export const bridgeDeviceStatusValues = ["active", "revoked", "rotated"] as const;
+export type BridgeDeviceStatus = (typeof bridgeDeviceStatusValues)[number];
+
+export const bridgeJobStateColumnValues = [
+  "queued",
+  "dispatched",
+  "running",
+  "succeeded",
+  "failed",
+  "orphaned",
+  "cancelled",
+  "revoked",
+] as const;
+export type BridgeJobStateColumn = (typeof bridgeJobStateColumnValues)[number];
+
+export const bridgeJobKindColumnValues = ["exec", "tmux.send"] as const;
+export type BridgeJobKindColumn = (typeof bridgeJobKindColumnValues)[number];
+
+export const bridgeJobRoutedAsValues = ["primary", "fallback", "queued_for_primary"] as const;
+export type BridgeJobRoutedAs = (typeof bridgeJobRoutedAsValues)[number];
+
+export const bridgeDevices = sqliteTable("bridge_devices", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workspaceId: text("workspace_id").notNull(),
+  deviceName: text("device_name").notNull(),
+  /** bcrypt hash of the issued JWT — never store the JWT itself. */
+  jwtTokenHash: text("jwt_token_hash").notNull(),
+  /** Wire protocol version this device negotiated at pairing time. */
+  protocolVersion: text("protocol_version").notNull().default("1.0.0"),
+  pairedAt: integer("paired_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  lastDialAt: integer("last_dial_at", { mode: "timestamp_ms" }),
+  lastIp: text("last_ip"),
+  status: text("status").notNull().$type<BridgeDeviceStatus>().default("active"),
+  revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  revokedReason: text("revoked_reason"),
+}, (table) => ({
+  byWorkspace: index("bridge_devices_workspace_idx").on(table.workspaceId),
+  byStatus: index("bridge_devices_status_idx").on(table.workspaceId, table.status),
+}));
+
+export const bridgePairingCodes = sqliteTable("bridge_pairing_codes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workspaceId: text("workspace_id").notNull(),
+  /** bcrypt hash of the 6-char base32 code; raw code never stored. */
+  codeHash: text("code_hash").notNull(),
+  /** Optional device-name hint chosen at code-generation time. */
+  deviceNameHint: text("device_name_hint"),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  /** Set on consumption — points at the device row produced. */
+  consumedDeviceId: text("consumed_device_id").references(() => bridgeDevices.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  byWorkspace: index("bridge_pairing_codes_workspace_idx").on(table.workspaceId),
+}));
+
+export const bridgeJobs = sqliteTable("bridge_jobs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  /** The device this job is targeted at (after fallback resolution). */
+  deviceId: text("device_id")
+    .references(() => bridgeDevices.id)
+    .notNull(),
+  /** Originally-requested primary device — only differs from deviceId when fallback routing kicked in. */
+  requestedDeviceId: text("requested_device_id").references(() => bridgeDevices.id),
+  routedAs: text("routed_as").notNull().$type<BridgeJobRoutedAs>().default("primary"),
+  processRunId: text("process_run_id")
+    .references(() => processRuns.id)
+    .notNull(),
+  stepRunId: text("step_run_id")
+    .references(() => stepRuns.id)
+    .notNull(),
+  kind: text("kind").notNull().$type<BridgeJobKindColumn>(),
+  /** Discriminated by `kind` per packages/core/src/bridge/types.ts. */
+  payload: text("payload", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>(),
+  state: text("state").notNull().$type<BridgeJobStateColumn>().default("queued"),
+  queuedAt: integer("queued_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  dispatchedAt: integer("dispatched_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  /** Updated every 60s from daemon pong frames; staleness sweeper checks this. */
+  lastHeartbeatAt: integer("last_heartbeat_at", { mode: "timestamp_ms" }),
+  exitCode: integer("exit_code"),
+  stdoutBytes: integer("stdout_bytes").notNull().default(0),
+  stderrBytes: integer("stderr_bytes").notNull().default(0),
+  truncated: integer("truncated", { mode: "boolean" }).notNull().default(false),
+  terminationSignal: text("termination_signal"),
+  /** Error frame from the daemon (e.g., "tmux session 'X' does not exist"). */
+  errorMessage: text("error_message"),
+}, (table) => ({
+  byDeviceState: index("bridge_jobs_device_state_idx").on(table.deviceId, table.state),
+  byStepRun: index("bridge_jobs_step_run_idx").on(table.stepRunId),
+  byHeartbeat: index("bridge_jobs_heartbeat_idx").on(table.state, table.lastHeartbeatAt),
+}));
+
+// ============================================================
+// Brief 215 — Projects + Runner Registry
+// ============================================================
+
+/**
+ * Projects — the union of cloud-runner fields (Brief 214 §D3) and pipeline-
+ * spec fields (collision reconciliation per Brief 215 §"Collision Reconciliation
+ * Resolved"). Each project is workspace-scoped (one user, n projects).
+ *
+ * `processes.projectId` references this table (FK tightened from text-no-FK).
+ * `defaultRunnerKind` and `fallbackRunnerKind` are NULLABLE because transient
+ * `status='analysing'` projects have no runner picked yet (Brief 224 territory).
+ *
+ * `runnerBearerHash` is a bcrypt hash of the bearer token used by Brief 223's
+ * status webhook for inbound auth — NEVER store the raw token. Brief 223's
+ * `POST /api/v1/projects` route is the bearer-generation surface.
+ */
+export const projects = sqliteTable("projects", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  /** GitHub repo in `owner/repo` shape — validated by Brief 223's POST handler. */
+  githubRepo: text("github_repo"),
+  defaultBranch: text("default_branch").notNull().default("main"),
+  /** `catalyst | native | none` — `none` is the BEFORE-flow case. */
+  harnessType: text("harness_type").notNull().$type<HarnessTypeValue>().default("none"),
+  briefSource: text("brief_source").$type<BriefSourceValue>(),
+  briefPath: text("brief_path"),
+  /** NULLABLE — analysing-state projects have no runner picked yet. */
+  defaultRunnerKind: text("default_runner_kind").$type<RunnerKindValue>(),
+  fallbackRunnerKind: text("fallback_runner_kind").$type<RunnerKindValue>(),
+  /** When present, overrides default + fallback. */
+  runnerChain: text("runner_chain", { mode: "json" }).$type<RunnerKindValue[]>(),
+  deployTarget: text("deploy_target").$type<DeployTargetValue>(),
+  status: text("status").notNull().$type<ProjectStatusValue>().default("analysing"),
+  /** bcrypt(cost=12) hash of the bearer token. Brief 223 generates + rotates. */
+  runnerBearerHash: text("runner_bearer_hash"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  byStatus: index("projects_status_idx").on(table.status),
+}));
+
+/**
+ * Project Runners — per-(project × kind) configuration. UNIQUE on (projectId,
+ * kind) per user pipeline spec — one config row per kind per project.
+ *
+ * `configJson` is kind-specific; each adapter validates it via its
+ * `RunnerAdapter.configSchema` Zod schema. `credentialIds` are POINTERS into
+ * the existing `credentials` table — no parallel credential storage.
+ */
+export const projectRunners = sqliteTable("project_runners", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  projectId: text("project_id")
+    .references(() => projects.id, { onDelete: "cascade" })
+    .notNull(),
+  kind: text("kind").notNull().$type<RunnerKindValue>(),
+  mode: text("mode").notNull().$type<RunnerModeValue>(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /** Kind-specific shape; validated by RunnerAdapter.configSchema. */
+  configJson: text("config_json", { mode: "json" })
+    .notNull()
+    .$type<Record<string, unknown>>()
+    .default({}),
+  /** Pointers into `credentials` table (existing AES-256-GCM vault). */
+  credentialIds: text("credential_ids", { mode: "json" })
+    .notNull()
+    .$type<string[]>()
+    .default([]),
+  lastHealthCheckAt: integer("last_health_check_at", { mode: "timestamp_ms" }),
+  lastHealthStatus: text("last_health_status")
+    .notNull()
+    .$type<RunnerHealthStatusValue>()
+    .default("unknown"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  uniqueProjectKind: unique("project_runners_project_kind_unique").on(
+    table.projectId,
+    table.kind
+  ),
+}));
+
+/**
+ * Runner Dispatches — dispatch lifecycle audit, one row per attempt.
+ *
+ * `stepRunId` FK enforces Insight-180 (every dispatch is gated through harness
+ * pipeline step execution). `attemptIndex` is 0 for the primary, 1+ for
+ * fallback attempts within a single chain walk.
+ *
+ * NOT cascade-deleted when a project is deleted — historical rows preserved.
+ */
+export const runnerDispatches = sqliteTable("runner_dispatches", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  workItemId: text("work_item_id")
+    .references(() => workItems.id)
+    .notNull(),
+  projectId: text("project_id")
+    .references(() => projects.id)
+    .notNull(),
+  runnerKind: text("runner_kind").notNull().$type<RunnerKindValue>(),
+  runnerMode: text("runner_mode").notNull().$type<RunnerModeValue>(),
+  externalRunId: text("external_run_id"),
+  externalUrl: text("external_url"),
+  attemptIndex: integer("attempt_index").notNull().default(0),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  status: text("status").notNull().$type<RunnerDispatchStatusValue>().default("queued"),
+  errorReason: text("error_reason"),
+  /** Insight-180 audit FK. */
+  stepRunId: text("step_run_id")
+    .references(() => stepRuns.id)
+    .notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  byWorkItem: index("runner_dispatches_work_item_idx").on(table.workItemId),
+  byProject: index("runner_dispatches_project_idx").on(table.projectId),
+  byStatus: index("runner_dispatches_status_idx").on(table.status),
 }));
