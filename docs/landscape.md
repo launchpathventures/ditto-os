@@ -627,7 +627,7 @@ New category for Insight-152 (Network Service is centralized). Full report: `doc
 
 ---
 
-## Workspace Local Bridge — cloud → laptop dispatch (2026-04-25)
+## Workspace Local Bridge — cloud → laptop dispatch (2026-04-25; Brief 212 shipped 2026-04-26)
 
 Building blocks for Brief 212 (Workspace Local Bridge — cloud-hosted Ditto reaches user's laptop). Full report: `docs/research/local-bridge.md`.
 
@@ -681,7 +681,7 @@ Building blocks for Brief 212 (Workspace Local Bridge — cloud-hosted Ditto rea
 **sshx** — github.com/ekzhang/sshx — *framework not a fit*
 - 7.4k stars | MIT | Rust | gRPC + e2e Argon2/AES. Collaborative cursor UX. **Not self-hostable** by author's stated policy. Pattern-only inspiration; no adoption path.
 
-### Bridge Runtime Dependencies (added with Brief 212)
+### Bridge Runtime Dependencies (added with Brief 212; Brief 212 complete 2026-04-26)
 
 **ws** — github.com/websockets/ws
 - ~21k stars | MIT | TypeScript-friendly Node WebSocket library. Zero-config in Node 18+; works under Next.js's underlying Node HTTP server via the `upgrade` event.
