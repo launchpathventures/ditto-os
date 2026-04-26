@@ -541,8 +541,8 @@ This is the complete capability map for Ditto. Every item traces back to the arc
 | Idempotent project seed at boot (`agent-crm` + `ditto`) wrapped in transaction | done | `src/engine/projects/seed-{data,on-boot}.ts` | Original |
 | `/projects` admin scaffold (index / new / detail / runners) — mobile-first, kind-selector with disabled cloud kinds + tooltips | done | `packages/web/app/projects/`, `packages/web/app/api/v1/projects/` | Original |
 | **Sub-briefs (downstream of Brief 215)** | | | |
-| Brief 216 — `claude-code-routine` adapter | draft | `docs/briefs/216-routine-dispatcher.md` | Anthropic Routine HTTP `/fire` |
-| Brief 217 — `claude-managed-agent` adapter | not yet written | — | Anthropic Managed Agents SDK |
+| Brief 216 — `claude-code-routine` adapter | done (2026-04-27, post-Reviewer-fix) | `docs/briefs/complete/216-routine-dispatcher.md` | Anthropic Routine HTTP `/fire`. AC #1-#10, #13 PASS via 87 tests across 6 files; AC #11 (E2E smoke) deferred manual; AC #12 (trust-tier) covered at dispatcher layer per Brief 215. GitHub webhook receiver `POST /api/v1/integrations/github/webhook` wired (HMAC-SHA256 + 7 tests). |
+| Brief 217 — `claude-managed-agent` adapter | draft | `docs/briefs/217-managed-agent-dispatcher.md` | Anthropic Managed Agents SDK |
 | Brief 218 — `github-action` adapter | not yet written | — | GitHub `workflow_dispatch` + `workflow_run` webhook |
 | Brief 219 — Optional Greptile/Argos integrations (per-project detected) | not yet written | — | Greptile + Argos APIs (cloud SaaS only at MVP) |
 | Brief 220 — Mobile deploy-gate UX | not yet written | — | Original |
