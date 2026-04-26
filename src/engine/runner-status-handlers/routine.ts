@@ -14,7 +14,7 @@
  * Engine-product layer — couples to DB. The route is the only consumer.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db as appDb } from "../../db";
@@ -26,6 +26,12 @@ import {
 } from "@ditto/core";
 
 type AnyDb = BetterSQLite3Database<typeof schema>;
+
+/**
+ * Statuses where an ephemeral callback token is still meaningful. Terminal
+ * rows are excluded so we don't bcrypt-compare against historical hashes.
+ */
+const ACTIVE_DISPATCH_STATUSES = ["queued", "dispatched", "running"] as const;
 
 export type RoutineBearerSource = "ephemeral" | "project" | "none";
 
@@ -50,13 +56,21 @@ export async function verifyEphemeralCallbackToken(
   options: { db?: AnyDb } = {},
 ): Promise<RoutineBearerCheckResult> {
   const dbImpl = (options.db ?? appDb) as AnyDb;
+  // Filter to active rows with a non-null hash in SQL — avoids bcrypt-comparing
+  // every historical dispatch (cost 12 ≈ 250ms × N rows otherwise).
   const rows = await dbImpl
     .select({
       id: runnerDispatches.id,
       hash: runnerDispatches.callbackTokenHash,
     })
     .from(runnerDispatches)
-    .where(eq(runnerDispatches.workItemId, workItemId));
+    .where(
+      and(
+        eq(runnerDispatches.workItemId, workItemId),
+        isNotNull(runnerDispatches.callbackTokenHash),
+        inArray(runnerDispatches.status, [...ACTIVE_DISPATCH_STATUSES]),
+      ),
+    );
 
   for (const row of rows) {
     if (!row.hash) continue;

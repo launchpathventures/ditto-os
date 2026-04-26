@@ -50,7 +50,11 @@ const localMacMiniConfig = z.object({
  */
 const claudeCodeRoutineConfigForm = z.object({
   endpoint_url: z.string().url(),
-  bearer: z.string().min(20),
+  // Anthropic bearers are typically `sk-ant-oat01-...` and >=80 chars; min 60
+  // catches truncation/typos that would otherwise fail at first dispatch.
+  bearer: z.string().min(60).regex(/^sk-ant-/, {
+    message: "Anthropic bearer must start with sk-ant-",
+  }),
   default_repo: z.string().regex(/^[^/]+\/[^/]+$/),
   default_branch: z.string().min(1).default("main"),
   beta_header: z.string().optional(),
@@ -132,10 +136,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  // Brief 216 — claude-code-routine: validate the form shape, then encrypt
-  // the bearer into the credential vault and replace plaintext with id.
+  // Brief 216 — claude-code-routine: validate the form shape first, then
+  // resolve the project slug, then encrypt the bearer with the final
+  // service-key in one step (no transient literal-key window).
   let routineCredentialId: string | null = null;
   let routineFinalConfig: Record<string, unknown> | null = null;
+  let routineFormParsed:
+    | (typeof claudeCodeRoutineConfigForm)["_output"]
+    | null = null;
   if (kind === "claude-code-routine") {
     const cfg = claudeCodeRoutineConfigForm.safeParse(data.config);
     if (!cfg.success) {
@@ -144,26 +152,56 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 400 }
       );
     }
-    // Verify the routine adapter accepts the resulting persisted shape.
+    routineFormParsed = cfg.data;
+  }
+
+  const { db } = await import("../../../../../../../../../src/db");
+  const { projectRunners, projects: projectsTable } = await import(
+    "../../../../../../../../../src/db/schema"
+  );
+  const projectId = await resolveProjectId(id);
+  if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+
+  // Resolve slug ONCE up front — needed for routine credential keying.
+  const projRow = await db
+    .select({ slug: projectsTable.slug })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+  if (projRow.length === 0) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+  const projectSlug = projRow[0].slug;
+
+  if (kind === "claude-code-routine" && routineFormParsed) {
     const { routineConfigSchema } = await import(
       "../../../../../../../../../src/adapters/claude-code-routine"
     );
     const { storeProjectCredential } = await import(
       "../../../../../../../../../src/engine/credential-vault"
     );
+    // Store with the final service-key directly — no re-key window.
     routineCredentialId = await storeProjectCredential(
-      `routine.<projectSlug>.bearer`,
-      cfg.data.bearer,
+      `routine.${projectSlug}.bearer`,
+      routineFormParsed.bearer,
     );
     routineFinalConfig = {
-      endpoint_url: cfg.data.endpoint_url,
+      endpoint_url: routineFormParsed.endpoint_url,
       bearer_credential_id: routineCredentialId,
-      default_repo: cfg.data.default_repo,
-      default_branch: cfg.data.default_branch,
-      ...(cfg.data.beta_header ? { beta_header: cfg.data.beta_header } : {}),
+      default_repo: routineFormParsed.default_repo,
+      default_branch: routineFormParsed.default_branch,
+      ...(routineFormParsed.beta_header
+        ? { beta_header: routineFormParsed.beta_header }
+        : {}),
     };
     const adapterValidation = routineConfigSchema.safeParse(routineFinalConfig);
     if (!adapterValidation.success) {
+      // Best-effort cleanup: delete the credential we just wrote since the
+      // project_runners insert won't happen.
+      const { deleteCredentialById } = await import(
+        "../../../../../../../../../src/engine/credential-vault"
+      );
+      await deleteCredentialById(routineCredentialId).catch(() => {});
       return NextResponse.json(
         {
           error: "Routine adapter rejected the constructed config",
@@ -171,34 +209,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
         { status: 400 }
       );
-    }
-  }
-
-  const { db } = await import("../../../../../../../../../src/db");
-  const { projectRunners } = await import(
-    "../../../../../../../../../src/db/schema"
-  );
-  const projectId = await resolveProjectId(id);
-  if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
-
-  // Re-key the credential service to use the project slug for clarity in audit.
-  if (kind === "claude-code-routine" && routineCredentialId) {
-    const { projects: projectsTable } = await import(
-      "../../../../../../../../../src/db/schema"
-    );
-    const projRow = await db
-      .select({ slug: projectsTable.slug })
-      .from(projectsTable)
-      .where(eq(projectsTable.id, projectId))
-      .limit(1);
-    if (projRow.length > 0) {
-      const { credentials } = await import(
-        "../../../../../../../../../src/db/schema"
-      );
-      await db
-        .update(credentials)
-        .set({ service: `routine.${projRow[0].slug}.bearer` })
-        .where(eq(credentials.id, routineCredentialId));
     }
   }
 

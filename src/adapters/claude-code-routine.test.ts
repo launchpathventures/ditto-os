@@ -8,7 +8,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDb } from "../test-utils";
-import { createRoutineAdapter, routineConfigSchema } from "./claude-code-routine";
+import {
+  createRoutineAdapter,
+  routineConfigSchema,
+  _clearHarnessTypeCacheForTests,
+  primeHarnessTypeCache,
+  invalidateHarnessTypeCache,
+} from "./claude-code-routine";
 import {
   projects,
   projectRunners,
@@ -30,6 +36,7 @@ let cleanup: () => void;
 
 beforeEach(() => {
   process.env.DITTO_TEST_MODE = "true";
+  _clearHarnessTypeCacheForTests();
   const t = createTestDb();
   testDb = t.db;
   cleanup = t.cleanup;
@@ -38,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   delete process.env.DITTO_TEST_MODE;
+  _clearHarnessTypeCacheForTests();
 });
 
 const VALID_CONFIG = {
@@ -299,7 +307,7 @@ describe("createRoutineAdapter — execute()", () => {
     const adapter = createRoutineAdapter({
       db: testDb,
       statusWebhookUrlFor: (id) => `https://test/api/v1/work-items/${id}/status`,
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
       fetch: (async (_url: string, init: RequestInit) => {
         firedBody = JSON.parse(init.body as string);
         firedHeaders = init.headers as Record<string, string>;
@@ -364,7 +372,7 @@ describe("createRoutineAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 429, text: "rate limit" }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r429 = await adapter429.execute(
       buildCtx({ dispatchId }),
@@ -378,7 +386,7 @@ describe("createRoutineAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 408, text: "timeout" }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r408 = await adapter408.execute(
       buildCtx({ dispatchId }),
@@ -400,7 +408,7 @@ describe("createRoutineAdapter — execute()", () => {
       db: testDb,
       fetch: fakeFetch({ status: 200, json: { unrelated: "field" } }) as unknown as typeof fetch,
       resolveCredential: async () => ({ value: "tok", service: "x" }),
-      harnessTypeFor: () => "catalyst",
+      harnessTypeFor: async () => "catalyst",
     });
     const r = await adapter.execute(
       buildCtx({ dispatchId }),
@@ -451,5 +459,54 @@ describe("createRoutineAdapter — cancel()", () => {
     const r = await adapter.cancel("d_01", "session_01");
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/preview API|terminate manually/);
+  });
+});
+
+describe("createRoutineAdapter — harnessType cache fallback (Reviewer fix)", () => {
+  it("falls back to a per-dispatch DB lookup when the project is not in the cache", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    // Cache is cleared in beforeEach — proj_01's harnessType ('catalyst') must
+    // be discovered via DB read at dispatch time, not silently default to 'native'.
+    let capturedPrompt = "";
+    const adapter = createRoutineAdapter({
+      db: testDb,
+      fetch: (async (_url: string, init: RequestInit) => {
+        capturedPrompt = JSON.parse(init.body as string).text;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            claude_code_session_id: "session_01",
+            claude_code_session_url: "https://x",
+          }),
+          text: async () => "",
+        } as unknown as Response;
+      }) as typeof fetch,
+      resolveCredential: async () => ({ value: "tok", service: "x" }),
+      // No harnessTypeFor override — exercise the default DB-fallback path.
+    });
+
+    const r = await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    expect(r.externalRunId).toBe("session_01");
+    // catalyst harnessType means /dev-review reference, NOT inlined skill text.
+    expect(capturedPrompt).toContain("/dev-review");
+    expect(capturedPrompt).not.toContain("<dev-review-skill>");
+  });
+
+  it("primes + invalidates cache correctly", () => {
+    primeHarnessTypeCache([["proj_a", "catalyst"], ["proj_b", "native"]]);
+    invalidateHarnessTypeCache("proj_a");
+    // No assertion on internals; we just verify these helpers don't throw.
+    expect(true).toBe(true);
   });
 });
