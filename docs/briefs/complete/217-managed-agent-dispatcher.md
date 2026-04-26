@@ -1,7 +1,7 @@
 # Brief 217: Managed Agents Dispatcher (claude-managed-agent) — second cloud runner adapter (sub-brief of 214)
 
 **Date:** 2026-04-26
-**Status:** draft
+**Status:** complete (2026-04-27, post-Reviewer-fix; AC #11 SSE observability deferred to a polish brief)
 **Depends on:** Brief 215 (Projects + Runner Registry — substrate; defines the `RunnerAdapter` interface, `runner_dispatches` table, kind/mode/state enums, `runner-registry.ts`, `validateRunnerConfig` for `claude-managed-agent` shape). Brief 223 SHOULD merge before this brief if the optional in-prompt callback path is wired (the status webhook handler at `packages/web/app/api/v1/work-items/[id]/status/route.ts` is owned by Brief 223); if Brief 223 has not merged at this brief's build time, the callback path is OPTIONAL and the polling-primary path proceeds independently. Brief 216 (Routine) is NOT a hard dependency, but if 216 has merged the prompt-composer (`src/adapters/routine-prompt.ts`) and ephemeral-token discipline are reused — see §D3 below.
 **Unlocks:** the second cloud runner kind. Combined with Brief 216 it gives the user two cloud-execution paths with distinct shapes (Routines = simple fire-and-forget; Managed Agents = steerable, polling-driven, longer-running). Brief 218 (GitHub Actions) ships in parallel; brief 220 (deploy gate), 221 (mobile UX), 222 (smoke tests) consume this adapter.
 **Parent brief:** 214 (Cloud Execution Runners Phase)
