@@ -934,6 +934,50 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 - Layer: 3 (Harness — observability) / Layer 6 (Human — conversation surface)
 - Related: Routine, Default Review Path
 
+### Cloud Execution — Managed Agents Dispatcher (Brief 217)
+
+**Managed Agent** — Anthropic's Managed Agents beta product. A persistent, container-based agent execution service (Agent + Environment + Session + Events). Sibling cloud runner to Routines with a different fit envelope: Routines are fire-and-forget; Managed Agents earn complexity when work needs steering, structured tool confirmations, or rubric-graded outcomes. Auth via `x-api-key` + `anthropic-beta: managed-agents-2026-04-01`.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agents Session, Polling-Primary Status, Cloud Runner Prompt Composer
+
+**Managed Agents Session** — A running instance of a Managed Agent, identified by an Anthropic-issued `session_id`. Created per dispatch via `POST /v1/sessions`; first work kicked off via `POST /v1/sessions/{id}/events` with a `user.message` event. Lifecycle: `idle | running | rescheduling | terminated`. Lifecycle observed via the polling cron (`GET /v1/sessions/{id}` + recent events) and the GitHub fallback handler. Best-effort archive on terminal state via `POST /v1/sessions/{id}/archive`.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agent, Terminal-State Heuristic
+
+**Polling-Primary Status** — Brief 217 §D2 status discipline. Anthropic's Managed Agents API does NOT ship a native completion event for "agent finished its assigned work"; the polling cron at `src/engine/runner-poll-cron.ts` walks non-terminal `claude-managed-agent` dispatches every 30 seconds (per `pollCadenceMs` in `@ditto/core`) and applies the terminal-state heuristic. Distinct from Brief 216's Routines, which are GitHub-events-only. The optional in-prompt callback path (`callback_mode='in-prompt'`) is OFF by default.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agents Session, Terminal-State Heuristic, Cross-Runner Poll Cron
+
+**Terminal-State Heuristic** — Brief 217 §D2 7-row table mapping (session.status, last events, time since dispatch) onto `runner_dispatches.status`. Conservative: `terminated→failed`; `running/rescheduling→running`; `idle + agent.message + idle for >threshold→succeeded`; `idle + agent.error→failed/rate_limited/timed_out` per error pattern; `idle + pending agent.tool_use→running` (no auto-fail at MVP — steering surface absent); `idle + dispatch grace not elapsed→running`. Ambiguous idle stays `running` until either GitHub PR-merged event arrives (authoritative success) or staleness sweeper marks dispatch orphaned. Configurable via `MANAGED_AGENT_TERMINAL_IDLE_THRESHOLD_MS` + `MANAGED_AGENT_DISPATCH_GRACE_MS`.
+- Layer: 3 (Harness — runner)
+- Related: Polling-Primary Status, Cross-Runner Poll Cron
+
+**Cross-Runner Poll Cron** — `src/engine/runner-poll-cron.ts`. Periodic worker that walks non-terminal `runner_dispatches` rows for kinds registered in `pollCadenceMs` (engine-core), calls each row's adapter `status()` per its kind cadence, and persists state transitions via the shared state machine. Currently registers only `claude-managed-agent` at 30s; routines stay GitHub-events-only per Brief 216 design. Adapter throws are isolated per-row. Boot-side `startRunnerPollCron()` wires from `instrumentation.ts`.
+- Layer: 3 (Harness — runner)
+- Related: Polling-Primary Status, Terminal-State Heuristic
+
+**Cloud Runner Prompt Composer** — `src/adapters/cloud-runner-prompt.ts`. Kind-agnostic prompt composition shared by `claude-code-routine` (Brief 216) and `claude-managed-agent` (Brief 217). Renamed from `routine-prompt.ts` per Brief 217 §D14 coordination. Sections: work-item body (always), `/dev-review` directive (always; for native projects skill text inlined at 4 KB cap), optional INTERNAL callback section (only when `ephemeralToken` is supplied; the runner_kind literal is parametrized so the receiving session sends the correct kind label back).
+- Layer: 3 (Harness — runner shared)
+- Related: Managed Agent, Routine, Default Review Path
+
+**Optional In-Prompt Callback** — Brief 217 §D3 mode (`callback_mode='in-prompt'`, OFF by default). When enabled, the managed-agent adapter generates a per-dispatch ephemeral token (bcrypt cost 12 hash on `runner_dispatches.callback_token_hash`, plaintext only in the prompt sent to Anthropic), and the composed prompt's INTERNAL section instructs the session to POST status back to Ditto's webhook on terminal state. Default `polling` mode skips this entirely. Reuses Brief 216's column without schema additions.
+- Layer: 3 (Harness — security)
+- Related: Managed Agent, Polling-Primary Status, Ephemeral Callback Token
+
+### Project Onboarding — Connection-as-Process (Brief 225)
+
+**Project Kind** — `projects.kind`: `'build' | 'track'` (default `'build'`). `'build'` projects are connected to a repo and managed by Ditto's runner pipeline; `'track'` projects are passively monitored (manual-entry flow, future brief). Brief 225's onboarding flow creates `'build'`-kind projects only. Schema-side enum at `packages/core/src/db/schema.ts:projectKindValues`.
+- Layer: 1 (Process — substrate)
+- Related: Onboarding Run, Connection Form
+
+**Onboarding Run** — A `process_runs` row whose `processId` resolves to `processes/project-onboarding.yaml` (slug `project-onboarding`). Triggered by `POST /api/v1/projects` with `kickOffOnboarding: true`. Walks two placeholder steps (`clone-and-scan` no-op + `surface-report` writes the report stub); sub-brief #2 fills the steps in. The run drives the chat-col surface at `/projects/:slug/onboarding`.
+- Layer: 1 (Process — system process) / Layer 6 (Human — chat-col surface)
+- Related: Project Kind, Connection Form, Default Review Path
+
+**Connection Form** — The URL-paste form rendered by reusing the existing `ConnectionSetupBlock` ContentBlock with `serviceName: 'github-project'`. The block's existing `connectionStatus` state machine (`disconnected | connecting | connected | error`) is wired to the URL-probe. Per Designer spec §Stage 0, both the conversational entry path (Self emits the block) and the sidebar entry path ("Connect a project" CTA seeds a Self message) converge on the same conversation-embedded form. NOT a separate `/projects/new` route — the block renders inline in the chat-col.
+- Layer: 6 (Human — chat-col surface)
+- Related: Project Kind, Onboarding Run, ConnectionSetupBlock
+
 ## Workspace Local Bridge (Brief 212)
 
 **Bridge Daemon** — `ditto-bridge`, the outbound-dial worker that runs on the user's laptop / Mac mini. Connects out to a cloud-hosted Ditto workspace via WebSocket. Transport only — no agent code runs on user hardware. Lives in `packages/bridge-cli/`.
