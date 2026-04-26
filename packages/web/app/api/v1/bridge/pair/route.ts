@@ -90,8 +90,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
   }
 
-  // (1) Issue device + JWT.
+  // (1) Mint the device id up-front so we can claim the code with it.
   const deviceId = newDeviceId();
+
+  // (2) Atomically claim the pairing code BEFORE inserting the device row.
+  // The conditional WHERE (`consumedAt IS NULL`) means a racing second
+  // redeemer's UPDATE affects zero rows — and `.returning()` lets us
+  // detect that without leaving an orphan device row behind.
+  const claimed = await db
+    .update(bridgePairingCodes)
+    .set({ consumedAt: now, consumedDeviceId: deviceId })
+    .where(
+      and(
+        eq(bridgePairingCodes.id, matchedRow.id),
+        isNull(bridgePairingCodes.consumedAt),
+      ),
+    )
+    .returning();
+  if (claimed.length === 0) {
+    // Another daemon won the race in the millisecond between our select
+    // and update. No device row inserted; surface 401 so the loser can
+    // request a fresh code.
+    return NextResponse.json(
+      { error: "Pairing code already redeemed" },
+      { status: 401 },
+    );
+  }
+
+  // (3) Now safe to issue device + JWT — the code is ours.
   const jwt = signBridgeJwt(
     { deviceId, workspaceId, protocolVersion: BRIDGE_PROTOCOL_VERSION },
     signingKey,
@@ -107,23 +133,6 @@ export async function POST(req: Request) {
     pairedAt: now,
     status: "active",
   });
-
-  // (2) Atomically mark the pairing code consumed. The conditional WHERE
-  // ensures double-redemption fails (the second consumer's update affects
-  // 0 rows). We don't currently roll back the device insert on conflict
-  // because the candidates query already filters consumedAt IS NULL;
-  // duplicate-redemption is a tight race we tolerate by treating the
-  // first-wins device row as authoritative (the second's would orphan
-  // and be revoke-able by an admin).
-  await db
-    .update(bridgePairingCodes)
-    .set({ consumedAt: now, consumedDeviceId: deviceId })
-    .where(
-      and(
-        eq(bridgePairingCodes.id, matchedRow.id),
-        isNull(bridgePairingCodes.consumedAt),
-      ),
-    );
 
   return NextResponse.json({
     deviceId,

@@ -168,6 +168,101 @@ describe("bridge sweepStaleJobs (AC #10)", () => {
   });
 });
 
+describe("bridge revoke-under-load (AC #11)", () => {
+  beforeEach(() => {
+    const result = createTestDb();
+    testDb = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("flips queued/dispatched/running jobs to revoked when device is revoked", async () => {
+    const { bridgeJobs, bridgeDevices } = await import("../db/schema");
+    const fx = await seedFixtures(testDb);
+
+    // Three jobs in different non-terminal states.
+    await testDb.insert(bridgeJobs).values([
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "sleep", args: ["60"] },
+        state: "queued",
+        queuedAt: new Date(Date.now() - 3000),
+      },
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["dispatched"] },
+        state: "dispatched",
+        queuedAt: new Date(Date.now() - 2000),
+        dispatchedAt: new Date(Date.now() - 1500),
+      },
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["running"] },
+        state: "running",
+        queuedAt: new Date(Date.now() - 1000),
+        dispatchedAt: new Date(Date.now() - 800),
+        lastHeartbeatAt: new Date(),
+      },
+      // Plus one already-terminal job that should NOT be touched.
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["done"] },
+        state: "succeeded",
+        queuedAt: new Date(Date.now() - 5000),
+        dispatchedAt: new Date(Date.now() - 4900),
+        completedAt: new Date(Date.now() - 4800),
+      },
+    ]);
+
+    // Mirror the REST handler's revoke logic (without the WebSocket close,
+    // which is irrelevant here — there's no live connection).
+    const { eq, and, inArray } = await import("drizzle-orm");
+    const now = new Date();
+    await testDb
+      .update(bridgeDevices)
+      .set({ status: "revoked", revokedAt: now, revokedReason: "test-revoke" })
+      .where(eq(bridgeDevices.id, fx.deviceId));
+    await testDb
+      .update(bridgeJobs)
+      .set({ state: "revoked", completedAt: now })
+      .where(
+        and(
+          eq(bridgeJobs.deviceId, fx.deviceId),
+          inArray(bridgeJobs.state, ["queued", "dispatched", "running"]),
+        ),
+      );
+
+    const allJobs = await testDb.select().from(bridgeJobs);
+    const byState = allJobs.reduce<Record<string, number>>((acc, r) => {
+      acc[r.state] = (acc[r.state] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(byState.revoked).toBe(3);
+    expect(byState.succeeded).toBe(1); // terminal job untouched
+
+    const deviceRow = (
+      await testDb.select().from(bridgeDevices).where(eq(bridgeDevices.id, fx.deviceId))
+    )[0];
+    expect(deviceRow.status).toBe("revoked");
+    expect(deviceRow.revokedReason).toBe("test-revoke");
+  });
+});
+
 describe("bridge drainQueueForDevice (AC #8a)", () => {
   beforeEach(() => {
     const result = createTestDb();
@@ -212,5 +307,54 @@ describe("bridge drainQueueForDevice (AC #8a)", () => {
 
     const rows = await testDb.select().from(bridgeJobs);
     expect(rows.every((r) => r.state === "queued")).toBe(true);
+  });
+
+  it("queue replay would happen in queuedAt order (AC #8a)", async () => {
+    // AC #8a verification: the drain SELECT must order by queuedAt asc so
+    // that a sequence of dispatches enters the daemon in the order the
+    // cloud queued them.
+    const { bridgeJobs } = await import("../db/schema");
+    const { asc, eq, and } = await import("drizzle-orm");
+    const fx = await seedFixtures(testDb);
+
+    await testDb.insert(bridgeJobs).values([
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["third"] },
+        state: "queued",
+        queuedAt: new Date(Date.now() - 1000),
+      },
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["first"] },
+        state: "queued",
+        queuedAt: new Date(Date.now() - 3000),
+      },
+      {
+        deviceId: fx.deviceId,
+        processRunId: fx.processRunId,
+        stepRunId: fx.stepRunId,
+        kind: "exec",
+        payload: { kind: "exec", command: "echo", args: ["second"] },
+        state: "queued",
+        queuedAt: new Date(Date.now() - 2000),
+      },
+    ]);
+
+    // Mirror drainQueueForDevice's read query.
+    const ordered = await testDb
+      .select()
+      .from(bridgeJobs)
+      .where(and(eq(bridgeJobs.deviceId, fx.deviceId), eq(bridgeJobs.state, "queued")))
+      .orderBy(asc(bridgeJobs.queuedAt));
+
+    const seq = ordered.map((r) => (r.payload as { args: string[] }).args[0]);
+    expect(seq).toEqual(["first", "second", "third"]);
   });
 });

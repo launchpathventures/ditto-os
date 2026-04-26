@@ -124,6 +124,9 @@ export type BridgeDispatchOutcome =
       /** True when the wire send happened synchronously; false when state
        *  remained `queued` (offline device OR awaiting trust approval). */
       wireSent: boolean;
+      /** Set when trust required human approval — the token a reviewer uses
+       *  to open `/review/[token]` and Approve/Reject. */
+      reviewToken: string | null;
     }
   | {
       ok: false;
@@ -334,5 +337,53 @@ export async function dispatchBridgeJob(
     reviewDetails,
   });
 
-  return { ok: true, jobId, routedDeviceId, routedAs, wireSent };
+  // (7) Mint a review page token when the trust gate paused (AC #15).
+  // Brief 212 §What Changes line for review/[token]: the bridge job's
+  // approval surface must render "this command will run on your <device>"
+  // before the human approves. Done by creating a review_pages row with
+  // a single TextBlock describing the dispatch.
+  let reviewToken: string | null = null;
+  if (input.trustAction === "pause" || input.trustAction === "sample_pause") {
+    try {
+      const { createReviewPage } = await import("../review-pages.js");
+      const bridge = reviewDetails.bridge as {
+        deviceName: string;
+        kind: "exec" | "tmux.send";
+        command?: string;
+        tmuxSession?: string;
+      };
+      const targetDescriptor =
+        bridge.kind === "exec"
+          ? `\`${bridge.command}\``
+          : `keys → tmux session \`${bridge.tmuxSession}\``;
+      const text = [
+        `# Approve bridge dispatch`,
+        ``,
+        `**This command will run on your ${bridge.deviceName}.**`,
+        ``,
+        `\`\`\``,
+        bridge.kind === "exec" ? bridge.command ?? "" : `tmux send-keys -t ${bridge.tmuxSession ?? ""} -- … Enter`,
+        `\`\`\``,
+        ``,
+        `Routed as: ${routedAs}. Job id: ${jobId}.`,
+        ``,
+        `Approve to dispatch; reject to cancel.`,
+      ].join("\n");
+      void targetDescriptor; // currently embedded in text body
+      const created = await createReviewPage({
+        userId: "founder",
+        personId: "self",
+        title: `Bridge: ${bridge.kind} on ${bridge.deviceName}`,
+        blocks: [{ type: "text", text }],
+        userName: bridge.deviceName,
+      });
+      reviewToken = created.token;
+    } catch (err) {
+      // Non-fatal — the dispatch already persisted; surface the warning so
+      // operators see the missing review page.
+      console.warn("[bridge] failed to create review page:", err);
+    }
+  }
+
+  return { ok: true, jobId, routedDeviceId, routedAs, wireSent, reviewToken };
 }
