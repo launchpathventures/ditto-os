@@ -1,5 +1,5 @@
 /**
- * routine-prompt composer tests — Brief 216 AC #9.
+ * cloud-runner-prompt composer tests — Brief 216 AC #9 + Brief 217 §D14 (kind-agnostic).
  */
 
 import fs from "fs";
@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   composePrompt,
   DEV_REVIEW_INLINE_CAP_BYTES,
-} from "./routine-prompt";
+} from "./cloud-runner-prompt";
 
 const SAMPLE_INPUT = {
   workItemBody: "Add a /healthz endpoint.",
@@ -43,6 +43,53 @@ describe("composePrompt — catalyst harness", () => {
     expect(r.prompt).toContain(`"stepRunId": "${SAMPLE_INPUT.stepRunId}"`);
     expect(r.prompt).toContain("INTERNAL DIRECTIVE");
     expect(r.prompt).toContain('"runnerKind": "claude-code-routine"');
+  });
+});
+
+describe("composePrompt — kind-agnostic INTERNAL section (Brief 217 §D14)", () => {
+  it("emits runner_kind literal matching the runnerKind input (managed-agent)", () => {
+    const r = composePrompt({
+      ...SAMPLE_INPUT,
+      harnessType: "catalyst",
+      runnerKind: "claude-managed-agent",
+    });
+    if (!r.ok) throw new Error("unreachable");
+    expect(r.prompt).toContain('"runnerKind": "claude-managed-agent"');
+    expect(r.prompt).not.toContain('"runnerKind": "claude-code-routine"');
+  });
+
+  it("defaults runnerKind to claude-code-routine for Brief 216 backwards-compat", () => {
+    const r = composePrompt({
+      ...SAMPLE_INPUT,
+      harnessType: "catalyst",
+    });
+    if (!r.ok) throw new Error("unreachable");
+    expect(r.prompt).toContain('"runnerKind": "claude-code-routine"');
+  });
+});
+
+describe("composePrompt — polling-only mode (Brief 217 §D3)", () => {
+  it("does NOT emit INTERNAL callback section when ephemeralToken is omitted", () => {
+    const r = composePrompt({
+      workItemBody: "Add /healthz",
+      harnessType: "catalyst",
+      runnerKind: "claude-managed-agent",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("unreachable");
+    expect(r.prompt).toContain("Add /healthz");
+    expect(r.prompt).toContain("/dev-review");
+    expect(r.prompt).not.toContain("INTERNAL DIRECTIVE");
+    expect(r.prompt).not.toContain("Bearer");
+  });
+
+  it("rejects ephemeralToken without statusWebhookUrl + stepRunId (defensive)", () => {
+    const r = composePrompt({
+      workItemBody: "Add /healthz",
+      harnessType: "catalyst",
+      ephemeralToken: "tok_x",
+    });
+    expect(r.ok).toBe(false);
   });
 });
 

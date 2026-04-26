@@ -1,12 +1,19 @@
 /**
- * Routine Prompt Composer — Brief 216 §D2 + §D7.
+ * Cloud Runner Prompt Composer — Brief 216 §D2 + Brief 217 §D4 (kind-agnostic).
  *
- * Pure function. Composes the prompt body sent to Anthropic's Claude Code
- * Routine `/fire` endpoint. Three sections: the work-item body, a `/dev-review`
- * directive, and an INTERNAL callback section that the routine session uses to
- * post terminal-state status back to Ditto.
+ * Pure function. Composes the prompt body sent to a cloud runner (currently
+ * `claude-code-routine` and `claude-managed-agent`). Sections:
+ *  - The work-item body (always).
+ *  - A `/dev-review` directive (always; for native projects the skill text is inlined).
+ *  - Optionally an INTERNAL callback section (when an `ephemeralToken` is supplied).
+ *    Brief 217 §D3 — managed-agent is polling-primary by default; the INTERNAL
+ *    section is only emitted when the caller sets `callback_mode='in-prompt'`.
  *
- * Skill loading (Brief 216 §D7):
+ * Brief 217 §D14 — kind-agnostic. The `runnerKind` parameter is the only
+ * kind-specific bit (it appears in the INTERNAL section's body shape so the
+ * receiving session sends the correct kind label back).
+ *
+ * Skill loading (Brief 216 §D7 / Brief 217 §D5):
  *  - `harnessType='catalyst'` — repo carries `.catalyst/skills/dev-review/SKILL.md`;
  *    Claude Code's slash-command mechanism reads it from the cloned working tree.
  *    The prompt does NOT inline the skill text.
@@ -15,18 +22,17 @@
  *    `composePrompt()` returns a structured error result and the dispatcher
  *    rejects the dispatch before HTTP fire.
  *
- * Brief drift flagged for Architect (Insight-043): Brief 216 §D2's literal
- * prompt body uses runner-state values (`succeeded`/`failed`/`cancelled`) for
- * the `state` field, but the route schema (`workItemStatusUpdateSchema` in
- * @ditto/core) accepts only brief states. This composer instructs the routine
- * to send brief states (`review`/`blocked`/`archived`) mapped from outcome,
- * preserving Brief 223's existing schema. The runner_dispatches lifecycle is
- * driven by GitHub fallback events on PR merge (Brief 216 §D4) — the in-prompt
- * callback advances workItems.briefState only.
+ * Brief drift flagged for Architect (Insight-043, carried from Brief 216): the
+ * brief's literal prompt body uses runner-state values for the `state` field,
+ * but the route schema (`workItemStatusUpdateSchema` in @ditto/core) accepts
+ * only brief states. This composer instructs the runner session to send brief
+ * states (`review`/`blocked`/`archived`) mapped from outcome, preserving
+ * Brief 223's existing schema.
  */
 
 import fs from "fs";
 import path from "path";
+import type { RunnerKind } from "@ditto/core";
 
 /**
  * Default location of the canonical `dev-review` SKILL.md inside Ditto's
@@ -45,12 +51,27 @@ export interface ComposePromptInput {
   workItemBody: string;
   /** Catalyst projects rely on the cloned repo; native/none projects inline. */
   harnessType: "catalyst" | "native" | "none";
-  /** Resolved status webhook URL for the in-prompt callback. */
-  statusWebhookUrl: string;
-  /** Plaintext ephemeral callback token (per-dispatch). */
-  ephemeralToken: string;
-  /** Audit identifier for the originating step run. */
-  stepRunId: string;
+  /**
+   * Identifies the runner kind that will execute the dispatch. Used in the
+   * INTERNAL callback section's `runnerKind` field so the receiving session
+   * sends the correct kind back to Ditto's status webhook. Defaults to
+   * `claude-code-routine` for Brief 216 backwards-compat.
+   */
+  runnerKind?: RunnerKind;
+  /**
+   * Resolved status webhook URL for the in-prompt callback. Required when
+   * `ephemeralToken` is supplied; ignored otherwise.
+   */
+  statusWebhookUrl?: string;
+  /**
+   * Plaintext ephemeral callback token (per-dispatch). When omitted, the
+   * INTERNAL callback section is NOT emitted — the runner has no way to post
+   * back and lifecycle is observed via the polling cron + GitHub fallback
+   * events alone (Brief 217 polling-primary default).
+   */
+  ephemeralToken?: string;
+  /** Audit identifier for the originating step run. Required iff ephemeralToken set. */
+  stepRunId?: string;
   /**
    * Optional override for the dev-review skill path. Defaults to
    * `<dittoRoot>/.catalyst/skills/dev-review/SKILL.md`. Configurable via
@@ -97,7 +118,24 @@ export function composePrompt(input: ComposePromptInput): ComposePromptResult {
     sections.push("---");
   }
 
-  sections.push(buildInternalCallbackSection(input));
+  if (input.ephemeralToken) {
+    if (!input.statusWebhookUrl || !input.stepRunId) {
+      return {
+        ok: false,
+        error:
+          "ephemeralToken supplied without statusWebhookUrl + stepRunId — composePrompt cannot build the INTERNAL callback section.",
+        reason: "dev-review-skill-missing-from-deployment",
+      };
+    }
+    sections.push(
+      buildInternalCallbackSection({
+        statusWebhookUrl: input.statusWebhookUrl,
+        ephemeralToken: input.ephemeralToken,
+        stepRunId: input.stepRunId,
+        runnerKind: input.runnerKind ?? "claude-code-routine",
+      }),
+    );
+  }
 
   return {
     ok: true,
@@ -106,7 +144,14 @@ export function composePrompt(input: ComposePromptInput): ComposePromptResult {
   };
 }
 
-function buildInternalCallbackSection(input: ComposePromptInput): string {
+interface InternalCallbackInput {
+  statusWebhookUrl: string;
+  ephemeralToken: string;
+  stepRunId: string;
+  runnerKind: RunnerKind;
+}
+
+function buildInternalCallbackSection(input: InternalCallbackInput): string {
   return [
     "---",
     "",
@@ -119,7 +164,7 @@ function buildInternalCallbackSection(input: ComposePromptInput): string {
     "    -H \"Content-Type: application/json\" \\",
     "    -d '{",
     "      \"state\": \"review\" | \"blocked\" | \"archived\",",
-    "      \"runnerKind\": \"claude-code-routine\",",
+    `      "runnerKind": "${input.runnerKind}",`,
     "      \"externalRunId\": \"<your-session-id>\",",
     `      "stepRunId": "${input.stepRunId}",`,
     "      \"prUrl\": \"<pr-url-if-any>\",",

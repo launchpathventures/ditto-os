@@ -39,7 +39,7 @@ import { db as appDb } from "../db";
 import * as schema from "../db/schema";
 import { runnerDispatches, projects } from "../db/schema";
 import { getCredentialById } from "../engine/credential-vault";
-import { composePrompt } from "./routine-prompt";
+import { composePrompt } from "./cloud-runner-prompt";
 
 type AnyDb = BetterSQLite3Database<typeof schema>;
 
@@ -115,7 +115,10 @@ export interface RoutineAdapterDeps {
    */
   statusWebhookUrlFor?: (workItemId: string) => string;
   /** Override for tests — the harness type lookup (catalyst | native | none). */
-  harnessTypeFor?: (project: ProjectRef) => "catalyst" | "native" | "none";
+  harnessTypeFor?: (
+    project: ProjectRef,
+    db: AnyDb,
+  ) => Promise<"catalyst" | "native" | "none">;
   /** Override for tests — defaults to the app db singleton. */
   db?: AnyDb;
   /** Override for tests — defaults to credential-vault's getCredentialById. */
@@ -182,10 +185,11 @@ export function createRoutineAdapter(deps: RoutineAdapterDeps = {}): RunnerAdapt
       const ephemeralHash = await bcrypt.hash(ephemeralToken, BCRYPT_COST);
 
       // Compose the prompt with /dev-review + callback section.
-      const harnessType = harnessTypeFor(project);
+      const harnessType = await harnessTypeFor(project, dbImpl);
       const promptResult = composePrompt({
         workItemBody: workItem.content,
         harnessType,
+        runnerKind: "claude-code-routine",
         statusWebhookUrl: statusWebhookUrlFor(workItem.id),
         ephemeralToken,
         stepRunId: ctx.stepRunId,
@@ -349,20 +353,31 @@ function defaultStatusWebhookUrlFor(workItemId: string): string {
   return `${base.replace(/\/$/, "")}/api/v1/work-items/${workItemId}/status`;
 }
 
-function defaultHarnessTypeFor(project: ProjectRef): "catalyst" | "native" | "none" {
-  // The ProjectRef interface doesn't yet surface harnessType; query DB.
-  // (Builder note: a future ProjectRef extension could carry harnessType so
-  // the adapter avoids a DB roundtrip per dispatch — flagged for Architect.)
-  return looksUpHarnessTypeSync(project.id) ?? "native";
+async function defaultHarnessTypeFor(
+  project: ProjectRef,
+  db: AnyDb,
+): Promise<"catalyst" | "native" | "none"> {
+  // Cache hit — no DB roundtrip.
+  const cached = cachedHarnessTypes?.get(project.id);
+  if (cached) return cached;
+  // Cache miss (project created at runtime, post-boot). Read the row and
+  // memoize. The ProjectRef interface doesn't yet surface harnessType; a
+  // future extension could remove this DB read entirely.
+  const rows = await db
+    .select({ harnessType: projects.harnessType })
+    .from(projects)
+    .where(eq(projects.id, project.id))
+    .limit(1);
+  const value = (rows[0]?.harnessType ?? "native") as
+    | "catalyst"
+    | "native"
+    | "none";
+  if (!cachedHarnessTypes) cachedHarnessTypes = new Map();
+  cachedHarnessTypes.set(project.id, value);
+  return value;
 }
 
 let cachedHarnessTypes: Map<string, "catalyst" | "native" | "none"> | null = null;
-function looksUpHarnessTypeSync(projectId: string): "catalyst" | "native" | "none" | null {
-  if (cachedHarnessTypes && cachedHarnessTypes.has(projectId)) {
-    return cachedHarnessTypes.get(projectId)!;
-  }
-  return null;
-}
 
 /**
  * Allow boot/test code to seed the harness-type cache so the adapter doesn't
@@ -373,6 +388,16 @@ export function primeHarnessTypeCache(
   entries: Iterable<[string, "catalyst" | "native" | "none"]>,
 ): void {
   cachedHarnessTypes = new Map(entries);
+}
+
+/** Test-only — clear the cache so DB-fallback paths can be exercised. */
+export function _clearHarnessTypeCacheForTests(): void {
+  cachedHarnessTypes = null;
+}
+
+/** Invalidate one project — call from /projects/[id] PATCH or DELETE. */
+export function invalidateHarnessTypeCache(projectId: string): void {
+  cachedHarnessTypes?.delete(projectId);
 }
 
 async function safeBody(res: Response): Promise<string> {
