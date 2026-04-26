@@ -281,3 +281,8 @@ export {
   type RegisteredDevice,
   type LocalBridge,
 } from "./bridge/index.js";
+
+// ============================================================
+// Onboarding analyser intermediate types (Brief 226)
+// ============================================================
+export * from "./onboarding/types.js";
