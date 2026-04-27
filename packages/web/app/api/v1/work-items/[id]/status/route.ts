@@ -109,6 +109,10 @@ export async function POST(
   const { verifyManagedAgentEphemeralCallbackToken } = await import(
     "../../../../../../../../../src/engine/runner-status-handlers/managed-agent"
   );
+  // Brief 218 §What Changes — same pattern for github-action.
+  const { verifyGithubActionEphemeralCallbackToken } = await import(
+    "../../../../../../../../../src/engine/runner-status-handlers/github-action"
+  );
 
   // Look up work item + project bearer hash.
   const wiRows = await db
@@ -150,9 +154,16 @@ export async function POST(
     if (ephemeralManagedAgent.ok) {
       bearerSource = "ephemeral";
       matchedDispatchId = ephemeralManagedAgent.dispatchId;
-    } else if (wi.bearerHash) {
-      const projectMatch = await verifyBearerToken(presented, wi.bearerHash);
-      if (projectMatch) bearerSource = "project";
+    } else {
+      const ephemeralGithubAction =
+        await verifyGithubActionEphemeralCallbackToken(presented, id);
+      if (ephemeralGithubAction.ok) {
+        bearerSource = "ephemeral";
+        matchedDispatchId = ephemeralGithubAction.dispatchId;
+      } else if (wi.bearerHash) {
+        const projectMatch = await verifyBearerToken(presented, wi.bearerHash);
+        if (projectMatch) bearerSource = "project";
+      }
     }
   }
 

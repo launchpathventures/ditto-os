@@ -374,3 +374,184 @@ describe("runRunnerPollTick — AC #6", () => {
     expect(o!.result).toBe("no-adapter");
   });
 });
+
+// ============================================================
+// Brief 218 AC #8 — github-action polling (60s cadence)
+// ============================================================
+
+describe("runRunnerPollTick — github-action (Brief 218 §D11)", () => {
+  it("polls a non-terminal github-action dispatch and applies a transition", async () => {
+    await seedFixtures();
+    // Cadence is 60s — set startedAt to 65s ago so it elapses.
+    const dispatchedAt = new Date(Date.now() - 65_000);
+    const dispatchId = await seedDispatch({
+      runnerKind: "github-action",
+      status: "running",
+      externalRunId: "12345",
+      startedAt: dispatchedAt,
+      createdAt: dispatchedAt,
+    });
+
+    const adapter = fakeAdapter({
+      kind: "github-action",
+      statusFn: async () => ({
+        status: "succeeded",
+        externalRunId: "12345",
+        externalUrl: "https://github.com/owner/agent-crm/actions/runs/12345",
+        lastUpdatedAt: new Date(),
+      }),
+    });
+
+    const outcomes = await runRunnerPollTick({
+      db: testDb,
+      adapterFor: (k) => (k === "github-action" ? adapter : null),
+    });
+
+    const o = outcomes.find((x) => x.dispatchId === dispatchId);
+    expect(o).toBeDefined();
+    expect(o!.result).toBe("polled");
+    expect(o!.transitioned).toEqual({ from: "running", to: "succeeded" });
+
+    const rows = await testDb
+      .select()
+      .from(runnerDispatches)
+      .where(eq(runnerDispatches.id, dispatchId));
+    expect(rows[0].status).toBe("succeeded");
+    expect(rows[0].externalUrl).toBe(
+      "https://github.com/owner/agent-crm/actions/runs/12345",
+    );
+  });
+
+  it("skips a github-action row whose 60s cadence has not yet elapsed", async () => {
+    await seedFixtures();
+    const veryRecent = new Date(Date.now() - 5_000);
+    const dispatchId = await seedDispatch({
+      runnerKind: "github-action",
+      status: "running",
+      externalRunId: "12346",
+      startedAt: veryRecent,
+      createdAt: veryRecent,
+    });
+
+    let statusCalls = 0;
+    const adapter = fakeAdapter({
+      kind: "github-action",
+      statusFn: async () => {
+        statusCalls += 1;
+        return {
+          status: "running",
+          externalRunId: "12346",
+          externalUrl: null,
+          lastUpdatedAt: new Date(),
+        };
+      },
+    });
+
+    const outcomes = await runRunnerPollTick({
+      db: testDb,
+      adapterFor: (k) => (k === "github-action" ? adapter : null),
+    });
+    const o = outcomes.find((x) => x.dispatchId === dispatchId);
+    expect(o!.result).toBe("skipped");
+    expect(statusCalls).toBe(0);
+  });
+
+  it("polls both managed-agent + github-action in the same tick (mixed kinds)", async () => {
+    await seedFixtures();
+    const old = new Date(Date.now() - 120_000);
+    const maId = await seedDispatch({
+      runnerKind: "claude-managed-agent",
+      status: "running",
+      externalRunId: "session_x",
+      startedAt: old,
+      createdAt: old,
+    });
+    const gaId = await seedDispatch({
+      runnerKind: "github-action",
+      status: "running",
+      externalRunId: "98765",
+      startedAt: old,
+      createdAt: old,
+    });
+
+    const adapters: Record<string, RunnerAdapter | null> = {
+      "claude-managed-agent": fakeAdapter({
+        kind: "claude-managed-agent",
+        statusFn: async () => ({
+          status: "succeeded",
+          externalRunId: "session_x",
+          externalUrl: "https://platform.claude.com/sessions/session_x",
+          lastUpdatedAt: new Date(),
+        }),
+      }),
+      "github-action": fakeAdapter({
+        kind: "github-action",
+        statusFn: async () => ({
+          status: "succeeded",
+          externalRunId: "98765",
+          externalUrl: "https://github.com/owner/agent-crm/actions/runs/98765",
+          lastUpdatedAt: new Date(),
+        }),
+      }),
+    };
+
+    const outcomes = await runRunnerPollTick({
+      db: testDb,
+      adapterFor: (k) => adapters[k] ?? null,
+    });
+
+    expect(outcomes.find((x) => x.dispatchId === maId)?.result).toBe("polled");
+    expect(outcomes.find((x) => x.dispatchId === gaId)?.result).toBe("polled");
+
+    const rows = await testDb.select().from(runnerDispatches);
+    const ma = rows.find((r) => r.id === maId);
+    const ga = rows.find((r) => r.id === gaId);
+    expect(ma?.status).toBe("succeeded");
+    expect(ga?.status).toBe("succeeded");
+  });
+
+  it("survives github-action adapter throwing — managed-agent rows continue to be polled", async () => {
+    await seedFixtures();
+    const old = new Date(Date.now() - 120_000);
+    const maId = await seedDispatch({
+      runnerKind: "claude-managed-agent",
+      status: "running",
+      externalRunId: "session_x",
+      startedAt: old,
+      createdAt: old,
+    });
+    const gaId = await seedDispatch({
+      runnerKind: "github-action",
+      status: "running",
+      externalRunId: "98765",
+      startedAt: old,
+      createdAt: old,
+    });
+
+    const adapters: Record<string, RunnerAdapter | null> = {
+      "claude-managed-agent": fakeAdapter({
+        kind: "claude-managed-agent",
+        statusFn: async () => ({
+          status: "succeeded",
+          externalRunId: "session_x",
+          externalUrl: null,
+          lastUpdatedAt: new Date(),
+        }),
+      }),
+      "github-action": fakeAdapter({
+        kind: "github-action",
+        statusFn: async () => {
+          throw new Error("octokit boom");
+        },
+      }),
+    };
+
+    const outcomes = await runRunnerPollTick({
+      db: testDb,
+      adapterFor: (k) => adapters[k] ?? null,
+    });
+
+    expect(outcomes.find((x) => x.dispatchId === maId)?.result).toBe("polled");
+    expect(outcomes.find((x) => x.dispatchId === gaId)?.result).toBe("error");
+  });
+});
