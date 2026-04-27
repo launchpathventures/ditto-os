@@ -158,6 +158,9 @@ export async function register() {
       const { createManagedAgentAdapter } = await import(
         "../../src/adapters/claude-managed-agent"
       );
+      const { createGithubActionAdapter } = await import(
+        "../../src/adapters/github-action"
+      );
       if (!hasAdapter("local-mac-mini")) {
         const bridge = createLocalBridge();
         registerAdapter(createLocalMacMiniAdapter({ bridge }));
@@ -176,6 +179,12 @@ export async function register() {
         registerAdapter(createManagedAgentAdapter());
         console.log(
           "[instrumentation] Runner registry: claude-managed-agent adapter registered (Brief 217)."
+        );
+      }
+      if (!hasAdapter("github-action")) {
+        registerAdapter(createGithubActionAdapter());
+        console.log(
+          "[instrumentation] Runner registry: github-action adapter registered (Brief 218)."
         );
       }
       // Brief 217 — start the cross-runner poll cron (only kinds with
@@ -204,6 +213,28 @@ export async function register() {
     } catch (error) {
       console.error("[instrumentation] Project seed failed:", error);
       // Non-fatal — projects can be created via /projects/new
+    }
+
+    // Brief 226 AC #14 — sweep stale `ditto-analyser-*` temp dirs older
+    // than 24 hours. Belt-and-braces with the per-handler try/finally
+    // cleanup; this catches engine-crash-mid-handler dir leaks.
+    try {
+      const { sweepStaleAnalyserDirs } = await import(
+        "../../src/engine/onboarding/cleanup"
+      );
+      const removed = sweepStaleAnalyserDirs();
+      if (removed > 0) {
+        console.log(
+          `[instrumentation] Brief 226 cleanup-on-boot: removed ${removed} stale ditto-analyser-* dirs.`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "[instrumentation] Brief 226 cleanup-on-boot sweep failed:",
+        error,
+      );
+      // Non-fatal — sweep retries on next boot; per-handler try/finally
+      // is the primary defence.
     }
 
     // Brief 215 AC #2 — post-migration audit: if any processes had a non-null

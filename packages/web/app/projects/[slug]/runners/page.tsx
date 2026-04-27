@@ -15,9 +15,72 @@ const RUNNER_KINDS = [
   { value: "local-mac-mini", label: "Local Mac mini", note: null as string | null },
   { value: "claude-code-routine", label: "Claude Code Routine", note: null as string | null },
   { value: "claude-managed-agent", label: "Claude Managed Agent", note: null as string | null },
-  { value: "github-action", label: "GitHub Action", note: "GitHub Actions — coming in sub-brief 218" },
+  { value: "github-action", label: "GitHub Action", note: null as string | null },
   { value: "e2b-sandbox", label: "E2B sandbox", note: "E2B sandbox — deferred" },
 ] as const;
+
+/**
+ * Brief 218 §D16 — copy-pasteable workflow YAML template. Source of truth is
+ * `docs/runner-templates/dispatch-coding-work.yml`; the in-page string keeps
+ * the admin form self-contained for the "Copy template" button. If the
+ * template file is updated, refresh this constant in lockstep.
+ */
+const DISPATCH_CODING_WORK_YML = `# Ditto runner template — Brief 218 §D16
+# Paste this into .github/workflows/dispatch-coding-work.yml in your repo.
+name: Ditto — Dispatch coding work
+
+on:
+  workflow_dispatch:
+    inputs:
+      work_item_id:        { type: string,  required: true,  description: "Ditto work item ID" }
+      work_item_body:      { type: string,  required: true,  description: "The coding task description" }
+      harness_type:        { type: choice,  required: true,  options: [catalyst, native, none] }
+      stepRunId:           { type: string,  required: true,  description: "Insight-180 audit ID" }
+      callback_url:        { type: string,  required: false, description: "Optional Ditto status webhook URL" }
+      dev_review_skill_url:
+        type: string
+        required: false
+        description: "URL to .catalyst/skills/dev-review/SKILL.md (used when harness_type != catalyst)"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch /dev-review skill (native projects only)
+        if: \${{ inputs.harness_type != 'catalyst' && inputs.dev_review_skill_url != '' }}
+        run: |
+          mkdir -p .catalyst/skills/dev-review
+          curl -fsSL "\${{ inputs.dev_review_skill_url }}" -o .catalyst/skills/dev-review/SKILL.md
+      - name: Run Claude Code with the work-item body
+        env:
+          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Replace with your preferred Claude Code invocation.
+          # Example: pipe the work-item body as the prompt and have it open a PR.
+          echo "\${{ inputs.work_item_body }}" | npx @anthropic-ai/claude-code -y --print --skill /dev-review
+      - name: Optional callback to Ditto status webhook
+        if: \${{ inputs.callback_url != '' }}
+        env:
+          # In 'in-workflow-secret' callback mode the bearer is in the repo secret;
+          # in 'in-workflow' mode the token is already in the callback_url query string.
+          DITTO_RUNNER_BEARER: \${{ secrets.DITTO_RUNNER_BEARER }}
+        run: |
+          AUTH=""
+          if [ -n "$DITTO_RUNNER_BEARER" ]; then AUTH="Authorization: Bearer $DITTO_RUNNER_BEARER"; fi
+          curl -X POST "\${{ inputs.callback_url }}" \\
+            -H "$AUTH" \\
+            -H "Content-Type: application/json" \\
+            -d "{
+              \\"state\\": \\"shipped\\",
+              \\"runnerKind\\": \\"github-action\\",
+              \\"externalRunId\\": \\"\${{ github.run_id }}\\",
+              \\"stepRunId\\": \\"\${{ inputs.stepRunId }}\\"
+            }"
+`;
 
 interface Runner {
   id: string;
@@ -165,7 +228,8 @@ export default function ProjectRunnersPage({
                     >
                       Test dispatch
                     </button>
-                    {r.kind === "claude-managed-agent" && (
+                    {(r.kind === "claude-managed-agent" ||
+                      r.kind === "github-action") && (
                       <button
                         onClick={() => onVerifyWithApi(r.kind)}
                         className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-text-primary"
@@ -225,6 +289,17 @@ function AddRunnerForm(props: {
   const [maObserveEvents, setMaObserveEvents] = useState(false);
   const [maCallbackMode, setMaCallbackMode] =
     useState<"polling" | "in-prompt">("polling");
+  // Brief 218 — github-action form fields.
+  const [gaRepo, setGaRepo] = useState("");
+  const [gaWorkflowFile, setGaWorkflowFile] = useState("dispatch-coding-work.yml");
+  const [gaDefaultRef, setGaDefaultRef] = useState("main");
+  const [gaPat, setGaPat] = useState("");
+  const [gaCallbackMode, setGaCallbackMode] =
+    useState<"webhook-only" | "in-workflow-secret" | "in-workflow">(
+      "webhook-only",
+    );
+  const [gaShowTemplate, setGaShowTemplate] = useState(false);
+  const [gaTemplateCopied, setGaTemplateCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,7 +341,15 @@ function AddRunnerForm(props: {
                   callback_mode: maCallbackMode,
                   observe_events: maObserveEvents,
                 }
-              : {};
+              : kind === "github-action"
+                ? {
+                    repo: gaRepo,
+                    workflowFile: gaWorkflowFile,
+                    defaultRef: gaDefaultRef || "main",
+                    pat: gaPat,
+                    callback_mode: gaCallbackMode,
+                  }
+                : {};
       const r = await fetch(`/api/v1/projects/${props.slug}/runners`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -579,6 +662,159 @@ function AddRunnerForm(props: {
               Stream session events into the activity log (SSE; off by default)
             </span>
           </label>
+        </div>
+      )}
+
+      {kind === "github-action" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Repo</span>
+            <input
+              required
+              type="text"
+              value={gaRepo}
+              onChange={(e) => setGaRepo(e.target.value)}
+              placeholder="owner/repo"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              May differ from the project&rsquo;s default GitHub repo (per Brief 218 §D12).
+            </span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Workflow file</span>
+            <input
+              required
+              type="text"
+              value={gaWorkflowFile}
+              onChange={(e) => setGaWorkflowFile(e.target.value)}
+              placeholder="dispatch-coding-work.yml"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              The file under <code>.github/workflows/</code> to dispatch.
+            </span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">Default ref</span>
+            <input
+              type="text"
+              value={gaDefaultRef}
+              onChange={(e) => setGaDefaultRef(e.target.value)}
+              placeholder="main"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-text-secondary">GitHub PAT</span>
+            <input
+              required
+              type="password"
+              autoComplete="off"
+              value={gaPat}
+              onChange={(e) => setGaPat(e.target.value)}
+              placeholder="ghp_…"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
+              style={{ minHeight: 44 }}
+            />
+            <span className="mt-1 block text-xs text-text-muted">
+              Needs <code>actions:write</code> + <code>contents:read</code> scope on the repo. Stored encrypted in the credential vault.
+            </span>
+          </label>
+          <fieldset>
+            <legend className="text-sm font-medium text-text-secondary">Callback mode</legend>
+            <div className="mt-2 space-y-2">
+              {[
+                { value: "webhook-only", label: "Webhook-only (default; safest)" },
+                {
+                  value: "in-workflow-secret",
+                  label: "In-workflow w/ repo secret (paste DITTO_RUNNER_BEARER once)",
+                },
+                {
+                  value: "in-workflow",
+                  label:
+                    "In-workflow w/ ephemeral token (NOT log-masked — risk acceptance)",
+                },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                    gaCallbackMode === opt.value
+                      ? "border-vivid bg-vivid-subtle"
+                      : "border-border bg-white"
+                  }`}
+                  style={{ minHeight: 44 }}
+                >
+                  <input
+                    type="radio"
+                    name="ga-callback-mode"
+                    value={opt.value}
+                    checked={gaCallbackMode === opt.value}
+                    onChange={() =>
+                      setGaCallbackMode(
+                        opt.value as
+                          | "webhook-only"
+                          | "in-workflow-secret"
+                          | "in-workflow",
+                      )
+                    }
+                  />
+                  <span className="text-sm">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            {gaCallbackMode === "in-workflow" && (
+              <p className="mt-2 text-xs text-amber-700">
+                Per-dispatch ephemeral tokens may appear in workflow logs (GitHub does not auto-mask
+                workflow_dispatch inputs). Tokens are one-trip and per-dispatch; the long-lived bearer
+                via &quot;in-workflow-secret&quot; is preferred for callback-heavy workflows.
+              </p>
+            )}
+          </fieldset>
+          <div className="rounded-lg border border-border bg-gray-50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-text-secondary">
+                Workflow template
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGaShowTemplate((v) => !v)}
+                  className="rounded-lg border border-border bg-white px-2 py-1 text-xs"
+                  style={{ minHeight: 44 }}
+                >
+                  {gaShowTemplate ? "Hide" : "Show"} template
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(DISPATCH_CODING_WORK_YML);
+                      setGaTemplateCopied(true);
+                      setTimeout(() => setGaTemplateCopied(false), 2000);
+                    } catch {
+                      setGaTemplateCopied(false);
+                    }
+                  }}
+                  className="rounded-lg border border-border bg-white px-2 py-1 text-xs"
+                  style={{ minHeight: 44 }}
+                >
+                  {gaTemplateCopied ? "Copied!" : "Copy template"}
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-text-muted">
+              Paste this into <code>.github/workflows/dispatch-coding-work.yml</code> in your repo, then commit and push.
+            </p>
+            {gaShowTemplate && (
+              <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-white p-3 text-xs">
+                <code>{DISPATCH_CODING_WORK_YML}</code>
+              </pre>
+            )}
+          </div>
         </div>
       )}
 

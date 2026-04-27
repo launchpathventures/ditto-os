@@ -79,6 +79,22 @@ const claudeManagedAgentConfigForm = z.object({
   observe_events: z.coerce.boolean().optional(),
 });
 
+/**
+ * Brief 218 — github-action config form. The GitHub PAT is accepted as
+ * plaintext at the boundary, written to the credential vault keyed
+ * `runner.<projectSlug>.github_token`, and replaced with `bearer_credential_id`
+ * before persist (mirrors Brief 217's pattern).
+ */
+const githubActionConfigForm = z.object({
+  repo: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/),
+  workflowFile: z.string().min(1).regex(/\.ya?ml$/),
+  defaultRef: z.string().min(1).default("main"),
+  pat: z.string().min(20),
+  callback_mode: z
+    .enum(["webhook-only", "in-workflow-secret", "in-workflow"])
+    .optional(),
+});
+
 const createRunnerBody = z.object({
   kind: z.enum([
     "local-mac-mini",
@@ -96,7 +112,7 @@ const NOT_YET_IMPLEMENTED: Record<RunnerKind, string | null> = {
   "local-mac-mini": null,
   "claude-code-routine": null, // Brief 216 — adapter wired
   "claude-managed-agent": null, // Brief 217 — adapter wired
-  "github-action": "Runner kind not yet implemented (sub-brief 218).",
+  "github-action": null, // Brief 218 — adapter wired
   "e2b-sandbox": "Runner kind not yet implemented (deferred).",
 };
 
@@ -189,6 +205,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
     managedAgentFormParsed = cfg.data;
+  }
+
+  // Brief 218 — github-action: same pattern.
+  let githubActionCredentialId: string | null = null;
+  let githubActionFinalConfig: Record<string, unknown> | null = null;
+  let githubActionFormParsed:
+    | (typeof githubActionConfigForm)["_output"]
+    | null = null;
+  if (kind === "github-action") {
+    const cfg = githubActionConfigForm.safeParse(data.config);
+    if (!cfg.success) {
+      return NextResponse.json(
+        { error: "Config validation failed", details: cfg.error.format() },
+        { status: 400 }
+      );
+    }
+    githubActionFormParsed = cfg.data;
   }
 
   const { db } = await import("../../../../../../../../../src/db");
@@ -299,6 +332,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  if (kind === "github-action" && githubActionFormParsed) {
+    const { githubActionConfigSchema } = await import(
+      "../../../../../../../../../src/adapters/github-action"
+    );
+    const { storeProjectCredential } = await import(
+      "../../../../../../../../../src/engine/credential-vault"
+    );
+    githubActionCredentialId = await storeProjectCredential(
+      `runner.${projectSlug}.github_token`,
+      githubActionFormParsed.pat,
+    );
+    githubActionFinalConfig = {
+      repo: githubActionFormParsed.repo,
+      workflowFile: githubActionFormParsed.workflowFile,
+      defaultRef: githubActionFormParsed.defaultRef,
+      bearer_credential_id: githubActionCredentialId,
+      ...(githubActionFormParsed.callback_mode
+        ? { callback_mode: githubActionFormParsed.callback_mode }
+        : {}),
+    };
+    const adapterValidation = githubActionConfigSchema.safeParse(
+      githubActionFinalConfig,
+    );
+    if (!adapterValidation.success) {
+      const { deleteCredentialById } = await import(
+        "../../../../../../../../../src/engine/credential-vault"
+      );
+      await deleteCredentialById(githubActionCredentialId).catch(() => {});
+      return NextResponse.json(
+        {
+          error: "github-action adapter rejected the constructed config",
+          details: adapterValidation.error.format(),
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Reject duplicate (projectId, kind) up front for a clean 409 — UNIQUE
   // constraint would otherwise surface as a 500.
   const existing = await db
@@ -320,13 +391,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       ? routineFinalConfig
       : kind === "claude-managed-agent" && managedAgentFinalConfig
         ? managedAgentFinalConfig
-        : data.config;
+        : kind === "github-action" && githubActionFinalConfig
+          ? githubActionFinalConfig
+          : data.config;
   const persistedCredentialIds =
     kind === "claude-code-routine" && routineCredentialId
       ? [routineCredentialId, ...data.credentialIds]
       : kind === "claude-managed-agent" && managedAgentCredentialId
         ? [managedAgentCredentialId, ...data.credentialIds]
-        : data.credentialIds;
+        : kind === "github-action" && githubActionCredentialId
+          ? [githubActionCredentialId, ...data.credentialIds]
+          : data.credentialIds;
 
   const inserted = await db
     .insert(projectRunners)

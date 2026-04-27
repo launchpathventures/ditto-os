@@ -1,20 +1,24 @@
 /**
- * Verify-with-API endpoint — Brief 217 §D8.
+ * Verify-with-API endpoint — Brief 217 §D8 + Brief 218 §D7.
  *
  *   POST /api/v1/projects/:id/runners/:kind/verify
  *
- * Manual-only live API probe. For `claude-managed-agent`, calls
- * `GET /v1/agents/{agent_id}` against Anthropic with the configured API key.
+ * Manual-only live API probe. Per kind:
+ *  - `claude-managed-agent`: `GET /v1/agents/{agent_id}` against Anthropic.
+ *  - `github-action`: `GET /repos/{owner}/{repo}/actions/workflows` against
+ *    GitHub. `actions:read` scope is sufficient — verifies the PAT can list
+ *    the configured repo's workflows without firing a dispatch.
+ *
  * Updates `project_runners.last_health_status` to one of:
  *   - "healthy"          — 200 OK
  *   - "unauthenticated"  — 401 / 403
  *   - "unreachable"      — non-2xx other / network error
  *
- * Brief 217 §D8: NEVER fired automatically (rate-limit / cost). Health checks
- * (called from the dispatcher's pre-dispatch path) remain config-validity only.
+ * NEVER fired automatically (rate-limit / cost). Health checks (called from
+ * the dispatcher's pre-dispatch path) remain config-validity only.
  *
- * Other cloud kinds return 501 — Brief 218 owns github-action verify; e2b-sandbox
- * is deferred.
+ * `local-mac-mini`, `claude-code-routine`, `e2b-sandbox` return 501 — verify
+ * is per-kind opt-in.
  */
 
 import { NextResponse } from "next/server";
@@ -58,10 +62,10 @@ export async function POST(
     return NextResponse.json({ error: `Unknown runner kind: ${kind}` }, { status: 400 });
   }
 
-  if (kind !== "claude-managed-agent") {
+  if (kind !== "claude-managed-agent" && kind !== "github-action") {
     return NextResponse.json(
       {
-        error: `Verify-with-API for ${kind} not implemented (Brief 217 covers claude-managed-agent only).`,
+        error: `Verify-with-API for ${kind} not implemented (only claude-managed-agent and github-action are supported).`,
       },
       { status: 501 },
     );
@@ -70,9 +74,6 @@ export async function POST(
   const { db } = await import("../../../../../../../../../../../src/db");
   const { projects, projectRunners } = await import(
     "../../../../../../../../../../../src/db/schema"
-  );
-  const { managedAgentConfigSchema } = await import(
-    "../../../../../../../../../../../src/adapters/claude-managed-agent"
   );
   const { getCredentialById } = await import(
     "../../../../../../../../../../../src/engine/credential-vault"
@@ -93,7 +94,7 @@ export async function POST(
     .where(
       and(
         eq(projectRunners.projectId, projectRows[0].id),
-        eq(projectRunners.kind, "claude-managed-agent"),
+        eq(projectRunners.kind, kind),
       ),
     )
     .limit(1);
@@ -101,7 +102,79 @@ export async function POST(
     return NextResponse.json({ error: "Runner config not found" }, { status: 404 });
   }
 
-  const cfg = managedAgentConfigSchema.safeParse(runnerRow[0].configJson);
+  if (kind === "claude-managed-agent") {
+    const { managedAgentConfigSchema } = await import(
+      "../../../../../../../../../../../src/adapters/claude-managed-agent"
+    );
+    const cfg = managedAgentConfigSchema.safeParse(runnerRow[0].configJson);
+    if (!cfg.success) {
+      await db
+        .update(projectRunners)
+        .set({ lastHealthCheckAt: new Date(), lastHealthStatus: "unauthenticated" })
+        .where(eq(projectRunners.id, runnerRow[0].id));
+      return NextResponse.json(
+        {
+          status: "unauthenticated",
+          reason: `config invalid: ${cfg.error.message}`,
+        },
+        { status: 200 },
+      );
+    }
+
+    const credential = await getCredentialById(cfg.data.bearer_credential_id);
+    if (!credential) {
+      await db
+        .update(projectRunners)
+        .set({ lastHealthCheckAt: new Date(), lastHealthStatus: "unauthenticated" })
+        .where(eq(projectRunners.id, runnerRow[0].id));
+      return NextResponse.json(
+        { status: "unauthenticated", reason: "API key credential not in vault" },
+        { status: 200 },
+      );
+    }
+
+    const betaHeader =
+      cfg.data.beta_header ??
+      process.env.MANAGED_AGENT_BETA_HEADER ??
+      "managed-agents-2026-04-01";
+
+    let probeStatus: "healthy" | "unauthenticated" | "unreachable" = "unreachable";
+    let reason: string | null = null;
+    try {
+      const res = await fetch(`${ENDPOINT_BASE}/v1/agents/${cfg.data.agent_id}`, {
+        method: "GET",
+        headers: {
+          "x-api-key": credential.value,
+          "anthropic-beta": betaHeader,
+        },
+      });
+      if (res.ok) {
+        probeStatus = "healthy";
+      } else if (res.status === 401 || res.status === 403) {
+        probeStatus = "unauthenticated";
+        reason = `Anthropic returned ${res.status}`;
+      } else {
+        probeStatus = "unreachable";
+        reason = `Anthropic returned ${res.status}`;
+      }
+    } catch (e) {
+      probeStatus = "unreachable";
+      reason = e instanceof Error ? e.message : String(e);
+    }
+
+    await db
+      .update(projectRunners)
+      .set({ lastHealthCheckAt: new Date(), lastHealthStatus: probeStatus })
+      .where(eq(projectRunners.id, runnerRow[0].id));
+
+    return NextResponse.json({ status: probeStatus, reason });
+  }
+
+  // kind === "github-action" — Brief 218 §D7.
+  const { githubActionConfigSchema } = await import(
+    "../../../../../../../../../../../src/adapters/github-action"
+  );
+  const cfg = githubActionConfigSchema.safeParse(runnerRow[0].configJson);
   if (!cfg.success) {
     await db
       .update(projectRunners)
@@ -115,7 +188,6 @@ export async function POST(
       { status: 200 },
     );
   }
-
   const credential = await getCredentialById(cfg.data.bearer_credential_id);
   if (!credential) {
     await db
@@ -123,44 +195,41 @@ export async function POST(
       .set({ lastHealthCheckAt: new Date(), lastHealthStatus: "unauthenticated" })
       .where(eq(projectRunners.id, runnerRow[0].id));
     return NextResponse.json(
-      { status: "unauthenticated", reason: "API key credential not in vault" },
+      { status: "unauthenticated", reason: "GitHub PAT not in vault" },
       { status: 200 },
     );
   }
-
-  const betaHeader =
-    cfg.data.beta_header ??
-    process.env.MANAGED_AGENT_BETA_HEADER ??
-    "managed-agents-2026-04-01";
-
+  const [owner, repo] = cfg.data.repo.split("/");
   let probeStatus: "healthy" | "unauthenticated" | "unreachable" = "unreachable";
   let reason: string | null = null;
   try {
-    const res = await fetch(`${ENDPOINT_BASE}/v1/agents/${cfg.data.agent_id}`, {
-      method: "GET",
-      headers: {
-        "x-api-key": credential.value,
-        "anthropic-beta": betaHeader,
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/actions/workflows`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${credential.value}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
       },
-    });
+    );
     if (res.ok) {
       probeStatus = "healthy";
     } else if (res.status === 401 || res.status === 403) {
       probeStatus = "unauthenticated";
-      reason = `Anthropic returned ${res.status}`;
+      reason = `GitHub returned ${res.status}`;
     } else {
       probeStatus = "unreachable";
-      reason = `Anthropic returned ${res.status}`;
+      reason = `GitHub returned ${res.status}`;
     }
   } catch (e) {
     probeStatus = "unreachable";
     reason = e instanceof Error ? e.message : String(e);
   }
-
   await db
     .update(projectRunners)
     .set({ lastHealthCheckAt: new Date(), lastHealthStatus: probeStatus })
     .where(eq(projectRunners.id, runnerRow[0].id));
-
   return NextResponse.json({ status: probeStatus, reason });
 }
