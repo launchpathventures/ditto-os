@@ -1,7 +1,7 @@
 # Brief 218: GitHub Actions Dispatcher (github-action) — third cloud runner adapter (sub-brief of 214)
 
 **Date:** 2026-04-26
-**Status:** draft
+**Status:** complete (2026-04-27, post-Builder + Reviewer-fix commit `c337c95`; 12 of 13 ACs PASS, AC #11 E2E smoke deferred to manual user run per the brief itself)
 **Depends on:** Brief 215 (Projects + Runner Registry — substrate; defines the `RunnerAdapter` interface, `runner_dispatches` table, kind/mode/state enums, `runner-registry.ts`, `validateRunnerConfig` for `github-action` shape). Brief 223 SHOULD merge before this brief if the optional in-workflow callback path is wired (the status webhook handler at `packages/web/app/api/v1/work-items/[id]/status/route.ts` is owned by Brief 223); if Brief 223 has not merged at this brief's build time, the workflow-driven status path proceeds via GitHub events alone (the adapter does not require Ditto's status webhook). Briefs 216 (Routine) and 217 (Managed Agents) are NOT hard dependencies, but **the kind-agnostic GitHub-fallback handler** introduced by 216/217 is consumed and extended here — see §D6 below for the rename/coordination guard.
 **Unlocks:** the third cloud runner kind. With Brief 215 substrate + 216 (Routine) + 217 (Managed Agents) + this brief, all four implemented cloud runner kinds are dispatchable. Brief 220 (deploy gate), 221 (mobile UX), 222 (smoke tests) consume this adapter.
 **Parent brief:** 214 (Cloud Execution Runners Phase)
