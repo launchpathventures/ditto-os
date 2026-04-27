@@ -139,6 +139,99 @@ describe("runnerWebhookSchema — claude-managed-agent (Brief 217 §D10)", () =>
   });
 });
 
+describe("runnerWebhookSchema — github-action (Brief 218 §D9)", () => {
+  const happy = {
+    runner_kind: "github-action" as const,
+    state: "succeeded" as const,
+    prUrl: "https://github.com/owner/repo/pull/42",
+    stepRunId: "sr_01abc",
+    externalRunId: "12345",
+  };
+
+  it("accepts a happy-path payload (no optional GitHub fields)", () => {
+    const r = runnerWebhookSchema.safeParse(happy);
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a payload with workflowRunUrl + conclusion", () => {
+    const r = runnerWebhookSchema.safeParse({
+      ...happy,
+      workflowRunUrl: "https://github.com/owner/repo/actions/runs/12345",
+      conclusion: "success",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts the `stale` conclusion (superseded run, Reviewer IMP-1 fix)", () => {
+    const r = runnerWebhookSchema.safeParse({
+      ...happy,
+      state: "cancelled",
+      conclusion: "stale",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a minimal payload (no prUrl, no error, no GitHub optionals)", () => {
+    const r = runnerWebhookSchema.safeParse({
+      runner_kind: "github-action",
+      state: "running",
+      stepRunId: "sr_01abc",
+      externalRunId: "12345",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects on missing stepRunId", () => {
+    const { stepRunId: _omit, ...partial } = happy;
+    void _omit;
+    const r = runnerWebhookSchema.safeParse(partial);
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on missing externalRunId", () => {
+    const { externalRunId: _omit, ...partial } = happy;
+    void _omit;
+    const r = runnerWebhookSchema.safeParse(partial);
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on unknown state value", () => {
+    const r = runnerWebhookSchema.safeParse({ ...happy, state: "exploded" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on malformed prUrl", () => {
+    const r = runnerWebhookSchema.safeParse({ ...happy, prUrl: "not a url" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on malformed workflowRunUrl", () => {
+    const r = runnerWebhookSchema.safeParse({
+      ...happy,
+      workflowRunUrl: "not a url",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects on unknown conclusion value", () => {
+    const r = runnerWebhookSchema.safeParse({
+      ...happy,
+      conclusion: "exploded",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("does NOT accept the legacy { dispatch_id, payload } envelope shape", () => {
+    // Brief 218 §D9 — placeholder `payload: z.unknown()` wrapper is dropped.
+    const r = runnerWebhookSchema.safeParse({
+      runner_kind: "github-action",
+      dispatch_id: "d_01",
+      payload: { whatever: true },
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("runnerWebhookSchema — local-mac-mini regression", () => {
   it("still accepts the Brief 212 envelope shape", () => {
     const r = runnerWebhookSchema.safeParse({

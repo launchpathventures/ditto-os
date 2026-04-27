@@ -18,6 +18,8 @@ import { type RunnerKind } from "./kinds.js";
 export const pollCadenceMs: Partial<Record<RunnerKind, number>> = {
   /** Brief 217 §D2 — 30-second polling cadence per parent §D11. */
   "claude-managed-agent": 30_000,
+  /** Brief 218 §D11 — 60-second polling cadence (webhook-primary, polling backup). */
+  "github-action": 60_000,
 };
 
 /** Returns the configured cadence for a kind, or null if not polled. */

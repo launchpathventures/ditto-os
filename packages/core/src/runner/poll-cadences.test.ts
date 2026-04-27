@@ -14,6 +14,10 @@ describe("pollCadenceMs", () => {
     expect(pollCadenceMs["claude-managed-agent"]).toBe(30_000);
   });
 
+  it("registers github-action at 60s (Brief 218 §D11 — webhook-primary, polling backup)", () => {
+    expect(pollCadenceMs["github-action"]).toBe(60_000);
+  });
+
   it("does NOT register claude-code-routine — Brief 216 deviation per §What Changes", () => {
     expect(pollCadenceMs["claude-code-routine"]).toBeUndefined();
   });
@@ -24,14 +28,17 @@ describe("pollCadenceMs", () => {
 });
 
 describe("getPollCadenceMs", () => {
-  it("returns the cadence for a registered kind", () => {
+  it("returns the cadence for claude-managed-agent", () => {
     expect(getPollCadenceMs("claude-managed-agent")).toBe(30_000);
+  });
+
+  it("returns the cadence for github-action (Brief 218)", () => {
+    expect(getPollCadenceMs("github-action")).toBe(60_000);
   });
 
   it("returns null for unregistered kinds", () => {
     expect(getPollCadenceMs("claude-code-routine")).toBeNull();
     expect(getPollCadenceMs("local-mac-mini")).toBeNull();
-    expect(getPollCadenceMs("github-action")).toBeNull();
   });
 });
 
@@ -39,6 +46,7 @@ describe("pollableKinds", () => {
   it("lists only kinds with a registered cadence", () => {
     const kinds = pollableKinds();
     expect(kinds).toContain("claude-managed-agent");
+    expect(kinds).toContain("github-action");
     expect(kinds).not.toContain("claude-code-routine");
     expect(kinds).not.toContain("local-mac-mini");
   });

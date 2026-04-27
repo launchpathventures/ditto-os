@@ -89,7 +89,41 @@ export const claudeManagedAgentStatusPayload = z.object({
   externalRunId: z.string().min(1),
 });
 
-/** Remaining cloud-kind placeholders — sub-brief 218 tightens. */
+/**
+ * Brief 218 §D9 — github-action callback payload. Same base shape as the
+ * other two cloud kinds (`cloudRunnerStateToDispatchStatus` handles all three
+ * via one helper) plus two GitHub-Actions-specific optional fields surfaced
+ * for the inline card UX:
+ *  - `workflowRunUrl` — `https://github.com/<owner>/<repo>/actions/runs/<id>`
+ *  - `conclusion` — GitHub's `workflow_run.conclusion` value, preserved into
+ *    `harness_decisions.reviewDetails.runner.conclusion` for status-badge UX.
+ *    `stale` (Reviewer IMP-1) means the run was superseded by a newer dispatch
+ *    on the same branch — semantically a cancellation, not a failure.
+ */
+export const workflowRunConclusionValues = [
+  "success",
+  "failure",
+  "cancelled",
+  "timed_out",
+  "action_required",
+  "neutral",
+  "skipped",
+  "stale",
+] as const;
+export type WorkflowRunConclusion =
+  (typeof workflowRunConclusionValues)[number];
+
+export const githubActionStatusPayload = z.object({
+  state: z.enum(cloudRunnerCallbackStateValues),
+  prUrl: z.string().url().optional(),
+  error: z.string().max(2_000).optional(),
+  stepRunId: z.string().min(1),
+  externalRunId: z.string().min(1),
+  workflowRunUrl: z.string().url().optional(),
+  conclusion: z.enum(workflowRunConclusionValues).optional(),
+});
+
+/** Remaining cloud-kind placeholders — future briefs tighten. */
 const placeholderPayload = z.unknown();
 
 // ============================================================
@@ -120,8 +154,13 @@ export const runnerWebhookSchema = z.discriminatedUnion("runner_kind", [
   }),
   z.object({
     runner_kind: z.literal("github-action"),
-    dispatch_id: z.string(),
-    payload: placeholderPayload,
+    state: z.enum(cloudRunnerCallbackStateValues),
+    prUrl: z.string().url().optional(),
+    error: z.string().max(2_000).optional(),
+    stepRunId: z.string().min(1),
+    externalRunId: z.string().min(1),
+    workflowRunUrl: z.string().url().optional(),
+    conclusion: z.enum(workflowRunConclusionValues).optional(),
   }),
   z.object({
     runner_kind: z.literal("e2b-sandbox"),
@@ -137,6 +176,7 @@ export type ClaudeCodeRoutineStatusPayload = z.infer<
 export type ClaudeManagedAgentStatusPayload = z.infer<
   typeof claudeManagedAgentStatusPayload
 >;
+export type GithubActionStatusPayload = z.infer<typeof githubActionStatusPayload>;
 
 /**
  * Brief 216 §D9 / Brief 217 §D10 — map a cloud-runner callback state +
