@@ -97,6 +97,12 @@ jobs:
       #    to the project's runnerBearer plaintext (rotate via the project admin UI).
       #    For `callback_mode='in-workflow'`, the ephemeral token is already in the
       #    callback_url query string — no Authorization header needed.
+      #
+      #    To populate `prUrl` in the callback, your work step above MUST write
+      #    `PR_URL=https://github.com/<owner>/<repo>/pull/<n>` to $GITHUB_ENV.
+      #    If $PR_URL is empty (Claude Code has not opened a PR yet), the field
+      #    is omitted from the JSON body — Ditto's `pull_request.opened`
+      #    webhook will surface the PR URL via the kind-agnostic fallback.
       - name: Status callback (optional)
         if: ${{ inputs.callback_url != '' }}
         env:
@@ -109,13 +115,16 @@ jobs:
               AUTH_HEADER="-H Authorization: Bearer $DITTO_RUNNER_BEARER"
             fi
           fi
+          PR_URL_FIELD=""
+          if [ -n "$PR_URL" ]; then
+            PR_URL_FIELD=", \"prUrl\": \"$PR_URL\""
+          fi
           curl -X POST "${{ inputs.callback_url }}" \
             $AUTH_HEADER \
             -H "Content-Type: application/json" \
-            -d '{
-              "state": "shipped",
-              "runnerKind": "github-action",
-              "externalRunId": "${{ github.run_id }}",
-              "stepRunId": "${{ inputs.stepRunId }}",
-              "prUrl": "${{ env.PR_URL }}"
-            }' || true
+            -d "{
+              \"state\": \"shipped\",
+              \"runnerKind\": \"github-action\",
+              \"externalRunId\": \"${{ github.run_id }}\",
+              \"stepRunId\": \"${{ inputs.stepRunId }}\"$PR_URL_FIELD
+            }" || true

@@ -890,3 +890,418 @@ describe("createGithubActionAdapter — healthCheck()", () => {
     expect(r.status).toBe("unauthenticated");
   });
 });
+
+// ============================================================
+// AC #12 — trust-tier behavior at adapter layer (Brief 214 §D8)
+//
+// Brief 214 §D8 places trust enforcement upstream of the adapter (the
+// dispatcher's pre-execute trust gate). Brief 215's dispatcher tests cover
+// queue/sample/reject transitions per tier. The adapter receives the
+// dispatcher's resolved `DispatchTrustContext` and is expected to forward
+// it faithfully into its execute path WITHOUT re-deriving or fabricating it.
+// These tests confirm the adapter does NOT make trust decisions of its own
+// (no per-tier branching inside execute()) — every tier reaches the same
+// `createWorkflowDispatch` wire send so long as the dispatcher routed there.
+// ============================================================
+
+describe("createGithubActionAdapter — trust forwarding (AC #12 / Brief 214 §D8)", () => {
+  const tiers: Array<{
+    label: string;
+    trust: DispatchExecuteContext["trust"];
+  }> = [
+    {
+      label: "supervised + advance (post-approval)",
+      trust: { trustTier: "supervised", trustAction: "advance" },
+    },
+    {
+      label: "spot_checked sampled-out (advance)",
+      trust: { trustTier: "spot_checked", trustAction: "advance" },
+    },
+    {
+      label: "spot_checked sampled-in (sample_advance)",
+      trust: { trustTier: "spot_checked", trustAction: "sample_advance" },
+    },
+    {
+      label: "autonomous + advance",
+      trust: { trustTier: "autonomous", trustAction: "advance" },
+    },
+    {
+      label: "critical + advance",
+      trust: { trustTier: "critical", trustAction: "advance" },
+    },
+  ];
+
+  for (const { label, trust } of tiers) {
+    it(`fires workflow_dispatch with trust=${label}`, async () => {
+      await seedFixtures();
+      const dispatchId = await seedDispatchRow({
+        workItemId: "wi_01",
+        projectId: "proj_01",
+        stepRunId: "sr_01",
+      });
+      const calls: ScriptedFetchCall[] = [];
+      const fetchImpl = scriptedFetch(
+        [{ status: 201, json: { id: 1000 } }],
+        calls,
+      );
+      const adapter = createGithubActionAdapter({
+        db: testDb,
+        fetch: fetchImpl,
+        resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+      });
+      const r = await adapter.execute(
+        buildCtx({ dispatchId, trust }),
+        WORK_ITEM_REF,
+        PROJECT_REF,
+        PROJECT_RUNNER_REF,
+      );
+      // Adapter does not re-derive trust; it sends the dispatch and lets
+      // the dispatcher's upstream gate decide whether execute() is even
+      // called. So every tier here results in a wire send.
+      expect(r.externalRunId).toBe("1000");
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toContain("/dispatches");
+    });
+  }
+
+  it("does NOT branch on trust internally — same encoded body for all tiers", async () => {
+    await seedFixtures();
+    const bodies: string[] = [];
+    for (const { trust } of tiers) {
+      const dispatchId = await seedDispatchRow({
+        workItemId: "wi_01",
+        projectId: "proj_01",
+        stepRunId: "sr_01",
+      });
+      const calls: ScriptedFetchCall[] = [];
+      const fetchImpl = scriptedFetch(
+        [{ status: 201, json: { id: 2000 } }],
+        calls,
+      );
+      const adapter = createGithubActionAdapter({
+        db: testDb,
+        fetch: fetchImpl,
+        resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+      });
+      await adapter.execute(
+        buildCtx({ dispatchId, trust }),
+        WORK_ITEM_REF,
+        PROJECT_REF,
+        PROJECT_RUNNER_REF,
+      );
+      bodies.push(calls[0].init.body as string);
+    }
+    // Every body should be byte-identical (no trust-keyed input fields).
+    const unique = new Set(bodies);
+    expect(unique.size).toBe(1);
+  });
+});
+
+// ============================================================
+// HIGH-1 fix — harness_type resolves from project, not hardcoded (Brief 218 §D4)
+// ============================================================
+
+describe("createGithubActionAdapter — harness_type resolution (Brief 218 §D4)", () => {
+  it("populates inputs.harness_type='catalyst' when project.harnessType is catalyst", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 3000 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      harnessTypeFor: async () => "catalyst",
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.harness_type).toBe("catalyst");
+  });
+
+  it("populates inputs.harness_type='native' when project.harnessType is native", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 3001 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      harnessTypeFor: async () => "native",
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.harness_type).toBe("native");
+  });
+
+  it("populates inputs.harness_type='none' when project.harnessType is none", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 3002 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      harnessTypeFor: async () => "none",
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.harness_type).toBe("none");
+  });
+
+  it("default resolver reads projects.harnessType from the DB (no hardcoded catalyst)", async () => {
+    const { _clearGithubActionHarnessTypeCacheForTests } = await import(
+      "./github-action"
+    );
+    _clearGithubActionHarnessTypeCacheForTests();
+    await seedFixtures();
+    // Update project to native.
+    await testDb
+      .update(projects)
+      .set({ harnessType: "native" })
+      .where(eq(projects.id, "proj_01"));
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 3003 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      // No harnessTypeFor override — uses default resolver.
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.harness_type).toBe("native");
+    _clearGithubActionHarnessTypeCacheForTests();
+  });
+});
+
+// ============================================================
+// MEDIUM-3 fix — listRunIdFallback honours dispatch_run_lookup_window_ms
+// ============================================================
+
+describe("listRunIdFallback — windowed correlation (Brief 218 §D2)", () => {
+  it("picks the run with created_at within the lookup window", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const now = new Date("2026-04-27T12:00:00Z");
+    const old = new Date("2026-04-27T11:00:00Z").toISOString(); // outside window
+    const recent = new Date("2026-04-27T11:59:55Z").toISOString(); // inside 30s window
+    const fetchImpl = scriptedFetch([
+      { status: 204, text: "" },
+      {
+        status: 200,
+        json: {
+          workflow_runs: [
+            // Newest first per GitHub convention; first is OUTSIDE window.
+            { id: 9999, created_at: old },
+            { id: 4242, created_at: recent },
+          ],
+        },
+      },
+    ]);
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      now: () => now,
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    const r = await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    // Should pick 4242 (within window), NOT 9999 (outside window).
+    expect(r.externalRunId).toBe("4242");
+  });
+
+  it("falls back to newest when no run carries created_at (test fixture compat)", async () => {
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const fetchImpl = scriptedFetch([
+      { status: 204, text: "" },
+      // No created_at — adapter falls back to newest.
+      { status: 200, json: { workflow_runs: [{ id: 7777 }] } },
+    ]);
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    const r = await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    expect(r.externalRunId).toBe("7777");
+  });
+});
+
+// ============================================================
+// MEDIUM-2 fix — defaultDevReviewSkillUrlFor returns null unless ALL THREE env vars set
+// ============================================================
+
+describe("defaultDevReviewSkillUrlFor — release-asset URL composition", () => {
+  // Use the adapter with no override to exercise the default resolver via
+  // the inputs.dev_review_skill_url channel.
+  const RELEASE_ENVS = [
+    "DITTO_RELEASE_VERSION",
+    "DITTO_RELEASE_OWNER",
+    "DITTO_RELEASE_REPO",
+  ] as const;
+
+  function clearReleaseEnvs() {
+    for (const k of RELEASE_ENVS) delete process.env[k];
+  }
+
+  it("omits dev_review_skill_url when DITTO_RELEASE_VERSION is unset", async () => {
+    clearReleaseEnvs();
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 5000 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.dev_review_skill_url).toBeUndefined();
+  });
+
+  it("omits dev_review_skill_url when only VERSION is set (no owner/repo defaults)", async () => {
+    clearReleaseEnvs();
+    process.env.DITTO_RELEASE_VERSION = "v1.42.0";
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 5001 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.dev_review_skill_url).toBeUndefined();
+    clearReleaseEnvs();
+  });
+
+  it("populates dev_review_skill_url when ALL THREE env vars are set", async () => {
+    clearReleaseEnvs();
+    process.env.DITTO_RELEASE_VERSION = "v1.42.0";
+    process.env.DITTO_RELEASE_OWNER = "myorg";
+    process.env.DITTO_RELEASE_REPO = "my-ditto-fork";
+    await seedFixtures();
+    const dispatchId = await seedDispatchRow({
+      workItemId: "wi_01",
+      projectId: "proj_01",
+      stepRunId: "sr_01",
+    });
+    const calls: ScriptedFetchCall[] = [];
+    const fetchImpl = scriptedFetch(
+      [{ status: 201, json: { id: 5002 } }],
+      calls,
+    );
+    const adapter = createGithubActionAdapter({
+      db: testDb,
+      fetch: fetchImpl,
+      resolveCredential: async () => ({ value: "ghp_x", service: "x" }),
+    });
+    await adapter.execute(
+      buildCtx({ dispatchId }),
+      WORK_ITEM_REF,
+      PROJECT_REF,
+      PROJECT_RUNNER_REF,
+    );
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.inputs.dev_review_skill_url).toBe(
+      "https://github.com/myorg/my-ditto-fork/releases/download/v1.42.0/dev-review-SKILL.md",
+    );
+    clearReleaseEnvs();
+  });
+});

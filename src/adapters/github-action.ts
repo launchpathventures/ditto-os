@@ -57,7 +57,7 @@ import type {
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db as appDb } from "../db";
 import * as schema from "../db/schema";
-import { runnerDispatches } from "../db/schema";
+import { runnerDispatches, projects } from "../db/schema";
 import { getCredentialById } from "../engine/credential-vault";
 
 type AnyDb = BetterSQLite3Database<typeof schema>;
@@ -129,7 +129,7 @@ interface WorkflowRun {
 }
 
 interface ListWorkflowRunsResponse {
-  workflow_runs?: WorkflowRun[];
+  workflow_runs?: Array<WorkflowRun & { created_at?: string }>;
 }
 
 // ============================================================
@@ -155,6 +155,17 @@ export interface GithubActionAdapterDeps {
    * returns null and the workflow falls back to its inlined skill copy.
    */
   devReviewSkillUrlFor?: () => string | null;
+  /**
+   * Override for tests — the harness type lookup. Production default reads
+   * from `projects.harnessType` with a per-project memoization map (matches
+   * the routine + managed-agent adapter pattern). Native projects need this
+   * to be honest so the workflow's `if: harness_type != 'catalyst'` branch
+   * fetches the dev-review skill via release-asset URL — Brief 218 §D4.
+   */
+  harnessTypeFor?: (
+    project: ProjectRef,
+    db: AnyDb,
+  ) => Promise<"catalyst" | "native" | "none">;
 }
 
 export function createGithubActionAdapter(
@@ -170,6 +181,8 @@ export function createGithubActionAdapter(
   const now = deps.now ?? (() => new Date());
   const devReviewSkillUrlFor =
     deps.devReviewSkillUrlFor ?? defaultDevReviewSkillUrlFor;
+  const harnessTypeFor =
+    deps.harnessTypeFor ?? defaultGithubActionHarnessTypeFor;
 
   return {
     kind,
@@ -180,7 +193,7 @@ export function createGithubActionAdapter(
     async execute(
       ctx: DispatchExecuteContext,
       workItem: WorkItemRef,
-      _project: ProjectRef,
+      project: ProjectRef,
       projectRunner: ProjectRunnerRef,
     ): Promise<DispatchResult> {
       // Insight-180 guard — pre-DB-write, pre-SDK rejection.
@@ -235,12 +248,17 @@ export function createGithubActionAdapter(
 
       const startedAt = now();
 
+      // Brief 218 §D4 — resolve the project's harnessType so the workflow
+      // knows whether to fetch the dev-review skill from a release asset
+      // (native/none) or rely on the cloned working tree (catalyst).
+      const harnessType = await harnessTypeFor(project, dbImpl);
+
       const inputs: Record<string, string> = {
         work_item_id: workItem.id,
         // Cap work-item body at 50 KB; GitHub limits each input to 65 KB and
         // we keep ~15 KB for skill-text fallback per §D4 + Brief Constraints.
         work_item_body: truncate(workItem.content, 50 * 1024),
-        harness_type: "catalyst", // resolved upstream; dispatcher does not pass it on, default catalyst
+        harness_type: harnessType,
         stepRunId: ctx.stepRunId,
       };
 
@@ -610,17 +628,25 @@ async function listRunIdFallback(
     if (!res.ok) return null;
     const json = (await res.json()) as ListWorkflowRunsResponse;
     const runs = json.workflow_runs ?? [];
-    // Pick the newest run within the lookup window. GitHub's listWorkflowRuns
-    // returns runs sorted by `created_at` DESC; the first should be ours
-    // unless two dispatches landed within milliseconds.
-    const firstWithinWindow = runs[0];
-    if (!firstWithinWindow) return null;
-    // Best-effort: the run is plausibly ours if it's the newest. The window
-    // bounds are advisory; we don't verify created_at strictly because the
-    // run is new and clock skew between Ditto and GitHub is unbounded.
-    void input.windowMs;
-    void input.since;
-    return firstWithinWindow.id;
+    if (runs.length === 0) return null;
+    // GitHub returns workflow_runs sorted by `created_at` DESC. Filter to runs
+    // created within `windowMs` of `since` to avoid grabbing an earlier
+    // dispatch's run that happens to be the newest visible. Allow generous
+    // clock skew (windowMs on either side); GitHub's clock and Ditto's clock
+    // can drift several seconds.
+    const sinceMs = input.since.getTime();
+    const lower = sinceMs - input.windowMs;
+    const upper = sinceMs + input.windowMs;
+    for (const run of runs) {
+      if (!run.created_at) continue;
+      const createdMs = Date.parse(run.created_at);
+      if (!Number.isFinite(createdMs)) continue;
+      if (createdMs >= lower && createdMs <= upper) return run.id;
+    }
+    // Fallback: if no run carries `created_at` (test fixtures, partial response),
+    // pick the newest. Documented best-effort.
+    if (runs.every((r) => !r.created_at)) return runs[0].id;
+    return null;
   } catch {
     return null;
   }
@@ -686,11 +712,46 @@ function defaultStatusWebhookUrlFor(workItemId: string): string {
 }
 
 function defaultDevReviewSkillUrlFor(): string | null {
+  // Brief 218 §D4 — release-asset URL composition. ALL THREE env vars must be
+  // set together; defaulting `owner`/`repo` to `anthropic/ditto` would point
+  // at a non-existent public repo (404). Fail safely → return null and let the
+  // workflow fall back to its inlined skill copy.
   const version = getDittoReleaseVersion();
-  if (!version) return null;
-  const owner = process.env.DITTO_RELEASE_OWNER ?? "anthropic";
-  const repo = process.env.DITTO_RELEASE_REPO ?? "ditto";
+  const owner = process.env.DITTO_RELEASE_OWNER;
+  const repo = process.env.DITTO_RELEASE_REPO;
+  if (!version || !owner || !repo) return null;
   return `https://github.com/${owner}/${repo}/releases/download/${version}/dev-review-SKILL.md`;
+}
+
+let cachedGithubActionHarnessTypes:
+  | Map<string, "catalyst" | "native" | "none">
+  | null = null;
+
+async function defaultGithubActionHarnessTypeFor(
+  project: ProjectRef,
+  db: AnyDb,
+): Promise<"catalyst" | "native" | "none"> {
+  const cached = cachedGithubActionHarnessTypes?.get(project.id);
+  if (cached) return cached;
+  const rows = await db
+    .select({ harnessType: projects.harnessType })
+    .from(projects)
+    .where(eq(projects.id, project.id))
+    .limit(1);
+  const value = (rows[0]?.harnessType ?? "native") as
+    | "catalyst"
+    | "native"
+    | "none";
+  if (!cachedGithubActionHarnessTypes) {
+    cachedGithubActionHarnessTypes = new Map();
+  }
+  cachedGithubActionHarnessTypes.set(project.id, value);
+  return value;
+}
+
+/** Test-only — clear the cache so DB-fallback paths can be exercised. */
+export function _clearGithubActionHarnessTypeCacheForTests(): void {
+  cachedGithubActionHarnessTypes = null;
 }
 
 /**

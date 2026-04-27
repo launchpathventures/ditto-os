@@ -172,6 +172,77 @@ describe("handlePullRequestEvent — pr opened", () => {
     );
     expect(r.kind).toBe("no-match");
   });
+
+  // ============================================================
+  // MEDIUM-4 fix — github-action workflows may open PRs on user-named
+  // branches (not the Anthropic claude/* convention). Brief 218 §D5 says
+  // PR events should still correlate when an active github-action dispatch
+  // exists for the repo.
+  // ============================================================
+
+  it("matches a non-claude/* PR when an active github-action dispatch exists", async () => {
+    const dispatchId = await seedActiveDispatch({
+      runnerKind: "github-action",
+      externalRunId: "12345",
+    });
+    const r = await handlePullRequestEvent(
+      {
+        action: "opened",
+        pull_request: {
+          html_url: "https://github.com/owner/agent-crm/pull/77",
+          head: { ref: "feature/healthz-endpoint" },
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("pr-opened");
+    if (r.kind !== "pr-opened") throw new Error("unreachable");
+    expect(r.dispatchId).toBe(dispatchId);
+
+    const acts = await testDb.select().from(activities);
+    expect(
+      acts.find((a) => a.action === "github_action_pr_opened"),
+    ).toBeDefined();
+  });
+
+  it("does NOT match a non-claude/* PR when only routine/managed-agent dispatches exist", async () => {
+    await seedActiveDispatch({ runnerKind: "claude-code-routine" });
+    const r = await handlePullRequestEvent(
+      {
+        action: "opened",
+        pull_request: {
+          html_url: "https://github.com/owner/agent-crm/pull/88",
+          head: { ref: "feature/x" },
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("no-match");
+    if (r.kind !== "no-match") throw new Error("unreachable");
+    expect(r.reason).toMatch(/branch is not claude\/\* and no active github-action/);
+  });
+
+  it("still matches claude/* PRs for routine dispatches (regression)", async () => {
+    const dispatchId = await seedActiveDispatch({
+      runnerKind: "claude-code-routine",
+    });
+    const r = await handlePullRequestEvent(
+      {
+        action: "opened",
+        pull_request: {
+          html_url: "https://github.com/owner/agent-crm/pull/99",
+          head: { ref: "claude/x" },
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("pr-opened");
+    if (r.kind !== "pr-opened") throw new Error("unreachable");
+    expect(r.dispatchId).toBe(dispatchId);
+  });
 });
 
 describe("handlePullRequestEvent — pr merged", () => {

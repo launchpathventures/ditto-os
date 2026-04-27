@@ -157,24 +157,37 @@ export async function handlePullRequestEvent(
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
   const dbImpl = options.db ?? appDb;
-  if (!event.pull_request.head.ref.startsWith(ROUTINE_BRANCH_PREFIX)) {
-    return { kind: "no-match", reason: "branch is not claude/*" };
-  }
 
   const prUrl = truncate(event.pull_request.html_url, URL_CAP);
+  const isClaudeBranch = event.pull_request.head.ref.startsWith(
+    ROUTINE_BRANCH_PREFIX,
+  );
 
-  // Lookup strategy depends on the action. Merged-close considers terminal
-  // rows so the late-callback warning can fire (Brief 216 §D4); all paths
-  // prefer a row whose externalUrl already matches to avoid cross-wiring.
+  // Brief 218 §D5 — github-action workflows run on user-controlled branches
+  // (typically `main`/`develop`), so the `claude/*` filter would exclude
+  // legitimate github-action PR events. Strategy: if the branch IS `claude/*`,
+  // proceed (covers routine + managed-agent + Claude-Code-via-github-action).
+  // If the branch is NOT `claude/*`, only proceed when an active github-action
+  // dispatch exists for the repo (the only kind whose workflow may open
+  // arbitrary-named branches).
   const includeTerminal =
     event.action === "closed" && event.pull_request.merged === true;
   const dispatch = await findDispatchForRepo(
     dbImpl,
     event.repository.full_name,
-    { includeTerminal, preferUrl: prUrl },
+    {
+      includeTerminal,
+      preferUrl: prUrl,
+      ...(isClaudeBranch ? {} : { onlyKinds: ["github-action"] }),
+    },
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no cloud-runner dispatch for repo" };
+    return {
+      kind: "no-match",
+      reason: isClaudeBranch
+        ? "no cloud-runner dispatch for repo"
+        : "branch is not claude/* and no active github-action dispatch for repo",
+    };
   }
 
   const sessionUrl = deepLinkForDispatch(
@@ -622,6 +635,12 @@ interface FindDispatchOptions {
   includeTerminal?: boolean;
   /** Prefer a row whose externalUrl already matches — branch correlation. */
   preferUrl?: string;
+  /**
+   * Restrict to specific runner kinds (Brief 218 §D5 — non-claude/* PR
+   * events should only match github-action dispatches because those are the
+   * only kind whose workflow may open user-named branches).
+   */
+  onlyKinds?: ReadonlyArray<RunnerKind>;
 }
 
 async function findDispatchForRepo(
@@ -636,6 +655,7 @@ async function findDispatchForRepo(
   if (projectRows.length === 0) return null;
 
   const projectIds = projectRows.map((p) => p.id);
+  const kindsFilter = options.onlyKinds ?? CLOUD_RUNNER_KINDS;
 
   const rows = await dbImpl
     .select({
@@ -652,7 +672,7 @@ async function findDispatchForRepo(
     .where(
       and(
         inArray(runnerDispatches.projectId, projectIds),
-        inArray(runnerDispatches.runnerKind, [...CLOUD_RUNNER_KINDS]),
+        inArray(runnerDispatches.runnerKind, [...kindsFilter]),
       ),
     );
 

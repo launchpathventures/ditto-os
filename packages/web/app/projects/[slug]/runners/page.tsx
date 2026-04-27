@@ -67,19 +67,28 @@ jobs:
         env:
           # In 'in-workflow-secret' callback mode the bearer is in the repo secret;
           # in 'in-workflow' mode the token is already in the callback_url query string.
+          # To populate prUrl, your work step above MUST write
+          #   PR_URL=https://github.com/<o>/<r>/pull/<n> >> $GITHUB_ENV
+          # If unset, prUrl is omitted; Ditto's pull_request webhook will surface it.
           DITTO_RUNNER_BEARER: \${{ secrets.DITTO_RUNNER_BEARER }}
         run: |
-          AUTH=""
-          if [ -n "$DITTO_RUNNER_BEARER" ]; then AUTH="Authorization: Bearer $DITTO_RUNNER_BEARER"; fi
+          AUTH_HEADER=""
+          if ! echo "\${{ inputs.callback_url }}" | grep -q "token="; then
+            if [ -n "$DITTO_RUNNER_BEARER" ]; then
+              AUTH_HEADER="-H Authorization: Bearer $DITTO_RUNNER_BEARER"
+            fi
+          fi
+          PR_URL_FIELD=""
+          if [ -n "$PR_URL" ]; then PR_URL_FIELD=", \\"prUrl\\": \\"$PR_URL\\""; fi
           curl -X POST "\${{ inputs.callback_url }}" \\
-            -H "$AUTH" \\
+            $AUTH_HEADER \\
             -H "Content-Type: application/json" \\
             -d "{
               \\"state\\": \\"shipped\\",
               \\"runnerKind\\": \\"github-action\\",
               \\"externalRunId\\": \\"\${{ github.run_id }}\\",
-              \\"stepRunId\\": \\"\${{ inputs.stepRunId }}\\"
-            }"
+              \\"stepRunId\\": \\"\${{ inputs.stepRunId }}\\"$PR_URL_FIELD
+            }" || true
 `;
 
 interface Runner {

@@ -14,7 +14,7 @@
  * ephemeral token cannot satisfy a github-action webhook.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db as appDb } from "../../db";
@@ -26,6 +26,13 @@ import {
 } from "@ditto/core";
 
 type AnyDb = BetterSQLite3Database<typeof schema>;
+
+/**
+ * Brief 218 — perf parity with `routine.ts` (Brief 216 Reviewer fix). Filter
+ * to active rows with a non-null hash in SQL — avoids bcrypt-comparing every
+ * historical dispatch (cost 12 ≈ 250ms × N rows otherwise).
+ */
+const ACTIVE_DISPATCH_STATUSES = ["queued", "dispatched", "running"] as const;
 
 export type GithubActionBearerSource = "ephemeral" | "project" | "none";
 
@@ -56,10 +63,19 @@ export async function verifyGithubActionEphemeralCallbackToken(
       runnerKind: runnerDispatches.runnerKind,
     })
     .from(runnerDispatches)
-    .where(eq(runnerDispatches.workItemId, workItemId));
+    .where(
+      and(
+        eq(runnerDispatches.workItemId, workItemId),
+        eq(runnerDispatches.runnerKind, "github-action"),
+        isNotNull(runnerDispatches.callbackTokenHash),
+        inArray(runnerDispatches.status, [...ACTIVE_DISPATCH_STATUSES]),
+      ),
+    );
 
   for (const row of rows) {
     if (!row.hash) continue;
+    // Defence-in-depth: SQL filter handles kind isolation, but keep the
+    // in-loop check so a buggy SQL generator can't bypass it.
     if (row.runnerKind !== "github-action") continue;
     if (await bcrypt.compare(presented, row.hash)) {
       return { ok: true, source: "ephemeral", dispatchId: row.id };
