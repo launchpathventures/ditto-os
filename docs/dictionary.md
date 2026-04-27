@@ -1003,3 +1003,57 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Orphaned Job** — A `bridge_jobs` row that was `running` but whose `lastHeartbeatAt` exceeded `ORPHAN_STALENESS_MS` (10 min). Transitioned to `orphaned` by the cloud-side staleness sweeper. Writes a `harness_decisions` row with `trustAction='pause'` + `reviewDetails.bridge.orphaned=true` so the review surface knows to flag it for human attention. The pause action is the existing-enum signal, NOT a new "escalate" value.
 - Layer: 3 (Harness)
 - Related: Bridge Job, Sweeper
+
+## Project Memory Scope (Brief 227)
+
+**Project Memory Scope** — The discipline that prevents corrections taught on project-A from bleeding into project-B's runs. Process-scoped memories load for any process in the same project, joined via `processes.projectId`. NOT a new value in `memoryScopeTypeValues` (`agent | process | self | person` is unchanged); project-scope is an emergent property of the join. Memory writes inherit the writing process's `projectId` automatically (no new `projectId` column on `memories` — inheritance is via the source process FK at retrieval time). Pre-project-era memories (source process `projectId IS NULL`) load across all projects for backwards compat.
+- Layer: 3 (Harness — memory-assembly read sites at `src/engine/harness-handlers/memory-assembly.ts`)
+- Related: Memory Promotion, Multi-Project Memory, ADR-003 §6
+
+**Memory Promotion** — The user-action by which a project-scoped memory is widened to apply across additional projects (or all projects). Surfaced via three UX surfaces (Designer spec): memory detail card (PRIMARY), citation chip peek (SECONDARY), proactive Self proposal in briefings (TERTIARY). Implemented by the `promote_memory_scope` Self tool; reverse direction is `demote_memory_scope`. Both tools require `stepRunId` (Insight-180 guard) and log the change to `activities` (`action='memory_promote'` / `'memory_demote'`). Promotion is ALWAYS an explicit user signal — Insight-127 forbids auto-promotion; the harness manages, the agent proposes, the user decides.
+- Layer: 3 / 6 (harness Self tools + Decide-job UI surface)
+- Related: Project Memory Scope, Multi-Project Memory, Insight-127
+
+**Multi-Project Memory** — A self-scope memory whose `appliedProjectIds: string[]` column lists a specific subset of projects the memory applies to (the hybrid case). When `appliedProjectIds` is null/empty, the memory applies everywhere (full self-scope per ADR-003 semantics). When non-empty, the memory only loads for runs whose process belongs to a listed project. The fourth scope-pill variant `<N> projects` renders for this case (extending Designer's three-pill spec). Single-row JSON-array model chosen over duplication and over a junction table (Architect's call on Designer Open Q1; junction tripwire fires at 5K rows or 50ms p95).
+- Layer: 1 (Data — `memories.appliedProjectIds` column added Brief 227)
+- Related: Project Memory Scope, Memory Promotion
+
+## Project Onboarding — In-Depth Analyser (Brief 226)
+
+**Analyser Report** — The structured `AnalyserReportBlock` ContentBlock (27th type in the discriminated union) produced by the `project-onboarding.yaml` system process at the end of its 9-step pipeline. Carries `entityType + entityId` (FK to the `workItems` row backing the report), `projectId`, `atAGlance` (`stack`, `metadata`, `looksLike` descriptor, `nearestNeighbours`), `strengths/watchOuts/missing` finding lists, `recommendation` (runner + trust tier with rationale + alternatives), `status: 'draft' | 'submitted' | 'active'`, and an optional `detectorErrors` partial-success side-car. Stored in `workItems.context.analyserReport` and mirrored into `harness_decisions.reviewDetails` for audit. Renders inline in the chat-col via `packages/web/components/blocks/analyser-report-block.tsx`.
+- Layer: 1 (data — content-block taxonomy in `packages/core/src/content-blocks.ts`) / Layer 6 (human — chat-col surface)
+- Related: Persona-fit Descriptor, Gold-standard Match, Onboarding Run
+
+**Persona-fit Descriptor** — A user-facing string ("mid-size org tooling, mature CI", "team-output review with quality gating", "data / scripting toolchain, test-backed") produced by `src/engine/onboarding/persona-fit.ts:scorePersonaFit()` and surfaced in the analyser report's at-a-glance `looksLike` field. Type-system enforced (Brief 226 §Constraints IMPORTANT #8): `scorePersonaFit` returns ONLY `{ descriptor: string }` — internal persona-shape labels (`jordan-shaped`, `lisa-shaped`, etc.) stay inside the scoring module and are NEVER exported. A unit test asserts the descriptor never matches the internal-label regex `/-shaped\b/i`. NOT to be confused with persona names like "Jordan" or "Lisa" — those are internal-research vocabulary and forbidden at the user surface (Designer Reviewer Critical #4).
+- Layer: 6 (human — at-a-glance copy)
+- Related: Analyser Report, Personas
+
+**Gold-standard Match** — A `GoldStandardMatch` entry (`{ name, url, rationale }`) returned by `src/engine/onboarding/gold-standard.ts:matchGoldStandard()`. Sourced from a Researcher-curated `docs/landscape-index.json` corpus (each entry: `{ name, url, stackSignals: string[], oneLineRationale }`); ranked by stack-signal overlap with the analyser's detected signals; top 1-3 returned. Brief 226 ships in MVP-graceful mode: when the index file does NOT yet exist, returns an EMPTY ARRAY and the report renders without nearestNeighbours. The Researcher creates / maintains the index in a follow-on; until then, this is a placeholder data path. Pure stack-signal matching against landscape entries — NOT freeform `landscape.md` parsing, NOT live web search, NOT embedding similarity (those are explicit non-goals at this brief's scope).
+- Layer: 1 (data — landscape corpus reader) / Layer 6 (human — at-a-glance link row)
+- Related: Analyser Report, `docs/landscape.md`
+
+## GitHub Action Runner (Brief 218)
+
+**GitHub Action Runner** — A `project_runners` row of kind `github-action`. Per-project handle to a user-controlled `.github/workflows/<file>.yml` workflow that Ditto fires via `POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches`. Runs on the user's GitHub Actions runner infrastructure; Ditto observes via webhook events (`workflow_run`, `pull_request`, `check_run`, `deployment_status`) routed through the kind-agnostic fallback handler. 60s polling backup catches missed deliveries. The third cloud-runner adapter shipped (after Routine + Managed Agents).
+- Layer: 3 (Harness — adapter at `src/adapters/github-action.ts`)
+- Related: Workflow Dispatch, Workflow Run, Cloud-Runner Callback Mode, Template Workflow File
+
+**Workflow Dispatch** — GitHub's REST endpoint `POST /repos/{o}/{r}/actions/workflows/{file}/dispatches` that fires a `workflow_dispatch` event in a target repo. Returns the new run's ID synchronously since 2026-02-19 (previously 204 No Content; the adapter falls back to `listWorkflowRuns?event=workflow_dispatch` when the response lacks `id`). Auth via `Authorization: Bearer <pat>` with `actions:write` scope. The body shape is `{ ref, inputs }`; Ditto encodes `work_item_id`, `work_item_body`, `harness_type`, `stepRunId`, optional `callback_url` + `dev_review_skill_url` into `inputs`.
+- Layer: 3 (Harness — `src/adapters/github-action.ts:execute()`)
+- Related: GitHub Action Runner, Dispatch Inputs
+
+**Workflow Run** — A GitHub Actions `workflow_run` row visible at `https://github.com/<owner>/<repo>/actions/runs/<id>`. State machine: `queued | waiting | pending | in_progress | completed`. On `completed`, the `conclusion` field carries one of `success | failure | cancelled | timed_out | action_required | neutral | skipped | stale`. Ditto's `mapWorkflowRunToDispatchStatus()` (Brief 218 §D9) decodes `(status, conclusion)` to the `runner_dispatches.status` enum: success → succeeded, failure → failed, cancelled → cancelled, timed_out → timed_out, action_required → failed (errorReason), neutral → succeeded (soft-pass), skipped → cancelled, **stale → cancelled** (Reviewer IMP-1: superseded run is semantically a cancellation).
+- Layer: 3 (Harness — `cloud-runner-fallback.ts` + `runner-poll-cron.ts`)
+- Related: Workflow Dispatch, GitHub Action Runner
+
+**Dispatch Inputs** — The fixed `workflow_dispatch.inputs` shape Ditto's adapter populates and the template workflow declares: `work_item_id` (required), `work_item_body` (required, capped at 50 KB), `harness_type` (catalyst | native | none), `stepRunId` (Insight-180 audit ID), `external_run_id` (optional, for in-workflow callback shapes), `callback_url` (optional Ditto status webhook URL — present in `in-workflow` and `in-workflow-secret` modes), `dev_review_skill_url` (optional URL to inline the dev-review skill on native projects). GitHub caps each input at 65 KB; Ditto reserves ~15 KB for fallback skill text.
+- Layer: 3 (Harness — adapter ↔ template wire format)
+- Related: Workflow Dispatch, Template Workflow File, Cloud-Runner Callback Mode
+
+**Template Workflow File** — A copy-pasteable workflow YAML at `docs/runner-templates/dispatch-coding-work.yml` shipped as **documentation, not code** (Brief 218 §D16). Ditto does NOT auto-commit YAML to user repos; the user copies the template into their `.github/workflows/` themselves. The admin form at `/projects/<slug>/runners` shows the template behind a "Show template" toggle and offers a "Copy template" clipboard button. Updating the template is a doc change; the in-page string in `packages/web/app/projects/[slug]/runners/page.tsx` (`DISPATCH_CODING_WORK_YML`) MUST be refreshed in lockstep so the admin form stays accurate.
+- Layer: 6 (Human — admin UX) / Documentation
+- Related: GitHub Action Runner, Workflow Dispatch
+
+**Cloud-Runner Callback Mode** — The cross-runner term covering the per-runner-row choice of how the runner reports status back to Ditto. Three modes for `github-action` (Brief 218 §D3): `webhook-only` (default; safest — GitHub events alone), `in-workflow-secret` (workflow uses `secrets.DITTO_RUNNER_BEARER`, the long-lived project bearer; user pastes plaintext into repo Secrets once; GitHub auto-masks repo secrets in logs), `in-workflow` (per-dispatch ephemeral token in `inputs.callback_url` query string; NOT log-masked because GitHub doesn't auto-mask `workflow_dispatch` inputs — explicit risk acceptance: tokens are one-trip and per-dispatch). Brief 217's managed-agent uses a similar two-mode shape: `polling` | `in-prompt`. Brief 216's routine is always in-prompt (no choice). The cross-cutting term lets briefs reference the discipline without naming each kind's specific values.
+- Layer: 3 (Harness — adapter config schema)
+- Related: GitHub Action Runner, Ephemeral Callback Token
