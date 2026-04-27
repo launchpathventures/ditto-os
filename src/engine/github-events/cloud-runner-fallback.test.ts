@@ -583,7 +583,7 @@ describe("kind-routing — claude-managed-agent dispatches", () => {
   });
 });
 
-describe("deepLinkForDispatch — kind-aware (Brief 217 §D6)", () => {
+describe("deepLinkForDispatch — kind-aware (Brief 217 §D6 + Brief 218 §D5)", () => {
   it("returns Anthropic platform URL for claude-managed-agent", () => {
     expect(deepLinkForDispatch("claude-managed-agent", "session_01")).toBe(
       "https://platform.claude.com/sessions/session_01",
@@ -608,5 +608,384 @@ describe("deepLinkForDispatch — kind-aware (Brief 217 §D6)", () => {
 
   it("returns null when externalRunId is missing and no fallback", () => {
     expect(deepLinkForDispatch("claude-managed-agent", null)).toBeNull();
+  });
+
+  it("returns github.com actions URL for github-action when repo context is provided (Brief 218)", () => {
+    expect(
+      deepLinkForDispatch("github-action", "12345", undefined, {
+        repoFullName: "owner/agent-crm",
+      }),
+    ).toBe("https://github.com/owner/agent-crm/actions/runs/12345");
+  });
+
+  it("falls back when repo context missing for github-action", () => {
+    expect(deepLinkForDispatch("github-action", "12345")).toBeNull();
+    expect(
+      deepLinkForDispatch(
+        "github-action",
+        "12345",
+        "https://stored.url/runs/12345",
+      ),
+    ).toBe("https://stored.url/runs/12345");
+  });
+});
+
+// ============================================================
+// Brief 218 §D5 — workflow_run routing for github-action dispatches
+// ============================================================
+
+describe("handleWorkflowRunEvent — github-action correlation by run id (Brief 218)", () => {
+  async function seedGithubActionDispatch(opts: {
+    status?: "queued" | "dispatched" | "running";
+    externalRunId: string;
+  }) {
+    await testDb.insert(processes).values({
+      id: "p_01",
+      name: "test",
+      slug: "p_01",
+      description: "test",
+      definition: {},
+    });
+    await testDb.insert(processRuns).values({
+      id: "pr_01",
+      processId: "p_01",
+      status: "running",
+      triggeredBy: "test",
+    });
+    await testDb.insert(stepRuns).values({
+      id: "sr_01",
+      processRunId: "pr_01",
+      stepId: "dispatch",
+      status: "running",
+      executorType: "rules",
+    });
+    await testDb.insert(projects).values({
+      id: "proj_01",
+      name: "agent-crm",
+      slug: "agent-crm",
+      harnessType: "catalyst",
+      githubRepo: "owner/agent-crm",
+      status: "active",
+    });
+    await testDb.insert(workItems).values({
+      id: "wi_01",
+      projectId: "proj_01",
+      type: "feature",
+      title: "x",
+      body: "x",
+      content: "x",
+      source: "system_generated",
+      status: "intake",
+      briefState: "active",
+    });
+    const inserted = await testDb
+      .insert(runnerDispatches)
+      .values({
+        workItemId: "wi_01",
+        projectId: "proj_01",
+        runnerKind: "github-action",
+        runnerMode: "cloud",
+        attemptIndex: 0,
+        stepRunId: "sr_01",
+        status: opts.status ?? "running",
+        externalRunId: opts.externalRunId,
+      })
+      .returning({ id: runnerDispatches.id });
+    return inserted[0].id;
+  }
+
+  it("transitions to succeeded on completed/success", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12345",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12345,
+          status: "completed",
+          conclusion: "success",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12345",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    if (r.kind !== "workflow-transitioned") throw new Error("unreachable");
+    expect(r.to).toBe("succeeded");
+    expect(r.from).toBe("running");
+    expect(r.dispatchId).toBe(dispatchId);
+
+    const rows = await testDb
+      .select()
+      .from(runnerDispatches)
+      .where(eq(runnerDispatches.id, dispatchId));
+    expect(rows[0].status).toBe("succeeded");
+    expect(rows[0].finishedAt).not.toBeNull();
+  });
+
+  it("transitions to failed on completed/failure", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12346",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12346,
+          status: "completed",
+          conclusion: "failure",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12346",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    if (r.kind !== "workflow-transitioned") throw new Error("unreachable");
+    expect(r.to).toBe("failed");
+
+    const rows = await testDb
+      .select()
+      .from(runnerDispatches)
+      .where(eq(runnerDispatches.id, dispatchId));
+    expect(rows[0].status).toBe("failed");
+  });
+
+  it("transitions to cancelled on completed/cancelled", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12347",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12347,
+          status: "completed",
+          conclusion: "cancelled",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12347",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    if (r.kind !== "workflow-transitioned") throw new Error("unreachable");
+    expect(r.to).toBe("cancelled");
+
+    const rows = await testDb
+      .select()
+      .from(runnerDispatches)
+      .where(eq(runnerDispatches.id, dispatchId));
+    expect(rows[0].status).toBe("cancelled");
+  });
+
+  it("transitions to cancelled on completed/stale (Reviewer IMP-1 — superseded run)", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12348",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12348,
+          status: "completed",
+          conclusion: "stale",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12348",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    if (r.kind !== "workflow-transitioned") throw new Error("unreachable");
+    expect(r.to).toBe("cancelled");
+    expect(dispatchId).toBeDefined();
+  });
+
+  it("transitions to timed_out on completed/timed_out", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12349",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12349,
+          status: "completed",
+          conclusion: "timed_out",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12349",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    if (r.kind !== "workflow-transitioned") throw new Error("unreachable");
+    expect(r.to).toBe("timed_out");
+    expect(dispatchId).toBeDefined();
+  });
+
+  it("emits late_callback_rejected on terminal-state transition attempt", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12350",
+    });
+    // Move dispatch to terminal succeeded first.
+    await testDb
+      .update(runnerDispatches)
+      .set({ status: "succeeded", finishedAt: new Date() })
+      .where(eq(runnerDispatches.id, dispatchId));
+
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12350,
+          status: "completed",
+          conclusion: "failure",
+          head_branch: "main",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12350",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("no-match");
+
+    const acts = await testDb.select().from(activities);
+    expect(
+      acts.find(
+        (a) => a.action === "github_action_late_callback_rejected",
+      ),
+    ).toBeDefined();
+  });
+
+  it("matches by run id, not branch — non-claude/* branches are accepted for github-action", async () => {
+    const dispatchId = await seedGithubActionDispatch({
+      externalRunId: "12351",
+    });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 12351,
+          status: "completed",
+          conclusion: "success",
+          head_branch: "feature/some-branch",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/12351",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("workflow-transitioned");
+    expect(dispatchId).toBeDefined();
+  });
+
+  it("falls back to claude/* branch matching when run id doesn't correlate to a github-action dispatch", async () => {
+    // Seed a routine dispatch (kind != github-action) for the same repo.
+    await seedActiveDispatch({ runnerKind: "claude-code-routine" });
+    const r = await handleWorkflowRunEvent(
+      {
+        action: "completed",
+        workflow_run: {
+          id: 99999,
+          status: "completed",
+          conclusion: "success",
+          head_branch: "claude/foo",
+          html_url: "https://github.com/owner/agent-crm/actions/runs/99999",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    // Falls through to the existing routine path (workflow-completed activity log).
+    expect(r.kind).toBe("workflow-completed");
+  });
+});
+
+// ============================================================
+// Brief 218 §D5 — check_run routing infrastructure
+// ============================================================
+
+describe("handleCheckRunEvent — Brief 218 §D5 routing infrastructure", () => {
+  it("emits a check_run_completed activity for an active cloud-runner dispatch", async () => {
+    const { handleCheckRunEvent } = await import("./cloud-runner-fallback");
+    const dispatchId = await seedActiveDispatch({
+      runnerKind: "github-action",
+      externalRunId: "55555",
+    });
+    const r = await handleCheckRunEvent(
+      {
+        action: "completed",
+        check_run: {
+          id: 1,
+          name: "Greptile review",
+          status: "completed",
+          conclusion: "success",
+          html_url:
+            "https://github.com/owner/agent-crm/runs/1",
+          head_sha: "abc",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("check-run-routed");
+    if (r.kind !== "check-run-routed") throw new Error("unreachable");
+    expect(r.checkRunName).toBe("Greptile review");
+    expect(r.dispatchId).toBe(dispatchId);
+
+    const acts = await testDb.select().from(activities);
+    expect(
+      acts.find((a) => a.action === "github_action_check_run_completed"),
+    ).toBeDefined();
+  });
+
+  it("ignores check_run events with action !== completed", async () => {
+    const { handleCheckRunEvent } = await import("./cloud-runner-fallback");
+    await seedActiveDispatch({ runnerKind: "github-action" });
+    const r = await handleCheckRunEvent(
+      {
+        action: "created",
+        check_run: {
+          id: 2,
+          name: "Argos",
+          status: "in_progress",
+          conclusion: null,
+          html_url: "https://github.com/owner/agent-crm/runs/2",
+          head_sha: "abc",
+        },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("no-match");
+  });
+
+  it("ignores check_run events for repos without an active cloud-runner dispatch", async () => {
+    const { handleCheckRunEvent } = await import("./cloud-runner-fallback");
+    const r = await handleCheckRunEvent(
+      {
+        action: "completed",
+        check_run: {
+          id: 3,
+          name: "X",
+          status: "completed",
+          conclusion: "success",
+          html_url: "https://github.com/other/repo/runs/3",
+          head_sha: "def",
+        },
+        repository: { full_name: "other/repo" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("no-match");
   });
 });
