@@ -118,7 +118,14 @@ describe("POST /api/v1/projects", () => {
           defaultRunnerKind: "github-action",
           runnerConfig: {
             kind: "github-action",
-            config: { repo: "x/y", workflowFile: "ci.yml" },
+            // Brief 218: canonical github-action adapter schema requires
+            // `bearer_credential_id` (vault pointer to the GitHub PAT) and
+            // `workflowFile` ending in .yml/.yaml. defaultRef defaults to "main".
+            config: {
+              repo: "x/y",
+              workflowFile: "ci.yml",
+              bearer_credential_id: "cred_test",
+            },
             credentialIds: [],
           },
         },
