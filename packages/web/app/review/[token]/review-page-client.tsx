@@ -1,14 +1,17 @@
 "use client";
 
 /**
- * Review Page Client Component (Brief 106)
+ * Review Page Client Component (Brief 106 + Brief 221).
  *
- * Renders ContentBlocks via existing block registry + embedded chat
- * for Alex conversation. The chat context includes the full review
- * page content so Alex can reference specific items.
+ * Renders ContentBlocks via existing block registry. Discriminates
+ * runner-dispatch-pause variants (Brief 221 D1) by inspecting the
+ * `WorkItemFormBlock` whose `formId === "runner-dispatch-approval"`:
+ * when present, surfaces interactive "Run on:" radio + force-cloud
+ * toggle + sticky bottom Approve/Reject buttons. Otherwise falls back
+ * to the original Brief 106 chat-with-Alex flow.
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { BlockRenderer } from "@/components/blocks/block-registry";
 import type { ContentBlock } from "@/lib/engine";
 
@@ -30,7 +33,271 @@ interface ChatMessage {
   text: string;
 }
 
+const RUNNER_DISPATCH_APPROVAL_FORM_ID = "runner-dispatch-approval";
+
+/**
+ * Find the runner-dispatch-approval form within the contentBlocks. Returns
+ * `null` for non-runner-dispatch pages (chat-with-Alex Brief 106 flow).
+ */
+function findApprovalForm(blocks: ContentBlock[]): {
+  kindOptions: string[];
+  defaultKind: string;
+  forceCloudInitial: boolean;
+} | null {
+  for (const block of blocks) {
+    if (
+      block.type === "work_item_form" &&
+      (block as ContentBlock & { formId?: string }).formId ===
+        RUNNER_DISPATCH_APPROVAL_FORM_ID
+    ) {
+      const form = block as ContentBlock & {
+        formId?: string;
+        fields: Array<{
+          name: string;
+          options?: string[];
+          value?: string | number | boolean;
+        }>;
+      };
+      const kindField = form.fields.find((f) => f.name === "selectedKind");
+      const forceCloudField = form.fields.find((f) => f.name === "forceCloud");
+      const kindOptions = (kindField?.options as string[] | undefined) ?? [];
+      const defaultKind = (kindField?.value as string | undefined) ?? kindOptions[0] ?? "";
+      const forceCloudInitial = Boolean(forceCloudField?.value);
+      return { kindOptions, defaultKind, forceCloudInitial };
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse a `kind|label` option string. Falls back to the raw value as both
+ * kind and label when no separator is present.
+ */
+function parseKindOption(option: string): { kind: string; label: string } {
+  const i = option.indexOf("|");
+  if (i === -1) return { kind: option, label: option };
+  return { kind: option.slice(0, i), label: option.slice(i + 1) };
+}
+
 export function ReviewPageClient({ data, token }: ReviewPageClientProps) {
+  const approvalForm = useMemo(
+    () => findApprovalForm(data.contentBlocks),
+    [data.contentBlocks],
+  );
+
+  // Render the runner-dispatch-approval surface when the form is present.
+  if (approvalForm && data.status === "active") {
+    return (
+      <RunnerDispatchApprovalView
+        data={data}
+        token={token}
+        kindOptions={approvalForm.kindOptions}
+        defaultKind={approvalForm.defaultKind}
+        forceCloudInitial={approvalForm.forceCloudInitial}
+      />
+    );
+  }
+
+  // Fallback: original Brief 106 chat-with-Alex flow.
+  return <ChatWithAlexView data={data} token={token} />;
+}
+
+// ============================================================
+// Brief 221 — Runner Dispatch Approval View
+// ============================================================
+
+function RunnerDispatchApprovalView(props: {
+  data: ReviewPageData;
+  token: string;
+  kindOptions: string[];
+  defaultKind: string;
+  forceCloudInitial: boolean;
+}) {
+  const { data, token, kindOptions, defaultKind, forceCloudInitial } = props;
+  const [selectedKind, setSelectedKind] = useState(defaultKind);
+  const [forceCloud, setForceCloud] = useState(forceCloudInitial);
+  const [submitting, setSubmitting] = useState<"approve" | "reject" | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{
+    kind: "approved" | "rejected";
+    detail: string;
+  } | null>(null);
+
+  // Render the summary block (TextBlock — first content block).
+  const summaryBlock = data.contentBlocks.find((b) => b.type === "text");
+
+  async function onApprove() {
+    setSubmitting("approve");
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/review/${token}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedKind, forceCloud }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        dispatchId?: string;
+        error?: string;
+      };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setDone({
+        kind: "approved",
+        detail: body.dispatchId
+          ? `Dispatched (${body.dispatchId.slice(0, 8)}…)`
+          : "Approved & dispatching…",
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setSubmitting(null);
+    }
+  }
+
+  async function onReject() {
+    setSubmitting("reject");
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/review/${token}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setDone({ kind: "rejected", detail: "Rejected." });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setSubmitting(null);
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
+        <h1 className="text-xl font-semibold text-text-primary">
+          {done.kind === "approved" ? "Approved" : "Rejected"}
+        </h1>
+        <p className="text-sm text-text-secondary">{done.detail}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pb-32">
+      {/* Scrollable content above the sticky action bar */}
+      <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pb-6 pt-6">
+        <h1 className="text-xl font-semibold text-text-primary">
+          {data.title}
+        </h1>
+
+        {summaryBlock && <BlockRenderer block={summaryBlock} />}
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-medium text-text-secondary">
+            This work will run on:
+          </legend>
+          <div className="flex flex-col gap-2">
+            {kindOptions.map((option) => {
+              const { kind, label } = parseKindOption(option);
+              const checked = selectedKind === option;
+              return (
+                <label
+                  key={option}
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 ${
+                    checked
+                      ? "border-vivid bg-vivid-subtle"
+                      : "border-border bg-white"
+                  }`}
+                  style={{ minHeight: 44 }}
+                >
+                  <input
+                    type="radio"
+                    name="selectedKind"
+                    value={option}
+                    checked={checked}
+                    onChange={() => setSelectedKind(option)}
+                  />
+                  <span className="text-sm">{label}</span>
+                  <span className="sr-only">{kind}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <label
+          className="flex items-center gap-3 rounded-lg border border-border bg-white px-3 py-3"
+          style={{ minHeight: 44 }}
+        >
+          <input
+            type="checkbox"
+            checked={forceCloud}
+            onChange={(e) => setForceCloud(e.target.checked)}
+          />
+          <span className="text-sm text-text-secondary">
+            Force cloud for this approval
+          </span>
+        </label>
+
+        {error && (
+          <div
+            data-testid="approval-error"
+            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          >
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Sticky bottom action bar — always visible on mobile */}
+      <div
+        data-testid="approval-action-bar"
+        className="fixed inset-x-0 bottom-0 border-t border-border bg-white px-4 py-3"
+        style={{
+          paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
+        }}
+      >
+        <div className="mx-auto flex max-w-2xl flex-col gap-2">
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={submitting !== null}
+            className="w-full rounded-lg bg-vivid px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            style={{ minHeight: 44 }}
+            data-testid="approve-button"
+          >
+            {submitting === "approve" ? "Dispatching…" : "Approve & dispatch"}
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={submitting !== null}
+            className="w-full rounded-lg border border-border bg-white px-4 py-3 text-sm font-medium disabled:opacity-60"
+            style={{ minHeight: 44 }}
+            data-testid="reject-button"
+          >
+            {submitting === "reject" ? "Rejecting…" : "Reject"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Brief 106 — Original chat-with-Alex view (unchanged)
+// ============================================================
+
+function ChatWithAlexView(props: { data: ReviewPageData; token: string }) {
+  const { data, token } = props;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);

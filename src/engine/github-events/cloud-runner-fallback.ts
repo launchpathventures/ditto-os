@@ -31,6 +31,10 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   transitionDispatch,
+  transitionBriefState,
+  buildRunnerDispatchCard,
+  kindToMode,
+  type BriefState,
   type RunnerDispatchStatus,
   type RunnerKind,
 } from "@ditto/core";
@@ -41,6 +45,7 @@ import {
   projects,
   activities,
   projectRunners,
+  workItems,
 } from "../../db/schema";
 import { mapWorkflowRunToDispatchStatus } from "../../adapters/github-action";
 
@@ -108,8 +113,24 @@ export interface DeploymentStatusEvent {
     environment: string;
     target_url?: string | null;
     environment_url?: string | null;
+    /** Brief 220 D2 — `failure`/`error` events carry a free-text description. */
+    description?: string | null;
   };
-  deployment: { ref: string };
+  /**
+   * Brief 220 D2.1 (Reviewer-fix H1) — `id` and `workflow_run_id` are
+   * always present in real GitHub `deployment_status` payloads but the
+   * earlier (Brief 216) shape only typed `ref`. Widened here so the
+   * production-deploy handler can correlate the deploy event back to
+   * the workflow run that created the deployment (used for the GitHub-
+   * Mobile deep-link). Both are typed `optional | null` so the handler
+   * gracefully falls back when GitHub omits them (e.g., legacy deploys
+   * not driven by Actions).
+   */
+  deployment: {
+    ref: string;
+    id?: number;
+    workflow_run_id?: number | null;
+  };
   repository: { full_name: string };
 }
 
@@ -119,7 +140,6 @@ export type FallbackOutcome =
   | { kind: "pr-merged"; dispatchId: string; prUrl: string }
   | { kind: "pr-closed-unmerged"; dispatchId: string; prUrl: string }
   | { kind: "preview-ready"; dispatchId: string; previewUrl: string }
-  | { kind: "production-no-op"; dispatchId: string }
   | { kind: "workflow-completed"; dispatchId: string; conclusion: string }
   | {
       kind: "workflow-transitioned";
@@ -133,7 +153,18 @@ export type FallbackOutcome =
       dispatchId: string;
       checkRunName: string;
       conclusion: string | null;
-    };
+    }
+  // Brief 220 D2 — production-deploy lifecycle outcomes. Replace the prior
+  // `production-no-op` placeholder with five differentiated variants.
+  | {
+      kind: "deploy-approval-pending";
+      dispatchId: string;
+      runUrl: string | null;
+    }
+  | { kind: "deploy-in-progress"; dispatchId: string }
+  | { kind: "deployed"; dispatchId: string; prodUrl: string | null }
+  | { kind: "deploy-failed"; dispatchId: string; errorReason: string | null }
+  | { kind: "deploy-state-no-op"; dispatchId: string; reason: string };
 
 const ROUTINE_BRANCH_PREFIX = "claude/";
 const URL_CAP = 2 * 1024;
@@ -200,6 +231,16 @@ export async function handlePullRequestEvent(
       .update(runnerDispatches)
       .set({ externalUrl: prUrl })
       .where(eq(runnerDispatches.id, dispatch.id));
+    const card = buildRunnerDispatchCard({
+      workItemId: dispatch.workItemId,
+      title: `${labelFor(dispatch.runnerKind as RunnerKind)} — PR opened`,
+      runnerKind: dispatch.runnerKind as RunnerKind,
+      runnerMode: kindToMode(dispatch.runnerKind as RunnerKind),
+      status: "running",
+      attemptIndex: dispatch.attemptIndex,
+      externalUrl: sessionUrl,
+      prUrl,
+    });
     await insertActivity(dbImpl, {
       action: `${activityPrefix(dispatch.runnerKind)}_pr_opened`,
       description: `${labelFor(dispatch.runnerKind)} PR opened: ${prUrl}`,
@@ -211,6 +252,7 @@ export async function handlePullRequestEvent(
         runnerKind: dispatch.runnerKind,
         sessionUrl,
       },
+      contentBlock: card as unknown as Record<string, unknown>,
     });
     return { kind: "pr-opened", dispatchId: dispatch.id, prUrl };
   }
@@ -226,6 +268,16 @@ export async function handlePullRequestEvent(
           .update(runnerDispatches)
           .set({ status: tr.to, finishedAt: new Date() })
           .where(eq(runnerDispatches.id, dispatch.id));
+        const card = buildRunnerDispatchCard({
+          workItemId: dispatch.workItemId,
+          title: `${labelFor(dispatch.runnerKind as RunnerKind)} finished — PR merged`,
+          runnerKind: dispatch.runnerKind as RunnerKind,
+          runnerMode: kindToMode(dispatch.runnerKind as RunnerKind),
+          status: "succeeded",
+          attemptIndex: dispatch.attemptIndex,
+          externalUrl: sessionUrl,
+          prUrl,
+        });
         await insertActivity(dbImpl, {
           action: `${activityPrefix(dispatch.runnerKind)}_pr_merged`,
           description: `${labelFor(dispatch.runnerKind)} PR merged: ${prUrl}`,
@@ -237,6 +289,7 @@ export async function handlePullRequestEvent(
             runnerKind: dispatch.runnerKind,
             sessionUrl,
           },
+          contentBlock: card as unknown as Record<string, unknown>,
         });
         return { kind: "pr-merged", dispatchId: dispatch.id, prUrl };
       }
@@ -483,6 +536,7 @@ async function findGithubActionDispatchByRunId(
       runnerKind: runnerDispatches.runnerKind,
       externalRunId: runnerDispatches.externalRunId,
       externalUrl: runnerDispatches.externalUrl,
+      attemptIndex: runnerDispatches.attemptIndex,
     })
     .from(runnerDispatches)
     .where(
@@ -502,6 +556,7 @@ async function findGithubActionDispatchByRunId(
     runnerKind: rows[0].runnerKind as RunnerKind,
     externalRunId: rows[0].externalRunId ?? null,
     externalUrl: rows[0].externalUrl ?? null,
+    attemptIndex: rows[0].attemptIndex ?? 0,
   };
 }
 
@@ -556,37 +611,114 @@ export async function handleCheckRunEvent(
 }
 
 // ============================================================
-// deployment_status handler — Vercel preview surfacing (§D5)
+// deployment_status handler — Vercel preview surfacing (Brief 216 §D5)
+// + production deploy gate (Brief 220 §D2)
 // ============================================================
+
+/**
+ * Brief 220 D2.2 (Reviewer-fix L6) — sanitises GitHub `repo.full_name`
+ * before inlining into URLs. The source is HMAC-verified in
+ * `packages/web/app/api/v1/integrations/github/webhook/route.ts`, so an
+ * attacker cannot forge a malicious payload — but the regex is defence
+ * in depth: rejects path-traversal characters, query strings, and
+ * fragments that would break the deep-link.
+ */
+const REPO_FULL_NAME_REGEX = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
+interface MobileApproveActionOk {
+  ok: true;
+  action: { kind: "external_link"; url: string; label: string };
+}
+interface MobileApproveActionRejected {
+  ok: false;
+  reason: string;
+}
+type MobileApproveActionResult = MobileApproveActionOk | MobileApproveActionRejected;
+
+/**
+ * Brief 220 D3 — composes the GitHub-Mobile deep-link `ActionBlock`
+ * payload. When `workflow_run_id` is present, deep-links to the
+ * workflow run page (GitHub Mobile auto-detects deployment-review-
+ * pending and surfaces the approve dialog). When absent (Reviewer-fix
+ * H1 fallback path), falls back to the project's repo `/deployments`
+ * page — universal across GitHub-Mobile-installed and mobile-web-only.
+ */
+export function buildMobileApproveAction(
+  repoFullName: string,
+  workflowRunId: number | null | undefined,
+): MobileApproveActionResult {
+  if (!REPO_FULL_NAME_REGEX.test(repoFullName)) {
+    return { ok: false, reason: "invalid-repo-full-name" };
+  }
+  const url =
+    workflowRunId != null
+      ? `https://github.com/${repoFullName}/actions/runs/${workflowRunId}`
+      : `https://github.com/${repoFullName}/deployments`;
+  return {
+    ok: true,
+    action: {
+      kind: "external_link",
+      url,
+      label: "Approve deploy in GitHub Mobile",
+    },
+  };
+}
 
 export async function handleDeploymentStatusEvent(
   event: DeploymentStatusEvent,
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
   const dbImpl = options.db ?? appDb;
-  if (event.deployment_status.state !== "success") {
-    return { kind: "no-match", reason: `state is ${event.deployment_status.state}` };
-  }
 
-  const dispatch = await findActiveDispatchForRepo(
+  // Brief 220 D2.2 (Reviewer-fix H2 + post-build M2) — `deployment_status`
+  // events fire post-runner-completion (the runner's PR has merged before
+  // the deploy starts), so the matching `runner_dispatches` row is
+  // `succeeded`. Both the production and the preview paths use
+  // `includeTerminal: true` and pick the most-recent-by-createdAt row
+  // regardless of status. This aligns with the M5 non-goal "the most-
+  // recently-shipped work item transitions" and avoids the M2 mis-
+  // correlation bug where an in-flight dispatch shadows a more-recent
+  // terminal dispatch for the just-merged PR.
+  //
+  // Side effect on the preview branch: when an in-flight dispatch coexists
+  // with a more-recently-created terminal dispatch in the same repo, the
+  // preview event correlates to the more-recent one. This matches the
+  // production branch's semantics and is a strict improvement on Brief
+  // 216's active-only lookup (which would silently no-match in that
+  // scenario). Documented as a deliberate behavior alignment, not drift.
+  const dispatch = await findDispatchForRepo(
     dbImpl,
     event.repository.full_name,
+    { includeTerminal: true },
   );
   if (!dispatch) {
-    return { kind: "no-match", reason: "no active cloud-runner dispatch for repo" };
+    return {
+      kind: "no-match",
+      reason: "no cloud-runner dispatch for repo",
+    };
   }
 
   const env = event.deployment_status.environment;
   const deployTarget =
     options.deployTargetFor?.(dispatch.projectId) ?? "Production";
+  const isProduction = env === deployTarget || env === "Production";
 
-  // Production deploy: Brief 220 owns this surface; no card here.
-  if (env === deployTarget || env === "Production") {
-    return { kind: "production-no-op", dispatchId: dispatch.id };
+  if (isProduction) {
+    return processProductionDeployStatus(dbImpl, dispatch, event);
+  }
+
+  // Non-production: Brief 216 §D5 preview-card path (unchanged).
+  if (event.deployment_status.state !== "success") {
+    return {
+      kind: "no-match",
+      reason: `non-production state is ${event.deployment_status.state}`,
+    };
   }
 
   const previewUrl =
-    event.deployment_status.environment_url ?? event.deployment_status.target_url ?? null;
+    event.deployment_status.environment_url ??
+    event.deployment_status.target_url ??
+    null;
   if (!previewUrl) {
     return { kind: "no-match", reason: "deployment_status without preview url" };
   }
@@ -611,6 +743,258 @@ export async function handleDeploymentStatusEvent(
 }
 
 // ============================================================
+// Production deploy lifecycle (Brief 220 §D2)
+// ============================================================
+
+interface DeployStateMapping {
+  target: BriefState;
+  activitySuffix: string;
+  outcomeKind:
+    | "deploy-approval-pending"
+    | "deploy-in-progress"
+    | "deployed"
+    | "deploy-failed";
+  description: (env: string, urlOrError: string | null) => string;
+}
+
+function mapDeploymentStateToBriefState(
+  state: string,
+): DeployStateMapping | null {
+  // GitHub `deployment_status.state` enum (per the webhook payload spec):
+  // `pending | queued | in_progress | success | failure | error | inactive`.
+  // The actionable subset is `queued | in_progress | success | failure | error`;
+  // `pending` and `inactive` deliberately fall through to `null` (no card,
+  // no transition). Any future GitHub addition (e.g., a new lifecycle state)
+  // also falls through to `null` until the handler is updated — safe default.
+  switch (state) {
+    case "queued":
+      return {
+        target: "deploying",
+        activitySuffix: "deploy_approval_pending",
+        outcomeKind: "deploy-approval-pending",
+        description: () => "Deploy approval pending",
+      };
+    case "in_progress":
+      return {
+        target: "deploying",
+        activitySuffix: "deploy_in_progress",
+        outcomeKind: "deploy-in-progress",
+        description: (env) => `Deploying to ${env}`,
+      };
+    case "success":
+      return {
+        target: "deployed",
+        activitySuffix: "deployed",
+        outcomeKind: "deployed",
+        description: (_env, url) =>
+          url ? `Deployed to production: ${url}` : "Deployed to production",
+      };
+    case "failure":
+    case "error":
+      return {
+        target: "deploy_failed",
+        activitySuffix: "deploy_failed",
+        outcomeKind: "deploy-failed",
+        description: (_env, err) =>
+          err ? `Deploy failed: ${err}` : "Deploy failed",
+      };
+    case "pending":
+    case "inactive":
+      return null;
+    default:
+      // Future GitHub additions land here. Safe default: no transition, no
+      // card. Surfaces as a `deploy-state-no-op` outcome.
+      return null;
+  }
+}
+
+const ERROR_REASON_CAP = 4 * 1024;
+
+async function processProductionDeployStatus(
+  dbImpl: AnyDb,
+  dispatch: DispatchRow,
+  event: DeploymentStatusEvent,
+): Promise<FallbackOutcome> {
+  const state = event.deployment_status.state;
+  const env = event.deployment_status.environment;
+
+  const mapping = mapDeploymentStateToBriefState(state);
+  if (!mapping) {
+    // pending / inactive — no card, no transition
+    return {
+      kind: "deploy-state-no-op",
+      dispatchId: dispatch.id,
+      reason: `production state ${state} is not actionable`,
+    };
+  }
+
+  // Read work item's current briefState. Deploy gate applies to project-
+  // flavored items only; non-project items have NULL briefState.
+  const wiRows = await dbImpl
+    .select({ briefState: workItems.briefState })
+    .from(workItems)
+    .where(eq(workItems.id, dispatch.workItemId))
+    .limit(1);
+  if (wiRows.length === 0) {
+    return { kind: "no-match", reason: "work item not found" };
+  }
+  const currentState = wiRows[0].briefState;
+  if (!currentState) {
+    return {
+      kind: "no-match",
+      reason: "non-project work item; deploy gate not applicable",
+    };
+  }
+
+  // Resolve URL fields used by the activity payload.
+  const prodUrl =
+    event.deployment_status.environment_url ??
+    event.deployment_status.target_url ??
+    null;
+  const errorReason =
+    state === "failure" || state === "error"
+      ? truncate(
+          event.deployment_status.description ??
+            event.deployment_status.target_url ??
+            `GitHub deployment_status: ${state}`,
+          ERROR_REASON_CAP,
+        )
+      : null;
+
+  // Brief 220 D3 — compose the GitHub-Mobile deep-link payload for `queued`.
+  const mobileApproveResult =
+    mapping.outcomeKind === "deploy-approval-pending"
+      ? buildMobileApproveAction(
+          event.repository.full_name,
+          event.deployment.workflow_run_id ?? null,
+        )
+      : null;
+
+  // Attempt the briefState transition.
+  const tr = transitionBriefState(currentState, mapping.target);
+  if (!tr.ok) {
+    // Idempotent replay or illegal transition. Audit but no card.
+    await insertActivity(dbImpl, {
+      action: `${activityPrefix(dispatch.runnerKind)}_${mapping.activitySuffix}_rejected`,
+      description: `Late or duplicate ${mapping.activitySuffix} signal — illegal SM transition from ${currentState} → ${mapping.target}`,
+      workItemId: dispatch.workItemId,
+      metadata: {
+        fallback: `deployment_status.${state}`,
+        guardWaived: true,
+        rejected: true,
+        transitionRejected: true,
+        fromBriefState: currentState,
+        attemptedBriefState: mapping.target,
+        environment: env,
+        dispatchId: dispatch.id,
+        runnerKind: dispatch.runnerKind,
+        ...(event.deployment.workflow_run_id != null
+          ? { workflowRunId: event.deployment.workflow_run_id }
+          : {}),
+        ...(event.deployment.id != null
+          ? { deploymentId: event.deployment.id }
+          : {}),
+      },
+    });
+    return {
+      kind: "deploy-state-no-op",
+      dispatchId: dispatch.id,
+      reason: tr.reason,
+    };
+  }
+
+  // Apply the transition.
+  const now = new Date();
+  await dbImpl
+    .update(workItems)
+    .set({
+      briefState: tr.to,
+      stateChangedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(workItems.id, dispatch.workItemId));
+
+  // Out-of-order detection (Reviewer-fix H3 + post-build M1): a
+  // `success`/`failure` event arrived before the corresponding
+  // `queued`/`in_progress` for the same deployment. Two cases:
+  //  1. `shipped → deployed | deploy_failed` (initial deploy out-of-order)
+  //  2. `deploy_failed → deployed` (retry success out-of-order — the retry's
+  //     `success` event arrived before its `queued` event)
+  // Both skip the informational `deploying` intermediate. Forensic audit
+  // distinguishes "retry happened normally" from "retry success arrived
+  // before retry queued" via this flag.
+  const outOfOrder =
+    (currentState === "shipped" &&
+      (tr.to === "deployed" || tr.to === "deploy_failed")) ||
+    (currentState === "deploy_failed" && tr.to === "deployed");
+
+  // Build activity metadata.
+  const metadata: Record<string, unknown> = {
+    fallback: `deployment_status.${state}`,
+    guardWaived: true,
+    environment: env,
+    dispatchId: dispatch.id,
+    runnerKind: dispatch.runnerKind,
+    transitioned: { from: currentState, to: tr.to },
+    ...(prodUrl ? { prodUrl: truncate(prodUrl, URL_CAP) } : {}),
+    ...(errorReason ? { error: errorReason } : {}),
+    ...(outOfOrder ? { outOfOrder: true } : {}),
+    ...(event.deployment.workflow_run_id != null
+      ? { workflowRunId: event.deployment.workflow_run_id }
+      : {}),
+    ...(event.deployment.id != null
+      ? { deploymentId: event.deployment.id }
+      : {}),
+  };
+
+  if (mobileApproveResult) {
+    if (mobileApproveResult.ok) {
+      metadata.mobileApproveAction = mobileApproveResult.action;
+    } else {
+      // Reviewer-fix L4 — this branch is unit-tested via
+      // `buildMobileApproveAction(...)` directly (see AC #13b in
+      // cloud-runner-fallback.test.ts), but cannot be reached through the
+      // integration path because `findDispatchForRepo` short-circuits on a
+      // mismatched repo before this branch executes. Defence in depth: the
+      // branch persists if the lookup-side guards ever weaken.
+      metadata.urlConstructionRejected = true;
+      metadata.urlConstructionRejectedReason = mobileApproveResult.reason;
+    }
+  }
+
+  await insertActivity(dbImpl, {
+    action: `${activityPrefix(dispatch.runnerKind)}_${mapping.activitySuffix}`,
+    description: mapping.description(env, prodUrl ?? errorReason),
+    workItemId: dispatch.workItemId,
+    metadata,
+  });
+
+  // Build outcome.
+  switch (mapping.outcomeKind) {
+    case "deploy-approval-pending":
+      return {
+        kind: "deploy-approval-pending",
+        dispatchId: dispatch.id,
+        runUrl: mobileApproveResult?.ok ? mobileApproveResult.action.url : null,
+      };
+    case "deploy-in-progress":
+      return { kind: "deploy-in-progress", dispatchId: dispatch.id };
+    case "deployed":
+      return {
+        kind: "deployed",
+        dispatchId: dispatch.id,
+        prodUrl: prodUrl ? truncate(prodUrl, URL_CAP) : null,
+      };
+    case "deploy-failed":
+      return {
+        kind: "deploy-failed",
+        dispatchId: dispatch.id,
+        errorReason,
+      };
+  }
+}
+
+// ============================================================
 // Shared lookup helpers
 // ============================================================
 
@@ -622,6 +1006,7 @@ interface DispatchRow {
   runnerKind: RunnerKind;
   externalRunId: string | null;
   externalUrl: string | null;
+  attemptIndex: number;
 }
 
 const CLOUD_RUNNER_KINDS: ReadonlyArray<RunnerKind> = [
@@ -666,6 +1051,7 @@ async function findDispatchForRepo(
       runnerKind: runnerDispatches.runnerKind,
       externalRunId: runnerDispatches.externalRunId,
       externalUrl: runnerDispatches.externalUrl,
+      attemptIndex: runnerDispatches.attemptIndex,
       createdAt: runnerDispatches.createdAt,
     })
     .from(runnerDispatches)
@@ -684,6 +1070,7 @@ async function findDispatchForRepo(
     runnerKind: r.runnerKind as RunnerKind,
     externalRunId: r.externalRunId ?? null,
     externalUrl: r.externalUrl ?? null,
+    attemptIndex: r.attemptIndex ?? 0,
   });
 
   // Branch correlation: prefer a dispatch whose externalUrl already matches
@@ -757,6 +1144,12 @@ interface ActivityWrite {
   description: string;
   workItemId: string;
   metadata: Record<string, unknown>;
+  /**
+   * Brief 221 §D12 — optional structured ContentBlock to render this
+   * activity inline as a typed card on the conversation surface. NULL
+   * for activities that don't have a paired card.
+   */
+  contentBlock?: Record<string, unknown> | null;
 }
 
 async function insertActivity(
@@ -770,6 +1163,7 @@ async function insertActivity(
     entityType: "work_item",
     entityId: row.workItemId,
     metadata: row.metadata,
+    contentBlock: row.contentBlock ?? null,
   });
 }
 

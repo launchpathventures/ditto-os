@@ -231,6 +231,12 @@ export {
   type PauseProjectRef,
   type PauseRunnerOption,
   type PauseCopy,
+  // status-card builder (Brief 221 §D6 + §D12)
+  buildRunnerDispatchCard,
+  isRunnerDispatchCard,
+  RUNNER_DISPATCH_CARD_KIND,
+  type BuildRunnerDispatchCardInput,
+  type RunnerDispatchCardMetadata,
 } from "./runner/index.js";
 
 // ============================================================
