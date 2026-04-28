@@ -40,9 +40,19 @@ afterEach(() => {
 
 async function seedActiveDispatch(
   opts: {
-    status?: "dispatched" | "running";
+    status?: "dispatched" | "running" | "succeeded";
     runnerKind?: RunnerKind;
     externalRunId?: string;
+    /** Brief 220 — the deploy gate transitions from `shipped`. Tests that
+     *  exercise the production-deploy lifecycle must start the work item
+     *  there. Defaults to `active` to preserve Brief 216/218 test behavior. */
+    briefState?:
+      | "active"
+      | "review"
+      | "shipped"
+      | "deploying"
+      | "deployed"
+      | "deploy_failed";
   } = {},
 ) {
   const kind = opts.runnerKind ?? "claude-code-routine";
@@ -83,7 +93,7 @@ async function seedActiveDispatch(
     content: "Add a /healthz endpoint",
     source: "system_generated",
     status: "intake",
-    briefState: "active",
+    briefState: opts.briefState ?? "active",
   });
   await testDb.insert(projectRunners).values({
     projectId: "proj_01",
@@ -138,7 +148,33 @@ describe("handlePullRequestEvent — pr opened", () => {
     expect(rows[0].externalUrl).toBe("https://github.com/owner/agent-crm/pull/42");
 
     const acts = await testDb.select().from(activities);
-    expect(acts.find((a) => a.action === "routine_pr_opened")).toBeDefined();
+    const prOpened = acts.find((a) => a.action === "routine_pr_opened");
+    expect(prOpened).toBeDefined();
+    // Brief 221 AC #7 — the PR-opened emission writes a StatusCardBlock
+    // (cardKind = "runnerDispatch") into activities.contentBlock.
+    expect(prOpened!.contentBlock).not.toBeNull();
+    const card = prOpened!.contentBlock as {
+      type: string;
+      title: string;
+      status: string;
+      metadata: {
+        cardKind: string;
+        runnerKind: string;
+        runnerMode: string;
+        status: string;
+        attemptIndex: number;
+        externalUrl?: string;
+        prUrl?: string;
+      };
+    };
+    expect(card.type).toBe("status_card");
+    expect(card.metadata.cardKind).toBe("runnerDispatch");
+    expect(card.metadata.runnerKind).toBe("claude-code-routine");
+    expect(card.metadata.runnerMode).toBe("cloud");
+    expect(card.metadata.status).toBe("running");
+    expect(card.metadata.prUrl).toBe(
+      "https://github.com/owner/agent-crm/pull/42",
+    );
   });
 
   it("ignores non-claude branches", async () => {
@@ -396,8 +432,11 @@ describe("handleDeploymentStatusEvent", () => {
     expect(r.kind).toBe("preview-ready");
   });
 
-  it("emits production-no-op for the default 'Production' environment", async () => {
-    await seedActiveDispatch();
+  it("Brief 220 — production success transitions briefState shipped → deployed (out-of-order H3)", async () => {
+    // Work item is `shipped` (PR merged); deployment_status: success arrives
+    // for the default Production environment. Per Brief 220 D1 H3, this admits
+    // a direct shipped → deployed transition (out-of-order delivery).
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
     const r = await handleDeploymentStatusEvent(
       {
         action: "created",
@@ -406,19 +445,27 @@ describe("handleDeploymentStatusEvent", () => {
           environment: "Production",
           environment_url: "https://prod.example.com",
         },
-        deployment: { ref: "claude/x" },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
         repository: { full_name: "owner/agent-crm" },
       },
       { db: testDb },
     );
-    expect(r.kind).toBe("production-no-op");
+    expect(r.kind).toBe("deployed");
+    if (r.kind !== "deployed") throw new Error("unreachable");
+    expect(r.prodUrl).toBe("https://prod.example.com");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deployed");
 
     const acts = await testDb.select().from(activities);
-    expect(acts.find((a) => a.action === "routine_preview_ready")).toBeUndefined();
+    const deployedAct = acts.find((a) => a.action === "routine_deployed");
+    expect(deployedAct).toBeDefined();
+    expect((deployedAct?.metadata as Record<string, unknown>)?.outOfOrder).toBe(true);
+    expect((deployedAct?.metadata as Record<string, unknown>)?.guardWaived).toBe(true);
   });
 
-  it("respects per-project deployTarget override (custom prod env name)", async () => {
-    await seedActiveDispatch();
+  it("Brief 220 — respects per-project deployTarget override (custom prod env name)", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
     const r = await handleDeploymentStatusEvent(
       {
         action: "created",
@@ -427,12 +474,12 @@ describe("handleDeploymentStatusEvent", () => {
           environment: "prod",
           environment_url: "https://prod.example.com",
         },
-        deployment: { ref: "claude/x" },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
         repository: { full_name: "owner/agent-crm" },
       },
       { db: testDb, deployTargetFor: () => "prod" },
     );
-    expect(r.kind).toBe("production-no-op");
+    expect(r.kind).toBe("deployed");
   });
 
   it("treats custom-staging as a preview when project's deployTarget is Production", async () => {
@@ -453,7 +500,7 @@ describe("handleDeploymentStatusEvent", () => {
     expect(r.kind).toBe("preview-ready");
   });
 
-  it("ignores deployment_status events that aren't success state", async () => {
+  it("ignores non-production deployment_status events that aren't success state", async () => {
     await seedActiveDispatch();
     const r = await handleDeploymentStatusEvent(
       {
@@ -468,6 +515,452 @@ describe("handleDeploymentStatusEvent", () => {
       { db: testDb },
     );
     expect(r.kind).toBe("no-match");
+  });
+});
+
+// ============================================================
+// Brief 220 — production deploy lifecycle (deployment_status events)
+// ============================================================
+
+describe("handleDeploymentStatusEvent — production deploy lifecycle (Brief 220)", () => {
+  // ----- AC #5: queued + in_progress live transitions -----
+
+  it("AC #5a — production queued transitions shipped → deploying with mobile-approve action (H2 regression: dispatch is succeeded)", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "queued",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+
+    expect(r.kind).toBe("deploy-approval-pending");
+    if (r.kind !== "deploy-approval-pending") throw new Error("unreachable");
+    expect(r.runUrl).toBe(
+      "https://github.com/owner/agent-crm/actions/runs/12345",
+    );
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploying");
+    expect(wi[0].stateChangedAt).not.toBeNull();
+
+    const acts = await testDb.select().from(activities);
+    const approvalAct = acts.find(
+      (a) => a.action === "routine_deploy_approval_pending",
+    );
+    expect(approvalAct).toBeDefined();
+    const meta = approvalAct?.metadata as Record<string, unknown>;
+    expect(meta.guardWaived).toBe(true);
+    expect(meta.workflowRunId).toBe(12345);
+    expect(meta.deploymentId).toBe(999);
+    const action = meta.mobileApproveAction as Record<string, unknown>;
+    expect(action.kind).toBe("external_link");
+    expect(action.url).toBe(
+      "https://github.com/owner/agent-crm/actions/runs/12345",
+    );
+    expect(action.label).toBe("Approve deploy in GitHub Mobile");
+  });
+
+  it("AC #5b — production in_progress transitions shipped → deploying without mobile-approve action", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "in_progress",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-in-progress");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploying");
+
+    const acts = await testDb.select().from(activities);
+    const inProgressAct = acts.find(
+      (a) => a.action === "routine_deploy_in_progress",
+    );
+    expect(inProgressAct).toBeDefined();
+    expect(
+      (inProgressAct?.metadata as Record<string, unknown>).mobileApproveAction,
+    ).toBeUndefined();
+  });
+
+  it("AC #5c — production in_progress is idempotent (already deploying)", async () => {
+    await seedActiveDispatch({ briefState: "deploying", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "in_progress",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-state-no-op");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploying");
+
+    const acts = await testDb.select().from(activities);
+    const rejectedAct = acts.find(
+      (a) => a.action === "routine_deploy_in_progress_rejected",
+    );
+    expect(rejectedAct).toBeDefined();
+    expect(
+      (rejectedAct?.metadata as Record<string, unknown>).transitionRejected,
+    ).toBe(true);
+  });
+
+  // ----- AC #6: success + failure/error terminal transitions -----
+
+  it("AC #6a — production success transitions deploying → deployed", async () => {
+    await seedActiveDispatch({ briefState: "deploying", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "success",
+          environment: "Production",
+          environment_url: "https://prod.example.com",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deployed");
+    if (r.kind !== "deployed") throw new Error("unreachable");
+    expect(r.prodUrl).toBe("https://prod.example.com");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deployed");
+  });
+
+  it("AC #6b — production failure transitions deploying → deploy_failed", async () => {
+    await seedActiveDispatch({ briefState: "deploying", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "failure",
+          environment: "Production",
+          description: "Vercel build failed: missing env var",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-failed");
+    if (r.kind !== "deploy-failed") throw new Error("unreachable");
+    expect(r.errorReason).toBe("Vercel build failed: missing env var");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploy_failed");
+  });
+
+  it("AC #6c — production error is treated as alias for failure", async () => {
+    await seedActiveDispatch({ briefState: "deploying", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "error",
+          environment: "Production",
+          description: "Infrastructure error before deploy ran",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-failed");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploy_failed");
+  });
+
+  // ----- AC #7: out-of-order webhook delivery (Reviewer-fix H3) -----
+
+  it("AC #7a — out-of-order: success arrives BEFORE queued → shipped → deployed direct", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "success",
+          environment: "Production",
+          environment_url: "https://prod.example.com",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deployed");
+
+    const acts = await testDb.select().from(activities);
+    const deployedAct = acts.find((a) => a.action === "routine_deployed");
+    expect((deployedAct?.metadata as Record<string, unknown>).outOfOrder).toBe(true);
+  });
+
+  it("AC #7b — out-of-order: failure arrives BEFORE queued → shipped → deploy_failed direct", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "failure",
+          environment: "Production",
+          description: "Out-of-order failure",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-failed");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploy_failed");
+  });
+
+  // ----- Reviewer-fix M3 — retry-out-of-order: deploy_failed → deployed -----
+
+  it("M3/Reviewer-fix — retry-out-of-order: deploy_failed → deployed direct (success arrives before retry queued)", async () => {
+    // The user manually re-ran a previously-failed workflow in GitHub.
+    // GitHub's webhook delivery is reordered: the retry's `success` event
+    // arrives BEFORE its `queued` event. The state machine admits this
+    // (Brief 220 D1) and the activity row marks `outOfOrder: true` so a
+    // forensic auditor can distinguish from a normal `deploy_failed → deploying
+    // → deployed` arc.
+    await seedActiveDispatch({ briefState: "deploy_failed", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "success",
+          environment: "Production",
+          environment_url: "https://prod.example.com",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deployed");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deployed");
+
+    const acts = await testDb.select().from(activities);
+    const deployedAct = acts.find((a) => a.action === "routine_deployed");
+    expect(deployedAct).toBeDefined();
+    // Reviewer-fix M1 — the symmetric out-of-order case must also flag.
+    expect((deployedAct?.metadata as Record<string, unknown>).outOfOrder).toBe(true);
+  });
+
+  it("M3/Reviewer-fix — normal retry: deploy_failed → deploying does NOT flag outOfOrder", async () => {
+    // Sanity: the regular retry path (`deploy_failed → deploying` via a
+    // fresh `queued` event) must NOT mark `outOfOrder: true`. The flag is
+    // only for out-of-order webhook delivery, not for legitimate retries.
+    await seedActiveDispatch({ briefState: "deploy_failed", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "queued",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-approval-pending");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("deploying");
+
+    const acts = await testDb.select().from(activities);
+    const approvalAct = acts.find(
+      (a) => a.action === "routine_deploy_approval_pending",
+    );
+    expect(approvalAct).toBeDefined();
+    expect(
+      (approvalAct?.metadata as Record<string, unknown>).outOfOrder,
+    ).toBeUndefined();
+  });
+
+  // ----- AC #8: idempotency + non-actionable + no-match -----
+
+  it("AC #8a — duplicate queued events: second is rejected as deploy-state-no-op", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const event = {
+      action: "created" as const,
+      deployment_status: {
+        state: "queued",
+        environment: "Production",
+      },
+      deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+      repository: { full_name: "owner/agent-crm" },
+    };
+
+    const r1 = await handleDeploymentStatusEvent(event, { db: testDb });
+    expect(r1.kind).toBe("deploy-approval-pending");
+
+    const r2 = await handleDeploymentStatusEvent(event, { db: testDb });
+    expect(r2.kind).toBe("deploy-state-no-op");
+
+    const acts = await testDb.select().from(activities);
+    const approvalActs = acts.filter(
+      (a) => a.action === "routine_deploy_approval_pending",
+    );
+    expect(approvalActs).toHaveLength(1); // only the first emitted a card
+    const rejectedAct = acts.find(
+      (a) => a.action === "routine_deploy_approval_pending_rejected",
+    );
+    expect(rejectedAct).toBeDefined();
+    expect(
+      (rejectedAct?.metadata as Record<string, unknown>).transitionRejected,
+    ).toBe(true);
+  });
+
+  it("AC #8b — production pending state is non-actionable no-op", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "pending",
+          environment: "Production",
+        },
+        deployment: { ref: "main" },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-state-no-op");
+
+    const wi = await testDb.select().from(workItems).where(eq(workItems.id, "wi_01"));
+    expect(wi[0].briefState).toBe("shipped"); // no transition
+  });
+
+  it("AC #8c — production inactive state is non-actionable no-op", async () => {
+    await seedActiveDispatch({ briefState: "deployed", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "inactive",
+          environment: "Production",
+        },
+        deployment: { ref: "main" },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-state-no-op");
+  });
+
+  it("AC #8d — no matching dispatch row → no-match (no transition, no activity)", async () => {
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "queued",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: 12345 },
+        repository: { full_name: "unrelated/repo" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("no-match");
+
+    const acts = await testDb.select().from(activities);
+    expect(acts).toHaveLength(0);
+  });
+
+  // ----- AC #9: non-production unchanged (regression) -----
+
+  it("AC #9 — non-production preview events still emit preview-ready card (Brief 216 regression)", async () => {
+    await seedActiveDispatch();
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "success",
+          environment: "Preview",
+          environment_url: "https://feature-x.vercel.app",
+        },
+        deployment: { ref: "claude/x" },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("preview-ready");
+    if (r.kind !== "preview-ready") throw new Error("unreachable");
+    expect(r.previewUrl).toBe("https://feature-x.vercel.app");
+
+    const acts = await testDb.select().from(activities);
+    expect(acts.find((a) => a.action === "routine_preview_ready")).toBeDefined();
+  });
+
+  // ----- AC #13: deep-link URL composer + sanitisation -----
+
+  it("AC #13a — workflow_run_id absent: graceful fallback to /deployments URL", async () => {
+    await seedActiveDispatch({ briefState: "shipped", status: "succeeded" });
+    const r = await handleDeploymentStatusEvent(
+      {
+        action: "created",
+        deployment_status: {
+          state: "queued",
+          environment: "Production",
+        },
+        deployment: { ref: "main", id: 999, workflow_run_id: null },
+        repository: { full_name: "owner/agent-crm" },
+      },
+      { db: testDb },
+    );
+    expect(r.kind).toBe("deploy-approval-pending");
+    if (r.kind !== "deploy-approval-pending") throw new Error("unreachable");
+    expect(r.runUrl).toBe("https://github.com/owner/agent-crm/deployments");
+  });
+
+  it("AC #13b — malformed repo full-name → URL rejected, no mobileApproveAction", async () => {
+    // Seed under a malformed repo string. We can't naturally trigger this via
+    // GitHub (HMAC verifies the payload), so we directly test the URL composer
+    // via a contrived payload — the dispatch-lookup short-circuits on no
+    // matching project, so we'd never reach the URL-construction guard
+    // through findDispatchForRepo. Instead test buildMobileApproveAction
+    // directly (the unit-level boundary of L6).
+    const { buildMobileApproveAction } = await import("./cloud-runner-fallback");
+    const result = buildMobileApproveAction("../../etc/passwd", 12345);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.reason).toBe("invalid-repo-full-name");
+
+    const okResult = buildMobileApproveAction("owner/repo", 12345);
+    expect(okResult.ok).toBe(true);
+    if (!okResult.ok) throw new Error("unreachable");
+    expect(okResult.action.url).toBe(
+      "https://github.com/owner/repo/actions/runs/12345",
+    );
   });
 });
 
