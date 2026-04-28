@@ -161,6 +161,11 @@ export type WorkItemType = (typeof workItemTypeValues)[number];
  * Brief 223 — brief-equivalent lifecycle for project-flavored work items.
  * Coexists with `workItemStatusValues` (intake/routing); partitioned by
  * `workItems.projectId` via DB-level CHECK constraint.
+ *
+ * Brief 220 — extended with three production-deploy states: `deploying`,
+ * `deployed`, `deploy_failed`. Driven by `deployment_status` GitHub
+ * webhook events on the project's production environment. Transitions
+ * defined in `work-items/state-machine.ts`.
  */
 export const briefStateValues = [
   "backlog",
@@ -170,6 +175,9 @@ export const briefStateValues = [
   "shipped",
   "blocked",
   "archived",
+  "deploying",
+  "deployed",
+  "deploy_failed",
 ] as const;
 export type BriefState = (typeof briefStateValues)[number];
 
@@ -247,6 +255,15 @@ export const projectStatusValues = [
   "archived",
 ] as const;
 export type ProjectStatusValue = (typeof projectStatusValues)[number];
+
+/**
+ * Brief 225 — project kind. `'build'` projects are connected to a repo and
+ * managed by Ditto's runner pipeline; `'track'` projects are passively
+ * monitored (manual-entry flow, future brief). Onboarding (Brief 225)
+ * creates `'build'` projects only.
+ */
+export const projectKindValues = ["build", "track"] as const;
+export type ProjectKindValue = (typeof projectKindValues)[number];
 
 // ============================================================
 // Layer 1: Process Layer
@@ -529,6 +546,14 @@ export const memories = sqliteTable("memories", {
   confidence: real("confidence").notNull().default(0.3),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   shared: integer("shared", { mode: "boolean" }).notNull().default(false),
+  /**
+   * Brief 227 — multi-project hybrid scope for `self`-scope memories.
+   * NULL: full self-scope (applies everywhere). Non-empty array: hybrid —
+   * memory only applies to the listed project ids. Unused for `process`-scope
+   * memories (project filtering happens via `processes.projectId` join).
+   */
+  appliedProjectIds: text("applied_project_ids", { mode: "json" })
+    .$type<string[] | null>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -755,10 +780,30 @@ export const activities = sqliteTable("activities", {
   metadata: text("metadata", { mode: "json" })
     .$type<Record<string, unknown>>()
     .default({}),
+  /**
+   * Brief 221 — optional structured ContentBlock for the conversation surface
+   * to render an activity row as a typed card (e.g., a `StatusCardBlock` with
+   * `metadata.cardKind = "runnerDispatch"`). `description` remains the audit
+   * string; `contentBlock` is the rendered card. NULL on legacy rows; new
+   * runner-status emissions populate both.
+   */
+  contentBlock: text("content_block", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
-});
+}, (table) => ({
+  /**
+   * Brief 227 — supports the cross-project promotion proposal cooldown query
+   * (lookup of recent `memory_promotion_dismissed` rows for a memory). Also
+   * broadly useful for any (entityType, entityId, action) lookup pattern.
+   */
+  byEntityAction: index("activities_entity_action_idx").on(
+    table.entityType,
+    table.entityId,
+    table.action,
+  ),
+}));
 
 // ============================================================
 // Schedules — cron-based process triggers
@@ -1064,6 +1109,8 @@ export const projects = sqliteTable("projects", {
   runnerChain: text("runner_chain", { mode: "json" }).$type<RunnerKindValue[]>(),
   deployTarget: text("deploy_target").$type<DeployTargetValue>(),
   status: text("status").notNull().$type<ProjectStatusValue>().default("analysing"),
+  /** Brief 225 — `'build'` (default) or `'track'`. Onboarding creates build-kind only. */
+  kind: text("kind").notNull().$type<ProjectKindValue>().default("build"),
   /** bcrypt(cost=12) hash of the bearer token. Brief 223 generates + rotates. */
   runnerBearerHash: text("runner_bearer_hash"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -1074,6 +1121,7 @@ export const projects = sqliteTable("projects", {
     .$defaultFn(() => new Date()),
 }, (table) => ({
   byStatus: index("projects_status_idx").on(table.status),
+  byKind: index("projects_kind_idx").on(table.kind),
 }));
 
 /**

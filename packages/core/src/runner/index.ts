@@ -84,3 +84,13 @@ export {
   getPollCadenceMs,
   pollableKinds,
 } from "./poll-cadences.js";
+
+export {
+  mintRunnerDispatchPause,
+  parseKindOption,
+  type MintRunnerDispatchPauseInput,
+  type PauseWorkItemRef,
+  type PauseProjectRef,
+  type PauseRunnerOption,
+  type PauseCopy,
+} from "./mint-pause-payload.js";

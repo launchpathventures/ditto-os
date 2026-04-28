@@ -71,6 +71,8 @@ export {
   voiceCalibrationHandler,
   broadcastDirectClassifierHandler,
   outboundQualityGateHandler,
+  // Brief 228 / Insight-217 — shared multi-step pipeline helper
+  readPriorStepOutputs,
 } from "./harness/index.js";
 
 // ============================================================
@@ -221,6 +223,14 @@ export {
   pollCadenceMs,
   getPollCadenceMs,
   pollableKinds,
+  // pause-payload helper (Brief 221)
+  mintRunnerDispatchPause,
+  parseKindOption,
+  type MintRunnerDispatchPauseInput,
+  type PauseWorkItemRef,
+  type PauseProjectRef,
+  type PauseRunnerOption,
+  type PauseCopy,
 } from "./runner/index.js";
 
 // ============================================================
