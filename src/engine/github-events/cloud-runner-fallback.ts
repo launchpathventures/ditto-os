@@ -38,7 +38,6 @@ import {
   type RunnerDispatchStatus,
   type RunnerKind,
 } from "@ditto/core";
-import { db as appDb } from "../../db";
 import * as schema from "../../db/schema";
 import {
   runnerDispatches,
@@ -50,6 +49,18 @@ import {
 import { mapWorkflowRunToDispatchStatus } from "../../adapters/github-action";
 
 type AnyDb = BetterSQLite3Database<typeof schema>;
+
+/**
+ * Lazy import of the singleton app DB. Importing `../../db` eagerly opens the
+ * SQLite file at module-load time; under vitest parallel workers that races
+ * with sibling test files and trips SQLITE_BUSY on the WAL pragma. Production
+ * always passes `options.db`, so the only callers that hit this fallback are
+ * runtime webhook handlers — paying one dynamic import per call is fine.
+ */
+async function loadAppDb(): Promise<AnyDb> {
+  const mod = await import("../../db");
+  return mod.db as AnyDb;
+}
 
 // ============================================================
 // Event payloads — narrow shapes (we don't import @octokit types)
@@ -187,7 +198,7 @@ export async function handlePullRequestEvent(
   event: PullRequestEvent,
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
-  const dbImpl = options.db ?? appDb;
+  const dbImpl: AnyDb = options.db ?? (await loadAppDb());
 
   const prUrl = truncate(event.pull_request.html_url, URL_CAP);
   const isClaudeBranch = event.pull_request.head.ref.startsWith(
@@ -327,7 +338,7 @@ export async function handleWorkflowRunEvent(
   event: WorkflowRunEvent,
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
-  const dbImpl = options.db ?? appDb;
+  const dbImpl: AnyDb = options.db ?? (await loadAppDb());
   if (event.action !== "completed") {
     return { kind: "no-match", reason: "workflow_run not completed" };
   }
@@ -568,7 +579,7 @@ export async function handleCheckRunEvent(
   event: CheckRunEvent,
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
-  const dbImpl = options.db ?? appDb;
+  const dbImpl: AnyDb = options.db ?? (await loadAppDb());
   if (event.action !== "completed") {
     return { kind: "no-match", reason: "check_run not completed" };
   }
@@ -668,7 +679,7 @@ export async function handleDeploymentStatusEvent(
   event: DeploymentStatusEvent,
   options: FallbackOptions = {},
 ): Promise<FallbackOutcome> {
-  const dbImpl = options.db ?? appDb;
+  const dbImpl: AnyDb = options.db ?? (await loadAppDb());
 
   // Brief 220 D2.2 (Reviewer-fix H2 + post-build M2) — `deployment_status`
   // events fire post-runner-completion (the runner's PR has merged before
@@ -1211,7 +1222,7 @@ export const ROUTINE_FALLBACK_EVENTS = CLOUD_RUNNER_FALLBACK_EVENTS;
 export async function hasAnyCloudRunnerConfigured(
   options: { db?: AnyDb } = {},
 ): Promise<boolean> {
-  const dbImpl = options.db ?? appDb;
+  const dbImpl: AnyDb = options.db ?? (await loadAppDb());
   const rows = await dbImpl
     .select({ id: projectRunners.id })
     .from(projectRunners)
