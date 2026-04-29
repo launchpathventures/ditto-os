@@ -1,5 +1,132 @@
 # Ditto — Current State
 
+**Last updated:** 2026-04-28 (Documenter — Brief 221 (Runner Mobile UX) **closed out**: marked complete, moved to `docs/briefs/complete/`, roadmap row → done, Brief 231 row added (deferred sibling), dictionary 5 new entries, **Insight-219** captured. 5 commits on branch awaiting merge. **Parallel sessions also shipped Brief 228 (Project Retrofitter) + Brief 230 (design-system CSS layer)** — independent, no overlap; all three await human approval.)
+
+**Documenter — Brief 221 (Runner Mobile UX, sub-brief of 214) marked complete (2026-04-28, Documenter wrap):** Brief moved from `docs/briefs/221-runner-mobile-ux.md` → `docs/briefs/complete/221-runner-mobile-ux.md` via `mv` (single copy). Status updated to `complete (2026-04-28, post-dev-review-fix commit 3ed9d56; type-check clean; 81 Brief 221 tests pass; 5 commits on branch awaiting merge to main)`. Roadmap row at `docs/roadmap.md:549` flipped from `draft (post-Reviewer revision)` → `done (2026-04-28, post-Builder + Reviewer + dev-review fixes; 5 commits on branch awaiting merge)` with the full deliverable list. **New Brief 231 row added** at `docs/roadmap.md:550` — "Runner Admin UX (pill on `/projects/[slug]` + per-project + workspace `/admin` runner-metrics + retry-next-in-chain + full `<DispatchCard>` template + bridge-dispatch migration)" marked `not yet written (deferred from Brief 221 buildability narrowing 2026-04-28; Architect-blocked)` — captures the deferred scope so it's not lost.
+
+**One new insight captured:**
+- **Insight-219** (`docs/insights/219-validated-input-must-reach-destination.md`) — when an API route, harness handler, or workflow input accepts a user-driven value, the route must trace that value to the side-effecting call where it has effect. Validation is necessary but insufficient — code that validates an input and never uses it is a silent UX failure that compiles cleanly. Brief 221's `/api/v1/review/[token]/approve` accepted `selectedKind`, validated it against the server-stamped eligibility list, then called `dispatchWorkItem({...})` WITHOUT setting `workItems.runnerOverride = selectedKind` — so the dispatcher walked the project's chain ignoring the user's pick. Type-check passed; tests asserted 200/dispatch-row-exists but didn't assert the dispatch was on the user-selected kind. Caught by `/dev-review` Pass 2 (Integration & Data Flow). Companion rule (one-shot-tokens-consume-on-success) also captured in the same insight body. Recommend Reviewer skill clause + Architect AC-discipline clause; absorb to architecture.md §L3 once a third instance lands (Brief 218 was the first sibling instance via the github-action workflow's hardcoded `harness_type`).
+
+**Reference doc audit (Insight-043):** The Builder flagged 4 docs for cross-cutting maintenance during the build session. Documenter pass:
+- `docs/dictionary.md` — **UPDATED** this session. New section "Runner Mobile UX (Brief 221)" with 5 entries (Runner-Dispatch-Pause Review-Page, Run-On Selector, Force-Cloud Toggle, `metadata.cardKind` Discriminator, `activities.contentBlock`). Inserted after the Brief 220 Deploy Gate section.
+- `docs/architecture.md` — **NOT updated this session.** Builder-flagged drift: §L6 still doesn't document the runner-dispatch-pause review-page kind nor the `cardKind`-keyed StatusCardBlock dispatch pattern. Per Insight-043 the Architect (not the Documenter) absorbs architectural amendments. Brief 222 (phase-completion smoke) absorbs the parent §L2/§L3 amendments per Brief 214 §"Reference doc updates"; the renderer-pattern + review-page-kind absorptions are deferred until Brief 220 (deploy-status `cardKind`) + Brief 229 (file-write-supervised review-page kind) ship — two more instances make the pattern clearly load-bearing for absorption.
+- `docs/human-layer.md` — **NOT updated this session.** Builder-flagged drift: the ContentBlock catalog should mention `metadata?: Record<string, unknown>` on `StatusCardBlock` and the `cardKind` discriminator convention. Architect to absorb at the next paired-brief pass — same trigger as architecture.md (Brief 220 + Brief 229 second / third instances).
+- `docs/landscape.md` — no new framework adoption this session. NOT updated.
+
+**Insight audit (active → re-validated scan, Brief 221 touched these):**
+- **Insight-180** (stepRunId guard for side-effecting functions) — RE-VALIDATED. `pauseRunnerDispatchForApproval()` requires stepRunId at entry; the approve + reject API routes both validate that the harness_decisions audit row carries a non-null stepRunId before dispatching/mutating. Test matrix in `runner-pause.test.ts` covers the rejection-on-missing-stepRunId case via `vi.resetModules()` + DITTO_TEST_MODE off.
+- **Insight-107** (BlockList is the viewer) — RE-VALIDATED. NO new ContentBlock types invented. Brief 221's runner-status data extends `StatusCardBlock` via the additive `metadata?` field + `cardKind` discriminator. The renderer in `packages/web/components/blocks/status-card-block.tsx` uses a discriminator-keyed dispatch table (`Record<string, RendererFn>`) — single explicit fork, future subtypes register a single line each.
+- **Insight-138** (metadata-first block mapping) — RE-VALIDATED. Runner-status emissions populate `metadata` (typed) AND `details` (string-only mirror) per the defensive convention. Block renderer reads metadata-first.
+- **Insight-072** (form-submit action namespace + Reviewer F1 fix) — RE-VALIDATED. The runner-dispatch-approval form uses `formId = "runner-dispatch-approval"` (additive optional field on `WorkItemFormBlock`); approve/reject API routes validate against the server-stamped `options` array stored in `review_pages.contentBlocks` — never trust the client-submitted form-id alone. AC #6 namespace-bypass tests verify forging the form-id on a Brief 106 chat-page returns 400.
+- **Insight-209** (resilience trio for async dispatch) — RE-VALIDATED. Manual retry on user-visible terminal failures (`failed | rate_limited | timed_out`); auto-advance reserved for transient dispatch errors handled inside `dispatchWorkItem` (deferred to Brief 231 for the failed-card retry button itself).
+- **Insight-214** (commit incrementally against parallel-session rollback) — RE-VALIDATED + ACTIVELY EXERCISED. 5 incremental commits on the branch (engine substrate → approval flow → reviewer fixes → state.md → dev-review fixes). Three parallel sessions (Brief 220 + 228 + 230) updated state.md + roadmap.md mid-session; multiple state.md merges resolved as one-edit fixes rather than re-applies.
+- **Insight-216** (Drizzle prefix collision recovery) — RE-VALIDATED + APPLIED. drizzle-kit auto-generated `0016_activity_content_block.sql` (prefix-colliding with the existing `0016_broad_onslaught.sql` from a parallel session); recovery procedure followed: renamed `.sql` + `_snapshot.json` to `0017_*` + updated `_journal.json` tag string. Brief 221 is application **#2** of this insight (Brief 227 was #1).
+- **Insight-218** (Builder must grep sibling peers for each input) — RE-VALIDATED indirectly: Insight-219 captured this session is the **route-level generalization** of Insight-218's workflow-input observation. Both are facets of "validated input must have its expected effect on system state."
+- **Insight-043** (knowledge maintenance at point of contact) — RE-VALIDATED partial: dictionary.md was NOT updated by the Builder during the build session (oversight), so the Documenter filled the gap this session. Builder skill amendment candidate: dictionary updates should be part of the buildability check checklist for any brief introducing user-facing terms.
+
+**Retrospective — what worked / what surprised / what to change (Brief 221):**
+- ✅ **The Builder buildability check earned its keep.** Three drifts caught BEFORE coding: (1) migration idx 16 was already taken by parallel sessions (Insight-216 recovery applied; my migration is idx 16, tag `0017_*`); (2) `review_pages.minterContext` field referenced in the brief revision didn't actually exist (fix: validate against `WorkItemFormBlock.options` already in `contentBlocks`, no schema change); (3) brief was sized at 13 ACs touching multiple subsystems → narrowed to 10 ACs by deferring admin-pill / metrics / retry-next-in-chain to Brief 231. The narrowing was the right call — kept the user-critical-path (Smoke A approval flow) tractable in one Builder session.
+- ✅ **Incremental commits saved coordination cost.** 5 commits on the branch during a session where 3 parallel sessions (Brief 220, 228, 230) each updated state.md + roadmap.md. Every conflict was a small docs-only merge instead of a re-apply.
+- ✅ **The dev-review skill found two CRITICAL integration bugs that compiled + tested cleanly.** Both in `approve/route.ts`: (1) `selectedKind` was validated but never wired to `dispatchWorkItem` — user picked Routine but the chain resolver walked the default; (2) `completeReviewPage(token)` was called BEFORE the success check, so transient failures stranded the user. Both fixes were one-liners. The skill's Pass 2 (Integration & Data Flow) is exactly the layer that catches this class.
+- ✅ **Brief sizing at the upper bound (10 ACs after narrowing) was sustainable** because the work was vertically integrated (engine helpers → handler → routes → UI → e2e). Splitting further would have separated the dispatch-table renderer (AC #1) from the helper that populates `metadata.cardKind` — those two need to ship together to be testable end-to-end.
+- 😬 **The Architect-revision overshot.** The post-Reviewer revision added `review_pages.minterContext` as the namespace-bypass safety mechanism, but that field doesn't exist — the safer-and-simpler mechanism (validate against `contentBlocks.options`) was already supportable. The Reviewer didn't catch the drift because the Reviewer reviewed the brief, not the spike state. Generalizable: post-Reviewer brief revisions should re-spike any newly-asserted schema fields. Could become an Architect skill clause; not yet insight-worthy on its own.
+- 😬 **Type-check + tests passed BUT integration bugs remained.** The route compiled because `dispatchWorkItem` doesn't *require* selectedKind. Tests asserted 200 status + a dispatch row existed — neither of those changes when the dispatcher uses the wrong kind. New test pattern (now a Reviewer concern per Insight-219): when a route accepts a user-driven param, the test must assert the param's effect on the system-state-changing operation, not just the route's response shape.
+- ✅ **`pnpm test` 2487/2499 passing post-fix.** Brief 221 contributes 81 tests across 4 files (13 mint-pause-payload + 7 runner-pause + 6 status-card-block + 55 cloud-runner-fallback incl. the new contentBlock integration assertion). Type-check clean at root; 3 pre-existing core errors in `outbound-quality-gate.test.ts` carry forward unchanged.
+- ✅ **Reference-doc-drift flagged for the Architect** (architecture.md + human-layer.md). Documenter filled the dictionary gap this session per Insight-043 cross-cutting maintenance.
+
+**Files moved/created/modified during Documenter pass:**
+- Moved: `docs/briefs/221-runner-mobile-ux.md` → `docs/briefs/complete/221-runner-mobile-ux.md`
+- Created: `docs/insights/219-validated-input-must-reach-destination.md`
+- Modified: `docs/dictionary.md` (5 new entries under "Runner Mobile UX (Brief 221)" section), `docs/roadmap.md` (Brief 221 row → done; Brief 231 row added), `docs/state.md` (this block).
+
+**Final test totals (Brief 221 build + Reviewer-fix + dev-review-fix):** 2487 pass / 12 skipped / 0 failed across 174 files. Brief 221-specific test coverage: 81 tests across 4 files. Type-check clean at root.
+
+**Direct trigger:** user `/dev-documenter` 2026-04-28, post-`/dev-builder Brief 221` + Reviewer pass + dev-review fixes (commit `3ed9d56`). **Phase progress:** Brief 214's UX seam ships. With Brief 215 substrate + 216 (Routine) + 217 (Managed Agents) + 218 (GitHub Actions) + 220 (deploy gate) + 221 (mobile UX approval flow), all FIVE implemented runner kinds are dispatchable through the user's phone via `/review/[token]`. **Smoke A in Brief 214 §"Smoke Test" — agent-crm cloud, Mac mini off, phone-only — is now executable** (manual smoke deferred per the parent brief). **Next step:** `/dev-pm` for next-work triage. Brief 222 (e2e smoke) and Brief 231 (Runner Admin UX — admin pill + metrics + retry-next-in-chain, deferred from Brief 221) are unblocked. Brief 229 (sub-brief #3b for Brief 224 supervised-tier UI; Designer-blocked) is also still open on the onboarding track.
+
+---
+
+## PRIOR STATE — Builder Brief 228 (Project Retrofitter)
+
+**Last updated:** 2026-04-28 (Builder — Brief 228 (Project Retrofitter) **implemented**, Reviewed (REVISE → CRIT-1 + CRIT-2 fixed in-session), 55 Brief-228 tests + 2493/2505 full-suite all green. Type-check clean. Awaiting human approval. **Parallel sessions also shipped Brief 221 (Runner Mobile UX) + Brief 230 (design-system CSS layer)** — independent, no overlap; all three await human approval.)
+
+**Builder — Brief 228 implemented (2026-04-28):** Project Retrofitter (`.ditto/` substrate writer, sub-brief #3a of Brief 224). Implements the autonomous + critical + spot_checked tier paths (supervised tier renders a placeholder; per-file approval surface deferred to Brief 229).
+
+**Files created:**
+- `packages/core/src/harness/step-output-reader.ts` — extracted `readPriorStepOutputs` (Insight-217 absorption)
+- `packages/core/src/onboarding/types.ts` — added `RetrofitPlan`, `RetrofitFile`, `RetrofitDispatchPayload`, `RetrofitFileAction`
+- `packages/core/src/content-blocks.ts` — added `RetrofitPlanBlock` (28th type) + 7 status values + text fallback case
+- `processes/project-retrofit.yaml` — 4-step process (`generate-plan` → `surface-plan` → `dispatch-write` → `verify-commit`)
+- `src/engine/onboarding/retrofitter.ts` — 4 handlers + `composeRetrofitPlan` + `computeDispatchOutcome` (~1200 LOC)
+- `src/engine/onboarding/retrofit-prompt.ts` — runner-agnostic prompt template
+- `src/engine/onboarding/retrofitter.test.ts` — 29 tests
+- `src/engine/onboarding/retrofit-prompt.test.ts` — 13 tests
+- `src/engine/self-tools/rerun-project-retrofit.ts` + `.test.ts` — Self tool with Insight-180 guard, 3 tests
+- `packages/web/components/blocks/retrofit-plan-block.tsx` + `.test.tsx` — renderer (Tailwind utilities mapped to design tokens, mirrors Brief 226 posture), 10 tests
+- `packages/web/app/api/v1/projects/[id]/retrofit/route.ts` — Re-run POST route
+- `packages/web/app/projects/[slug]/onboarding/rerun-button.tsx` — client component
+- `docs/adrs/043-project-substrate-ditto-directory.md` — NEW ADR (accepted)
+
+**Files modified:**
+- `packages/core/src/harness/index.ts` + `packages/core/src/index.ts` — barrel exports for `readPriorStepOutputs`
+- `src/engine/onboarding/handlers.ts` — analyser handlers consume the shared helper (no behavioural drift; Brief 226 13 tests pass)
+- `src/engine/onboarding/system-agent.ts` + `src/engine/system-agents/index.ts` — register 4 retrofit handlers
+- `src/engine/self-delegation.ts` — register `rerun_project_retrofit` Self tool (now 36 selfTools, was 35)
+- `src/engine/self.test.ts` + `src/engine/self-tools/self-tools.test.ts` — bumped tool counts 35→36
+- `packages/web/app/projects/[slug]/onboarding/page.tsx` — extends to handle status='active' + RetrofitPlanBlock branch + Re-run button
+- `packages/web/app/api/v1/projects/[id]/onboarding/confirm/route.ts` — replaced TODO breadcrumb at lines 271-275 with `await startProcessRun("project-retrofit", { projectId }, "event", { parentTrustTier: data.trustTier })`; removed the `void (data.trustTier)` line
+- `packages/web/components/blocks/block-registry.tsx` — `retrofit_plan` case
+- `docs/dictionary.md` — appended Battle-Readiness, Project Substrate, Retrofit entries
+
+**Reviewer pass (fresh-context Dev Reviewer agent, 2026-04-28):** Verdict was **REVISE** with 2 CRITICAL + 5 IMPORTANT + 8 MINOR findings. Both CRITICAL fixed in-session; key IMPORTANT findings addressed:
+- **CRIT-1 FIXED:** YAML's `trust.initial_tier: supervised` interaction with the harness's `moreRestrictiveTrust` discipline (heartbeat.ts:1742-1753) silently downgraded user-picked autonomous + spot_checked tiers to supervised. Fixed by setting `trust.initial_tier: autonomous` in the YAML so any user pick flows through verbatim. Documented inline with the rationale + warning never to set it back to supervised.
+- **CRIT-2 FIXED:** Three queries (retrofitter `readPriorRunHashes`, Self tool last-known-tier, retrofit route last-known-tier) filtered on `processes.projectId` — but system processes have NULL projectId per the process loader. Rewired all three to filter via `json_extract(processRuns.inputs, '$.projectId')`. Also fixed the `readPriorRunHashes` to read `reviewDetails.retrofit.fileHashes` (the actual nested path verify-commit writes) instead of top-level `fileHashes`.
+- **IMP-1 ACKNOWLEDGED + DOCUMENTED:** runner_dispatches has no body/responseBody field for the runner's structured `{ commitSha, actuallyChangedFiles, skippedFiles }` response (Builder D2 deviation). Brief 228 MVP parses commitSha from `externalRunId` if hex-shaped; `actuallyChangedFiles` + `skippedFiles` flow through as empty. The runner-side user-edit-safety enforcement still happens (the prompt instructs the runner) — Ditto can't surface the skip-list end-to-end until a future schema-extension brief adds the response-body channel. Documented in `parseRunnerResponse` + the YAML's verify-commit description.
+- **IMP-2 FIXED:** YAML description for verify-commit no longer references the non-existent `lastRawEvent` field; updated to describe the externalRunId-based parsing + flag the deferred response-body work.
+- **IMP-3 FIXED:** `applyUserEditSafety` dead-code function removed; user-edit safety is documented inline as runner-side enforcement only (Brief 228 MVP).
+- **IMP-5 FIXED:** Renderer's escalate-to-autonomous action payload now passes `projectId + processRunId` instead of misrepresenting `processRunId` as `workItemId`.
+- **MIN-4 FIXED:** Default trust action when no decision row exists is now `'pause'` (fail-safe to supervised path) instead of `'advance'` (auto-dispatch). Test updated.
+
+**Builder deviations from the brief (the Reviewer agreed with all three):**
+- **D1:** Brief AC #7 said surface-plan reads its own trust-gate decision via `readPriorStepOutputs(processRunId, 'surface-plan')` reading `step_runs.reviewDetails.trustAction`. Reality: `step_runs` has no `reviewDetails` field (it's on `harness_decisions`); the trust-gate decision isn't persisted until AFTER the step's script runs (via feedback-recorder). Implementation: surface-plan writes optimistic `status='dispatched'`, dispatch-write reads the surface-plan step's harness_decisions row via `readTrustDecision` (joins harness_decisions to stepRuns by stepRunId) and reconciles. End state matches AC #7's intent.
+- **D2:** Brief §Constraints expected the runner's structured response via "the runner's responseBody field" on runner_dispatches. The schema has no such field — only externalRunId/externalUrl/errorReason/status. Implementation: parse commitSha from `externalRunId` if hex-shaped; defer `actuallyChangedFiles` + `skippedFiles` channels to a future schema-extension brief.
+- **D3:** Insight-180 guard pattern — read `_stepRunId` from inputs (the step-executor injects it at script-executor entry per `step-executor.ts:71-75`), reject with placeholder when missing. DB-spy guard tests verify zero DB calls before rejection across all 4 retrofit handlers + the Self tool.
+
+**Reference docs touched** (Insight-043, point-of-contact discipline):
+- `docs/dictionary.md` — appended 3 new entries (Battle-Readiness, Project Substrate, Retrofit)
+- `docs/adrs/043-project-substrate-ditto-directory.md` — NEW ADR (accepted)
+- `docs/architecture.md` — NOT updated by Builder. Documenter to consider §L3 absorption paragraph for Insight-217 (the shared step-output-reader module is the canonical multi-step pipeline pattern); §L6 absorption for Insight-201 IFF Brief 199 has shipped by closeout.
+- `docs/landscape.md` — no update needed (no new framework dependency).
+- `docs/insights/217-multi-step-pipelines-query-step-runs-outputs.md` — Documenter to consider archiving (the shared module extraction landed cleanly; Brief 228 IS the third multi-step pipeline that triggered the absorption recommendation).
+- `docs/insights/201-user-facing-legibility.md` — Documenter to resolve based on Brief 199's ship order (this brief is application #1 OR #2 conditionally).
+- `docs/insights/202-ditto-as-x-before-external-x.md` — Documenter to amend §"Where It Should Land" to credit Brief 228 as application #1.5; insight stays `active`.
+
+**Test results:**
+- `pnpm exec tsc --noEmit` (root) — clean (0 errors)
+- `cd packages/core && pnpm exec tsc --noEmit` — clean (3 pre-existing outbound-quality-gate.test.ts errors only, unrelated)
+- Brief 228 test suite (5 files, 55 tests) — 55/55 PASS
+- Full suite — 2493/2505 PASS + 12 skipped (0 fail)
+
+**AC status:**
+- AC #1 (ADR-043 accepted) — PASS
+- AC #2 (types in core) — PASS
+- AC #3 (readPriorStepOutputs extracted; analyser tests still pass) — PASS
+- AC #4 (project-retrofit.yaml exists; trigger event unique) — PASS
+- AC #5 (4 handlers registered + Insight-180 guard + DB-spy tests) — PASS
+- AC #6 (generate-plan composes plan with all `.ditto/` files) — PASS (note: brief AC text says "6 files" but the actual count is 13 per ADR-043 — 7 role-contracts + 6 directory artefacts; brief miscount, ADR is canonical)
+- AC #7 (surface-plan writes RetrofitPlanBlock to new workItems row) — PASS via Builder D1 (surface-plan writes optimistic 'dispatched'; dispatch-write reconciles)
+- AC #8 (dispatch-write branches per trust action; calls dispatchWorkItem) — PASS (post-CRIT-1 fix; all 4 tier paths reachable)
+- AC #9 (verify-commit UPDATES existing harness_decisions row) — PASS
+- AC #10 (trust-tier-bound depth maps to ADR-007; confirm route lights up data.trustTier) — PASS (post-CRIT-1 fix)
+- AC #11 (idempotent re-run + user-edit-safe) — PARTIAL: idempotency works post-CRIT-2 fix; user-edit-safety surface flows through but the renderer can't display skipped files end-to-end until the response-body channel ships (D2 + IMP-1 deferred to future brief)
+- AC #12 (re-run surfaces work; renderer covers 5 statuses + supervised placeholder) — PASS
+- AC #13 (dictionary entries) — PASS
+
+**Next step:** Human approval. On approval → `/dev-documenter` for full retrospective + Insight-217/201/202 absorption decisions + roadmap update. Brief 229 (supervised-tier per-file approval surface) remains the named follow-on, Designer-blocked.
+
+---
+
+## PRIOR STATE — Brief 221 Builder closeout (2026-04-28, parallel session)
+
 **Last updated:** 2026-04-28 (Builder — Brief 221 (Runner Mobile UX) **implemented**. 3 commits on branch (dce67f5 + 637b9b8 + 0313c55). 81 new/updated tests passing. Type-check clean. Awaiting human approval. **Parallel session also shipped Brief 230 (design-system CSS layer)** — independent, no overlap; both await human approval.)
 
 **Builder — Brief 221 implemented (2026-04-27, post-Reviewer-fix commit 0313c55):**
@@ -100,7 +227,68 @@ Web product layer (`packages/web/`):
 
 ---
 
-## PRIOR STATE — Builder Brief 220 (Deploy Gate, 2026-04-28)
+## PRIOR STATE — Brief 220 (Deploy Gate) — Documenter closeout (2026-04-28)
+
+**Brief 220 — Deploy Gate + GitHub Mobile — COMPLETE.** Brief moved to `docs/briefs/complete/220-deploy-gate.md`; roadmap row at `docs/roadmap.md:548` flipped to `done`; new insight captured at `docs/insights/219-new-state-requires-validation-at-every-write-seam.md`.
+
+**Final shape (post-second-pass-fix on user "fix all" steer):**
+- **Engine-core schema** (`packages/core/src/db/schema.ts:170-181`): `briefStateValues` extended with `deploying`, `deployed`, `deploy_failed`. **No DB migration shipped** — `briefState` is plain `text` with no enum CHECK constraint at the DB level (Brief 223 enforces via Zod app-validation only); idx-17 reservation released. Brief's §Inputs #15, §Constraints, AC #3 all updated to reflect this build-time outcome.
+- **Engine-core pure module** (`packages/core/src/work-items/state-machine.ts` + `.test.ts`): `transitionBriefState()` + `BRIEF_STATE_TRANSITIONS` map. Mirrors `packages/core/src/runner/state-machine.ts` shape. Admits H3 out-of-order webhook delivery (`shipped → deployed | deploy_failed` direct), H4 non-deploy-gated projects (`shipped → archived`), and the symmetric M1 retry-out-of-order (`deploy_failed → deployed`). Re-exported from `packages/core/src/work-items/index.ts`.
+- **Webhook handler** (`src/engine/github-events/cloud-runner-fallback.ts`): `DeploymentStatusEvent.deployment` typed shape widened (D2.1: `id?: number`, `workflow_run_id?: number | null`); `production-no-op` outcome variant removed and replaced with five differentiated variants (`deploy-approval-pending`, `deploy-in-progress`, `deployed`, `deploy-failed`, `deploy-state-no-op`); production branch in `processProductionDeployStatus()` reads work-item `briefState`, calls `transitionBriefState()`, writes activity rows with `metadata.guardWaived = true` (Insight-180 bounded-waiver), audits illegal transitions with `metadata.transitionRejected = true`, marks `metadata.outOfOrder = true` for both initial out-of-order AND retry-out-of-order; `buildMobileApproveAction()` URL composer with `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$` regex sanitisation + graceful `/deployments` fallback when `workflow_run_id` is absent; lookup uses `findDispatchForRepo({ includeTerminal: true })` directly (M2 fix — most-recent-by-createdAt regardless of status, aligns with the brief's M5 non-goal "the most-recently-shipped work item transitions"); `mapDeploymentStateToBriefState()` has explicit `case "pending"` and `case "inactive"` branches (L3 fix); URL-rejection branch carries a defence-in-depth comment (L4).
+- **Status route** (`packages/web/app/api/v1/work-items/[id]/status/route.ts`): `briefStateToDispatchEvent` extended with cases for the three new states returning `null` (D4 — deploy is post-runner-completion); **state-machine validation wired at the route boundary** (M4 second-pass fix) — illegal transitions return **409 Conflict** with `{ from, attempted, reason }` body. Closes the leapfrog vector where a runner could post `state: "deployed"` against a `backlog`-state work item.
+- **Template + runbook** (`docs/runner-templates/deploy-prod.yml` + `deploy-prod-setup.md`): Vendor-agnostic `environment: production` workflow with Vercel default + Netlify/Cloudflare Pages/Fly.io commented alternatives; runbook covers GitHub Environment + Required Reviewer + GitHub Mobile push setup + first-deploy smoke + troubleshooting. Bash snippets use `$OWNER/$REPO` shell-variable placeholders.
+- **Bash-syntax CI gate** (`docs/runner-templates/deploy-prod-setup.test.ts`): extracts every fenced ```bash block from the runbook and runs `bash -n` on each; failures break the build. Caught the original `<OWNER>/<REPO>` literal (bash-invalid — `<` is redirection) before merge.
+- **Architecture amendment** (`docs/architecture.md` §L3): Deploy Gate paragraph appended documenting `briefState` extension + `processProductionDeployStatus()` driving the lifecycle + out-of-order admittance + bounded-waiver pattern + GitHub-side gate semantics.
+- **Dictionary** (`docs/dictionary.md`): 7 new entries — Deploy Gate, Deploying State, Deployed State, Deploy Failed State, Deploy-Prod Workflow Template, GitHub Environment, Required Reviewer.
+
+**Test evidence (final):**
+- Root `pnpm run type-check`: **0 errors**.
+- Brief 220 test suites: **108 tests pass** across 4 test files (state-machine 30 + cloud-runner-fallback 53 + status route 20 + runbook bash-syntax 5).
+- Full vitest sweep: **2497 pass / 0 fail / 12 skip** — clean run, no failures across the entire suite.
+
+**Reviewer cycles:**
+- **Architect Reviewer** (2026-04-27): NEEDS-REVISIONS with 4 HIGH + 6 MEDIUM + 6 LOW. All resolved before brief promoted to `draft (Reviewer-fix revision)`.
+- **Builder Reviewer** (2026-04-28, first pass): NEEDS-REVISIONS with 2 HIGH + 4 MEDIUM + 4 LOW. All HIGH + 3 MEDIUM + 2 LOW resolved.
+- **Builder second-pass on user "fix all" steer** (2026-04-28): M4 wired (state-machine validation at route boundary, 409 Conflict response) + L1+L2 idx-17 note clarified + 4 new validation tests added; existing tests adapted to seed legal-precondition states. Final: 0 type errors, 2497/0/12 clean.
+
+**Insight captured:**
+- **Insight-219** (`docs/insights/219-new-state-requires-validation-at-every-write-seam.md`) — when adding new states to a state-machine column written by multiple code paths, validation must be wired at every write seam, not just the new one introduced by the brief. Triggered by the Reviewer M4 → second-pass fix sequence: deferring route-side validation as "Brief 223 carryover" was a Chesterton's-fence trap because new post-shipped states ALWAYS widen the leapfrog gap. Should land in Builder/Architect/Reviewer skill clauses; absorb to architecture.md §L3 once a 3rd state-machine extension brief lands using this discipline.
+
+**Retrospective — what worked, what surprised, what to change:**
+
+*What worked:*
+- **Bash-syntax CI gate caught a real shipping bug.** The L2 deferral test (`deploy-prod-setup.test.ts`) immediately surfaced `<OWNER>/<REPO>` as bash-invalid syntax, forcing the runbook to use proper `$OWNER/$REPO` shell variables. Pattern is reusable for any runbook shipping copy-pasteable bash.
+- **Reviewer-fix discipline at every cycle.** Three Reviewer passes (Architect, Builder pass 1, Builder pass 2) each surfaced legitimate-and-actionable findings. The post-build M4 catch (state-machine bypass at route) was the most consequential — without it, runners could leapfrog the entire pipeline.
+- **Engine-core boundary held cleanly.** `state-machine.ts` imports only `BriefState` from schema; no DB, no IO, no Ditto opinions. Test file is pure. CLAUDE.md "could ProcessOS use this?" satisfied without ambiguity.
+- **`production-no-op` placeholder seam paid off.** Brief 216 §D5 explicitly named line 583-586 as Brief 220's seam (`// Production deploy: Brief 220 owns this surface; no card here.`). Brief 220 inherited a clean extension point with no coupling debt — a near-zero-friction handoff between siblings.
+
+*What surprised:*
+- **No DB migration needed despite enum extension.** Brief 223 enforced `briefState` via Zod app-validation only — the column is plain `text`. Widening the TS array produced "No schema changes" from `drizzle-kit generate`. The brief had reserved idx 17 expecting a CHECK constraint to update; build-time verification revealed the reservation was unnecessary. Reusable lesson: verify the enforcement mechanism (`git grep "CHECK.*<column>"` against `drizzle/`) BEFORE reserving an idx.
+- **GitHub webhook ordering is genuinely unreliable.** The H3 out-of-order admittance (direct `shipped → deployed`) was Architect-Reviewer paranoia at design time; the implementation tests cover the case via fixtures. Worth re-stating: webhook ordering for `deployment_status` events is documented as best-effort, not guaranteed; designs that assume `queued → in_progress → success` ordering are fragile.
+- **Multi-write-seam validation gap is non-obvious.** The first Builder pass deferred M4 as "Brief 223 carryover" with a sound-sounding justification. Only the user steer "fix all" forced wiring it — and that revealed the actual leapfrog vector. Pattern absorbed as Insight-219.
+
+*What to change:*
+- **State-machine extension briefs should explicitly enumerate write seams.** Insight-219 names this as Architect discipline: when introducing new states to an enum already written by multiple code paths, §What Changes must list every write seam + require validation at each. Architect skill clause forthcoming.
+- **AC enumeration discipline.** Brief 220 hit 18 ACs after Reviewer-L5 split, then aggregated to 15 to stay within Insight-004's 8-17 band. The aggregation was honest (closely-related fixtures share an AC) but the initial L5 split temptation showed how a parent's "8-10 ACs target" can balloon under Reviewer-found surface growth. Worth restating in Insight-004 absorption: Reviewer findings legitimately expand AC count, and aggregating closely-related sub-cases is acceptable as long as each sub-case remains independently testable.
+
+**Reference doc audit (Insight-043 cross-cutting check):**
+- ✅ `docs/architecture.md` — Builder added Deploy Gate paragraph to §L3 (Builder pass 1, Reviewer-fix-H1).
+- ✅ `docs/dictionary.md` — Builder added 7 new entries (Builder pass 1).
+- ✅ `docs/roadmap.md` — flipped to `done` by this Documenter session.
+- ✅ `docs/runner-templates/README.md` — Builder added deploy-prod entry + secrets-table row (Builder pass 1).
+- ✅ `docs/insights/219-...` — captured this Documenter session.
+- **NOT touched** (no drift):
+  - `docs/landscape.md` — Mobile-First Deploy Gate entry (line 1051-1057) was already correct; no post-build observations require updating it.
+  - `docs/personas.md` — no persona-impact changes; the deploy gate is a Decide-job moment for all four personas equally.
+  - `docs/human-layer.md` — the existing `ActionBlock` primitive was reused; no new primitives invented.
+  - `docs/dev-process.md` — Insight-219 should land in role-skill clauses (Builder/Architect/Reviewer) but the absorption is a per-skill `.md` edit, not a dev-process change. Flagged for next Architect session that touches dev-process.
+  - `docs/adrs/` — no ADR needed; the brief is sub-brief implementing the parent's design (Brief 214 §D12).
+
+**Direct trigger:** user `/dev-documenter` after Builder second-pass fix. **Next step:** session ends; or user invokes `/dev-pm` for next work. The parent brief 214 phase advances: 215 + 216 + 217 + 218 + 220 done; 221 (Mobile UX) + 222 (E2E smoke) still ahead, with 221 already Architect-drafted in a parallel session and awaiting human approval.
+
+---
+
+## PRIOR STATE — Builder Brief 220 (pre-Documenter, 2026-04-28)
 
 **Last updated:** 2026-04-28 (Builder — Brief 220 (Deploy Gate + GitHub Mobile, sub-brief #5 of Brief 214) implemented + Reviewer-pass + Reviewer-fixes applied. All HIGH + actionable MEDIUM resolved. 104 Brief 220 tests pass; type-check clean; full suite 2484 pass / 3 pre-existing fail / 12 skip — no regressions.)
 

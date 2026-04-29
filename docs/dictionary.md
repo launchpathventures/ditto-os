@@ -76,6 +76,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 - Layer: 4 (Awareness)
 - Related: Process Graph, Dependency Graph, Event Propagation, Process Layer
 
+**Block Primitive** — One of six canonical compositional units defined by the Anthropic Claude Design package (`workspace/blocks.js`): `block.breakdown`, `block.decision`, `block.plan`, `block.compare`, `block.evidence`, `block.people`. Plus one Ditto-original sibling primitive `block.findings` (sectioned-list-with-tone-coded-header) added in Brief 230. Block primitives sit *below* the 16 Conceptual Primitives — they are CSS-level composition shapes that block renderers consume by class name. See `docs/architecture.md` §Layer 6 "Design-token-vs-component-class layering" for the full boundary.
+- Layer: 6 (Human)
+- Related: Bundled Component Class, Design-Token-vs-Component-Class Boundary, ContentBlock
+
 **Borrowing Strategy** — The approach of composing proven patterns from existing open-source projects rather than inventing from scratch. Codified in the architecture spec's borrowing table mapping needs to source projects.
 - Layer: Meta
 - Related: Composition Over Invention, Paperclip, ralph, antfarm, gstack, compound-product
@@ -99,6 +103,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 **Builder** — An agent role in the coding team responsible for implementing code. Based on the ralph autonomous loop pattern. Serves Feature Implementation (step 3) and Bug Investigation (step 5).
 - Layer: 2 (Agent)
 - Related: Planner, Reviewer, ralph, Feature Implementation
+
+**Bundled Component Class** — The CSS implementation of a Block Primitive in our codebase, authored at `packages/web/app/design-system.css` (imported into `globals.css`). Class names match the Anthropic Claude Design package's `workspace/blocks.js` strings verbatim (e.g., `.block.decision`, `.dopt.rec`, `.recbadge`, `.alex-line`, `.eline`, `.pstep`). Block renderers compose by class name (`<section className="block findings tone-positive">`) instead of authoring per-renderer Tailwind utility maps. Introduced in Brief 230. Per-renderer promotion (utility-mapped → bundled-class composition) happens organically as briefs touch each renderer.
+- Layer: 6 (Human)
+- Related: Block Primitive, Design-Token-vs-Component-Class Boundary, ContentBlock
 
 **Capability Catalog** — The model for Ditto's process library: a guided, evolving capability catalog (not an app store or raw templates). The platform acts as a consultant, recognising pain points and assembling capabilities into processes.
 - Layer: 6 (Human)
@@ -239,6 +247,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 **Dependency Graph** — The live graph created by processes declaring their inputs (sources) and outputs (destinations). Enables impact propagation, bottleneck detection, and cross-process intelligence.
 - Layer: 4 (Awareness)
 - Related: Awareness Layer, Process Graph, Event Propagation
+
+**Design-Token-vs-Component-Class Boundary** — The Layer 6 styling principle codified in Brief 230. Tokens (colors, fonts, type scale, spacing, radius, shadows) live inside the Tailwind v4 `@theme` block at `packages/web/app/globals.css`; component classes (the six Block Primitives + chrome + composition helpers) live in a sibling `packages/web/app/design-system.css`. The design package preserved at `.context/attachments/design-package-2026-04-27/` is the source-of-truth-mirror. Block renderers compose by class name; mass-promotion of utility-mapped renderers is intentionally deferred. See `docs/architecture.md` §Layer 6 "Design-token-vs-component-class layering" for the full specification.
+- Layer: 6 (Human)
+- Related: Block Primitive, Bundled Component Class, ContentBlock
 
 **Edit** — A feedback action in the Review Queue where the human modifies agent output. The diff between original and edited output is captured structurally as implicit feedback, enabling correction pattern extraction.
 - Layer: 6 (Human)
@@ -1057,3 +1069,69 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Cloud-Runner Callback Mode** — The cross-runner term covering the per-runner-row choice of how the runner reports status back to Ditto. Three modes for `github-action` (Brief 218 §D3): `webhook-only` (default; safest — GitHub events alone), `in-workflow-secret` (workflow uses `secrets.DITTO_RUNNER_BEARER`, the long-lived project bearer; user pastes plaintext into repo Secrets once; GitHub auto-masks repo secrets in logs), `in-workflow` (per-dispatch ephemeral token in `inputs.callback_url` query string; NOT log-masked because GitHub doesn't auto-mask `workflow_dispatch` inputs — explicit risk acceptance: tokens are one-trip and per-dispatch). Brief 217's managed-agent uses a similar two-mode shape: `polling` | `in-prompt`. Brief 216's routine is always in-prompt (no choice). The cross-cutting term lets briefs reference the discipline without naming each kind's specific values.
 - Layer: 3 (Harness — adapter config schema)
 - Related: GitHub Action Runner, Ephemeral Callback Token
+
+## Deploy Gate (Brief 220)
+
+**Deploy Gate** — The production-deploy approval moment a project's `deploy-prod.yml` workflow gates on. Concretely: a GitHub Environment named `production` (or matching `project.deployTargetEnvironment`) with at least one Required Reviewer. The workflow's deploy job declares `environment: production`, which causes GitHub to pause the job until the reviewer approves via GitHub Mobile (push notification → tap → approve dialog → approve). Ditto observes the approval lifecycle via `deployment_status` webhook events (`queued` → `in_progress` → `success | failure | error`) and drives the work item's `briefState` through `shipped → deploying → deployed | deploy_failed`. The gate is GitHub-side (Required Reviewer); Ditto is the observer + UX surface only.
+- Layer: 1 (Process) / 6 (Human — Decide-job moment)
+- Related: GitHub Environment, Required Reviewer, Deploying State, Deployed State, Deploy Failed State
+
+**Deploying State** — `briefState='deploying'`. The work item's PR has merged; the production-deploy workflow is queued or actively running. Set by `cloud-runner-fallback.ts:processProductionDeployStatus()` in response to `deployment_status: queued | in_progress` events on the project's `deployTargetEnvironment`. The `queued` event additionally emits a `mobileApproveAction` payload that the conversation surface renders as an `ActionBlock` deep-linking into GitHub Mobile's deployment-review-pending dialog. Successor states: `deployed` (success) or `deploy_failed` (failure/error). Out-of-order tolerated: `shipped → deployed | deploy_failed` direct transitions admitted when GitHub's webhook delivery is reordered.
+- Layer: 1 (Data — `work_items.brief_state` enum value) / 6 (Human — inline card)
+- Related: Deploy Gate, Deployed State
+
+**Deployed State** — `briefState='deployed'`. The production deploy succeeded. Set by `cloud-runner-fallback.ts:processProductionDeployStatus()` in response to `deployment_status: success` for the production env. The activity row's metadata carries `prodUrl` (from `deployment_status.environment_url`) which the conversation-surface inline card renders as a tappable link. Terminal-success: only `archived` exit is admitted. Post-deploy issues that need attention are surfaced as new work items, NOT as a regression to `blocked` or `deploy_failed`.
+- Layer: 1 (Data) / 6 (Human — terminal success card)
+- Related: Deploy Gate, Deploying State
+
+**Deploy Failed State** — `briefState='deploy_failed'`. The production deploy failed (`deployment_status: failure | error` for the production env). Recoverable: the user re-runs the failed workflow in GitHub; GitHub fires a fresh `deployment_status: queued`; the handler transitions `deploy_failed → deploying → deployed` (or back to `deploy_failed` on a second failure). Out-of-order retry-success admitted via direct `deploy_failed → deployed` transition. The activity row's metadata carries the GitHub-supplied `error` description (capped at 4 KB).
+- Layer: 1 (Data) / 6 (Human — failure inline card with retry deep-link)
+- Related: Deploy Gate, Deploying State
+
+**Deploy-Prod Workflow Template** — A copy-pasteable production-deploy workflow YAML at `docs/runner-templates/deploy-prod.yml` shipped as **documentation, not code** (Brief 220 §D9, mirrors Brief 218 §D16 template-as-docs precedent). Vendor-agnostic at the workflow level (`environment: production` + a single deploy step); Vercel default with Netlify, Cloudflare Pages, Fly.io as commented-out alternatives. Companion runbook at `docs/runner-templates/deploy-prod-setup.md` walks the user through the one-time GitHub-side setup. Ditto does NOT auto-commit the file to user repos; the user copies it manually.
+- Layer: 6 (Human — runbook) / Documentation
+- Related: Deploy Gate, GitHub Environment, Required Reviewer
+
+**GitHub Environment** — A GitHub-side per-repo configuration (Settings → Environments → New environment) that gates a workflow job declared as `environment: <name>`. Configured with optional Required Reviewers, Deployment branches, and environment-scoped Secrets. Brief 220's deploy gate uses the Environment named per `project.deployTargetEnvironment` (default `production`). The Environment's Required Reviewer list IS the deploy gate; without at least one Required Reviewer the workflow runs without pause and Ditto sees only `success`/`failure` (no approval moment).
+- Layer: External — GitHub-side configuration
+- Related: Deploy Gate, Required Reviewer
+
+**Required Reviewer** — A GitHub-side reviewer (user or team) named on a GitHub Environment's `Required reviewers` list. Maximum 6 per environment; **one approval suffices** to advance the workflow. GitHub Mobile sends a push notification to each Required Reviewer when a workflow job referencing the environment is queued. Brief 220's runbook (`deploy-prod-setup.md`) walks the user through adding themselves as the sole Required Reviewer — for solo founders this collapses to a single tap.
+- Layer: External — GitHub-side configuration
+- Related: Deploy Gate, GitHub Environment
+
+## Runner Mobile UX (Brief 221)
+
+**Runner-Dispatch-Pause Review-Page** — A `/review/[token]` page kind whose `contentBlocks` array contains a `WorkItemFormBlock` with `formId === "runner-dispatch-approval"`. Minted by `pauseRunnerDispatchForApproval()` (the first production caller of `dispatchWorkItem`) when the upstream trust-gate returns `pause` or `sample_pause` for a project-bound work item. Discrimination from Brief 106 chat-with-Alex network-review pages is by content-blocks composition (the form's presence) — no `review_pages.kind` schema column. The page renders a structured form (vertical-radio "Run on:" selector + force-cloud toggle + sticky-bottom Approve/Reject bar) instead of the chat-only flow.
+- Layer: 6 (Human — Decide-job moment, mobile-first surface)
+- Related: Run-On Selector, Force-Cloud Toggle, `mintRunnerDispatchPause()`, `pauseRunnerDispatchForApproval()`, Brief 072 form-namespace pattern
+
+**Run-On Selector** — The vertical-radio runner-kind picker on a runner-dispatch-pause review-page. Each option label encodes `<kind>|<display label>` (e.g., `claude-code-routine|Routine · Cloud`); the kind slug is parsed server-side at approve time. Eligible options come from `resolveChain()` filtered by the project's `runnerChain` + the work item's `runnerModeRequired`; degraded runners are shown with parenthesised reasons (`(offline)`, `(rate-limited)`, `(needs re-auth)`). Defaults to the chain head. The selected kind is persisted as `workItems.runnerOverride` BEFORE `dispatchWorkItem` is called, so the dispatcher's chain resolver prepends the user's pick to the chain.
+- Layer: 6 (Human — Delegate-job affordance)
+- Related: Runner-Dispatch-Pause Review-Page, `runner_override`, `resolveChain()`
+
+**Force-Cloud Toggle** — A boolean switch on the runner-dispatch-pause review-page. When ON: persists `workItems.runnerModeRequired = "cloud"` BEFORE dispatch so the chain resolver mode-filters out local kinds. UI guards prevent the conflict with a local-kind selection: toggling force-cloud ON greys+disables local-mode radio options and snaps the selection to the first cloud kind; the approve route additionally rejects 400 if both arrive (defence in depth). The 95%-need on a phone with the Mac mini off; symmetric "Force local" exists behind a "More options" disclosure (Designer spec §6).
+- Layer: 6 (Human — per-dispatch override affordance)
+- Related: Run-On Selector, `runner_mode_required`
+
+**`metadata.cardKind` Discriminator** — The optional discriminator field on `StatusCardBlock.metadata` that drives the renderer's dispatch-table fork. Brief 221 introduces `cardKind = "runnerDispatch"` for runner-status inline cards. Future subtypes (Brief 220 deploy-status, Brief 229 file-write supervised, etc.) register additional values in the `Record<string, RendererFn>` table at `packages/web/components/blocks/status-card-block.tsx`. Single-line per subtype; missing or unknown discriminator falls through to the generic template — never cascading-if. This is the metadata-first variant of the BlockList-is-the-viewer principle (Insight-107) for typed-subtype rendering.
+- Layer: 2 (Engine — content-block contract) / 6 (Human — renderer)
+- Related: `StatusCardBlock`, `buildRunnerDispatchCard()`, Insight-107, Insight-138
+
+**`activities.contentBlock`** — Optional JSON-typed nullable column on the `activities` table (added in migration `0017_activity_content_block.sql`, idx 16). Carries a typed `ContentBlock` (typically a `StatusCardBlock` with `metadata.cardKind = "runnerDispatch"`) paired with the audit-trail `description` text. Lets the work-item conversation surface render runner-status transitions as typed cards through the existing `BlockRegistry`. Backward-compatible: NULL on legacy rows; existing readers (audit views, system-agent activity-string consumers) unchanged.
+- Layer: 1 (Data — schema column) / 6 (Human — conversation surface)
+- Related: `metadata.cardKind` Discriminator, `cloud-runner-fallback.ts` emission
+
+## Project Retrofit (Brief 228)
+
+**Battle-Readiness** — The connection-time experience that makes a project Ditto-driveable. Concretely: when a user pastes a repo URL, Ditto runs the analyser (Brief 226) to produce an onboarding report, then runs the retrofitter (Brief 228) to write a `.ditto/` substrate into the target repo under the user's chosen runner. After both, the project carries role contracts, a skill index, a tool allowlist, project-specific guidance, and a human-readable onboarding report — sibling to `.git/`, in the user's working tree, grep-able and git-trackable. The substrate is the project's harness; the retrofit is the act of installing it. Per Insight-205, this turns connection from a dead form into a primary user-acquisition surface ("first contact demonstrates value").
+- Layer: 1 (Process — `project-onboarding.yaml` + `project-retrofit.yaml`) / 6 (Human — chat-col surface)
+- Related: Project Substrate, Retrofit, AnalyserReportBlock (Brief 226)
+
+**Project Substrate** — The `.ditto/` directory at the target repo's root, containing role contracts, skill index, tool allowlist, project-specific guidance, and the human-readable analyser report. ADR-043 finalises the shape (`.ditto/role-contracts/{dev-pm,dev-architect,...}.md` + `skills.json` + `tools.json` + `guidance.md` + `onboarding-report.md` + `version.txt` + `.gitignore`). The substrate is file-as-primary at the user-facing seam (Insight-201 application #2 — Brief 199's memory projection is application #1). It coexists with `.catalyst/` and other harness conventions; `.ditto/` writes never touch sibling directories. Schema versioning lives in `.ditto/version.txt`; future ADRs ship migrators.
+- Layer: 6 (Human — file-as-primary legibility) / External — target repo working tree
+- Related: Battle-Readiness, Retrofit, ADR-043, Insight-201
+
+**Retrofit** — The act of writing the project substrate via a runner. Concretely: a 4-step process (`generate-plan` → `surface-plan` → `dispatch-write` → `verify-commit`) defined in `processes/project-retrofit.yaml`. The plan generator composes 13 files from the analyser report; surface-plan writes a workItems row carrying a `RetrofitPlanBlock`; dispatch-write reads the trust-gate decision (autonomous → silent dispatch; spot_checked → sample-then-dispatch; critical → reject; supervised → placeholder per Brief 229) and invokes `dispatchWorkItem` (which routes via the existing Briefs 212/216/217/218 adapters). verify-commit reads the runner's response, UPDATES the existing `harness_decisions` audit row with planned hashes (so the next retrofit can detect user-edits per Q3 resolution). Idempotent per Insight-212 — re-runs producing only `unchanged` files complete with `commitSha=null`. Trust-tier-bound depth maps verbatim to ADR-007 (no new TrustAction values).
+- Layer: 1 (Process — `project-retrofit.yaml`) / 3 (Harness — 4 systemAgent handlers in `src/engine/onboarding/retrofitter.ts`)
+- Related: Battle-Readiness, Project Substrate, ADR-043, ADR-007, Insight-180, Insight-212, Insight-217, RetrofitPlanBlock
