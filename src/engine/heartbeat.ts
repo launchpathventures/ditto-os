@@ -447,7 +447,9 @@ async function executeSingleStep(
   run: { processId: string; inputs: unknown; startedAt: Date | null },
   definition: ProcessDefinition,
   trustTier: TrustTier,
-  parallelGroupId?: string
+  parallelGroupId?: string,
+  /** Brief 227 — resolved at the call site (fullHeartbeat / pumpRun) and threaded through. */
+  projectId: string | null = null,
 ): Promise<StepPipelineResult> {
   // Human steps suspend immediately — create action work item, serialize state
   // Provenance: Mastra path-based suspend/resume, ADR-010 Section 4
@@ -723,7 +725,9 @@ async function executeSingleStep(
     }
   }
 
-  // Run through harness pipeline (module-scoped, handlers are stateless)
+  // Run through harness pipeline (module-scoped, handlers are stateless).
+  // Brief 227: pass the resolved projectId so memory-assembly + any later
+  // consumers see the project context without re-querying the DB.
   const harnessContext = createHarnessContext({
     processRun: {
       id: processRunId,
@@ -734,6 +738,7 @@ async function executeSingleStep(
     processDefinition: definition,
     trustTier,
     stepRunId: stepRunRecord[0].id,
+    projectId,
   });
 
   // Brief 172: Pre-dispatch budget guard. Block outbound actions when the
@@ -1421,7 +1426,7 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   // 7. Execute
   if (nextWork.type === "step") {
     const result = await executeSingleStep(
-      nextWork.step, processRunId, run, definition, trustTier
+      nextWork.step, processRunId, run, definition, trustTier, undefined, process.projectId ?? null
     );
 
     if (result.status === "failed") {
@@ -1530,7 +1535,7 @@ export async function heartbeat(processRunId: string): Promise<HeartbeatResult> 
   const { groupId, steps } = nextWork;
   const results = await Promise.all(
     steps.map((step) =>
-      executeSingleStep(step, processRunId, run, definition, trustTier, groupId)
+      executeSingleStep(step, processRunId, run, definition, trustTier, groupId, process.projectId ?? null)
     )
   );
 

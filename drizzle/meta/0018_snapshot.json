@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d8a74b89-f591-40fd-8c9f-90f3de1826fc",
-  "prevId": "e2235f8d-9f70-454f-ab5e-dd28779d4dfc",
+  "id": "0e27fb7e-b7b4-4485-9643-2af1c03dc0e4",
+  "prevId": "d8a74b89-f591-40fd-8c9f-90f3de1826fc",
   "tables": {
     "activities": {
       "name": "activities",
@@ -2443,6 +2443,13 @@
         },
         "error_reason": {
           "name": "error_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "response_body": {
+          "name": "response_body",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

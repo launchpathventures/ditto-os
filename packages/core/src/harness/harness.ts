@@ -305,6 +305,13 @@ export interface HarnessContext {
   processDefinition: ProcessDefinition;
   trustTier: TrustTier;
   stepRunId: string;
+  /**
+   * Project the running process belongs to (Brief 227 — project memory scope).
+   * Resolved at handler entry from `processes.projectId`. NULL means the
+   * source process is pre-project-era (legacy compat); memory-assembly falls
+   * back to single-process scopeId matching for these.
+   */
+  projectId: string | null;
 
   // Accumulated by handlers
   memories: string;
@@ -411,6 +418,8 @@ export function createHarnessContext(params: {
   processDefinition: ProcessDefinition;
   trustTier: TrustTier;
   stepRunId: string;
+  /** Brief 227 — defaults to null (legacy / pre-project-era compatibility). */
+  projectId?: string | null;
 }): HarnessContext {
   return {
     processRun: params.processRun,
@@ -418,6 +427,7 @@ export function createHarnessContext(params: {
     processDefinition: params.processDefinition,
     trustTier: params.trustTier,
     stepRunId: params.stepRunId,
+    projectId: params.projectId ?? null,
 
     memories: "",
     memoriesInjected: 0,

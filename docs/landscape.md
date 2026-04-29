@@ -1034,19 +1034,17 @@ Added to support the cloud-runners brief (companion to Brief 212 local-bridge). 
 
 Cross-cutting cloud-runner substrate; mode-agnostic (works whether the PR was opened by a cloud or local runner).
 
-### Greptile — greptile.com (Added 2026-04-25)
-- AI code-review SaaS. GitHub App per repo; reviews PRs by indexing the full repo as a code graph, traces dependencies, multi-hop investigation. v3 (late 2025) uses Anthropic Claude Agent SDK. Review delivery: PR summary comment + inline comments with "Fix with your Agent" buttons; "Fix All" summary button. SOC2 Type II SaaS or self-hosted (Docker Compose / Helm / air-gapped).
-- **Classification:** DEPEND — service, GitHub App + per-seat subscription.
-- **Pricing (2026):** $30 / active developer / month, 50 reviews/seat, $1/additional. 14-day full trial. Enterprise custom.
-- **Ditto usage:** Cloud-side AI review on every PR (cross-runner). Read review state via GitHub `issue_comment.created` / `pull_request_review` events.
-- **Limitations:** No native completion webhook documented at the public docs surface. No native `approved-by-greptile` label — must be applied by Ditto-owned automation reading PR comments. Per-seat pricing (developer count, not run count).
+### ~~Greptile — greptile.com~~ (Added 2026-04-25 → REJECTED 2026-04-27)
+- **Classification:** ~~DEPEND~~ → **REJECTED 2026-04-27 (sub-brief 219 retired per user steer).**
+- AI code-review SaaS. GitHub App + per-seat subscription. Researched as a possible AI-review-on-every-PR signal during the cloud-runners design phase.
+- **Why rejected:** Brief 216's `/dev-review` skill running inside the Routine session + human review on the GitHub PR ships the entire review path Ditto needs. Greptile's value-add (multi-hop dependency analysis) doesn't justify the per-seat subscription, the detection complexity (Brief 214 §D11's `detectIntegrations()` cron + flags + conditional handlers), or the ongoing third-party-SaaS coordination cost when the default already works. Users who already have Greptile installed will see its GitHub-native PR comments like any other GitHub user — Ditto doesn't detect or adapt.
+- **Re-add path:** if post-dogfood demand surfaces, a follow-on integration-detection brief can re-introduce per-project Greptile detection. Brief 218's `cloud-runner-fallback.ts` `check_run.completed` infrastructure (originally reserved for sub-brief 219) is generic enough to serve any future check-gate.
 
-### Argos — argos-ci.com (Added 2026-04-25)
-- Visual-regression SaaS. GitHub App per repo; receives screenshots from Playwright/Cypress/Storybook; reports diffs as a GitHub check (pass/fail) + summary comment with side-by-side diff links. `@argos-ci/playwright` npm package on the test side.
-- **Classification:** DEPEND — service, GitHub App.
-- **Pricing (2026):** Hobby plan $0 forever, 5,000 screenshots, GitHub & GitLab integration. Pro $100/mo, 35,000 screenshots, $0.004 overage ($0.0015 Storybook). GitHub SSO add-on $50/mo. Real free tier, not a trial.
-- **Ditto usage:** Visual-diff gate signal for review→ready-to-deploy. Read via `check_run.completed` event with `name: "argos-ci"`.
-- **Limitations:** Diff-review UI lives at Argos (link out from /review/[token], not embed). Screenshot meter — high-frequency pipelines exhaust the free tier.
+### ~~Argos — argos-ci.com~~ (Added 2026-04-25 → REJECTED 2026-04-27)
+- **Classification:** ~~DEPEND~~ → **REJECTED 2026-04-27 (sub-brief 219 retired per user steer).**
+- Visual-regression SaaS. GitHub App + Hobby free tier. Researched as a possible visual-diff gate for review→ready-to-deploy during the cloud-runners design phase.
+- **Why rejected:** Brief 216's Vercel preview URL inline card surfaced from `deployment_status` non-production events provides the visual signal users actually need (a clickable preview link in the conversation surface). Adding a check-gate dependency on Argos would over-couple Ditto to a specific visual-diff SaaS while delivering marginal incremental value over "click the preview URL." Same retirement rationale as Greptile above.
+- **Re-add path:** same as Greptile — future follow-on brief can re-introduce per-project detection. Existing Vercel/Netlify/Cloudflare-Pages preview-URL signal stays as the default visual check.
 
 ---
 

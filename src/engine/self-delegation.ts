@@ -38,6 +38,27 @@ import { handleQuickCapture } from "./self-tools/quick-capture";
 import { handleAdjustTrust } from "./self-tools/adjust-trust";
 import { handleGetProcessDetail } from "./self-tools/get-process-detail";
 import { handleConnectService } from "./self-tools/connect-service";
+import {
+  handleStartProjectOnboarding,
+  isStartProjectOnboardingEnabled,
+  START_PROJECT_ONBOARDING_TOOL_NAME,
+} from "./self-tools/start-project-onboarding";
+import {
+  handlePromoteMemoryScope,
+  PROMOTE_MEMORY_SCOPE_TOOL_NAME,
+} from "./self-tools/promote-memory-scope";
+import {
+  handleDemoteMemoryScope,
+  DEMOTE_MEMORY_SCOPE_TOOL_NAME,
+} from "./self-tools/demote-memory-scope";
+import {
+  handleDismissPromotionProposal,
+  DISMISS_PROMOTION_PROPOSAL_TOOL_NAME,
+} from "./self-tools/dismiss-promotion-proposal";
+import {
+  handleRerunProjectRetrofit,
+  RERUN_PROJECT_RETROFIT_TOOL_NAME,
+} from "./self-tools/rerun-project-retrofit";
 import { handleGetBriefing } from "./self-tools/get-briefing";
 import { handleDetectRisks } from "./self-tools/detect-risks";
 import { handleSuggestNext } from "./self-tools/suggest-next";
@@ -813,6 +834,125 @@ export const selfTools: LlmToolDefinition[] = [
       required: ["extractionGoal"],
     },
   },
+  // ============================================================
+  // Brief 225 — Project onboarding entry tool (env-var gated below)
+  // ============================================================
+  ...(isStartProjectOnboardingEnabled()
+    ? ([
+        {
+          name: START_PROJECT_ONBOARDING_TOOL_NAME,
+          description:
+            "Use when the user wants to connect a GitHub repo to Ditto. " +
+            'Examples: "Connect github.com/foo/bar", "Onboard the agent-crm repo", ' +
+            'or a bare GitHub URL pasted on its own line. Triggers the BEFORE-flow ' +
+            "analyser onboarding process: emits an inline Connect form (URL paste " +
+            "+ display name + slug) so the user can verify access before any state " +
+            "is committed.",
+          input_schema: {
+            type: "object" as const,
+            properties: {
+              repoUrl: {
+                type: "string",
+                description:
+                  "GitHub repo URL or owner/repo shorthand (optional — sidebar entry leaves it blank)",
+              },
+            },
+            required: [],
+          },
+        },
+      ] as LlmToolDefinition[])
+    : []),
+  // ============================================================
+  // Brief 227 — Project memory scope: promote / demote tools
+  // ============================================================
+  {
+    name: PROMOTE_MEMORY_SCOPE_TOOL_NAME,
+    description:
+      "Use when the user wants a memory to apply across more projects than its current scope. " +
+      'Examples: "Make this brand-voice rule apply everywhere", "Promote this correction to all projects", ' +
+      '"Apply this to my marketing repos as well". scope: "all" promotes to full self-scope (everywhere); ' +
+      "{ projectIds: [...] } promotes to a specific list of projects (hybrid).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        memoryId: {
+          type: "string",
+          description: "ID of the memory to promote",
+        },
+        scope: {
+          description:
+            'Either "all" for full self-scope, or { projectIds: [...] } for hybrid multi-project scope',
+        },
+      },
+      required: ["memoryId", "scope"],
+    },
+  },
+  {
+    name: DEMOTE_MEMORY_SCOPE_TOOL_NAME,
+    description:
+      "Use when the user wants to restrict a memory back to a single project's scope. " +
+      'Examples: "Don\'t apply this to support-archive anymore", "Only keep this for the marketing repo". ' +
+      "Rejects user_model and preference memories (those are person-facts that never had a source process).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        memoryId: {
+          type: "string",
+          description: "ID of the memory to demote",
+        },
+        targetProjectId: {
+          type: "string",
+          description:
+            "Project to demote to. Must be in the memory's appliedProjectIds (if hybrid) or be a currently-active project (if fully self-scoped).",
+        },
+      },
+      required: ["memoryId", "targetProjectId"],
+    },
+  },
+  {
+    name: DISMISS_PROMOTION_PROPOSAL_TOOL_NAME,
+    description:
+      "Use when the user dismisses a cross-project memory-promotion proposal in the daily briefing. " +
+      'Examples: "[Keep per-project]" tap from the SuggestionBlock; "Skip this for now" responses. ' +
+      "Engages a 30-day cooldown — the proposal won't re-surface for the same memory until the cooldown expires.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        memoryId: {
+          type: "string",
+          description: "ID of the memory whose promotion proposal is being dismissed",
+        },
+      },
+      required: ["memoryId"],
+    },
+  },
+  // ============================================================
+  // Brief 228 — Project retrofit re-run tool
+  // ============================================================
+  {
+    name: RERUN_PROJECT_RETROFIT_TOOL_NAME,
+    description:
+      "Use when the user wants to re-run the project retrofitter — refreshes the `.ditto/` substrate " +
+      'in the target repo via their chosen runner. Examples: "Re-run the retrofit on agent-crm", ' +
+      '"Refresh .ditto/ for ditto", "Update the project substrate after the role contracts changed". ' +
+      "Idempotent — re-runs that detect no changes complete with no commit (just an info side-car).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        projectId: {
+          type: "string",
+          description: "ID or slug of the project to retrofit",
+        },
+        trustTier: {
+          type: "string",
+          description:
+            "Optional trust tier override (supervised | spot_checked | autonomous | critical). " +
+            "Defaults to the project's last-known retrofit tier or 'supervised'.",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
 ];
 
 // ============================================================
@@ -934,6 +1074,50 @@ export async function executeDelegation(
         service: toolInput.service as string,
         processSlug: toolInput.processSlug as string | undefined,
         action: toolInput.action as "check" | "guide" | "verify",
+      });
+
+    // Brief 225 — Project onboarding entry tool
+    case START_PROJECT_ONBOARDING_TOOL_NAME:
+      return await handleStartProjectOnboarding({
+        repoUrl: toolInput.repoUrl as string | undefined,
+      });
+
+    // Brief 227 — Memory scope promote / demote
+    case PROMOTE_MEMORY_SCOPE_TOOL_NAME:
+      return await handlePromoteMemoryScope({
+        memoryId: toolInput.memoryId as string,
+        scope: toolInput.scope as "all" | { projectIds: string[] },
+        stepRunId: toolInput.stepRunId as string | undefined,
+        actorId: toolInput.actorId as string | undefined,
+      });
+
+    case DEMOTE_MEMORY_SCOPE_TOOL_NAME:
+      return await handleDemoteMemoryScope({
+        memoryId: toolInput.memoryId as string,
+        targetProjectId: toolInput.targetProjectId as string,
+        stepRunId: toolInput.stepRunId as string | undefined,
+        actorId: toolInput.actorId as string | undefined,
+      });
+
+    case DISMISS_PROMOTION_PROPOSAL_TOOL_NAME:
+      return await handleDismissPromotionProposal({
+        memoryId: toolInput.memoryId as string,
+        stepRunId: toolInput.stepRunId as string | undefined,
+        actorId: toolInput.actorId as string | undefined,
+      });
+
+    // Brief 228 — Project retrofit re-run tool
+    case RERUN_PROJECT_RETROFIT_TOOL_NAME:
+      return await handleRerunProjectRetrofit({
+        projectId: toolInput.projectId as string,
+        trustTier: toolInput.trustTier as
+          | "supervised"
+          | "spot_checked"
+          | "autonomous"
+          | "critical"
+          | undefined,
+        stepRunId: toolInput.stepRunId as string | undefined,
+        actorId: toolInput.actorId as string | undefined,
       });
 
     // Brief 043 — Proactive Engine Tools

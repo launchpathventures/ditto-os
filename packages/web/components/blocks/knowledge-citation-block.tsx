@@ -26,8 +26,14 @@ import {
   InlineCitationQuote,
   InlineCitationExpandedView,
 } from "@/components/ai-elements/inline-citation";
+import { MemoryScopePill, classifyScope } from "@/components/memory-scope-pill";
 
 type SourceItem = KnowledgeCitationBlock["sources"][number];
+
+/** Brief 227 — does this source carry memory-scope metadata? */
+function isMemoryCitation(source: SourceItem): boolean {
+  return Boolean(source.memoryId) || Boolean(source.memoryScopeType);
+}
 
 interface NeighborChunk {
   id: string;
@@ -267,22 +273,55 @@ export function KnowledgeCitationBlockComponent({
             );
           }
 
-          // Non-document citations — original behavior
-          return source.excerpt ? (
-            <InlineCitationCard
-              key={i}
-              trigger={
-                <button className="block text-left">
-                  <Source name={source.name} type={source.type} />
-                </button>
-              }
-            >
-              <InlineCitationSource name={source.name} type={source.type} />
-              <InlineCitationQuote>{source.excerpt}</InlineCitationQuote>
-            </InlineCitationCard>
-          ) : (
-            <Source key={i} name={source.name} type={source.type} />
-          );
+          // Non-document citations — original behavior, extended with scope pill
+          // for memory citations (Brief 227).
+          const memoryPill = isMemoryCitation(source) ? (
+            <MemoryScopePill source={source} className="mr-1" />
+          ) : null;
+          const memoryScope = isMemoryCitation(source) ? classifyScope(source) : null;
+          const showPromote =
+            memoryScope?.kind === "project" && Boolean(source.memoryId);
+
+          if (source.excerpt || memoryPill) {
+            return (
+              <InlineCitationCard
+                key={i}
+                trigger={
+                  <button className="inline-flex items-center gap-1 text-left">
+                    {memoryPill}
+                    <Source name={source.name} type={source.type} />
+                  </button>
+                }
+              >
+                {memoryPill && (
+                  <div className="mb-2">
+                    <MemoryScopePill source={source} />
+                  </div>
+                )}
+                <InlineCitationSource name={source.name} type={source.type} />
+                {source.excerpt && (
+                  <InlineCitationQuote>{source.excerpt}</InlineCitationQuote>
+                )}
+                {showPromote && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="text-xs text-vivid hover:underline"
+                      onClick={() =>
+                        onAction?.("promote-memory-scope", {
+                          memoryId: source.memoryId,
+                        })
+                      }
+                    >
+                      Promote
+                    </button>
+                  </div>
+                )}
+              </InlineCitationCard>
+            );
+          }
+
+          return <Source key={i} name={source.name} type={source.type} />;
         })}
       </SourcesContent>
     </Sources>

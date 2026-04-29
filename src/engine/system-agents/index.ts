@@ -20,6 +20,21 @@ import {
   executeKnowledgeAssembler,
 } from "./knowledge-extractor";
 import { executeCoverageAgent } from "./coverage-agent";
+import {
+  executeOnboardingCloneAndScan,
+  executeOnboardingDetectBuildSystem,
+  executeOnboardingDetectTestFramework,
+  executeOnboardingDetectCI,
+  executeOnboardingDetectHarness,
+  executeOnboardingScorePersonaFit,
+  executeOnboardingMatchGoldStandard,
+  executeOnboardingRecommendRunnerTier,
+  executeOnboardingSurfaceReport,
+  executeRetrofitGeneratePlan,
+  executeRetrofitSurfacePlan,
+  executeRetrofitDispatchWrite,
+  executeRetrofitVerifyCommit,
+} from "../onboarding/system-agent";
 
 export type SystemAgentHandler = (
   inputs: Record<string, unknown>,
@@ -36,6 +51,21 @@ const registry = new Map<string, SystemAgentHandler>([
   ["knowledge-related-finder", executeRelatedFinder],
   ["knowledge-assembler", executeKnowledgeAssembler],
   ["coverage-agent", executeCoverageAgent],
+  // Brief 225/226 — project onboarding analyser handlers
+  ["project-onboarding-clone-and-scan", executeOnboardingCloneAndScan],
+  ["project-onboarding-detect-build-system", executeOnboardingDetectBuildSystem],
+  ["project-onboarding-detect-test-framework", executeOnboardingDetectTestFramework],
+  ["project-onboarding-detect-ci", executeOnboardingDetectCI],
+  ["project-onboarding-detect-existing-harness", executeOnboardingDetectHarness],
+  ["project-onboarding-score-persona-fit", executeOnboardingScorePersonaFit],
+  ["project-onboarding-match-gold-standard", executeOnboardingMatchGoldStandard],
+  ["project-onboarding-recommend-runner-tier", executeOnboardingRecommendRunnerTier],
+  ["project-onboarding-surface-report", executeOnboardingSurfaceReport],
+  // Brief 228 — project retrofitter handlers (sub-brief #3a of Brief 224)
+  ["project-retrofit-generate-plan", executeRetrofitGeneratePlan],
+  ["project-retrofit-surface-plan", executeRetrofitSurfacePlan],
+  ["project-retrofit-dispatch-write", executeRetrofitDispatchWrite],
+  ["project-retrofit-verify-commit", executeRetrofitVerifyCommit],
 ]);
 
 /**

@@ -1,0 +1,232 @@
+# Ditto — System Process: Project Onboarding
+#
+# Triggered when a user connects a GitHub repo and the resulting project
+# row is created with status='analysing'. Walks 9 steps:
+#
+#   1. clone-and-scan          — isomorphic-git shallow clone to a temp dir;
+#                                emits cheap repo metadata. (Brief 226 replaced
+#                                Brief 225's no-op body with the real clone.)
+#   2. detect-build-system     — pure detector over the cloned dir.
+#   3. detect-test-framework   — pure detector.
+#   4. detect-ci               — pure detector.
+#   5. detect-existing-harness — pure detector (.claude/ / .cursorrules /
+#                                AGENTS.md / .catalyst/ / .ditto/ / CLAUDE.md).
+#   6. score-persona-fit       — descriptor-only output (NO persona names
+#                                at the user surface — Brief 226 IMPORTANT #8).
+#   7. match-gold-standard     — landscape-index lookup; graceful no-op when
+#                                docs/landscape-index.json is missing.
+#   8. recommend-runner-tier   — heuristic mapping (Brief 226 §Constraints).
+#   9. surface-report          — assembles the AnalyserReportBlock + writes
+#                                workItems.context + populated harness_decisions
+#                                audit row + cleans up the clone temp dir
+#                                in a try/finally (Brief 226 §AC #14).
+#
+# Trigger event + first/last step names unchanged from Brief 225 plumbing
+# (Brief 226 §Non-Goals).
+#
+# Provenance: Brief 224 §Sub-brief #1+#2; Brief 225; Brief 226;
+#   Insight-205 (battle-ready project onboarding); Insight-180 (stepRunId guard);
+#   Designer spec at docs/research/analyser-report-and-onboarding-flow-ux.md.
+
+name: Project Onboarding
+id: project-onboarding
+version: 2
+status: active
+system: true
+
+description: >
+  Walks a freshly-connected project through the BEFORE-flow analyser
+  (read-only repo scan → onboarding report → user picks runner + tier
+  → atomic flip to active → retrofitter runs as the project's first
+  real process). Brief 225 ships placeholder handlers; Brief 226 replaces
+  them with the read-only analyser brain.
+
+trigger:
+  type: event
+  event: project.connected
+  description: >
+    Fires when projects.status flips to 'analysing' (Brief 225's
+    POST /api/v1/projects with kickOffOnboarding=true).
+
+inputs:
+  - name: projectId
+    type: text
+    source: system
+    required: true
+    description: The project being onboarded
+
+steps:
+  - id: clone-and-scan
+    name: Clone & Scan
+    executor: script
+    description: >
+      Read-only shallow clone via isomorphic-git (depth=1, single-branch
+      against projects.defaultBranch). Cleans up on failure; success path
+      emits the temp dir path + cheap repo metadata (file count, byte size,
+      default branch) for downstream detectors to read via step_runs.outputs.
+    config:
+      systemAgent: project-onboarding-clone-and-scan
+    outputs:
+      - scan-result
+
+  - id: detect-build-system
+    name: Detect Build System
+    executor: script
+    description: >
+      Pure filesystem-pattern detector. Returns 0+ build systems (Node /
+      Python / Ruby / Rust / Go / PHP / Java); polyglot repos return multiple.
+      Throws → emits _detectorError; surface-report renders partial.
+    config:
+      systemAgent: project-onboarding-detect-build-system
+    outputs:
+      - build-system
+
+  - id: detect-test-framework
+    name: Detect Test Framework
+    executor: script
+    description: >
+      Pure detector for vitest / jest / playwright / pytest / RSpec /
+      cargo-test / go-test / phpunit / junit. Throws → emits _detectorError.
+    config:
+      systemAgent: project-onboarding-detect-test-framework
+    outputs:
+      - test-framework
+
+  - id: detect-ci
+    name: Detect CI Provider
+    executor: script
+    description: >
+      Pure detector for .github/workflows/, .gitlab-ci.yml, .circleci/,
+      azure-pipelines.yml, Jenkinsfile. Brief 226 §Constraints —
+      lastKnownStatus stays `unknown` (no GitHub Actions API call here;
+      depth=1 limit explicit non-goal).
+    config:
+      systemAgent: project-onboarding-detect-ci
+    outputs:
+      - ci
+
+  - id: detect-existing-harness
+    name: Detect Existing Harness
+    executor: script
+    description: >
+      Pure detector for AI / agent harness markers: .claude/, .cursorrules,
+      AGENTS.md, .catalyst/, .ditto/, CLAUDE.md. Returns flavours=['none']
+      when no markers present.
+    config:
+      systemAgent: project-onboarding-detect-existing-harness
+    outputs:
+      - existing-harness
+
+  - id: score-persona-fit
+    name: Score Persona Fit
+    executor: script
+    description: >
+      Maps detected stack signals to a USER-FACING DESCRIPTOR string only
+      ("mid-size org tooling, mature CI"). Internal persona-shape labels
+      stay inside the scoring module — Brief 226 IMPORTANT #8 type-system
+      enforcement; descriptor never matches /-shaped\\b/i.
+    config:
+      systemAgent: project-onboarding-score-persona-fit
+    outputs:
+      - persona-fit
+
+  - id: match-gold-standard
+    name: Match Gold-Standard
+    executor: script
+    description: >
+      Reads docs/landscape-index.json (Researcher-curated). Returns top 1-3
+      matches by stack-signal overlap. Index missing → empty array (graceful
+      degradation per Brief 226 IMPORTANT #7).
+    config:
+      systemAgent: project-onboarding-match-gold-standard
+    outputs:
+      - gold-standard
+
+  - id: recommend-runner-tier
+    name: Recommend Runner + Trust Tier
+    executor: script
+    description: >
+      Heuristic mapping from detected signals to RunnerKind +
+      TrustTier (recommendation only — user can override at picker).
+      Mapping table per Brief 226 §Constraints. Output shape matches
+      RunnerRecommendation + TrustTierRecommendation types.
+    config:
+      systemAgent: project-onboarding-recommend-runner-tier
+    outputs:
+      - recommendation
+
+  - id: surface-report
+    name: Surface Onboarding Report
+    executor: script
+    description: >
+      Assembles the AnalyserReportBlock from upstream step outputs, writes
+      it into the onboarding workItems row's `context` field + populated
+      `harness_decisions.reviewDetails` + flips briefState to 'backlog'.
+      Brief 225's stub-INSERT path is fully REPLACED by this populated
+      INSERT/UPDATE (Brief 226 §AC #7). Cleanup of the clone temp dir
+      runs in try/finally inside this handler — fires on success AND on
+      parent-step throw.
+    config:
+      systemAgent: project-onboarding-surface-report
+    outputs:
+      - report-work-item-id
+      - analyser-report
+
+outputs:
+  - name: scan-result
+    type: data
+    destination: system
+    description: >
+      { tempDir, fileCount, totalBytes, defaultBranch, fetchedUrl } emitted
+      by clone-and-scan. Read by every downstream step via step_runs.outputs.
+  - name: build-system
+    type: data
+    destination: system
+  - name: test-framework
+    type: data
+    destination: system
+  - name: ci
+    type: data
+    destination: system
+  - name: existing-harness
+    type: data
+    destination: system
+  - name: persona-fit
+    type: data
+    destination: system
+  - name: gold-standard
+    type: data
+    destination: system
+  - name: recommendation
+    type: data
+    destination: system
+  - name: report-work-item-id
+    type: data
+    destination: system
+    description: >
+      ID of the workItems row that the chat-col surface renders against.
+  - name: analyser-report
+    type: data
+    destination: system
+    description: >
+      The fully-populated AnalyserReportBlock — the same shape stored in
+      workItems.context for the Server Component to render.
+
+quality_criteria:
+  - >
+    The project transitions from analysing to active only after the user
+    approves at /projects/:slug/onboarding.
+  - >
+    The atomic three-write commit (project_runners insert + bearer
+    generation + status flip) honours Brief 215 validateStatusTransition
+    invariant.
+  - >
+    The clone temp dir is removed on success AND on parent-step throw
+    (Brief 226 try/finally cleanup; cleanup-on-boot sweep catches
+    engine-crash leaks).
+  - >
+    The user-facing descriptor never carries an internal persona-shape
+    label (Brief 226 type-system enforcement; unit test asserts the regex).
+
+trust:
+  initial_tier: supervised

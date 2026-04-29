@@ -447,10 +447,19 @@ async function handleFormSubmit(
       }
 
       case "connection_setup": {
-        // Route to credential API — do NOT store credentials in blocks
         const serviceName = values.serviceName as string | undefined;
         if (!serviceName) {
           return { success: false, message: "Service name is required", blocks: [] };
+        }
+
+        // Brief 225 — github-project routes to projects API instead of
+        // /api/credential. The Self tool emits a ConnectionSetupBlock with
+        // `serviceName: 'github-project'`; submitting it kicks off the
+        // onboarding analyser. Other serviceName values keep the legacy
+        // /api/credential flow (no regression).
+        if (serviceName === "github-project") {
+          const result = await handleGithubProjectConnect(values);
+          return result;
         }
 
         // Forward to the connect_service engine function for auth flow
@@ -486,4 +495,124 @@ async function handleFormSubmit(
       blocks: [],
     };
   }
+}
+
+// ============================================================
+// Brief 225 — github-project Connect form handler
+// ============================================================
+
+/**
+ * Slug a repo URL into a `[a-z][a-z0-9-]+` form. Mirrors the regex on
+ * `POST /api/v1/projects` (`/^[a-z][a-z0-9-]{1,63}$/`).
+ */
+function slugFromRepoUrl(url: string): string {
+  const m = url.match(/[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);
+  const candidate = m ? `${m[1]}-${m[2]}` : url;
+  const cleaned = candidate
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // Slug regex requires leading letter; prefix if needed.
+  const withLeading = /^[a-z]/.test(cleaned) ? cleaned : `repo-${cleaned}`;
+  return withLeading.slice(0, 63);
+}
+
+/**
+ * Convert a free-form GitHub repo URL/string into the `owner/repo` shape
+ * accepted by the projects POST handler. Returns null when the input
+ * doesn't look like a GitHub repo at all.
+ *
+ * Rejects domain-shaped owners (e.g. `example.com/foo`) — only github.com
+ * URLs and bare owner/repo strings are accepted. The repo segment may
+ * contain `.` (real repos do, e.g. `vercel/next.js`); the owner segment
+ * must not, since GitHub usernames don't allow `.`.
+ */
+function repoOwnerSlash(url: string): string | null {
+  const m = url.match(/(?:github\.com[:/])?([\w-]+)\/([\w.-]+?)(?:\.git)?\/?$/);
+  if (!m) return null;
+  // If the input contains `://` but didn't match via the github.com prefix,
+  // it's some other domain's URL — reject.
+  if (/:\/\//.test(url) && !/github\.com/i.test(url)) return null;
+  return `${m[1]}/${m[2]}`;
+}
+
+async function handleGithubProjectConnect(
+  values: Record<string, unknown>,
+): Promise<SurfaceActionResult> {
+  if (process.env.DITTO_PROJECT_ONBOARDING_READY !== "true") {
+    return {
+      success: false,
+      message:
+        "Project onboarding is not enabled in this environment.",
+      blocks: [],
+    };
+  }
+  const repoUrl = (values.repoUrl as string | undefined) ?? "";
+  if (!repoUrl.trim()) {
+    return {
+      success: false,
+      message: "Paste a GitHub repo URL first.",
+      blocks: [],
+    };
+  }
+  const githubRepo = repoOwnerSlash(repoUrl.trim());
+  if (!githubRepo) {
+    return {
+      success: false,
+      message: `Couldn't parse "${repoUrl}" as a GitHub repo URL.`,
+      blocks: [],
+    };
+  }
+  const explicitSlug = (values.slug as string | undefined)?.trim();
+  const slug = explicitSlug && explicitSlug.length > 0
+    ? explicitSlug
+    : slugFromRepoUrl(repoUrl);
+  const explicitName = (values.displayName as string | undefined)?.trim();
+  const name = explicitName && explicitName.length > 0
+    ? explicitName
+    : githubRepo;
+
+  // Delegate directly to the engine helper — no self-HTTP roundtrip
+  // (which would lose the workspace-session cookie and 401 in deployments
+  // with WORKSPACE_OWNER_EMAIL set). The form-submit dispatcher already
+  // runs server-side inside trusted engine context; the action-registry
+  // validation upstream is the auth gate for this surface.
+  const { createOnboardingProject } = await import(
+    "./projects/create-project-onboarding"
+  );
+  const result = await createOnboardingProject({
+    slug,
+    name,
+    githubRepo,
+  });
+  if (!result.ok) {
+    return {
+      success: false,
+      message: `Failed to start onboarding: ${result.error}`,
+      blocks: [],
+    };
+  }
+  return {
+    success: true,
+    message: `Started onboarding for ${name}.`,
+    blocks: [
+      {
+        type: "status_card",
+        entityType: "work_item",
+        entityId: result.project.id,
+        title: name,
+        status: "analysing",
+        details: {
+          slug,
+          githubRepo,
+          conversationUrl: result.conversationUrl,
+        },
+      },
+    ],
+    conversationContext: {
+      onboardingProjectSlug: slug,
+      conversationUrl: result.conversationUrl,
+    },
+  };
 }

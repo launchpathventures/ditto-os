@@ -103,6 +103,17 @@ jobs:
       #    If $PR_URL is empty (Claude Code has not opened a PR yet), the field
       #    is omitted from the JSON body — Ditto's `pull_request.opened`
       #    webhook will surface the PR URL via the kind-agnostic fallback.
+      #
+      #    Brief 232 — `responseBody` channel. If your task asks for a structured
+      #    response (e.g., the project retrofitter expects
+      #    `{commitSha, actuallyChangedFiles, skippedFiles}`), your work step
+      #    MUST write the corresponding values to $GITHUB_ENV:
+      #      COMMIT_SHA=<sha-or-empty>
+      #      ACTUALLY_CHANGED_FILES=<JSON array of strings, e.g. '["a.md","b.md"]'>
+      #      SKIPPED_FILES=<JSON array of strings, optional>
+      #    The callback below will assemble them into a `responseBody` field.
+      #    Omit the env vars when your task does not return structured output —
+      #    the field is optional.
       - name: Status callback (optional)
         if: ${{ inputs.callback_url != '' }}
         env:
@@ -119,6 +130,20 @@ jobs:
           if [ -n "$PR_URL" ]; then
             PR_URL_FIELD=", \"prUrl\": \"$PR_URL\""
           fi
+          # Assemble responseBody from $COMMIT_SHA, $ACTUALLY_CHANGED_FILES,
+          # $SKIPPED_FILES if any of them are set. Default to empty when absent.
+          RESPONSE_BODY_FIELD=""
+          if [ -n "$COMMIT_SHA" ] || [ -n "$ACTUALLY_CHANGED_FILES" ] || [ -n "$SKIPPED_FILES" ]; then
+            CHANGED_VAL="${ACTUALLY_CHANGED_FILES:-[]}"
+            SKIPPED_VAL="${SKIPPED_FILES:-[]}"
+            COMMIT_VAL="${COMMIT_SHA:-}"
+            if [ -n "$COMMIT_VAL" ]; then
+              COMMIT_JSON="\"$COMMIT_VAL\""
+            else
+              COMMIT_JSON="null"
+            fi
+            RESPONSE_BODY_FIELD=", \"responseBody\": {\"commitSha\": $COMMIT_JSON, \"actuallyChangedFiles\": $CHANGED_VAL, \"skippedFiles\": $SKIPPED_VAL}"
+          fi
           curl -X POST "${{ inputs.callback_url }}" \
             $AUTH_HEADER \
             -H "Content-Type: application/json" \
@@ -126,5 +151,5 @@ jobs:
               \"state\": \"shipped\",
               \"runnerKind\": \"github-action\",
               \"externalRunId\": \"${{ github.run_id }}\",
-              \"stepRunId\": \"${{ inputs.stepRunId }}\"$PR_URL_FIELD
+              \"stepRunId\": \"${{ inputs.stepRunId }}\"$PR_URL_FIELD$RESPONSE_BODY_FIELD
             }" || true

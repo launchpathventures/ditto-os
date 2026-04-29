@@ -1,7 +1,7 @@
 # Brief 211: Workspace ChatPanel — Streamed Messages Stomped After Stream Completes
 
 **Date:** 2026-04-21
-**Status:** ready
+**Status:** complete (2026-04-21, shipped in PR #36 / commit `5f74ebb`; Documenter close-out 2026-04-29 — 8-day late retro because the fix was bundled into a multi-brief PM-triage PR that skipped per-brief Documenter discipline)
 **Depends on:** none (regression fix; PR #35 introduced)
 **Unlocks:** un-skip 10 e2e specs (`packages/web/e2e/{blocks,pipeline,planning}.spec.ts`); workspace conversation surface becomes usable; `/drain-queue` autopilot regains full e2e coverage
 

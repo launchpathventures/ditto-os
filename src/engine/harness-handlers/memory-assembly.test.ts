@@ -262,6 +262,233 @@ describe("memory-assembly handler", () => {
     });
   });
 
+  describe("project memory scope (Brief 227)", () => {
+    async function seedProject(id: string, slug: string) {
+      await testDb.insert(schema.projects).values({
+        id,
+        slug,
+        name: slug,
+        kind: "build",
+        harnessType: "native",
+        status: "active",
+      } as any);
+    }
+
+    async function seedProcess(id: string, projectId: string | null) {
+      await testDb.insert(schema.processes).values({
+        id,
+        name: id,
+        slug: id,
+        definition: {} as any,
+        projectId,
+      });
+    }
+
+    async function seedMemory(opts: {
+      scopeType: "process" | "self";
+      scopeId: string;
+      content: string;
+      appliedProjectIds?: string[] | null;
+    }) {
+      await testDb.insert(schema.memories).values({
+        scopeType: opts.scopeType,
+        scopeId: opts.scopeId,
+        type: "correction",
+        content: opts.content,
+        source: "feedback",
+        confidence: 0.8,
+        reinforcementCount: 3,
+        active: true,
+        appliedProjectIds: opts.appliedProjectIds ?? null,
+      });
+    }
+
+    it("loads process-scope memory tagged to a project-mate process (cross-process within same project)", async () => {
+      await seedProject("p1", "proj-a");
+      await seedProcess("proc-a1", "p1");
+      await seedProcess("proc-a2", "p1");
+      await seedMemory({
+        scopeType: "process",
+        scopeId: "proc-a1",
+        content: "Always cite the source",
+      });
+
+      const context = makeContext({ processId: "proc-a2" });
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memories).toContain("Always cite the source");
+      expect(result.projectId).toBe("p1");
+    });
+
+    it("does NOT load process-scope memory from a different project (no bleed)", async () => {
+      await seedProject("p1", "proj-a");
+      await seedProject("p2", "proj-b");
+      await seedProcess("proc-a", "p1");
+      await seedProcess("proc-b", "p2");
+      await seedMemory({
+        scopeType: "process",
+        scopeId: "proc-a",
+        content: "Project A correction — should not bleed",
+      });
+
+      const context = makeContext({ processId: "proc-b" });
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memories).not.toContain("Project A correction");
+      expect(result.projectId).toBe("p2");
+    });
+
+    it("loads self-scope memory with appliedProjectIds=null (full self-scope) for any project run", async () => {
+      await seedProject("p1", "proj-a");
+      await seedProcess("proc-a", "p1");
+      await seedMemory({
+        scopeType: "self",
+        scopeId: "user-1",
+        content: "User prefers terse responses",
+        appliedProjectIds: null,
+      });
+
+      const context = makeContext({ processId: "proc-a" });
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memories).toContain("User prefers terse responses");
+    });
+
+    it("loads self-scope memory only when appliedProjectIds contains current projectId (hybrid)", async () => {
+      await seedProject("p1", "proj-a");
+      await seedProject("p2", "proj-b");
+      await seedProject("p3", "proj-c");
+      await seedProcess("proc-a", "p1");
+      await seedProcess("proc-c", "p3");
+      await seedMemory({
+        scopeType: "self",
+        scopeId: "user-1",
+        content: "Brand voice rule for marketing repos",
+        appliedProjectIds: ["p1", "p2"],
+      });
+
+      // Runs against project p1 — memory should load (p1 is in appliedProjectIds)
+      const ctxP1 = makeContext({ processId: "proc-a" });
+      const r1 = await memoryAssemblyHandler.execute(ctxP1);
+      expect(r1.memories).toContain("Brand voice rule for marketing repos");
+
+      // Runs against project p3 — memory should NOT load (p3 not in appliedProjectIds)
+      const ctxP3 = makeContext({ processId: "proc-c" });
+      const r3 = await memoryAssemblyHandler.execute(ctxP3);
+      expect(r3.memories).not.toContain("Brand voice rule for marketing repos");
+    });
+
+    it("legacy fallback: pre-project-era process (projectId=null) uses single-process scope match", async () => {
+      // Process has no projectId (pre-project-era). Memory tagged to it loads.
+      await seedProcess("proc-legacy", null);
+      await seedMemory({
+        scopeType: "process",
+        scopeId: "proc-legacy",
+        content: "Legacy correction — single-process scope",
+      });
+
+      const context = makeContext({ processId: "proc-legacy" });
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memories).toContain("Legacy correction — single-process scope");
+      expect(result.projectId).toBeNull();
+    });
+
+    it("backfill discipline (AC #12): pre-project-era memory loads in any project run", async () => {
+      // Pre-project-era memory: source process has no projectId
+      await seedProcess("proc-legacy", null);
+      await seedMemory({
+        scopeType: "process",
+        scopeId: "proc-legacy",
+        content: "Pre-projects implicit-everywhere memory",
+      });
+
+      // Current run is in a real project
+      await seedProject("p1", "proj-a");
+      await seedProcess("proc-a", "p1");
+
+      const context = makeContext({ processId: "proc-a" });
+      const result = await memoryAssemblyHandler.execute(context);
+      expect(result.memories).toContain("Pre-projects implicit-everywhere memory");
+    });
+
+    it("performance tripwire: project-scope query stays under 50ms p95 with 1K memories", async () => {
+      await seedProject("p1", "proj-a");
+      // Seed 50 sibling processes belonging to p1
+      const projectMateProcessIds: string[] = [];
+      for (let i = 0; i < 50; i++) {
+        const pid = `proc-mate-${i}`;
+        await seedProcess(pid, "p1");
+        projectMateProcessIds.push(pid);
+      }
+
+      // Seed 1000 process-scope memories spread across the project's processes
+      for (let i = 0; i < 1000; i++) {
+        const proc = projectMateProcessIds[i % projectMateProcessIds.length];
+        await testDb.insert(schema.memories).values({
+          scopeType: "process",
+          scopeId: proc,
+          type: "correction",
+          content: `seed-memory-${i}`,
+          source: "feedback",
+          confidence: 0.5,
+          reinforcementCount: 1,
+          active: true,
+        });
+      }
+
+      // Run multiple iterations and take p95
+      const context = makeContext({ processId: projectMateProcessIds[0] });
+      const samples: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        const start = performance.now();
+        await memoryAssemblyHandler.execute(context);
+        samples.push(performance.now() - start);
+      }
+      samples.sort((a, b) => a - b);
+      const p95 = samples[Math.floor(samples.length * 0.95)];
+      // Tripwire: 50ms p95 — if we cross this, follow-on brief lifts to junction table
+      expect(p95).toBeLessThan(50);
+    });
+
+    it("performance tripwire (Reviewer IMP-6): self-scope appliedProjectIds json_each lateral stays under 50ms p95 with 1K hybrid memories", async () => {
+      // Seed 5 projects + 1 process per project so the hybrid memories have
+      // a believable surface to filter against.
+      const projectIds = ["p1", "p2", "p3", "p4", "p5"];
+      for (const pid of projectIds) {
+        await seedProject(pid, `proj-${pid}`);
+        await seedProcess(`proc-${pid}`, pid);
+      }
+
+      // Seed 1000 self-scope memories with appliedProjectIds = 5-element arrays
+      // including p1 — exercises the json_each lateral the brief committed to.
+      for (let i = 0; i < 1000; i++) {
+        const applied = [...projectIds]; // every memory targets p1 plus 4 others
+        await testDb.insert(schema.memories).values({
+          scopeType: "self",
+          scopeId: `user-${i}`,
+          type: "correction",
+          content: `hybrid-memory-${i}`,
+          source: "feedback",
+          confidence: 0.5,
+          reinforcementCount: 1,
+          active: true,
+          appliedProjectIds: applied,
+        });
+      }
+
+      const context = makeContext({ processId: "proc-p1" });
+      const samples: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        const start = performance.now();
+        await memoryAssemblyHandler.execute(context);
+        samples.push(performance.now() - start);
+      }
+      samples.sort((a, b) => a - b);
+      const p95 = samples[Math.floor(samples.length * 0.95)];
+      // Tripwire: same 50ms p95 — but the load-bearing slow path here is the
+      // json_each lateral, NOT the inArray sub-query. If this fires, the
+      // junction-table follow-up applies.
+      expect(p95).toBeLessThan(50);
+    });
+  });
+
   describe("memoriesDropped (Brief 175)", () => {
     it("is zero when no memories exist", async () => {
       const context = makeContext();

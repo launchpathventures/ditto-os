@@ -1198,6 +1198,14 @@ export const runnerDispatches = sqliteTable("runner_dispatches", {
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
   status: text("status").notNull().$type<RunnerDispatchStatusValue>().default("queued"),
   errorReason: text("error_reason"),
+  /**
+   * Brief 232 — opaque JSON channel for the runner's structured response.
+   * The retrofitter (Brief 228) reads `{ commitSha, actuallyChangedFiles,
+   * skippedFiles? }` from here; future task types may use other shapes.
+   * Per-shape validation is consumer-side; the wire boundary
+   * (`workItemStatusUpdateSchema`) enforces object-ness only.
+   */
+  responseBody: text("response_body", { mode: "json" }).$type<Record<string, unknown> | null>(),
   /** Insight-180 audit FK. */
   stepRunId: text("step_run_id")
     .references(() => stepRuns.id)
