@@ -299,7 +299,7 @@ describe("loadSessionTurns", () => {
 
 describe("selfTools", () => {
   it("defines all delegation, consultation, planning, workspace, proactive, onboarding, confidence, knowledge, orchestration, editing, and browser tools", () => {
-    expect(selfTools).toHaveLength(32);
+    expect(selfTools).toHaveLength(36);
     const names = selfTools.map((t) => t.name);
     // Original 5
     expect(names).toContain("start_dev_role");
@@ -321,6 +321,10 @@ describe("selfTools", () => {
     expect(names).toContain("assess_confidence");
     // Brief 079 — Knowledge Base
     expect(names).toContain("search_knowledge");
+    // Brief 227 — memory scope promote/demote/dismiss
+    expect(names).toContain("promote_memory_scope");
+    expect(names).toContain("demote_memory_scope");
+    expect(names).toContain("dismiss_promotion_proposal");
   });
 
   it("start_dev_role accepts all 7 roles", () => {
@@ -441,8 +445,8 @@ describe("assembleSelfContext", () => {
 // ============================================================
 
 describe("consult_role tool definition", () => {
-  it("selfTools contains 32 tools including consult_role and plan_with_role", () => {
-    expect(selfTools).toHaveLength(32);
+  it("selfTools contains 36 tools including consult_role and plan_with_role", () => {
+    expect(selfTools).toHaveLength(36);
     const names = selfTools.map((t) => t.name);
     expect(names).toContain("consult_role");
     expect(names).toContain("plan_with_role");

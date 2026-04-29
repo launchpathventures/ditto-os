@@ -63,9 +63,9 @@ export async function PATCH(
     );
   }
 
-  const { db } = await import("../../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../../src/db");
   const { projectRunners } = await import(
-    "../../../../../../../../../../src/db/schema"
+    "../../../../../../../../../src/db/schema"
   );
   const projectId = await resolveProjectId(id);
   if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -99,9 +99,9 @@ export async function DELETE(
     return NextResponse.json({ error: `Unknown runner kind: ${kind}` }, { status: 400 });
   }
 
-  const { db } = await import("../../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../../src/db");
   const { projectRunners } = await import(
-    "../../../../../../../../../../src/db/schema"
+    "../../../../../../../../../src/db/schema"
   );
   const projectId = await resolveProjectId(id);
   if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });

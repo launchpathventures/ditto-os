@@ -37,6 +37,9 @@ export { trustGateHandler, setSessionTrustResolver, setSamplingSalt } from "./ha
 export { stepExecutionHandler, executeStep, setAdapterRegistry, setSystemAgentResolver } from "./handlers/step-execution.js";
 export { parseHarnessConfig, type HarnessConfig } from "./handlers/harness-config.js";
 
+// Shared helper for multi-step pipelines (Brief 228 / Insight-217)
+export { readPriorStepOutputs } from "./step-output-reader.js";
+
 // Model purpose resolution (Brief 128)
 export { modelPurposeResolverHandler, resolveModelPurpose } from "./handlers/model-purpose-resolver.js";
 

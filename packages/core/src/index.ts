@@ -71,6 +71,8 @@ export {
   voiceCalibrationHandler,
   broadcastDirectClassifierHandler,
   outboundQualityGateHandler,
+  // Brief 228 / Insight-217 — shared multi-step pipeline helper
+  readPriorStepOutputs,
 } from "./harness/index.js";
 
 // ============================================================
@@ -201,8 +203,40 @@ export {
   // webhook
   runnerWebhookSchema,
   localMacMiniStatusPayload,
+  claudeCodeRoutineStatusPayload,
+  claudeManagedAgentStatusPayload,
+  githubActionStatusPayload,
+  cloudRunnerCallbackStateValues,
+  routineCallbackStateValues,
+  workflowRunConclusionValues,
+  cloudRunnerStateToDispatchStatus,
+  routineStateToDispatchStatus,
   isKnownRunnerKind,
   type RunnerWebhookPayload,
+  type ClaudeCodeRoutineStatusPayload,
+  type ClaudeManagedAgentStatusPayload,
+  type GithubActionStatusPayload,
+  type CloudRunnerCallbackState,
+  type RoutineCallbackState,
+  type WorkflowRunConclusion,
+  // poll cadences
+  pollCadenceMs,
+  getPollCadenceMs,
+  pollableKinds,
+  // pause-payload helper (Brief 221)
+  mintRunnerDispatchPause,
+  parseKindOption,
+  type MintRunnerDispatchPauseInput,
+  type PauseWorkItemRef,
+  type PauseProjectRef,
+  type PauseRunnerOption,
+  type PauseCopy,
+  // status-card builder (Brief 221 §D6 + §D12)
+  buildRunnerDispatchCard,
+  isRunnerDispatchCard,
+  RUNNER_DISPATCH_CARD_KIND,
+  type BuildRunnerDispatchCardInput,
+  type RunnerDispatchCardMetadata,
 } from "./runner/index.js";
 
 // ============================================================
@@ -267,3 +301,8 @@ export {
   type RegisteredDevice,
   type LocalBridge,
 } from "./bridge/index.js";
+
+// ============================================================
+// Onboarding analyser intermediate types (Brief 226)
+// ============================================================
+export * from "./onboarding/types.js";

@@ -52,6 +52,15 @@ export type {
   SendingIdentityChoiceBlock,
   TrustMilestoneBlock,
   FormSubmitAction,
+  // Brief 226 — analyser report block + sub-types
+  AnalyserReportBlock,
+  Finding,
+  GoldStandardMatch,
+  RunnerRecommendation,
+  TrustTierRecommendation,
+  // Brief 228 — project retrofit plan block
+  RetrofitPlanBlock,
+  RetrofitPlanStatus,
 } from "../../../src/engine/content-blocks";
 // renderBlockToText is a pure function — import it directly from
 // @engine/content-blocks in client components to avoid pulling in

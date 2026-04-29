@@ -12,6 +12,8 @@
 import { z } from "zod";
 import { type RunnerKind } from "@ditto/core";
 import { localMacMiniConfigSchema } from "../adapters/local-mac-mini.js";
+import { managedAgentConfigSchema } from "../adapters/claude-managed-agent.js";
+import { githubActionConfigSchema } from "../adapters/github-action.js";
 
 const claudeCodeRoutineSchema = z.object({
   endpoint: z.string().url(),
@@ -22,16 +24,17 @@ const claudeCodeRoutineSchema = z.object({
   credentialService: z.string().min(1).optional(),
 });
 
-const claudeManagedAgentSchema = z.object({
-  agentId: z.string().min(1),
-  credentialService: z.string().min(1).optional(),
-});
+/**
+ * Brief 217 — re-export the adapter schema as the canonical source. Replaces
+ * the pre-Brief-217 placeholder (`agentId` + `credentialService`).
+ */
+const claudeManagedAgentSchema = managedAgentConfigSchema;
 
-const githubActionSchema = z.object({
-  repo: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/),
-  workflowFile: z.string().min(1),
-  credentialService: z.string().min(1).optional(),
-});
+/**
+ * Brief 218 — re-export the adapter schema as the canonical source. Replaces
+ * the pre-Brief-218 placeholder (`repo` + `workflowFile` + `credentialService`).
+ */
+const githubActionSchema = githubActionConfigSchema;
 
 const e2bSandboxSchema = z.object({
   template: z.string().min(1),

@@ -1,0 +1,6 @@
+[project]
+name = "python-stub-pyproject-fixture"
+version = "0.0.0"
+
+# Intentionally NO [tool.pytest] block — the test-framework detector must
+# fall through to pytest.ini below instead of bailing early.

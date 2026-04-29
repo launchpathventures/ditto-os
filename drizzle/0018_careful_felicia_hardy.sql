@@ -1,0 +1,1 @@
+ALTER TABLE `runner_dispatches` ADD `response_body` text;

@@ -76,6 +76,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 - Layer: 4 (Awareness)
 - Related: Process Graph, Dependency Graph, Event Propagation, Process Layer
 
+**Block Primitive** — One of six canonical compositional units defined by the Anthropic Claude Design package (`workspace/blocks.js`): `block.breakdown`, `block.decision`, `block.plan`, `block.compare`, `block.evidence`, `block.people`. Plus one Ditto-original sibling primitive `block.findings` (sectioned-list-with-tone-coded-header) added in Brief 230. Block primitives sit *below* the 16 Conceptual Primitives — they are CSS-level composition shapes that block renderers consume by class name. See `docs/architecture.md` §Layer 6 "Design-token-vs-component-class layering" for the full boundary.
+- Layer: 6 (Human)
+- Related: Bundled Component Class, Design-Token-vs-Component-Class Boundary, ContentBlock
+
 **Borrowing Strategy** — The approach of composing proven patterns from existing open-source projects rather than inventing from scratch. Codified in the architecture spec's borrowing table mapping needs to source projects.
 - Layer: Meta
 - Related: Composition Over Invention, Paperclip, ralph, antfarm, gstack, compound-product
@@ -99,6 +103,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 **Builder** — An agent role in the coding team responsible for implementing code. Based on the ralph autonomous loop pattern. Serves Feature Implementation (step 3) and Bug Investigation (step 5).
 - Layer: 2 (Agent)
 - Related: Planner, Reviewer, ralph, Feature Implementation
+
+**Bundled Component Class** — The CSS implementation of a Block Primitive in our codebase, authored at `packages/web/app/design-system.css` (imported into `globals.css`). Class names match the Anthropic Claude Design package's `workspace/blocks.js` strings verbatim (e.g., `.block.decision`, `.dopt.rec`, `.recbadge`, `.alex-line`, `.eline`, `.pstep`). Block renderers compose by class name (`<section className="block findings tone-positive">`) instead of authoring per-renderer Tailwind utility maps. Introduced in Brief 230. Per-renderer promotion (utility-mapped → bundled-class composition) happens organically as briefs touch each renderer.
+- Layer: 6 (Human)
+- Related: Block Primitive, Design-Token-vs-Component-Class Boundary, ContentBlock
 
 **Capability Catalog** — The model for Ditto's process library: a guided, evolving capability catalog (not an app store or raw templates). The platform acts as a consultant, recognising pain points and assembling capabilities into processes.
 - Layer: 6 (Human)
@@ -239,6 +247,10 @@ The canonical reference for every key term, concept, and component in Ditto. Thi
 **Dependency Graph** — The live graph created by processes declaring their inputs (sources) and outputs (destinations). Enables impact propagation, bottleneck detection, and cross-process intelligence.
 - Layer: 4 (Awareness)
 - Related: Awareness Layer, Process Graph, Event Propagation
+
+**Design-Token-vs-Component-Class Boundary** — The Layer 6 styling principle codified in Brief 230. Tokens (colors, fonts, type scale, spacing, radius, shadows) live inside the Tailwind v4 `@theme` block at `packages/web/app/globals.css`; component classes (the six Block Primitives + chrome + composition helpers) live in a sibling `packages/web/app/design-system.css`. The design package preserved at `.context/attachments/design-package-2026-04-27/` is the source-of-truth-mirror. Block renderers compose by class name; mass-promotion of utility-mapped renderers is intentionally deferred. See `docs/architecture.md` §Layer 6 "Design-token-vs-component-class layering" for the full specification.
+- Layer: 6 (Human)
+- Related: Block Primitive, Bundled Component Class, ContentBlock
 
 **Edit** — A feedback action in the Review Queue where the human modifies agent output. The diff between original and edited output is captured structurally as implicit feedback, enabling correction pattern extraction.
 - Layer: 6 (Human)
@@ -908,9 +920,75 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 - Layer: 1 (Process)
 - Related: WorkItem, Status Webhook
 
-**Status Webhook** — `POST /api/v1/work-items/:id/status`. Bearer-token gated against `projects.runnerBearerHash` of the work item's project. Updates `briefState`, `stateChangedAt`, optionally `linkedProcessRunId`. Bridges `runner_dispatches` lifecycle when `runnerKind` + `externalRunId` provided. Writes `activities` row with `action='work_item_status_update'`. Insight-180 bounded waiver: missing `stepRunId` is allowed but recorded as `metadata.webhook.guardWaived = true`.
+**Status Webhook** — `POST /api/v1/work-items/:id/status`. Bearer-token gated against `projects.runnerBearerHash` of the work item's project (long-lived) OR `runner_dispatches.callback_token_hash` of an active dispatch (per-dispatch ephemeral, Brief 216). Updates `briefState`, `stateChangedAt`, optionally `linkedProcessRunId`. Bridges `runner_dispatches` lifecycle when `runnerKind` + `externalRunId` provided. Writes `activities` row with `action='work_item_status_update'` and `metadata.webhook.bearerSource ∈ {ephemeral, project}`. Insight-180 bounded waiver: missing `stepRunId` is allowed but recorded as `metadata.webhook.guardWaived = true`.
 - Layer: 1 (Process API)
-- Related: Brief State, Insight-180, Runner Dispatch
+- Related: Brief State, Insight-180, Runner Dispatch, Ephemeral Callback Token
+
+### Cloud Execution — Routine Dispatcher (Brief 216)
+
+**Routine** — Anthropic's Claude Code Routines research-preview feature. A persistent, web-fired Claude Code session triggered via `POST https://api.anthropic.com/v1/claude_code/routines/{trigger_id}/fire` with bearer + `experimental-cc-routine-2026-04-01` beta header. Returns `{claude_code_session_id, claude_code_session_url}` synchronously; terminal state is back-channeled via in-prompt callback (Ditto's status webhook) plus GitHub fallback events on PR / workflow_run / deployment_status.
+- Layer: 3 (Harness — runner)
+- Related: Routine Trigger, Ephemeral Callback Token, Default Review Path
+
+**Routine Trigger** — The HTTP-fireable handle to a Routine, identified by a `trigger_id` segment in the `/fire` endpoint URL. Created in Anthropic's web UI; the URL + bearer are pasted into Ditto's `/projects/[slug]/runners` form. One trigger = one runner = one project_runners row of kind `claude-code-routine`.
+- Layer: 3 (Harness — runner config)
+- Related: Routine
+
+**Ephemeral Callback Token** — Per-dispatch random token generated by the Routine adapter at execute() entry. bcrypt-hashed (cost 12) into `runner_dispatches.callback_token_hash`; plaintext appears only in the prompt sent to Anthropic for the duration of the dispatch and is forgotten by Ditto immediately after. The status webhook accepts EITHER the long-lived `projects.runnerBearerHash` (for non-prompt-composing runners) OR this ephemeral token (for prompt-composing runners). Token capability is strictly less than the project bearer: it can post one status update for one specific dispatch.
+- Layer: 3 (Harness — security)
+- Related: Routine, Status Webhook
+
+**Default Review Path** — Brief 214 §D11 discipline: every cloud runner's prompt invokes the `/dev-review` skill in-session and posts its output as a PR comment. The Routine adapter is the first runner where this is implemented. Catalyst projects rely on `.catalyst/skills/dev-review/SKILL.md` in the cloned repo; native projects inline the skill text from Ditto's deployed binary (capped at 4 KB per Brief 216 §D7). No optional review integrations (Greptile / Argos) — Brief 219 owns those.
+- Layer: 3 (Harness — review)
+- Related: Routine, dev-review skill
+
+**Vercel Preview URL Inline Card** — The conversation-surface card emitted when a `deployment_status` event with `state==="success"` and a non-production `environment` arrives on a routine-configured repo. Detection rule (Brief 216 §D5): `state === "success" && environment !== "Production" && environment !== project.deployTargetEnvironment`. Vendor-agnostic — Vercel "Preview", Netlify "deploy-preview", custom-staging all surface as previews. Production deploys are no-op here (Brief 220 owns the deploy-gate state machine).
+- Layer: 3 (Harness — observability) / Layer 6 (Human — conversation surface)
+- Related: Routine, Default Review Path
+
+### Cloud Execution — Managed Agents Dispatcher (Brief 217)
+
+**Managed Agent** — Anthropic's Managed Agents beta product. A persistent, container-based agent execution service (Agent + Environment + Session + Events). Sibling cloud runner to Routines with a different fit envelope: Routines are fire-and-forget; Managed Agents earn complexity when work needs steering, structured tool confirmations, or rubric-graded outcomes. Auth via `x-api-key` + `anthropic-beta: managed-agents-2026-04-01`.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agents Session, Polling-Primary Status, Cloud Runner Prompt Composer
+
+**Managed Agents Session** — A running instance of a Managed Agent, identified by an Anthropic-issued `session_id`. Created per dispatch via `POST /v1/sessions`; first work kicked off via `POST /v1/sessions/{id}/events` with a `user.message` event. Lifecycle: `idle | running | rescheduling | terminated`. Lifecycle observed via the polling cron (`GET /v1/sessions/{id}` + recent events) and the GitHub fallback handler. Best-effort archive on terminal state via `POST /v1/sessions/{id}/archive`.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agent, Terminal-State Heuristic
+
+**Polling-Primary Status** — Brief 217 §D2 status discipline. Anthropic's Managed Agents API does NOT ship a native completion event for "agent finished its assigned work"; the polling cron at `src/engine/runner-poll-cron.ts` walks non-terminal `claude-managed-agent` dispatches every 30 seconds (per `pollCadenceMs` in `@ditto/core`) and applies the terminal-state heuristic. Distinct from Brief 216's Routines, which are GitHub-events-only. The optional in-prompt callback path (`callback_mode='in-prompt'`) is OFF by default.
+- Layer: 3 (Harness — runner)
+- Related: Managed Agents Session, Terminal-State Heuristic, Cross-Runner Poll Cron
+
+**Terminal-State Heuristic** — Brief 217 §D2 7-row table mapping (session.status, last events, time since dispatch) onto `runner_dispatches.status`. Conservative: `terminated→failed`; `running/rescheduling→running`; `idle + agent.message + idle for >threshold→succeeded`; `idle + agent.error→failed/rate_limited/timed_out` per error pattern; `idle + pending agent.tool_use→running` (no auto-fail at MVP — steering surface absent); `idle + dispatch grace not elapsed→running`. Ambiguous idle stays `running` until either GitHub PR-merged event arrives (authoritative success) or staleness sweeper marks dispatch orphaned. Configurable via `MANAGED_AGENT_TERMINAL_IDLE_THRESHOLD_MS` + `MANAGED_AGENT_DISPATCH_GRACE_MS`.
+- Layer: 3 (Harness — runner)
+- Related: Polling-Primary Status, Cross-Runner Poll Cron
+
+**Cross-Runner Poll Cron** — `src/engine/runner-poll-cron.ts`. Periodic worker that walks non-terminal `runner_dispatches` rows for kinds registered in `pollCadenceMs` (engine-core), calls each row's adapter `status()` per its kind cadence, and persists state transitions via the shared state machine. Currently registers only `claude-managed-agent` at 30s; routines stay GitHub-events-only per Brief 216 design. Adapter throws are isolated per-row. Boot-side `startRunnerPollCron()` wires from `instrumentation.ts`.
+- Layer: 3 (Harness — runner)
+- Related: Polling-Primary Status, Terminal-State Heuristic
+
+**Cloud Runner Prompt Composer** — `src/adapters/cloud-runner-prompt.ts`. Kind-agnostic prompt composition shared by `claude-code-routine` (Brief 216) and `claude-managed-agent` (Brief 217). Renamed from `routine-prompt.ts` per Brief 217 §D14 coordination. Sections: work-item body (always), `/dev-review` directive (always; for native projects skill text inlined at 4 KB cap), optional INTERNAL callback section (only when `ephemeralToken` is supplied; the runner_kind literal is parametrized so the receiving session sends the correct kind label back).
+- Layer: 3 (Harness — runner shared)
+- Related: Managed Agent, Routine, Default Review Path
+
+**Optional In-Prompt Callback** — Brief 217 §D3 mode (`callback_mode='in-prompt'`, OFF by default). When enabled, the managed-agent adapter generates a per-dispatch ephemeral token (bcrypt cost 12 hash on `runner_dispatches.callback_token_hash`, plaintext only in the prompt sent to Anthropic), and the composed prompt's INTERNAL section instructs the session to POST status back to Ditto's webhook on terminal state. Default `polling` mode skips this entirely. Reuses Brief 216's column without schema additions.
+- Layer: 3 (Harness — security)
+- Related: Managed Agent, Polling-Primary Status, Ephemeral Callback Token
+
+### Project Onboarding — Connection-as-Process (Brief 225)
+
+**Project Kind** — `projects.kind`: `'build' | 'track'` (default `'build'`). `'build'` projects are connected to a repo and managed by Ditto's runner pipeline; `'track'` projects are passively monitored (manual-entry flow, future brief). Brief 225's onboarding flow creates `'build'`-kind projects only. Schema-side enum at `packages/core/src/db/schema.ts:projectKindValues`.
+- Layer: 1 (Process — substrate)
+- Related: Onboarding Run, Connection Form
+
+**Onboarding Run** — A `process_runs` row whose `processId` resolves to `processes/project-onboarding.yaml` (slug `project-onboarding`). Triggered by `POST /api/v1/projects` with `kickOffOnboarding: true`. Walks two placeholder steps (`clone-and-scan` no-op + `surface-report` writes the report stub); sub-brief #2 fills the steps in. The run drives the chat-col surface at `/projects/:slug/onboarding`.
+- Layer: 1 (Process — system process) / Layer 6 (Human — chat-col surface)
+- Related: Project Kind, Connection Form, Default Review Path
+
+**Connection Form** — The URL-paste form rendered by reusing the existing `ConnectionSetupBlock` ContentBlock with `serviceName: 'github-project'`. The block's existing `connectionStatus` state machine (`disconnected | connecting | connected | error`) is wired to the URL-probe. Per Designer spec §Stage 0, both the conversational entry path (Self emits the block) and the sidebar entry path ("Connect a project" CTA seeds a Self message) converge on the same conversation-embedded form. NOT a separate `/projects/new` route — the block renders inline in the chat-col.
+- Layer: 6 (Human — chat-col surface)
+- Related: Project Kind, Onboarding Run, ConnectionSetupBlock
 
 ## Workspace Local Bridge (Brief 212)
 
@@ -937,3 +1015,129 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Orphaned Job** — A `bridge_jobs` row that was `running` but whose `lastHeartbeatAt` exceeded `ORPHAN_STALENESS_MS` (10 min). Transitioned to `orphaned` by the cloud-side staleness sweeper. Writes a `harness_decisions` row with `trustAction='pause'` + `reviewDetails.bridge.orphaned=true` so the review surface knows to flag it for human attention. The pause action is the existing-enum signal, NOT a new "escalate" value.
 - Layer: 3 (Harness)
 - Related: Bridge Job, Sweeper
+
+## Project Memory Scope (Brief 227)
+
+**Project Memory Scope** — The discipline that prevents corrections taught on project-A from bleeding into project-B's runs. Process-scoped memories load for any process in the same project, joined via `processes.projectId`. NOT a new value in `memoryScopeTypeValues` (`agent | process | self | person` is unchanged); project-scope is an emergent property of the join. Memory writes inherit the writing process's `projectId` automatically (no new `projectId` column on `memories` — inheritance is via the source process FK at retrieval time). Pre-project-era memories (source process `projectId IS NULL`) load across all projects for backwards compat.
+- Layer: 3 (Harness — memory-assembly read sites at `src/engine/harness-handlers/memory-assembly.ts`)
+- Related: Memory Promotion, Multi-Project Memory, ADR-003 §6
+
+**Memory Promotion** — The user-action by which a project-scoped memory is widened to apply across additional projects (or all projects). Surfaced via three UX surfaces (Designer spec): memory detail card (PRIMARY), citation chip peek (SECONDARY), proactive Self proposal in briefings (TERTIARY). Implemented by the `promote_memory_scope` Self tool; reverse direction is `demote_memory_scope`. Both tools require `stepRunId` (Insight-180 guard) and log the change to `activities` (`action='memory_promote'` / `'memory_demote'`). Promotion is ALWAYS an explicit user signal — Insight-127 forbids auto-promotion; the harness manages, the agent proposes, the user decides.
+- Layer: 3 / 6 (harness Self tools + Decide-job UI surface)
+- Related: Project Memory Scope, Multi-Project Memory, Insight-127
+
+**Multi-Project Memory** — A self-scope memory whose `appliedProjectIds: string[]` column lists a specific subset of projects the memory applies to (the hybrid case). When `appliedProjectIds` is null/empty, the memory applies everywhere (full self-scope per ADR-003 semantics). When non-empty, the memory only loads for runs whose process belongs to a listed project. The fourth scope-pill variant `<N> projects` renders for this case (extending Designer's three-pill spec). Single-row JSON-array model chosen over duplication and over a junction table (Architect's call on Designer Open Q1; junction tripwire fires at 5K rows or 50ms p95).
+- Layer: 1 (Data — `memories.appliedProjectIds` column added Brief 227)
+- Related: Project Memory Scope, Memory Promotion
+
+## Project Onboarding — In-Depth Analyser (Brief 226)
+
+**Analyser Report** — The structured `AnalyserReportBlock` ContentBlock (27th type in the discriminated union) produced by the `project-onboarding.yaml` system process at the end of its 9-step pipeline. Carries `entityType + entityId` (FK to the `workItems` row backing the report), `projectId`, `atAGlance` (`stack`, `metadata`, `looksLike` descriptor, `nearestNeighbours`), `strengths/watchOuts/missing` finding lists, `recommendation` (runner + trust tier with rationale + alternatives), `status: 'draft' | 'submitted' | 'active'`, and an optional `detectorErrors` partial-success side-car. Stored in `workItems.context.analyserReport` and mirrored into `harness_decisions.reviewDetails` for audit. Renders inline in the chat-col via `packages/web/components/blocks/analyser-report-block.tsx`.
+- Layer: 1 (data — content-block taxonomy in `packages/core/src/content-blocks.ts`) / Layer 6 (human — chat-col surface)
+- Related: Persona-fit Descriptor, Gold-standard Match, Onboarding Run
+
+**Persona-fit Descriptor** — A user-facing string ("mid-size org tooling, mature CI", "team-output review with quality gating", "data / scripting toolchain, test-backed") produced by `src/engine/onboarding/persona-fit.ts:scorePersonaFit()` and surfaced in the analyser report's at-a-glance `looksLike` field. Type-system enforced (Brief 226 §Constraints IMPORTANT #8): `scorePersonaFit` returns ONLY `{ descriptor: string }` — internal persona-shape labels (`jordan-shaped`, `lisa-shaped`, etc.) stay inside the scoring module and are NEVER exported. A unit test asserts the descriptor never matches the internal-label regex `/-shaped\b/i`. NOT to be confused with persona names like "Jordan" or "Lisa" — those are internal-research vocabulary and forbidden at the user surface (Designer Reviewer Critical #4).
+- Layer: 6 (human — at-a-glance copy)
+- Related: Analyser Report, Personas
+
+**Gold-standard Match** — A `GoldStandardMatch` entry (`{ name, url, rationale }`) returned by `src/engine/onboarding/gold-standard.ts:matchGoldStandard()`. Sourced from a Researcher-curated `docs/landscape-index.json` corpus (each entry: `{ name, url, stackSignals: string[], oneLineRationale }`); ranked by stack-signal overlap with the analyser's detected signals; top 1-3 returned. Brief 226 ships in MVP-graceful mode: when the index file does NOT yet exist, returns an EMPTY ARRAY and the report renders without nearestNeighbours. The Researcher creates / maintains the index in a follow-on; until then, this is a placeholder data path. Pure stack-signal matching against landscape entries — NOT freeform `landscape.md` parsing, NOT live web search, NOT embedding similarity (those are explicit non-goals at this brief's scope).
+- Layer: 1 (data — landscape corpus reader) / Layer 6 (human — at-a-glance link row)
+- Related: Analyser Report, `docs/landscape.md`
+
+## GitHub Action Runner (Brief 218)
+
+**GitHub Action Runner** — A `project_runners` row of kind `github-action`. Per-project handle to a user-controlled `.github/workflows/<file>.yml` workflow that Ditto fires via `POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches`. Runs on the user's GitHub Actions runner infrastructure; Ditto observes via webhook events (`workflow_run`, `pull_request`, `check_run`, `deployment_status`) routed through the kind-agnostic fallback handler. 60s polling backup catches missed deliveries. The third cloud-runner adapter shipped (after Routine + Managed Agents).
+- Layer: 3 (Harness — adapter at `src/adapters/github-action.ts`)
+- Related: Workflow Dispatch, Workflow Run, Cloud-Runner Callback Mode, Template Workflow File
+
+**Workflow Dispatch** — GitHub's REST endpoint `POST /repos/{o}/{r}/actions/workflows/{file}/dispatches` that fires a `workflow_dispatch` event in a target repo. Returns the new run's ID synchronously since 2026-02-19 (previously 204 No Content; the adapter falls back to `listWorkflowRuns?event=workflow_dispatch` when the response lacks `id`). Auth via `Authorization: Bearer <pat>` with `actions:write` scope. The body shape is `{ ref, inputs }`; Ditto encodes `work_item_id`, `work_item_body`, `harness_type`, `stepRunId`, optional `callback_url` + `dev_review_skill_url` into `inputs`.
+- Layer: 3 (Harness — `src/adapters/github-action.ts:execute()`)
+- Related: GitHub Action Runner, Dispatch Inputs
+
+**Workflow Run** — A GitHub Actions `workflow_run` row visible at `https://github.com/<owner>/<repo>/actions/runs/<id>`. State machine: `queued | waiting | pending | in_progress | completed`. On `completed`, the `conclusion` field carries one of `success | failure | cancelled | timed_out | action_required | neutral | skipped | stale`. Ditto's `mapWorkflowRunToDispatchStatus()` (Brief 218 §D9) decodes `(status, conclusion)` to the `runner_dispatches.status` enum: success → succeeded, failure → failed, cancelled → cancelled, timed_out → timed_out, action_required → failed (errorReason), neutral → succeeded (soft-pass), skipped → cancelled, **stale → cancelled** (Reviewer IMP-1: superseded run is semantically a cancellation).
+- Layer: 3 (Harness — `cloud-runner-fallback.ts` + `runner-poll-cron.ts`)
+- Related: Workflow Dispatch, GitHub Action Runner
+
+**Dispatch Inputs** — The fixed `workflow_dispatch.inputs` shape Ditto's adapter populates and the template workflow declares: `work_item_id` (required), `work_item_body` (required, capped at 50 KB), `harness_type` (catalyst | native | none), `stepRunId` (Insight-180 audit ID), `external_run_id` (optional, for in-workflow callback shapes), `callback_url` (optional Ditto status webhook URL — present in `in-workflow` and `in-workflow-secret` modes), `dev_review_skill_url` (optional URL to inline the dev-review skill on native projects). GitHub caps each input at 65 KB; Ditto reserves ~15 KB for fallback skill text.
+- Layer: 3 (Harness — adapter ↔ template wire format)
+- Related: Workflow Dispatch, Template Workflow File, Cloud-Runner Callback Mode
+
+**Template Workflow File** — A copy-pasteable workflow YAML at `docs/runner-templates/dispatch-coding-work.yml` shipped as **documentation, not code** (Brief 218 §D16). Ditto does NOT auto-commit YAML to user repos; the user copies the template into their `.github/workflows/` themselves. The admin form at `/projects/<slug>/runners` shows the template behind a "Show template" toggle and offers a "Copy template" clipboard button. Updating the template is a doc change; the in-page string in `packages/web/app/projects/[slug]/runners/page.tsx` (`DISPATCH_CODING_WORK_YML`) MUST be refreshed in lockstep so the admin form stays accurate.
+- Layer: 6 (Human — admin UX) / Documentation
+- Related: GitHub Action Runner, Workflow Dispatch
+
+**Cloud-Runner Callback Mode** — The cross-runner term covering the per-runner-row choice of how the runner reports status back to Ditto. Three modes for `github-action` (Brief 218 §D3): `webhook-only` (default; safest — GitHub events alone), `in-workflow-secret` (workflow uses `secrets.DITTO_RUNNER_BEARER`, the long-lived project bearer; user pastes plaintext into repo Secrets once; GitHub auto-masks repo secrets in logs), `in-workflow` (per-dispatch ephemeral token in `inputs.callback_url` query string; NOT log-masked because GitHub doesn't auto-mask `workflow_dispatch` inputs — explicit risk acceptance: tokens are one-trip and per-dispatch). Brief 217's managed-agent uses a similar two-mode shape: `polling` | `in-prompt`. Brief 216's routine is always in-prompt (no choice). The cross-cutting term lets briefs reference the discipline without naming each kind's specific values.
+- Layer: 3 (Harness — adapter config schema)
+- Related: GitHub Action Runner, Ephemeral Callback Token
+
+## Deploy Gate (Brief 220)
+
+**Deploy Gate** — The production-deploy approval moment a project's `deploy-prod.yml` workflow gates on. Concretely: a GitHub Environment named `production` (or matching `project.deployTargetEnvironment`) with at least one Required Reviewer. The workflow's deploy job declares `environment: production`, which causes GitHub to pause the job until the reviewer approves via GitHub Mobile (push notification → tap → approve dialog → approve). Ditto observes the approval lifecycle via `deployment_status` webhook events (`queued` → `in_progress` → `success | failure | error`) and drives the work item's `briefState` through `shipped → deploying → deployed | deploy_failed`. The gate is GitHub-side (Required Reviewer); Ditto is the observer + UX surface only.
+- Layer: 1 (Process) / 6 (Human — Decide-job moment)
+- Related: GitHub Environment, Required Reviewer, Deploying State, Deployed State, Deploy Failed State
+
+**Deploying State** — `briefState='deploying'`. The work item's PR has merged; the production-deploy workflow is queued or actively running. Set by `cloud-runner-fallback.ts:processProductionDeployStatus()` in response to `deployment_status: queued | in_progress` events on the project's `deployTargetEnvironment`. The `queued` event additionally emits a `mobileApproveAction` payload that the conversation surface renders as an `ActionBlock` deep-linking into GitHub Mobile's deployment-review-pending dialog. Successor states: `deployed` (success) or `deploy_failed` (failure/error). Out-of-order tolerated: `shipped → deployed | deploy_failed` direct transitions admitted when GitHub's webhook delivery is reordered.
+- Layer: 1 (Data — `work_items.brief_state` enum value) / 6 (Human — inline card)
+- Related: Deploy Gate, Deployed State
+
+**Deployed State** — `briefState='deployed'`. The production deploy succeeded. Set by `cloud-runner-fallback.ts:processProductionDeployStatus()` in response to `deployment_status: success` for the production env. The activity row's metadata carries `prodUrl` (from `deployment_status.environment_url`) which the conversation-surface inline card renders as a tappable link. Terminal-success: only `archived` exit is admitted. Post-deploy issues that need attention are surfaced as new work items, NOT as a regression to `blocked` or `deploy_failed`.
+- Layer: 1 (Data) / 6 (Human — terminal success card)
+- Related: Deploy Gate, Deploying State
+
+**Deploy Failed State** — `briefState='deploy_failed'`. The production deploy failed (`deployment_status: failure | error` for the production env). Recoverable: the user re-runs the failed workflow in GitHub; GitHub fires a fresh `deployment_status: queued`; the handler transitions `deploy_failed → deploying → deployed` (or back to `deploy_failed` on a second failure). Out-of-order retry-success admitted via direct `deploy_failed → deployed` transition. The activity row's metadata carries the GitHub-supplied `error` description (capped at 4 KB).
+- Layer: 1 (Data) / 6 (Human — failure inline card with retry deep-link)
+- Related: Deploy Gate, Deploying State
+
+**Deploy-Prod Workflow Template** — A copy-pasteable production-deploy workflow YAML at `docs/runner-templates/deploy-prod.yml` shipped as **documentation, not code** (Brief 220 §D9, mirrors Brief 218 §D16 template-as-docs precedent). Vendor-agnostic at the workflow level (`environment: production` + a single deploy step); Vercel default with Netlify, Cloudflare Pages, Fly.io as commented-out alternatives. Companion runbook at `docs/runner-templates/deploy-prod-setup.md` walks the user through the one-time GitHub-side setup. Ditto does NOT auto-commit the file to user repos; the user copies it manually.
+- Layer: 6 (Human — runbook) / Documentation
+- Related: Deploy Gate, GitHub Environment, Required Reviewer
+
+**GitHub Environment** — A GitHub-side per-repo configuration (Settings → Environments → New environment) that gates a workflow job declared as `environment: <name>`. Configured with optional Required Reviewers, Deployment branches, and environment-scoped Secrets. Brief 220's deploy gate uses the Environment named per `project.deployTargetEnvironment` (default `production`). The Environment's Required Reviewer list IS the deploy gate; without at least one Required Reviewer the workflow runs without pause and Ditto sees only `success`/`failure` (no approval moment).
+- Layer: External — GitHub-side configuration
+- Related: Deploy Gate, Required Reviewer
+
+**Required Reviewer** — A GitHub-side reviewer (user or team) named on a GitHub Environment's `Required reviewers` list. Maximum 6 per environment; **one approval suffices** to advance the workflow. GitHub Mobile sends a push notification to each Required Reviewer when a workflow job referencing the environment is queued. Brief 220's runbook (`deploy-prod-setup.md`) walks the user through adding themselves as the sole Required Reviewer — for solo founders this collapses to a single tap.
+- Layer: External — GitHub-side configuration
+- Related: Deploy Gate, GitHub Environment
+
+## Runner Mobile UX (Brief 221)
+
+**Runner-Dispatch-Pause Review-Page** — A `/review/[token]` page kind whose `contentBlocks` array contains a `WorkItemFormBlock` with `formId === "runner-dispatch-approval"`. Minted by `pauseRunnerDispatchForApproval()` (the first production caller of `dispatchWorkItem`) when the upstream trust-gate returns `pause` or `sample_pause` for a project-bound work item. Discrimination from Brief 106 chat-with-Alex network-review pages is by content-blocks composition (the form's presence) — no `review_pages.kind` schema column. The page renders a structured form (vertical-radio "Run on:" selector + force-cloud toggle + sticky-bottom Approve/Reject bar) instead of the chat-only flow.
+- Layer: 6 (Human — Decide-job moment, mobile-first surface)
+- Related: Run-On Selector, Force-Cloud Toggle, `mintRunnerDispatchPause()`, `pauseRunnerDispatchForApproval()`, Brief 072 form-namespace pattern
+
+**Run-On Selector** — The vertical-radio runner-kind picker on a runner-dispatch-pause review-page. Each option label encodes `<kind>|<display label>` (e.g., `claude-code-routine|Routine · Cloud`); the kind slug is parsed server-side at approve time. Eligible options come from `resolveChain()` filtered by the project's `runnerChain` + the work item's `runnerModeRequired`; degraded runners are shown with parenthesised reasons (`(offline)`, `(rate-limited)`, `(needs re-auth)`). Defaults to the chain head. The selected kind is persisted as `workItems.runnerOverride` BEFORE `dispatchWorkItem` is called, so the dispatcher's chain resolver prepends the user's pick to the chain.
+- Layer: 6 (Human — Delegate-job affordance)
+- Related: Runner-Dispatch-Pause Review-Page, `runner_override`, `resolveChain()`
+
+**Force-Cloud Toggle** — A boolean switch on the runner-dispatch-pause review-page. When ON: persists `workItems.runnerModeRequired = "cloud"` BEFORE dispatch so the chain resolver mode-filters out local kinds. UI guards prevent the conflict with a local-kind selection: toggling force-cloud ON greys+disables local-mode radio options and snaps the selection to the first cloud kind; the approve route additionally rejects 400 if both arrive (defence in depth). The 95%-need on a phone with the Mac mini off; symmetric "Force local" exists behind a "More options" disclosure (Designer spec §6).
+- Layer: 6 (Human — per-dispatch override affordance)
+- Related: Run-On Selector, `runner_mode_required`
+
+**`metadata.cardKind` Discriminator** — The optional discriminator field on `StatusCardBlock.metadata` that drives the renderer's dispatch-table fork. Brief 221 introduces `cardKind = "runnerDispatch"` for runner-status inline cards. Future subtypes (Brief 220 deploy-status, Brief 229 file-write supervised, etc.) register additional values in the `Record<string, RendererFn>` table at `packages/web/components/blocks/status-card-block.tsx`. Single-line per subtype; missing or unknown discriminator falls through to the generic template — never cascading-if. This is the metadata-first variant of the BlockList-is-the-viewer principle (Insight-107) for typed-subtype rendering.
+- Layer: 2 (Engine — content-block contract) / 6 (Human — renderer)
+- Related: `StatusCardBlock`, `buildRunnerDispatchCard()`, Insight-107, Insight-138
+
+**`activities.contentBlock`** — Optional JSON-typed nullable column on the `activities` table (added in migration `0017_activity_content_block.sql`, idx 16). Carries a typed `ContentBlock` (typically a `StatusCardBlock` with `metadata.cardKind = "runnerDispatch"`) paired with the audit-trail `description` text. Lets the work-item conversation surface render runner-status transitions as typed cards through the existing `BlockRegistry`. Backward-compatible: NULL on legacy rows; existing readers (audit views, system-agent activity-string consumers) unchanged.
+- Layer: 1 (Data — schema column) / 6 (Human — conversation surface)
+- Related: `metadata.cardKind` Discriminator, `cloud-runner-fallback.ts` emission
+
+## Project Retrofit (Brief 228)
+
+**Battle-Readiness** — The connection-time experience that makes a project Ditto-driveable. Concretely: when a user pastes a repo URL, Ditto runs the analyser (Brief 226) to produce an onboarding report, then runs the retrofitter (Brief 228) to write a `.ditto/` substrate into the target repo under the user's chosen runner. After both, the project carries role contracts, a skill index, a tool allowlist, project-specific guidance, and a human-readable onboarding report — sibling to `.git/`, in the user's working tree, grep-able and git-trackable. The substrate is the project's harness; the retrofit is the act of installing it. Per Insight-205, this turns connection from a dead form into a primary user-acquisition surface ("first contact demonstrates value").
+- Layer: 1 (Process — `project-onboarding.yaml` + `project-retrofit.yaml`) / 6 (Human — chat-col surface)
+- Related: Project Substrate, Retrofit, AnalyserReportBlock (Brief 226)
+
+**Project Substrate** — The `.ditto/` directory at the target repo's root, containing role contracts, skill index, tool allowlist, project-specific guidance, and the human-readable analyser report. ADR-043 finalises the shape (`.ditto/role-contracts/{dev-pm,dev-architect,...}.md` + `skills.json` + `tools.json` + `guidance.md` + `onboarding-report.md` + `version.txt` + `.gitignore`). The substrate is file-as-primary at the user-facing seam (Insight-201 application #2 — Brief 199's memory projection is application #1). It coexists with `.catalyst/` and other harness conventions; `.ditto/` writes never touch sibling directories. Schema versioning lives in `.ditto/version.txt`; future ADRs ship migrators.
+- Layer: 6 (Human — file-as-primary legibility) / External — target repo working tree
+- Related: Battle-Readiness, Retrofit, ADR-043, Insight-201
+
+**Retrofit** — The act of writing the project substrate via a runner. Concretely: a 4-step process (`generate-plan` → `surface-plan` → `dispatch-write` → `verify-commit`) defined in `processes/project-retrofit.yaml`. The plan generator composes 13 files from the analyser report; surface-plan writes a workItems row carrying a `RetrofitPlanBlock`; dispatch-write reads the trust-gate decision (autonomous → silent dispatch; spot_checked → sample-then-dispatch; critical → reject; supervised → placeholder per Brief 229) and invokes `dispatchWorkItem` (which routes via the existing Briefs 212/216/217/218 adapters). verify-commit reads the runner's response, UPDATES the existing `harness_decisions` audit row with planned hashes (so the next retrofit can detect user-edits per Q3 resolution). Idempotent per Insight-212 — re-runs producing only `unchanged` files complete with `commitSha=null`. Trust-tier-bound depth maps verbatim to ADR-007 (no new TrustAction values).
+- Layer: 1 (Process — `project-retrofit.yaml`) / 3 (Harness — 4 systemAgent handlers in `src/engine/onboarding/retrofitter.ts`)
+- Related: Battle-Readiness, Project Substrate, ADR-043, ADR-007, Insight-180, Insight-212, Insight-217, RetrofitPlanBlock
+
+## Runner Dispatch Response Body (Brief 232)
+
+**Runner Response Body** — The opaque-JSON channel `runner_dispatches.response_body` (column added by Brief 232 migration idx=17, prefix `0018_*`). The wire boundary `workItemStatusUpdateSchema` accepts an OPTIONAL `responseBody: z.record(z.unknown())` field; the status webhook persists it on the matched dispatch row inside the existing transaction (orphan callbacks silently drop). Per-shape validation is consumer-side: the project retrofitter reads `{commitSha, actuallyChangedFiles, skippedFiles?}` and falls back to a legacy hex-parse from `externalRunId` when responseBody is null/malformed (Brief 228 MVP behaviour preserved). Generic by design — future task types (post-merge linter results, deploy-runner output, branch coverage) compose without schema growth or new tables. Excludes `local-mac-mini` (synchronous bridge has no callback path; results return inline). Cloud runners (`claude-code-routine` + `claude-managed-agent` + `github-action`) carry the channel — the routine + managed-agent in-prompt callback stanza (`buildInternalCallbackSection`) and the GH Action template both name `responseBody` in the curl `-d` body shape.
+- Layer: 1 (Data — `runner_dispatches.response_body` column) / 3 (Harness — webhook persistence) / 6 (Human — the renderer's `skippedUserTouchedFiles` populates end-to-end)
+- Related: Brief 228 AC #11 (discharged), `parseRunnerResponse`, `workItemStatusUpdateSchema`, `buildInternalCallbackSection`

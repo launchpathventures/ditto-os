@@ -1,0 +1,127 @@
+# =============================================================================
+# Ditto — Production Deploy Workflow Template
+# =============================================================================
+#
+# Brief 220 — copy-pasteable production-deploy workflow that engages
+# GitHub's Environment + required-reviewer gate. Paste into your repo's
+# `.github/workflows/deploy-prod.yml`. Replace placeholders marked
+# <ANGLE-BRACKETS>, then complete the one-time GitHub-side setup in
+# `deploy-prod-setup.md`.
+#
+# What this workflow does:
+#  1. Triggers on push to main (default) or manual dispatch.
+#  2. References `environment: production`. GitHub pauses the job until a
+#     required reviewer approves it. GitHub Mobile delivers a push
+#     notification to the reviewer; one tap → approve → workflow continues.
+#  3. Runs your vendor-specific deploy command (Vercel default; Netlify,
+#     Cloudflare Pages, Fly.io commented as alternatives).
+#  4. GitHub emits `deployment_status` webhook events (`queued`,
+#     `in_progress`, `success`, `failure`/`error`) which Ditto consumes
+#     to drive the work item's `briefState` through `shipped → deploying
+#     → deployed | deploy_failed`.
+#
+# Vendor deploy commands shown as comments. Pick ONE and uncomment.
+# =============================================================================
+
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  # Required for GitHub to record `deployment_status` events that Ditto
+  # subscribes to. `id-token: write` is needed if your vendor uses OIDC
+  # (Vercel + Netlify deploy via OIDC tokens by default in modern setups).
+  contents: read
+  deployments: write
+  id-token: write
+
+concurrency:
+  # Serialise production deploys: a newer push cancels any in-flight run.
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+
+    # =========================================================================
+    # The Environment is the gate. GitHub pauses this job until a Required
+    # Reviewer approves. See `deploy-prod-setup.md` for the one-time setup.
+    # The Environment name MUST match `project.deployTargetEnvironment` in
+    # Ditto (default: "production").
+    # =========================================================================
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deploy_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------------
+      # OPTION A: Vercel (default for Ditto-built Catalyst projects)
+      # ---------------------------------------------------------------------
+      # Required repo secrets:
+      #   VERCEL_TOKEN       — https://vercel.com/account/tokens
+      #   VERCEL_ORG_ID      — `vercel link` then read `.vercel/project.json`
+      #   VERCEL_PROJECT_ID  — same source as above
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel production
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "deploy_url=${DEPLOY_URL}" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------------
+      # OPTION B: Netlify — uncomment + remove Option A above
+      # ---------------------------------------------------------------------
+      # Required secrets: NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: 20 }
+      # - run: npm ci && npm run build
+      # - uses: nwtgck/actions-netlify@v3
+      #   id: deploy
+      #   with:
+      #     production-deploy: true
+      #     publish-dir: ./dist
+      #   env:
+      #     NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      #     NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      # ---------------------------------------------------------------------
+      # OPTION C: Cloudflare Pages — uncomment + remove Option A above
+      # ---------------------------------------------------------------------
+      # Required secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: 20 }
+      # - run: npm ci && npm run build
+      # - uses: cloudflare/wrangler-action@v3
+      #   id: deploy
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     command: pages deploy ./dist --project-name=<YOUR-PROJECT>
+
+      # ---------------------------------------------------------------------
+      # OPTION D: Fly.io — uncomment + remove Option A above
+      # ---------------------------------------------------------------------
+      # Required secrets: FLY_API_TOKEN
+      # - uses: superfly/flyctl-actions/setup-flyctl@master
+      # - id: deploy
+      #   run: |
+      #     flyctl deploy --remote-only
+      #     APP_NAME=$(flyctl status --json | jq -r .Name)
+      #     echo "deploy_url=https://${APP_NAME}.fly.dev" >> "$GITHUB_OUTPUT"
+      #   env:
+      #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

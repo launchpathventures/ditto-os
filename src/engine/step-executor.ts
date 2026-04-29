@@ -35,6 +35,11 @@ export interface ToolCallRecord {
 
 /**
  * Execute a single process step using the appropriate adapter.
+ *
+ * `stepRunId` and `processRunId` (when supplied) are forwarded into the
+ * inputs that reach the system-agent handler. System agents that produce
+ * external side effects (Insight-180) read `_stepRunId` from inputs to
+ * verify their invocation context. Existing handlers ignore the field.
  */
 export async function executeStep(
   step: StepDefinition,
@@ -42,6 +47,8 @@ export async function executeStep(
   processDefinition: ProcessDefinition,
   resolvedTools?: ResolvedTools,
   processId?: string,
+  stepRunId?: string,
+  processRunId?: string,
 ): Promise<StepExecutionResult> {
   console.log(`  Executing step: ${step.name} (${step.executor})`);
 
@@ -58,7 +65,15 @@ export async function executeStep(
       if (systemAgentName) {
         console.log(`  System agent: ${systemAgentName}`);
         const handler = resolveSystemAgent(systemAgentName);
-        return handler(runInputs);
+        // Insight-180: forward harness-pipeline context so handlers can
+        // enforce the step-run guard. Underscored keys avoid collision with
+        // user-defined process inputs.
+        const enrichedInputs = {
+          ...runInputs,
+          _stepRunId: stepRunId,
+          _processRunId: processRunId,
+        };
+        return handler(enrichedInputs);
       }
       return scriptAdapter.execute(step, runInputs, processDefinition);
     }

@@ -23,9 +23,17 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const sqlite = new Database(DB_PATH);
+// `timeout: 10_000` sets PRAGMA busy_timeout — when parallel vitest workers
+// race to set `journal_mode = WAL` against the same DB file, one wins and the
+// others wait the busy_timeout for the locking pragma to clear instead of
+// returning SQLITE_BUSY immediately. Without this, CI test jobs that
+// transitively import `src/db` from multiple suites trip the pragma race and
+// fail one suite at module load.
+const sqlite = new Database(DB_PATH, { timeout: 10_000 });
 
-// WAL mode for better concurrent read performance
+// WAL mode for better concurrent read performance. Setting it is idempotent
+// at the DB-file level (once it's WAL, subsequent connections inherit), but
+// the pragma itself takes a write lock — hence the busy_timeout above.
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 

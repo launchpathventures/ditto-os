@@ -89,4 +89,10 @@ describe("validateStatusTransition", () => {
     const r = validateStatusTransition("active", "active", snapshot({}));
     expect(r.ok).toBe(true);
   });
+
+  // Brief 225 — Cancel and Don't-onboard paths flip analysing → archived.
+  it("accepts analysing → archived (Brief 225 Cancel + Don't-onboard regression guard)", () => {
+    const r = validateStatusTransition("analysing", "archived", snapshot({}));
+    expect(r.ok).toBe(true);
+  });
 });

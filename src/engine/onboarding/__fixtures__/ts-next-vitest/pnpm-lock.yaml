@@ -1,0 +1,3 @@
+lockfileVersion: '9.0'
+# Fixture lockfile for Brief 226 tests — intentionally empty body; presence
+# alone signals pnpm to the build-system detector.

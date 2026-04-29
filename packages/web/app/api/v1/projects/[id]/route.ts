@@ -61,9 +61,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (authErr) return authErr;
   const { id } = await params;
 
-  const { db } = await import("../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../src/db");
   const { projects, projectRunners } = await import(
-    "../../../../../../../../src/db/schema"
+    "../../../../../../../src/db/schema"
   );
 
   const rows = await db
@@ -97,9 +97,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const { db } = await import("../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../src/db");
   const { projects, projectRunners, activities } = await import(
-    "../../../../../../../../src/db/schema"
+    "../../../../../../../src/db/schema"
   );
 
   const current = await db
@@ -157,7 +157,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let newBearerToken: string | undefined;
   if (parsed.data.rotateBearer) {
     const { generateBearerToken, hashBearerToken } = await import(
-      "../../../../../../../../src/engine/project-credentials"
+      "../../../../../../../src/engine/project-credentials"
     );
     newBearerToken = generateBearerToken();
     updateData.runnerBearerHash = await hashBearerToken(newBearerToken);
@@ -207,8 +207,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (authErr) return authErr;
   const { id } = await params;
 
-  const { db } = await import("../../../../../../../../src/db");
-  const { projects } = await import("../../../../../../../../src/db/schema");
+  const { db } = await import("../../../../../../../src/db");
+  const { projects } = await import("../../../../../../../src/db/schema");
 
   const archived = await db
     .update(projects)

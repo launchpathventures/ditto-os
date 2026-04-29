@@ -16,6 +16,14 @@ export const dynamic = "force-dynamic";
 const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
 
 export async function GET() {
+  // Local-dev / CI mode: when WORKSPACE_OWNER_EMAIL is unset, workspace auth
+  // is disabled (mirrors the gating pattern in `/api/v1/projects` and
+  // siblings — see `checkWorkspaceAuth`). Return authenticated so the admin
+  // surfaces render without requiring the magic-link login.
+  if (!process.env.WORKSPACE_OWNER_EMAIL) {
+    return NextResponse.json({ authenticated: true, email: "dev@local" });
+  }
+
   const cookieStore = await cookies();
   const session = cookieStore.get(WORKSPACE_SESSION_COOKIE);
 

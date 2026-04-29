@@ -1,0 +1,155 @@
+# Ditto runner template — Brief 218 §D16
+#
+# Copy this into `.github/workflows/dispatch-coding-work.yml` of any repo
+# you want Ditto to dispatch coding work to. Then configure a `github-action`
+# runner under /projects/<slug>/runners pointing at this workflow.
+#
+# Placeholders:
+#  - replace `<DITTO_RELEASE_VERSION>` with the version of Ditto's published
+#    release containing the dev-review skill (or rely on `inputs.dev_review_skill_url`
+#    being populated at dispatch time by the adapter — it falls back to a
+#    Ditto release asset URL keyed off `DITTO_RELEASE_VERSION`).
+#
+# Required scopes for the PAT Ditto dispatches with:
+#  - `actions:write` (to fire workflow_dispatch + cancel)
+#  - `contents:read`
+#
+# Optional repo secrets the workflow may consume (depending on `callback_mode`):
+#  - `DITTO_RUNNER_BEARER` — long-lived project bearer (in-workflow-secret mode)
+#  - `ANTHROPIC_API_KEY` — your Claude Code bearer for the in-workflow run
+#
+# Brief 218 §D2 declares the `inputs` shape; Ditto's adapter populates it.
+
+name: Ditto — Dispatch coding work
+
+on:
+  workflow_dispatch:
+    inputs:
+      work_item_id:
+        type: string
+        required: true
+        description: "Ditto work item ID"
+      work_item_body:
+        type: string
+        required: true
+        description: "The coding task description"
+      harness_type:
+        type: choice
+        required: true
+        options: [catalyst, native, none]
+        default: catalyst
+      stepRunId:
+        type: string
+        required: true
+        description: "Insight-180 audit ID"
+      external_run_id:
+        type: string
+        required: false
+        description: "Pre-allocated external run ID (for in-workflow callback shapes)"
+      callback_url:
+        type: string
+        required: false
+        description: "Optional Ditto status webhook URL"
+      dev_review_skill_url:
+        type: string
+        required: false
+        description: "URL to .catalyst/skills/dev-review/SKILL.md (used when harness_type != catalyst)"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # 1. Check out the user's repo (the workflow runs in their CI).
+      - uses: actions/checkout@v4
+
+      # 2. Native projects: fetch the dev-review skill from Ditto's release asset.
+      - name: Fetch /dev-review skill (native projects only)
+        if: ${{ inputs.harness_type != 'catalyst' && inputs.dev_review_skill_url != '' }}
+        run: |
+          mkdir -p .catalyst/skills/dev-review
+          curl -fsSL "${{ inputs.dev_review_skill_url }}" \
+            -o .catalyst/skills/dev-review/SKILL.md
+
+      # 3. Run Claude Code with the work-item body as prompt.
+      #    Replace this with your preferred Claude Code invocation. The example
+      #    below assumes `@anthropic-ai/claude-code` is on the PATH and that you
+      #    have `ANTHROPIC_API_KEY` in repo secrets.
+      - name: Run Claude Code with the work-item body
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not set in repo secrets — Claude Code will fail to authenticate." >&2
+            exit 1
+          fi
+          # Pipe the work-item body into Claude Code. Adjust flags to your taste.
+          # The /dev-review skill runs as a step before the run terminates.
+          echo "${{ inputs.work_item_body }}" | npx --yes @anthropic-ai/claude-code \
+            --print \
+            --skill /dev-review
+
+      # 4. Optional: callback to Ditto's status webhook on success.
+      #    For `callback_mode='webhook-only'`, callback_url is empty — skip this.
+      #    For `callback_mode='in-workflow-secret'`, set repo secret DITTO_RUNNER_BEARER
+      #    to the project's runnerBearer plaintext (rotate via the project admin UI).
+      #    For `callback_mode='in-workflow'`, the ephemeral token is already in the
+      #    callback_url query string — no Authorization header needed.
+      #
+      #    To populate `prUrl` in the callback, your work step above MUST write
+      #    `PR_URL=https://github.com/<owner>/<repo>/pull/<n>` to $GITHUB_ENV.
+      #    If $PR_URL is empty (Claude Code has not opened a PR yet), the field
+      #    is omitted from the JSON body — Ditto's `pull_request.opened`
+      #    webhook will surface the PR URL via the kind-agnostic fallback.
+      #
+      #    Brief 232 — `responseBody` channel. If your task asks for a structured
+      #    response (e.g., the project retrofitter expects
+      #    `{commitSha, actuallyChangedFiles, skippedFiles}`), your work step
+      #    MUST write the corresponding values to $GITHUB_ENV:
+      #      COMMIT_SHA=<sha-or-empty>
+      #      ACTUALLY_CHANGED_FILES=<JSON array of strings, e.g. '["a.md","b.md"]'>
+      #      SKIPPED_FILES=<JSON array of strings, optional>
+      #    The callback below will assemble them into a `responseBody` field.
+      #    Omit the env vars when your task does not return structured output —
+      #    the field is optional.
+      - name: Status callback (optional)
+        if: ${{ inputs.callback_url != '' }}
+        env:
+          DITTO_RUNNER_BEARER: ${{ secrets.DITTO_RUNNER_BEARER }}
+        run: |
+          AUTH_HEADER=""
+          # If the URL has no `?token=…` AND we have the project bearer, send it.
+          if ! echo "${{ inputs.callback_url }}" | grep -q "token="; then
+            if [ -n "$DITTO_RUNNER_BEARER" ]; then
+              AUTH_HEADER="-H Authorization: Bearer $DITTO_RUNNER_BEARER"
+            fi
+          fi
+          PR_URL_FIELD=""
+          if [ -n "$PR_URL" ]; then
+            PR_URL_FIELD=", \"prUrl\": \"$PR_URL\""
+          fi
+          # Assemble responseBody from $COMMIT_SHA, $ACTUALLY_CHANGED_FILES,
+          # $SKIPPED_FILES if any of them are set. Default to empty when absent.
+          RESPONSE_BODY_FIELD=""
+          if [ -n "$COMMIT_SHA" ] || [ -n "$ACTUALLY_CHANGED_FILES" ] || [ -n "$SKIPPED_FILES" ]; then
+            CHANGED_VAL="${ACTUALLY_CHANGED_FILES:-[]}"
+            SKIPPED_VAL="${SKIPPED_FILES:-[]}"
+            COMMIT_VAL="${COMMIT_SHA:-}"
+            if [ -n "$COMMIT_VAL" ]; then
+              COMMIT_JSON="\"$COMMIT_VAL\""
+            else
+              COMMIT_JSON="null"
+            fi
+            RESPONSE_BODY_FIELD=", \"responseBody\": {\"commitSha\": $COMMIT_JSON, \"actuallyChangedFiles\": $CHANGED_VAL, \"skippedFiles\": $SKIPPED_VAL}"
+          fi
+          curl -X POST "${{ inputs.callback_url }}" \
+            $AUTH_HEADER \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"state\": \"shipped\",
+              \"runnerKind\": \"github-action\",
+              \"externalRunId\": \"${{ github.run_id }}\",
+              \"stepRunId\": \"${{ inputs.stepRunId }}\"$PR_URL_FIELD$RESPONSE_BODY_FIELD
+            }" || true

@@ -50,6 +50,14 @@ interface WorkspaceProps {
   userId?: string;
   userName?: string;
   orgName?: string;
+  /**
+   * Brief 225 — when true, the sidebar shows a "+ Connect a project" CTA
+   * that seeds a Self conversation message + triggers the
+   * `start_project_onboarding` tool. Server-side env-var check at the
+   * page boundary; passed through props because env vars don't reach
+   * client components.
+   */
+  projectOnboardingReady?: boolean;
 }
 
 type CenterView =
@@ -68,7 +76,12 @@ const VIEW_IDS: ViewId[] = [
   "settings",
 ];
 
-export function Workspace({ userId = "default", userName, orgName }: WorkspaceProps) {
+export function Workspace({
+  userId = "default",
+  userName,
+  orgName,
+  projectOnboardingReady = false,
+}: WorkspaceProps) {
   const { data } = useProcessList();
   const workItems = data?.workItems ?? [];
 
@@ -291,6 +304,20 @@ export function Workspace({ userId = "default", userName, orgName }: WorkspacePr
       previousViewRef.current = center;
       setCenter({ type: "chat-full" });
       setSplit(false);
+    })();
+  }, [center]);
+
+  /**
+   * Brief 225 — sidebar "+ Connect a project" CTA. Opens a fresh chat +
+   * seeds a Self message that the start_project_onboarding tool picks up.
+   */
+  const connectProject = useCallback(() => {
+    void (async () => {
+      await threadStore.create();
+      previousViewRef.current = center;
+      setCenter({ type: "chat-full" });
+      setSplit(false);
+      threadStore.requestSend("Connect a new project", "sidebar-cta");
     })();
   }, [center]);
 
@@ -517,6 +544,9 @@ export function Workspace({ userId = "default", userName, orgName }: WorkspacePr
           orgName={orgName}
           adaptiveViews={adaptiveViews}
           onCollapseToggle={() => setSidebarCollapsed((c) => !c)}
+          onConnectProject={
+            projectOnboardingReady ? connectProject : undefined
+          }
         />
       )}
 
