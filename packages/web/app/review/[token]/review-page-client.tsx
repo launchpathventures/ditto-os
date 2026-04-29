@@ -258,7 +258,6 @@ function RunnerDispatchApprovalView(props: {
                       </span>
                     )}
                   </span>
-                  <span className="sr-only">{kind}</span>
                 </label>
               );
             })}

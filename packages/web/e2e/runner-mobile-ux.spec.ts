@@ -89,8 +89,14 @@ for (const viewport of VIEWPORTS) {
       await expect(approveBtn).toBeVisible();
       await expect(rejectBtn).toBeVisible();
 
-      // Each tap target is ≥44pt high (the minimum for mobile-first).
-      const checks = [approveBtn, rejectBtn, ...(await radios.all())];
+      // Each tap target is ≥44pt high (the minimum for mobile-first). The
+      // user-visible tap target for each radio is the wrapping <label>; the
+      // raw <input type="radio"> renders at the browser's ~13px default but
+      // is enclosed in a min-h-44 row, so we measure the label.
+      const radioLabels = page.locator(
+        'label:has(input[type="radio"][name="selectedKind"])',
+      );
+      const checks = [approveBtn, rejectBtn, ...(await radioLabels.all())];
       for (const target of checks) {
         const box = await target.boundingBox();
         expect(box).not.toBeNull();
