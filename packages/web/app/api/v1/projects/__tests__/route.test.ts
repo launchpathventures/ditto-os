@@ -43,14 +43,20 @@ async function loadDetailRoute() {
   return route;
 }
 
-function jsonReq(url: string, init?: RequestInit & { body?: unknown }): Request {
-  const opts: RequestInit = { ...init };
-  if (init?.body && typeof init.body !== "string") {
-    opts.body = JSON.stringify(init.body);
+function jsonReq(
+  url: string,
+  init?: Omit<RequestInit, "body"> & { body?: unknown },
+): Request {
+  const { body, headers, ...rest } = init ?? {};
+  const opts: RequestInit = { ...rest };
+  if (body !== undefined) {
+    opts.body = typeof body === "string" ? body : JSON.stringify(body);
     opts.headers = {
-      ...(init.headers || {}),
+      ...(headers || {}),
       "Content-Type": "application/json",
     };
+  } else if (headers) {
+    opts.headers = headers;
   }
   return new Request(url, opts);
 }

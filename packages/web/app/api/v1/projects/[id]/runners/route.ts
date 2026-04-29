@@ -122,9 +122,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (authErr) return authErr;
   const { id } = await params;
 
-  const { db } = await import("../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../src/db");
   const { projectRunners } = await import(
-    "../../../../../../../../../src/db/schema"
+    "../../../../../../../../src/db/schema"
   );
   const projectId = await resolveProjectId(id);
   if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -224,9 +224,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     githubActionFormParsed = cfg.data;
   }
 
-  const { db } = await import("../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../src/db");
   const { projectRunners, projects: projectsTable } = await import(
-    "../../../../../../../../../src/db/schema"
+    "../../../../../../../../src/db/schema"
   );
   const projectId = await resolveProjectId(id);
   if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -244,10 +244,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (kind === "claude-code-routine" && routineFormParsed) {
     const { routineConfigSchema } = await import(
-      "../../../../../../../../../src/adapters/claude-code-routine"
+      "../../../../../../../../src/adapters/claude-code-routine"
     );
     const { storeProjectCredential } = await import(
-      "../../../../../../../../../src/engine/credential-vault"
+      "../../../../../../../../src/engine/credential-vault"
     );
     // Store with the final service-key directly — no re-key window.
     routineCredentialId = await storeProjectCredential(
@@ -268,7 +268,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Best-effort cleanup: delete the credential we just wrote since the
       // project_runners insert won't happen.
       const { deleteCredentialById } = await import(
-        "../../../../../../../../../src/engine/credential-vault"
+        "../../../../../../../../src/engine/credential-vault"
       );
       await deleteCredentialById(routineCredentialId).catch(() => {});
       return NextResponse.json(
@@ -283,10 +283,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (kind === "claude-managed-agent" && managedAgentFormParsed) {
     const { managedAgentConfigSchema } = await import(
-      "../../../../../../../../../src/adapters/claude-managed-agent"
+      "../../../../../../../../src/adapters/claude-managed-agent"
     );
     const { storeProjectCredential } = await import(
-      "../../../../../../../../../src/engine/credential-vault"
+      "../../../../../../../../src/engine/credential-vault"
     );
     managedAgentCredentialId = await storeProjectCredential(
       `runner.${projectSlug}.api_key`,
@@ -319,7 +319,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
     if (!adapterValidation.success) {
       const { deleteCredentialById } = await import(
-        "../../../../../../../../../src/engine/credential-vault"
+        "../../../../../../../../src/engine/credential-vault"
       );
       await deleteCredentialById(managedAgentCredentialId).catch(() => {});
       return NextResponse.json(
@@ -334,10 +334,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (kind === "github-action" && githubActionFormParsed) {
     const { githubActionConfigSchema } = await import(
-      "../../../../../../../../../src/adapters/github-action"
+      "../../../../../../../../src/adapters/github-action"
     );
     const { storeProjectCredential } = await import(
-      "../../../../../../../../../src/engine/credential-vault"
+      "../../../../../../../../src/engine/credential-vault"
     );
     githubActionCredentialId = await storeProjectCredential(
       `runner.${projectSlug}.github_token`,
@@ -357,7 +357,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
     if (!adapterValidation.success) {
       const { deleteCredentialById } = await import(
-        "../../../../../../../../../src/engine/credential-vault"
+        "../../../../../../../../src/engine/credential-vault"
       );
       await deleteCredentialById(githubActionCredentialId).catch(() => {});
       return NextResponse.json(

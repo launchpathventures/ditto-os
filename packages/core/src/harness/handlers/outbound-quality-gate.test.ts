@@ -263,7 +263,9 @@ describe("outbound-quality-gate (staged actions — Brief 129)", () => {
 
     it("records blocked action with budget-reason via recordOutboundAction", async () => {
       const staged = makeStagedAction();
-      const recorder = vi.fn(async () => {});
+      const recorder = vi.fn<NonNullable<HarnessContext["recordOutboundAction"]>>(
+        async () => {},
+      );
       const budgetCheck = vi.fn(async () => ({
         blocked: true,
         reason: "budget exhausted for goal",

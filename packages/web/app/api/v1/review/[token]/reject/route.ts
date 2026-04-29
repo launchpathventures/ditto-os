@@ -13,15 +13,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { eq, sql } from "drizzle-orm";
-import { db } from "../../../../../../../../../src/db";
+import { db } from "../../../../../../../../src/db";
 import {
   workItems,
   harnessDecisions,
-} from "../../../../../../../../../src/db/schema";
+} from "../../../../../../../../src/db/schema";
 import {
   getReviewPage,
   completeReviewPage,
-} from "../../../../../../../../../src/engine/review-pages";
+} from "../../../../../../../../src/engine/review-pages";
 
 const RUNNER_DISPATCH_APPROVAL_FORM_ID = "runner-dispatch-approval";
 

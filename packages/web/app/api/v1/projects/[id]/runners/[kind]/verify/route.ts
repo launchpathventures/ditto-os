@@ -71,12 +71,12 @@ export async function POST(
     );
   }
 
-  const { db } = await import("../../../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../../../src/db");
   const { projects, projectRunners } = await import(
-    "../../../../../../../../../../../src/db/schema"
+    "../../../../../../../../../../src/db/schema"
   );
   const { getCredentialById } = await import(
-    "../../../../../../../../../../../src/engine/credential-vault"
+    "../../../../../../../../../../src/engine/credential-vault"
   );
 
   const projectRows = await db
@@ -104,7 +104,7 @@ export async function POST(
 
   if (kind === "claude-managed-agent") {
     const { managedAgentConfigSchema } = await import(
-      "../../../../../../../../../../../src/adapters/claude-managed-agent"
+      "../../../../../../../../../../src/adapters/claude-managed-agent"
     );
     const cfg = managedAgentConfigSchema.safeParse(runnerRow[0].configJson);
     if (!cfg.success) {
@@ -172,7 +172,7 @@ export async function POST(
 
   // kind === "github-action" — Brief 218 §D7.
   const { githubActionConfigSchema } = await import(
-    "../../../../../../../../../../../src/adapters/github-action"
+    "../../../../../../../../../../src/adapters/github-action"
   );
   const cfg = githubActionConfigSchema.safeParse(runnerRow[0].configJson);
   if (!cfg.success) {

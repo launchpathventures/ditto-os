@@ -12,6 +12,7 @@
  *     names (AC #8 — `FORBIDDEN_INTERNAL_TERMS` exported as a constant).
  */
 
+import type { Page } from "@playwright/test";
 import { test, expect, resetDatabase } from "./fixtures";
 
 /**
@@ -39,7 +40,7 @@ const VIEWPORTS = [
 ] as const;
 
 async function seedRunnerPause(
-  page: Awaited<ReturnType<Parameters<Parameters<typeof test>[1]>[0]["page"]>>,
+  page: Page,
 ): Promise<{ reviewUrl: string; eligibleKinds: string[] }> {
   // The fixture page object is enough to call fetch; tests run against the
   // same dev server.
