@@ -106,6 +106,15 @@ export function ReviewPageClient({ data, token }: ReviewPageClientProps) {
 // Brief 221 — Runner Dispatch Approval View
 // ============================================================
 
+// Local-mode kinds (Brief 221 §D8 conflict-guard with force-cloud).
+const LOCAL_KIND_PREFIXES = ["local-mac-mini"];
+
+function isLocalKindOption(option: string): boolean {
+  const idx = option.indexOf("|");
+  const kind = idx === -1 ? option : option.slice(0, idx);
+  return LOCAL_KIND_PREFIXES.includes(kind);
+}
+
 function RunnerDispatchApprovalView(props: {
   data: ReviewPageData;
   token: string;
@@ -116,6 +125,18 @@ function RunnerDispatchApprovalView(props: {
   const { data, token, kindOptions, defaultKind, forceCloudInitial } = props;
   const [selectedKind, setSelectedKind] = useState(defaultKind);
   const [forceCloud, setForceCloud] = useState(forceCloudInitial);
+
+  // Reviewer HIGH #1 — force-cloud + local-kind collision guard. When
+  // force-cloud is on, local kinds are disabled (server-side rejects the
+  // combo too, defence in depth). When the current selection becomes
+  // disabled by toggling force-cloud on, snap back to the first cloud kind.
+  function handleForceCloudChange(checked: boolean) {
+    setForceCloud(checked);
+    if (checked && isLocalKindOption(selectedKind)) {
+      const firstCloud = kindOptions.find((o) => !isLocalKindOption(o));
+      if (firstCloud) setSelectedKind(firstCloud);
+    }
+  }
   const [submitting, setSubmitting] = useState<"approve" | "reject" | null>(
     null,
   );
@@ -208,24 +229,35 @@ function RunnerDispatchApprovalView(props: {
             {kindOptions.map((option) => {
               const { kind, label } = parseKindOption(option);
               const checked = selectedKind === option;
+              const disabledByForceCloud =
+                forceCloud && isLocalKindOption(option);
               return (
                 <label
                   key={option}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 ${
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-3 ${
                     checked
                       ? "border-vivid bg-vivid-subtle"
                       : "border-border bg-white"
-                  }`}
+                  } ${disabledByForceCloud ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                   style={{ minHeight: 44 }}
+                  aria-disabled={disabledByForceCloud}
                 >
                   <input
                     type="radio"
                     name="selectedKind"
                     value={option}
                     checked={checked}
+                    disabled={disabledByForceCloud}
                     onChange={() => setSelectedKind(option)}
                   />
-                  <span className="text-sm">{label}</span>
+                  <span className="text-sm">
+                    {label}
+                    {disabledByForceCloud && (
+                      <span className="ml-2 text-xs text-text-muted">
+                        (force cloud is on)
+                      </span>
+                    )}
+                  </span>
                   <span className="sr-only">{kind}</span>
                 </label>
               );
@@ -240,7 +272,7 @@ function RunnerDispatchApprovalView(props: {
           <input
             type="checkbox"
             checked={forceCloud}
-            onChange={(e) => setForceCloud(e.target.checked)}
+            onChange={(e) => handleForceCloudChange(e.target.checked)}
           />
           <span className="text-sm text-text-secondary">
             Force cloud for this approval

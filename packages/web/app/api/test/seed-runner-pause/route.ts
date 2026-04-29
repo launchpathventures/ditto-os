@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { eq as eqUnsafe } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     const dbModule = await import("../../../../../../src/db");
     const { db, schema } = dbModule;
+    const { sql } = await import("drizzle-orm");
     dbModule.ensureSchema();
     const runnerPause = await import(
       "../../../../../../src/engine/harness-handlers/runner-pause"
@@ -58,6 +60,19 @@ export async function POST(request: NextRequest) {
     const processRunId = "run_e2e_pause";
     const stepRunId = "step_e2e_pause";
     const workItemId = "wi_e2e_pause";
+
+    // Reviewer LOW #1 — re-seed within a single resetDatabase scope must not
+    // accumulate prior pause-decisions / pause-pages on the same work item
+    // (otherwise the approve route's by-reviewToken query may find a stale
+    // row before the freshest one). Clear them here.
+    await db
+      .delete(schema.harnessDecisions)
+      .where(
+        sql`json_extract(${schema.harnessDecisions.reviewDetails}, '$.runnerPause.workItemId') = ${workItemId}`,
+      );
+    await db
+      .delete(schema.reviewPages)
+      .where(eqUnsafe(schema.reviewPages.userId, "founder"));
 
     // Project (ON CONFLICT DO NOTHING via try-catch — Drizzle/SQLite has no
     // upsert primitive without unique constraints; for the e2e we accept

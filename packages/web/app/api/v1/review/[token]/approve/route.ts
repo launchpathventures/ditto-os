@@ -19,16 +19,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
-import { db } from "@engine/../db";
+import { eq, sql } from "drizzle-orm";
+import { db } from "../../../../../../../../../src/db";
 import {
-  reviewPages,
   workItems,
   harnessDecisions,
-  type RunnerKindValue,
-} from "@engine/../db/schema";
-import { getReviewPage, completeReviewPage } from "@engine/review-pages";
-import { dispatchWorkItem } from "@engine/runner-dispatcher";
+} from "../../../../../../../../../src/db/schema";
+import {
+  getReviewPage,
+  completeReviewPage,
+} from "../../../../../../../../../src/engine/review-pages";
+import { dispatchWorkItem } from "../../../../../../../../../src/engine/runner-dispatcher";
 import { parseKindOption, type RunnerKind } from "@ditto/core";
 
 const RUNNER_DISPATCH_APPROVAL_FORM_ID = "runner-dispatch-approval";
@@ -116,17 +117,16 @@ export async function POST(
 
   // Look up the harness_decisions row keyed on this review token (written by
   // pauseRunnerDispatchForApproval). Provides stepRunId + processRunId +
-  // workItemId + trustTier.
+  // workItemId + trustTier. SQLite JSON1 `json_extract` filters server-side
+  // (Reviewer MEDIUM #2 — avoids full-table scan).
   const decisionRows = await db
     .select()
     .from(harnessDecisions)
-    .orderBy(desc(harnessDecisions.createdAt));
-  const decision = decisionRows.find((d) => {
-    const rd = d.reviewDetails as
-      | { runnerPause?: { reviewToken?: string; workItemId?: string } }
-      | null;
-    return rd?.runnerPause?.reviewToken === token;
-  });
+    .where(
+      sql`json_extract(${harnessDecisions.reviewDetails}, '$.runnerPause.reviewToken') = ${token}`,
+    )
+    .limit(1);
+  const decision = decisionRows[0];
   if (!decision) {
     return NextResponse.json(
       {
@@ -153,14 +153,38 @@ export async function POST(
     );
   }
 
-  // Optionally persist force-cloud onto the work item BEFORE dispatch so the
-  // chain re-resolution honours it (parent §D13).
-  if (body.forceCloud) {
-    await db
-      .update(workItems)
-      .set({ runnerModeRequired: "cloud" })
-      .where(eq(workItems.id, workItemId));
+  // Force-cloud + local-kind conflict guard (Brief 221 §D8 — Reviewer HIGH #1).
+  // The chain resolver's mode-filter would silently drop the local-mode
+  // selection if forceCloud is on. Reject explicitly so the user sees the
+  // collision rather than getting a different runner than they picked.
+  const localKinds = new Set(["local-mac-mini"]);
+  if (body.forceCloud && localKinds.has(selectedRunnerKind)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          'Force-cloud is on but you picked a local runner. Either turn off "Force cloud" or pick a cloud runner.',
+      },
+      { status: 400 },
+    );
   }
+
+  // Persist the user's per-dispatch override + force-cloud onto the work item
+  // BEFORE dispatch so the chain resolver honours both (Brief 215 §D4 + parent
+  // §D13). The override prepends `selectedRunnerKind` to the chain, ensuring
+  // the dispatcher actually uses what the user picked (Reviewer CRITICAL #1).
+  await db
+    .update(workItems)
+    .set({
+      runnerOverride: selectedRunnerKind as
+        | "local-mac-mini"
+        | "claude-code-routine"
+        | "claude-managed-agent"
+        | "github-action"
+        | "e2b-sandbox",
+      ...(body.forceCloud ? { runnerModeRequired: "cloud" as const } : {}),
+    })
+    .where(eq(workItems.id, workItemId));
 
   // Dispatch via the runner-dispatcher.
   const outcome = await dispatchWorkItem({
@@ -175,9 +199,9 @@ export async function POST(
     trustAction: "advance",
   });
 
-  // Mark the review-page completed so the token is one-shot.
-  await completeReviewPage(token);
-
+  // Reviewer CRITICAL #2 — only consume the token on dispatch success. A
+  // transient failure (rate limit, daemon offline, no eligible runner) leaves
+  // the token active so the user can retry the same approval link.
   if (!outcome.ok) {
     return NextResponse.json(
       {
@@ -188,6 +212,9 @@ export async function POST(
       { status: 502 },
     );
   }
+
+  // Mark the review-page completed so the token is one-shot AFTER success.
+  await completeReviewPage(token);
 
   return NextResponse.json(
     {

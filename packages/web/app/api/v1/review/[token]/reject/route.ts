@@ -12,10 +12,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
-import { db } from "@engine/../db";
-import { workItems, harnessDecisions } from "@engine/../db/schema";
-import { getReviewPage, completeReviewPage } from "@engine/review-pages";
+import { eq, sql } from "drizzle-orm";
+import { db } from "../../../../../../../../../src/db";
+import {
+  workItems,
+  harnessDecisions,
+} from "../../../../../../../../../src/db/schema";
+import {
+  getReviewPage,
+  completeReviewPage,
+} from "../../../../../../../../../src/engine/review-pages";
 
 const RUNNER_DISPATCH_APPROVAL_FORM_ID = "runner-dispatch-approval";
 
@@ -76,17 +82,16 @@ export async function POST(
     );
   }
 
-  // Look up audit row to get stepRunId for the Insight-180 guard.
+  // Look up audit row to get stepRunId for the Insight-180 guard. SQLite
+  // JSON1 `json_extract` filters server-side (Reviewer MEDIUM #2).
   const decisionRows = await db
     .select()
     .from(harnessDecisions)
-    .orderBy(desc(harnessDecisions.createdAt));
-  const decision = decisionRows.find((d) => {
-    const rd = d.reviewDetails as
-      | { runnerPause?: { reviewToken?: string; workItemId?: string } }
-      | null;
-    return rd?.runnerPause?.reviewToken === token;
-  });
+    .where(
+      sql`json_extract(${harnessDecisions.reviewDetails}, '$.runnerPause.reviewToken') = ${token}`,
+    )
+    .limit(1);
+  const decision = decisionRows[0];
   if (!decision || !decision.stepRunId) {
     return NextResponse.json(
       {
