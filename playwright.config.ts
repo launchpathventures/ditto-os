@@ -52,6 +52,11 @@ export default defineConfig({
     env: {
       MOCK_LLM: "true",
       NODE_ENV: "test",
+      // `/admin` and `/welcome` are 404'd by middleware in workspace mode (the
+      // safer prod default — see lib/deployment.ts). Tests under
+      // `e2e/projects.spec.ts` rely on the admin → projects nav, so the test
+      // server must run in public mode.
+      DITTO_DEPLOYMENT: "public",
     },
   },
 });

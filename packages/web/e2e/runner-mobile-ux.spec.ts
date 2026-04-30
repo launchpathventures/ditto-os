@@ -134,11 +134,12 @@ for (const viewport of VIEWPORTS) {
       // Wait for dynamic render so the form's option labels are committed.
       await expect(page.getByTestId("approve-button")).toBeVisible();
 
-      // Read the entire body's text content. The option `value` attribute
-      // (which carries the `kind|label` string with the raw runner-kind slug)
-      // is NOT considered rendered text by the user — but the visible label
-      // is. We assert only on user-visible textContent.
-      const bodyText = (await page.locator("body").textContent()) ?? "";
+      // Read the user-visible text. `innerText` excludes <script>/<style>
+      // content and respects `display: none`, so SSR-hydration JSON (which
+      // does serialise option `value` strings like "claude-code-routine|…")
+      // doesn't leak into the assertion. `textContent` would include script
+      // content per the DOM spec.
+      const bodyText = await page.locator("body").innerText();
       for (const term of FORBIDDEN_INTERNAL_TERMS) {
         expect(
           bodyText.toLowerCase().includes(term.toLowerCase()),
