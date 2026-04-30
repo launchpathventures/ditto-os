@@ -3,7 +3,7 @@
 **Date:** 2026-04-25
 **Trigger:** User steer during Brief 212 architect session — "when we connect to a new project repo, we should run an in-depth analysis on the project and retro-fit or augment a harness and skill and tool system into the project to make sure the project is battle ready"
 **Layers affected:** L1 Process (project model + onboarding process), L2 Agent (the analyser+retrofitter is itself an agent role), L3 Harness (retrofit installs harness primitives into target repo), L6 Human (onboarding interaction surface)
-**Status:** active
+**Status:** absorbed (2026-04-27, Brief 226 ships sub-brief #2 — discharges Brief 224 §AC #8 absorption gate; one-paragraph absorption note added to `docs/architecture.md` §Layer 1: Process Layer at the "Connecting a project is a process, not a metadata operation" subsection)
 
 ## The Insight
 

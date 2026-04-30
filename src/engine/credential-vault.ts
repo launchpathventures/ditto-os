@@ -136,6 +136,67 @@ export async function getCredential(
 }
 
 /**
+ * Brief 216 — project-scoped credentials (no `processId`).
+ *
+ * Used for outbound bearers tied to a project_runner config (e.g.,
+ * `routine.<projectSlug>.bearer`). Plaintext is encrypted at the boundary;
+ * the returned credential id is stored in `project_runners.credentialIds`.
+ * Lookup uses `getCredentialById` since the credentials table's
+ * `(processId, service)` unique constraint does not enforce on NULL processId.
+ *
+ * Returns the inserted row's id.
+ */
+export async function storeProjectCredential(
+  service: string,
+  value: string,
+  expiresAt?: number,
+): Promise<string> {
+  const { encryptedValue, iv, authTag } = encrypt(value);
+  const inserted = await db
+    .insert(schema.credentials)
+    .values({
+      service,
+      encryptedValue,
+      iv,
+      authTag,
+      expiresAt: expiresAt ?? null,
+      createdAt: Date.now(),
+    })
+    .returning({ id: schema.credentials.id });
+  return inserted[0].id;
+}
+
+/**
+ * Brief 216 — lookup a credential by id and return the decrypted value.
+ * Used by adapters that hold a `credentialId` reference (project-scoped
+ * credentials).
+ */
+export async function getCredentialById(
+  credentialId: string,
+): Promise<{ value: string; service: string } | null> {
+  const rows = await db
+    .select()
+    .from(schema.credentials)
+    .where(eq(schema.credentials.id, credentialId))
+    .limit(1);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const value = decrypt({
+    encryptedValue: row.encryptedValue,
+    iv: row.iv,
+    authTag: row.authTag,
+  });
+  return { value, service: row.service };
+}
+
+/**
+ * Brief 216 — delete a credential by id (used during bearer rotation).
+ */
+export async function deleteCredentialById(credentialId: string): Promise<void> {
+  await db.delete(schema.credentials).where(eq(schema.credentials.id, credentialId));
+}
+
+/**
  * Delete a credential for a (processId, service) scope.
  */
 export async function deleteCredential(

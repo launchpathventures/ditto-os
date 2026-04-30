@@ -1,0 +1,1 @@
+ALTER TABLE `activities` ADD `content_block` text;

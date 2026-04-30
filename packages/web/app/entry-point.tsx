@@ -17,9 +17,14 @@ import { DayZero, isDayZeroSeen } from "./day-zero";
 
 interface EntryPointProps {
   userId: string;
+  /** Brief 225 — when true, the workspace shows the "Connect a project" CTA. */
+  projectOnboardingReady?: boolean;
 }
 
-export function EntryPoint({ userId }: EntryPointProps) {
+export function EntryPoint({
+  userId,
+  projectOnboardingReady = false,
+}: EntryPointProps) {
   const [showDayZero, setShowDayZero] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -39,5 +44,10 @@ export function EntryPoint({ userId }: EntryPointProps) {
     return <DayZero onComplete={() => setShowDayZero(false)} />;
   }
 
-  return <WorkspacePage userId={userId} />;
+  return (
+    <WorkspacePage
+      userId={userId}
+      projectOnboardingReady={projectOnboardingReady}
+    />
+  );
 }

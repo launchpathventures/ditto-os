@@ -33,5 +33,16 @@ export default function Home() {
     applyConfigToEnv(config);
   }
 
-  return <EntryPoint userId="default" />;
+  // Brief 225 — surface the env-var-gated project-onboarding readiness as
+  // a server-rendered prop. The client can't read non-NEXT_PUBLIC env vars
+  // directly, so we thread it down from here.
+  const projectOnboardingReady =
+    process.env.DITTO_PROJECT_ONBOARDING_READY === "true";
+
+  return (
+    <EntryPoint
+      userId="default"
+      projectOnboardingReady={projectOnboardingReady}
+    />
+  );
 }

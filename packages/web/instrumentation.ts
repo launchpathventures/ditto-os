@@ -145,18 +145,58 @@ export async function register() {
 
     // Brief 215 — register the local-mac-mini RunnerAdapter into the in-process
     // registry. Brief 212 shipped — wire its primitives into a `LocalBridge`
-    // instance via `createLocalBridge()` and pass into the adapter. Cloud
-    // adapters (sub-briefs 216-218) register here too when they land.
+    // instance via `createLocalBridge()` and pass into the adapter. Brief 216
+    // adds the claude-code-routine adapter alongside; sub-briefs 217-218 add
+    // managed-agent + github-action when they land.
     try {
       const { registerAdapter, hasAdapter } = await import("../../src/engine/runner-registry");
       const { createLocalMacMiniAdapter } = await import("../../src/adapters/local-mac-mini");
       const { createLocalBridge } = await import("../../src/engine/local-bridge");
+      const { createRoutineAdapter, primeHarnessTypeCacheFromDb } = await import(
+        "../../src/adapters/claude-code-routine"
+      );
+      const { createManagedAgentAdapter } = await import(
+        "../../src/adapters/claude-managed-agent"
+      );
+      const { createGithubActionAdapter } = await import(
+        "../../src/adapters/github-action"
+      );
       if (!hasAdapter("local-mac-mini")) {
         const bridge = createLocalBridge();
         registerAdapter(createLocalMacMiniAdapter({ bridge }));
         console.log(
           "[instrumentation] Runner registry: local-mac-mini adapter registered (bridge wired to Brief 212 LocalBridge)."
         );
+      }
+      if (!hasAdapter("claude-code-routine")) {
+        registerAdapter(createRoutineAdapter());
+        await primeHarnessTypeCacheFromDb();
+        console.log(
+          "[instrumentation] Runner registry: claude-code-routine adapter registered (Brief 216)."
+        );
+      }
+      if (!hasAdapter("claude-managed-agent")) {
+        registerAdapter(createManagedAgentAdapter());
+        console.log(
+          "[instrumentation] Runner registry: claude-managed-agent adapter registered (Brief 217)."
+        );
+      }
+      if (!hasAdapter("github-action")) {
+        registerAdapter(createGithubActionAdapter());
+        console.log(
+          "[instrumentation] Runner registry: github-action adapter registered (Brief 218)."
+        );
+      }
+      // Brief 217 — start the cross-runner poll cron (only kinds with
+      // registered cadences are walked; routines stay GitHub-events-only).
+      try {
+        const { startRunnerPollCron } = await import(
+          "../../src/engine/runner-poll-cron"
+        );
+        startRunnerPollCron();
+        console.log("[instrumentation] Runner poll cron started (Brief 217).");
+      } catch (cronErr) {
+        console.error("[instrumentation] Runner poll cron start failed:", cronErr);
       }
     } catch (error) {
       console.error("[instrumentation] Runner registry init failed:", error);
@@ -173,6 +213,28 @@ export async function register() {
     } catch (error) {
       console.error("[instrumentation] Project seed failed:", error);
       // Non-fatal — projects can be created via /projects/new
+    }
+
+    // Brief 226 AC #14 — sweep stale `ditto-analyser-*` temp dirs older
+    // than 24 hours. Belt-and-braces with the per-handler try/finally
+    // cleanup; this catches engine-crash-mid-handler dir leaks.
+    try {
+      const { sweepStaleAnalyserDirs } = await import(
+        "../../src/engine/onboarding/cleanup"
+      );
+      const removed = sweepStaleAnalyserDirs();
+      if (removed > 0) {
+        console.log(
+          `[instrumentation] Brief 226 cleanup-on-boot: removed ${removed} stale ditto-analyser-* dirs.`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "[instrumentation] Brief 226 cleanup-on-boot sweep failed:",
+        error,
+      );
+      // Non-fatal — sweep retries on next boot; per-handler try/finally
+      // is the primary defence.
     }
 
     // Brief 215 AC #2 — post-migration audit: if any processes had a non-null

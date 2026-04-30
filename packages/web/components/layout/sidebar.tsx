@@ -49,6 +49,13 @@ interface SidebarProps {
   orgName?: string;
   adaptiveViews?: AdaptiveViewNavItem[];
   onCollapseToggle?: () => void;
+  /**
+   * Brief 225 — when set, the "+ Connect a project" CTA appears under the
+   * Projects nav item. Tapping it seeds a Self conversation message
+   * ("Connect a new project") that triggers the `start_project_onboarding`
+   * tool. The parent decides what message to seed.
+   */
+  onConnectProject?: () => void;
 }
 
 /* ============================================================= */
@@ -147,6 +154,7 @@ export function Sidebar({
   orgName,
   adaptiveViews,
   onCollapseToggle,
+  onConnectProject,
 }: SidebarProps) {
   const inboxCount = useMemo(
     () =>
@@ -363,6 +371,41 @@ export function Sidebar({
             onClick={() => onNavigate(item.id)}
           />
         ))}
+        {onConnectProject && (
+          <button
+            onClick={onConnectProject}
+            data-testid="connect-project-cta"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              padding: "5px 10px 5px 38px",
+              borderRadius: 6,
+              color: "var(--color-text-muted)",
+              fontSize: 12.5,
+              fontWeight: 400,
+              cursor: "pointer",
+              background: "transparent",
+              border: "none",
+              fontFamily: "inherit",
+              width: "100%",
+              textAlign: "left",
+              marginBottom: 1,
+              transition: "background 120ms ease, color 120ms ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--color-surface-raised)";
+              e.currentTarget.style.color = "var(--color-text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--color-text-muted)";
+            }}
+          >
+            <span style={{ width: 13, height: 13, flexShrink: 0 }}>{icons.plus}</span>
+            <span>Connect a project</span>
+          </button>
+        )}
 
         {adaptiveViews && adaptiveViews.length > 0 && (
           <>

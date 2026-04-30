@@ -693,3 +693,155 @@ describe("MP-5.4 Spot-Check Transparency", () => {
     expect(briefing.spotCheckTransparency).toHaveLength(0);
   });
 });
+
+// ============================================================
+// Brief 227 — Cross-Project Memory Promotion Proposal
+// ============================================================
+
+describe("Brief 227 cross-project promotion proposal", () => {
+  async function seedProject(id: string, slug: string) {
+    await testDb.insert(schema.projects).values({
+      id,
+      slug,
+      name: slug,
+      kind: "build",
+      harnessType: "native",
+      status: "active",
+    } as any);
+  }
+
+  async function seedProcess(id: string, projectId: string) {
+    await testDb.insert(schema.processes).values({
+      id,
+      name: id,
+      slug: id,
+      definition: {} as any,
+      projectId,
+    });
+  }
+
+  async function seedMemory(scopeId: string, content: string, reinforcementCount = 3) {
+    const [m] = await testDb
+      .insert(schema.memories)
+      .values({
+        scopeType: "process",
+        scopeId,
+        type: "correction",
+        content,
+        source: "feedback",
+        confidence: 0.8,
+        reinforcementCount,
+        active: true,
+      })
+      .returning();
+    return m;
+  }
+
+  it("emits a cross-project promotion suggestion when memory reinforced ≥2× across ≥2 projects", async () => {
+    const userId = "test-user-promotion";
+    await seedSession(userId, new Date(Date.now() - 60000));
+
+    await seedProject("p1", "proj-a");
+    await seedProject("p2", "proj-b");
+    await seedProcess("proc-a", "p1");
+    await seedProcess("proc-b", "p2");
+    // Same content reinforced on both projects
+    await seedMemory("proc-a", "Always cite the data source", 3);
+    await seedMemory("proc-b", "Always cite the data source", 2);
+
+    const briefing = await assembleBriefing(userId);
+    const promotion = briefing.suggestions.find(
+      (s) => s.type === "cross_project_promotion",
+    );
+    expect(promotion).toBeDefined();
+    expect(promotion?.suggestion).toMatch(/2 different projects/);
+    expect(promotion?.memoryId).toBeTruthy();
+  });
+
+  it("does NOT emit a promotion suggestion when memory is in single-project scope", async () => {
+    const userId = "test-user-no-promotion";
+    await seedSession(userId, new Date(Date.now() - 60000));
+
+    await seedProject("p1", "proj-a");
+    await seedProcess("proc-a", "p1");
+    // Same content reinforced 5 times, but all on a single project
+    await seedMemory("proc-a", "Project A correction", 5);
+
+    const briefing = await assembleBriefing(userId);
+    const promotion = briefing.suggestions.find(
+      (s) => s.type === "cross_project_promotion",
+    );
+    expect(promotion).toBeUndefined();
+  });
+
+  it("respects 30-day cooldown after dismissal", async () => {
+    const userId = "test-user-cooldown";
+    await seedSession(userId, new Date(Date.now() - 60000));
+
+    await seedProject("p1", "proj-a");
+    await seedProject("p2", "proj-b");
+    await seedProcess("proc-a", "p1");
+    await seedProcess("proc-b", "p2");
+    const memA = await seedMemory("proc-a", "Cooldown-tested content", 3);
+    const memB = await seedMemory("proc-b", "Cooldown-tested content", 2);
+
+    // Insert a recent dismissal for one of the candidate memories
+    await testDb.insert(schema.activities).values({
+      action: "memory_promotion_dismissed",
+      actorType: "user",
+      entityType: "memory",
+      entityId: memA.id,
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+    });
+
+    const briefing = await assembleBriefing(userId);
+    const promotion = briefing.suggestions.find(
+      (s) => s.type === "cross_project_promotion",
+    );
+    expect(promotion).toBeUndefined();
+  });
+
+  it("dismiss_promotion_proposal tool engages cooldown end-to-end (Reviewer Crit-2 regression)", async () => {
+    const { handleDismissPromotionProposal } = await import(
+      "./self-tools/dismiss-promotion-proposal"
+    );
+    const originalTestMode = process.env.DITTO_TEST_MODE;
+    process.env.DITTO_TEST_MODE = "true";
+
+    try {
+      const userId = "test-user-end-to-end";
+      await seedSession(userId, new Date(Date.now() - 60000));
+
+      await seedProject("p1", "proj-a");
+      await seedProject("p2", "proj-b");
+      await seedProcess("proc-a", "p1");
+      await seedProcess("proc-b", "p2");
+      const memA = await seedMemory("proc-a", "End-to-end cooldown content", 3);
+      await seedMemory("proc-b", "End-to-end cooldown content", 2);
+
+      // Pre-dismissal: proposal surfaces
+      const before = await assembleBriefing(userId);
+      const beforeProposal = before.suggestions.find(
+        (s) => s.type === "cross_project_promotion",
+      );
+      expect(beforeProposal).toBeDefined();
+      expect(beforeProposal?.memoryId).toBeTruthy();
+
+      // User dismisses via the new tool
+      const dismissResult = await handleDismissPromotionProposal({
+        memoryId: beforeProposal!.memoryId!,
+      });
+      expect(dismissResult.success).toBe(true);
+
+      // Post-dismissal: same memory's content shouldn't re-surface
+      const after = await assembleBriefing(userId);
+      const afterProposal = after.suggestions.find(
+        (s) => s.type === "cross_project_promotion",
+      );
+      expect(afterProposal).toBeUndefined();
+    } finally {
+      if (originalTestMode === undefined) delete process.env.DITTO_TEST_MODE;
+      else process.env.DITTO_TEST_MODE = originalTestMode;
+    }
+  });
+});

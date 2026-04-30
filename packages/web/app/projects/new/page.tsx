@@ -105,13 +105,14 @@ export default function NewProjectPage() {
                 setSlugTouched(true);
               }}
               pattern="[a-z][a-z0-9-]{1,63}"
+              aria-describedby="slug-hint"
               className="mt-1 w-full rounded-lg border border-border px-3 py-2 font-mono text-sm"
               style={{ minHeight: 44 }}
             />
-            <span className="mt-1 block text-xs text-text-muted">
-              lowercase a-z 0-9 -, starts with a letter
-            </span>
           </label>
+          <span id="slug-hint" className="-mt-3 block text-xs text-text-muted">
+            lowercase a-z 0-9 -, starts with a letter
+          </span>
 
           <label className="block">
             <span className="text-sm font-medium text-text-secondary">GitHub repo</span>

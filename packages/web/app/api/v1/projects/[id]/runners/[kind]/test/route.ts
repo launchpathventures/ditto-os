@@ -54,9 +54,9 @@ export async function POST(
     );
   }
 
-  const { db } = await import("../../../../../../../../../../../src/db");
+  const { db } = await import("../../../../../../../../../../src/db");
   const { projects, projectRunners } = await import(
-    "../../../../../../../../../../../src/db/schema"
+    "../../../../../../../../../../src/db/schema"
   );
 
   const projectRows = await db

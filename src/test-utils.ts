@@ -28,7 +28,7 @@ const MIGRATIONS_FOLDER = path.join(PROJECT_ROOT, "drizzle");
  */
 export function createTestDb(): { db: TestDb; dbPath: string; cleanup: () => void } {
   const dbPath = path.join(os.tmpdir(), `ditto-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  const sqlite = new Database(dbPath);
+  const sqlite = new Database(dbPath, { timeout: 10_000 });
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 

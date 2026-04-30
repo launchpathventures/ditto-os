@@ -16,7 +16,9 @@ import { test, expect, resetDatabase } from "./fixtures";
 
 test.use({ viewport: { width: 375, height: 667 } });
 
-test.beforeAll(async () => {
+// Use beforeEach so Playwright's CI retries (retries: 2) start clean and
+// don't 409 on the slug created by the previous attempt.
+test.beforeEach(async () => {
   await resetDatabase();
 });
 
@@ -45,21 +47,19 @@ test.describe("Projects admin", () => {
     // Step 4 — open the kind selector
     await page.getByRole("button", { name: /add runner/i }).click();
 
-    // Local Mac mini is enabled
-    const localOption = page.getByLabel(/local mac mini/i);
-    await expect(localOption).toBeEnabled();
-
-    // The four cloud kinds are present + disabled with their tooltips.
-    for (const { kind, note } of [
-      { kind: /claude code routine/i, note: /sub-brief 216/i },
-      { kind: /claude managed agent/i, note: /sub-brief 217/i },
-      { kind: /github action/i, note: /sub-brief 218/i },
-      { kind: /e2b sandbox/i, note: /deferred/i },
+    // Local Mac mini + the three implemented cloud kinds are enabled
+    // (Briefs 216/217/218 lit them up; Brief 215's "disabled with sub-brief
+    // tooltip" state no longer applies). E2B Sandbox stays deferred.
+    for (const kind of [
+      /local mac mini/i,
+      /claude code routine/i,
+      /claude managed agent/i,
+      /github action/i,
     ]) {
-      const radio = page.getByLabel(kind);
-      await expect(radio).toBeDisabled();
-      await expect(page.getByText(note)).toBeVisible();
+      await expect(page.getByLabel(kind)).toBeEnabled();
     }
+    await expect(page.getByLabel(/e2b sandbox/i)).toBeDisabled();
+    await expect(page.getByText(/deferred/i)).toBeVisible();
 
     // Step 5 — fill local-mac-mini config + submit
     await page.getByLabel(/device id/i).fill("dev_smoke_test");

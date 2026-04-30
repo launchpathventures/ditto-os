@@ -1,0 +1,1 @@
+ALTER TABLE `runner_dispatches` ADD `callback_token_hash` text;

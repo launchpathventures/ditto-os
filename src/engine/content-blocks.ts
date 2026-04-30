@@ -44,6 +44,17 @@ export {
   type SendingIdentityChoiceBlock,
   type TrustMilestoneBlock,
 
+  // Brief 226 — analyser report block + sub-types
+  type AnalyserReportBlock,
+  type Finding,
+  type GoldStandardMatch,
+  type RunnerRecommendation,
+  type TrustTierRecommendation,
+
+  // Brief 228 — project retrofit plan block
+  type RetrofitPlanBlock,
+  type RetrofitPlanStatus,
+
   // Response-level metadata
   type ConfidenceCheck,
   type ConfidenceUncertainty,

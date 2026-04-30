@@ -50,9 +50,20 @@ export interface UpcomingItem {
 
 export interface SuggestionItem {
   id: string;
-  type: "coverage_gap" | "trust_upgrade" | "process_improvement" | "next_step";
+  type:
+    | "coverage_gap"
+    | "trust_upgrade"
+    | "process_improvement"
+    | "next_step"
+    | "cross_project_promotion";
   suggestion: string;
   reasoning: string;
+  /**
+   * Brief 227 — for cross_project_promotion suggestions: the memory the user
+   * is being asked to promote. Lets the renderer build the SuggestionBlock
+   * with the right action handlers + memory peek.
+   */
+  memoryId?: string;
 }
 
 /** Autonomous digest entry — one per process that auto-advanced (Brief 158 MP-3.1) */
@@ -576,7 +587,135 @@ async function assembleSuggestions(userId: string): Promise<SuggestionItem[]> {
     });
   }
 
+  // 4. Brief 227 — cross-project promotion proposal.
+  // Triggered when a memory is reinforced ≥2 times across ≥2 distinct projects.
+  // One per briefing max; 30-day cooldown on dismissal (activities query).
+  const promotionProposal = await detectCrossProjectPromotionCandidate();
+  if (promotionProposal) {
+    suggestions.push(promotionProposal);
+  }
+
   return suggestions;
+}
+
+/**
+ * Brief 227 — detect a memory eligible for cross-project promotion.
+ *
+ * Trigger: a process-scope memory has been reinforced ≥2 times across ≥2
+ * distinct projects (counted via the source process's `projectId`). Single-
+ * project repetition (≥3 reinforcements in one project) is project-internal
+ * pattern — not eligible (Designer spec §"We Noticed" Pattern).
+ *
+ * 30-day cooldown via `activities` query for prior
+ * `action='memory_promotion_dismissed'` rows.
+ *
+ * Returns at most ONE candidate (the highest-reinforcement memory). NULL when
+ * no eligible memory or the only candidate is in cooldown.
+ */
+async function detectCrossProjectPromotionCandidate(): Promise<SuggestionItem | null> {
+  // Pull all active process-scope correction memories whose source process
+  // has a non-null projectId. Group by content + reinforcement count.
+  const candidates = await db
+    .select({
+      memoryId: schema.memories.id,
+      content: schema.memories.content,
+      reinforcementCount: schema.memories.reinforcementCount,
+      scopeId: schema.memories.scopeId,
+      projectId: schema.processes.projectId,
+    })
+    .from(schema.memories)
+    .innerJoin(schema.processes, eq(schema.processes.id, schema.memories.scopeId))
+    .where(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        eq(schema.memories.active, true),
+      ),
+    );
+
+  // Group by content — count distinct projects + total reinforcements
+  type Bucket = {
+    representativeMemoryId: string;
+    content: string;
+    distinctProjects: Set<string>;
+    totalReinforcements: number;
+    topMemoryId: string;
+    topReinforcement: number;
+  };
+  const buckets = new Map<string, Bucket>();
+  for (const row of candidates) {
+    if (!row.projectId) continue;
+    const existing = buckets.get(row.content);
+    if (!existing) {
+      buckets.set(row.content, {
+        representativeMemoryId: row.memoryId,
+        content: row.content,
+        distinctProjects: new Set([row.projectId]),
+        totalReinforcements: row.reinforcementCount,
+        topMemoryId: row.memoryId,
+        topReinforcement: row.reinforcementCount,
+      });
+      continue;
+    }
+    existing.distinctProjects.add(row.projectId);
+    existing.totalReinforcements += row.reinforcementCount;
+    if (row.reinforcementCount > existing.topReinforcement) {
+      existing.topMemoryId = row.memoryId;
+      existing.topReinforcement = row.reinforcementCount;
+    }
+  }
+
+  const eligible = Array.from(buckets.values())
+    .filter(
+      (b) => b.distinctProjects.size >= 2 && b.totalReinforcements >= 2,
+    )
+    .sort((a, b) => b.totalReinforcements - a.totalReinforcements);
+
+  if (eligible.length === 0) return null;
+
+  // 30-day cooldown filter (Designer spec). Pull all recent dismissals once
+  // and filter eligible candidates against them in JS — saves an N×query
+  // round-trip and benefits from the activities composite index added in
+  // the same brief's migration (`activities_entity_action_idx`).
+  const cooldownThreshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentDismissalRows = await db
+    .select({ entityId: schema.activities.entityId })
+    .from(schema.activities)
+    .where(
+      and(
+        eq(schema.activities.entityType, "memory"),
+        eq(schema.activities.action, "memory_promotion_dismissed"),
+        gte(schema.activities.createdAt, cooldownThreshold),
+      ),
+    );
+  const dismissedMemoryIds = new Set(
+    recentDismissalRows
+      .map((r) => r.entityId)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  for (const candidate of eligible) {
+    const candidateMemoryIds = candidates
+      .filter((c) => c.content === candidate.content)
+      .map((c) => c.memoryId);
+
+    const inCooldown = candidateMemoryIds.some((id) =>
+      dismissedMemoryIds.has(id),
+    );
+    if (inCooldown) continue;
+
+    // Found a non-cooled-down candidate
+    const projectCount = candidate.distinctProjects.size;
+    return {
+      id: `promote-memory-${candidate.topMemoryId}`,
+      type: "cross_project_promotion",
+      memoryId: candidate.topMemoryId,
+      suggestion: `You've taught this on ${projectCount} different projects. Want it to apply everywhere?`,
+      reasoning: `Memory: "${candidate.content.slice(0, 120)}" — reinforced ${candidate.totalReinforcements}× across ${projectCount} project${projectCount === 1 ? "" : "s"}.`,
+    };
+  }
+
+  // All eligible candidates are within their cooldown window
+  return null;
 }
 
 // ============================================================

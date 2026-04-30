@@ -415,9 +415,9 @@ describe("user-model", () => {
 // ============================================================
 
 describe("selfTools definitions", () => {
-  it("has 32 tools (5 original + 1 Brief 052 + 7 Brief 040 + 1 Brief 074 + 3 Brief 043 + 1 Brief 044 + 3 Brief 164 + 1 Brief 068 + 1 Brief 079 + 5 Brief 118 + 2 Brief 131 + 1 Brief 134)", async () => {
+  it("has 36 tools (5 original + 1 Brief 052 + 7 Brief 040 + 1 Brief 074 + 3 Brief 043 + 1 Brief 044 + 3 Brief 164 + 1 Brief 068 + 1 Brief 079 + 5 Brief 118 + 2 Brief 131 + 1 Brief 134 + 3 Brief 227 + 1 Brief 228)", async () => {
     const { selfTools } = await import("../self-delegation");
-    expect(selfTools).toHaveLength(32);
+    expect(selfTools).toHaveLength(36);
 
     const names = selfTools.map((t) => t.name);
     // Original 5
@@ -453,6 +453,10 @@ describe("selfTools definitions", () => {
     // Brief 131 — Self Cognitive Orchestration
     expect(names).toContain("orchestrate_work");
     expect(names).toContain("generate_chat_link");
+    // Brief 227 — Memory scope promote/demote/dismiss
+    expect(names).toContain("promote_memory_scope");
+    expect(names).toContain("demote_memory_scope");
+    expect(names).toContain("dismiss_promotion_proposal");
   });
 
   it("all tools have valid schemas", async () => {

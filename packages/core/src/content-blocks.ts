@@ -53,7 +53,13 @@ export interface ReviewCardBlock {
   knowledgeUsed?: string[];
 }
 
-/** StatusCardBlock — Process or work item status */
+/** StatusCardBlock — Process or work item status.
+ *  Optional `metadata` (Brief 221) carries typed subtype-specific data — e.g.,
+ *  runner-dispatch state via `metadata.cardKind = "runnerDispatch"` plus runner
+ *  fields. Renderer dispatches via a `Record<cardKind, RendererFn>` table keyed
+ *  on `metadata.cardKind`; missing/unknown discriminator falls through to the
+ *  generic template. Future subtypes (Brief 220 deploy-status etc.) register
+ *  the same way — single-line per subtype, no cascading-if. */
 export interface StatusCardBlock {
   type: "status_card";
   entityType: "process_run" | "work_item";
@@ -61,6 +67,7 @@ export interface StatusCardBlock {
   title: string;
   status: string;
   details: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 /** ActionBlock — Choices for the user */
@@ -80,6 +87,7 @@ export interface InputRequestBlock {
 /** KnowledgeCitationBlock — Provenance strip
  *  Two use cases: memory provenance (original) and document citations (Brief 079).
  *  When document citation fields are present, renders with file/page/section detail.
+ *  When memory fields are present (Brief 227), renders a project-scope pill.
  */
 export interface KnowledgeCitationBlock {
   type: "knowledge_citation";
@@ -98,6 +106,22 @@ export interface KnowledgeCitationBlock {
     chunkId?: string; // enables neighbor fetch (Layer 2)
     fullText?: string; // complete chunk text, not truncated (Layer 1)
     documentHash?: string; // enables document viewer (Layer 3)
+    // Memory provenance + scope fields (Brief 227 — project memory scope)
+    /** When present, indicates this source is a memory (drives scope-pill rendering). */
+    memoryId?: string;
+    /** Memory type: correction | preference | user_model | skill | context | solution. */
+    memoryType?: string;
+    /** Memory scope type — drives which scope pill renders. */
+    memoryScopeType?: "process" | "self";
+    /** For process-scope memories: the source process's project id (null = pre-project-era). */
+    memoryProjectId?: string | null;
+    /** Display label for the project pill (project name or slug). */
+    memoryProjectSlug?: string | null;
+    /**
+     * For self-scope memories: list of project ids the memory applies to.
+     * null = full self-scope (everywhere). Non-empty array = hybrid (`<N> projects` pill).
+     */
+    memoryAppliedProjectIds?: string[] | null;
   }>;
 }
 
@@ -223,11 +247,16 @@ export interface ProcessProposalBlock {
   trigger?: string;
 }
 
-/** WorkItemFormBlock — structured work item creation form (Brief 072) */
+/** WorkItemFormBlock — structured work item creation form (Brief 072).
+ *  Optional `formId` (Brief 221) is a server-stamped namespace identifier used
+ *  by approve/reject API routes to discriminate which form-submission contract
+ *  applies. Server-stamped at mint time; client cannot forge it because routes
+ *  re-read the underlying `review_pages.contentBlocks` to validate. */
 export interface WorkItemFormBlock {
   type: "work_item_form";
   fields: InteractiveField[];
   defaults?: Record<string, unknown>;
+  formId?: string;
 }
 
 /** ConnectionSetupBlock — service connection initiation (Brief 072) */
@@ -267,6 +296,166 @@ export interface TrustMilestoneBlock {
   explanation?: string;
   /** Accept/reject actions for upgrades; override action for downgrades */
   actions?: ActionDef[];
+}
+
+// ============================================================
+// AnalyserReportBlock — project onboarding analyser surface (Brief 226)
+// ============================================================
+
+/** Finding — one row in strengths / watch-outs / missing (Brief 226). */
+export interface Finding {
+  /** User-facing one-liner. */
+  text: string;
+  /** Optional one-line citation backing the claim ("47 vitest specs, 82% coverage"). */
+  evidence?: string;
+  /** Optional default action Ditto would take if the user doesn't override. */
+  defaultAction?: string;
+}
+
+/** GoldStandardMatch — nearest-neighbour from landscape corpus (Brief 226). */
+export interface GoldStandardMatch {
+  name: string;
+  url: string;
+  rationale: string;
+}
+
+/** RunnerRecommendation — analyser's pick + alternatives (Brief 226).
+ *  The runner kind values mirror @ditto/core's RunnerKind enum but are
+ *  carried as plain strings here to keep ContentBlock free of runtime
+ *  schema imports — consumers validate against the enum at the seam. */
+export interface RunnerRecommendation {
+  kind: string;
+  rationale: string;
+  alternatives: Array<{ kind: string; rationale: string }>;
+}
+
+/** TrustTierRecommendation — analyser's pick + alternatives (Brief 226). */
+export interface TrustTierRecommendation {
+  tier: string;
+  rationale: string;
+  alternatives: Array<{ tier: string; rationale: string }>;
+}
+
+/** AnalyserReportBlock — Stage 3 of project onboarding (Brief 226).
+ *  Renders as a sequence of design-package primitives in the chat-col:
+ *  at-a-glance card → strengths/watch-outs/missing block.evidence cards →
+ *  runner+tier block.decision pickers → CTA row.
+ *  Shape per Designer spec docs/research/analyser-report-and-onboarding-flow-ux.md. */
+export interface AnalyserReportBlock {
+  type: "analyser_report";
+  entityType: "work_item";
+  /** workItems.id (existing FK convention from StatusCardBlock). */
+  entityId: string;
+  /** FK to projects.id. */
+  projectId: string;
+  atAGlance: {
+    /** ["TypeScript", "pnpm", "next.js", ...] */
+    stack: string[];
+    /** ["main branch", "847 files", "12.3 MB"] */
+    metadata: string[];
+    /** User-facing descriptor — NOT a persona name. */
+    looksLike: string;
+    nearestNeighbours: GoldStandardMatch[];
+  };
+  strengths: Finding[];
+  watchOuts: Finding[];
+  missing: Finding[];
+  recommendation: {
+    runner: RunnerRecommendation;
+    trustTier: TrustTierRecommendation;
+  };
+  /** Lifecycle of the report itself: draft (analyser still writing),
+   *  submitted (ready for user), active (user has confirmed). */
+  status: "draft" | "submitted" | "active";
+  /** Detectors that failed (partial-success path — Brief 226 §AC #11).
+   *  When non-empty, the renderer surfaces an info AlertBlock alongside the
+   *  available findings. */
+  detectorErrors?: Array<{ detector: string; message: string }>;
+}
+
+// ============================================================
+// RetrofitPlanBlock — project retrofit substrate writer surface (Brief 228)
+// ============================================================
+
+/** Lifecycle status of a retrofit plan. Brief 228 ships 5 surfaceable states
+ *  + a supervised-tier placeholder; Brief 229 fills in the per-file approval
+ *  surface for `pending-review` + adds `partially-approved`.
+ *
+ *  - `pending-review` (Brief 228 placeholder; Brief 229 fills in): supervised
+ *    tier; per-file approval UI lands in Brief 229. Brief 228 renders an
+ *    explainer + escalation CTA.
+ *  - `pending-sample-review`: spot_checked tier with sample-required;
+ *    user reviews sampled subset via /review/[token]. Dispatch blocked.
+ *  - `partially-approved` (Brief 229): user submitted a subset; awaiting
+ *    dispatch. Brief 228 does not produce this status.
+ *  - `dispatched`: runner is executing.
+ *  - `committed`: success; commit SHA + URL displayed.
+ *  - `rejected`: critical tier; informative error; user must hand-author.
+ *  - `failed`: dispatch error; reason displayed.
+ */
+export type RetrofitPlanStatus =
+  | "pending-review"
+  | "pending-sample-review"
+  | "partially-approved"
+  | "dispatched"
+  | "committed"
+  | "rejected"
+  | "failed";
+
+/** RetrofitPlanBlock — the user-facing surface for a retrofit plan + its
+ *  outcome. Renders inline in the chat-col on `/projects/:slug/onboarding`.
+ *
+ *  Brief 228 produces this block from the `surface-plan` step + updates it
+ *  in `verify-commit`. Brief 229 extends with per-file approval rows.
+ *
+ *  Renderer composition (Brief 228 §Constraints "Renderer composition"):
+ *  - block.plan — the planned `.ditto/` files render as a step list.
+ *  - block.evidence — runner kind / trust tier / commit SHA / status metadata.
+ *  - block.decision — the spot_checked sample yes/no surface (no .dopt.rec
+ *    badge — the user is approving, not picking).
+ */
+export interface RetrofitPlanBlock {
+  type: "retrofit_plan";
+  /** Stable identifier (uuid) for this plan. */
+  planId: string;
+  /** FK to projects.id. */
+  projectId: string;
+  /** The processRunId that produced this plan (for cross-reference). */
+  processRunId: string;
+  /** All planned files; the renderer shows them as a step list with action icons. */
+  files: Array<{
+    /** Stable id for per-file approval (Brief 229). */
+    id: string;
+    /** Repo-relative path, e.g. `.ditto/role-contracts/dev-builder.md`. */
+    path: string;
+    /** First-N-bytes preview for the renderer (NOT the full content). */
+    contentPreview: string;
+    /** Total byte size of the full content. */
+    byteSize: number;
+    /** What this file does relative to the prior retrofit's state. */
+    action: "create" | "update" | "unchanged";
+  }>;
+  /** Picked runner kind (mirrors RunnerKind enum but as plain string per
+   *  AnalyserReportBlock convention). */
+  runnerKind: string;
+  /** Trust tier picked at confirm time (or re-run time). */
+  trustTier: string;
+  /** Lifecycle status. */
+  status: RetrofitPlanStatus;
+  /** Set on `committed` — runner-returned commit SHA. */
+  commitSha?: string;
+  /** Set on `committed` — diff link in the user's git host. */
+  commitUrl?: string;
+  /** Brief 228 §Constraints "Re-runnable retrofit / user-edit safety":
+   *  paths of files that were excluded from the dispatch under autonomous
+   *  tier because the user edited them between retrofits. */
+  skippedUserTouchedFiles?: string[];
+  /** spot_checked sampling: subset of `files[].id` that were sampled.
+   *  When `status === 'pending-sample-review'` these are the files the user
+   *  reviews on /review/[token]. Empty array when sampling not required. */
+  sampledFileIds?: string[];
+  /** Failure detail for `failed` / `rejected` statuses. */
+  failureReason?: string;
 }
 
 /** FormSubmitAction — action type for form submissions (Brief 072) */
@@ -473,7 +662,9 @@ export type ContentBlock =
   | WorkItemFormBlock
   | ConnectionSetupBlock
   | SendingIdentityChoiceBlock
-  | TrustMilestoneBlock;
+  | TrustMilestoneBlock
+  | AnalyserReportBlock
+  | RetrofitPlanBlock;
 
 /** All possible content block type strings */
 export type ContentBlockType = ContentBlock["type"];
@@ -758,6 +949,85 @@ export function renderBlockToText(block: ContentBlock): string {
       }
       if (block.actions) {
         parts.push(block.actions.map((a) => `[${a.label}]`).join(" "));
+      }
+      return parts.filter(Boolean).join("\n");
+    }
+
+    case "analyser_report": {
+      const parts: string[] = [];
+      parts.push(`Onboarding report (${block.status})`);
+      const ag = block.atAGlance;
+      if (ag.stack.length) parts.push(`  Stack: ${ag.stack.join(", ")}`);
+      if (ag.metadata.length) parts.push(`  ${ag.metadata.join(" · ")}`);
+      if (ag.looksLike) parts.push(`  Looks like: ${ag.looksLike}`);
+      if (ag.nearestNeighbours.length) {
+        parts.push(
+          `  Closest matches: ${ag.nearestNeighbours.map((n) => n.name).join(", ")}`,
+        );
+      }
+      const renderFindings = (label: string, items: Finding[]) => {
+        if (items.length === 0) return;
+        parts.push(`${label}:`);
+        for (const f of items) {
+          const ev = f.evidence ? ` (${f.evidence})` : "";
+          parts.push(`  - ${f.text}${ev}`);
+        }
+      };
+      renderFindings("Strengths", block.strengths);
+      renderFindings("Watch-outs", block.watchOuts);
+      renderFindings("Missing", block.missing);
+      parts.push(
+        `Recommended runner: ${block.recommendation.runner.kind} — ${block.recommendation.runner.rationale}`,
+      );
+      parts.push(
+        `Recommended trust tier: ${block.recommendation.trustTier.tier} — ${block.recommendation.trustTier.rationale}`,
+      );
+      if (block.detectorErrors && block.detectorErrors.length > 0) {
+        parts.push(
+          `Detector partial failures: ${block.detectorErrors.map((e) => e.detector).join(", ")}`,
+        );
+      }
+      return parts.filter(Boolean).join("\n");
+    }
+
+    case "retrofit_plan": {
+      const parts: string[] = [];
+      parts.push(`Retrofit plan (${block.status})`);
+      parts.push(
+        `  Runner: ${block.runnerKind} · Trust tier: ${block.trustTier}`,
+      );
+      const counts = block.files.reduce(
+        (acc, f) => {
+          acc[f.action] = (acc[f.action] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+      const summary = Object.entries(counts)
+        .map(([k, v]) => `${v} ${k}`)
+        .join(", ");
+      if (summary) parts.push(`  Files: ${summary}`);
+      for (const f of block.files) {
+        const marker =
+          f.action === "unchanged"
+            ? "✓"
+            : f.action === "create"
+              ? "+"
+              : f.action === "update"
+                ? "~"
+                : "·";
+        parts.push(`  ${marker} ${f.path} (${f.byteSize} B)`);
+      }
+      if (block.commitSha) {
+        parts.push(`  Commit: ${block.commitSha}`);
+      }
+      if (block.skippedUserTouchedFiles?.length) {
+        parts.push(
+          `  Skipped (user-edited): ${block.skippedUserTouchedFiles.join(", ")}`,
+        );
+      }
+      if (block.failureReason) {
+        parts.push(`  Reason: ${block.failureReason}`);
       }
       return parts.filter(Boolean).join("\n");
     }

@@ -35,6 +35,13 @@ export const workItemBriefInputSchema = z.object({
  *
  * Insight-180: `stepRunId` is OPTIONAL but its absence triggers the
  * bounded-waiver path (caller writes `guardWaived=true` to the audit row).
+ *
+ * Brief 232: `responseBody` is an OPTIONAL opaque-JSON channel for the
+ * runner's structured response. The wire boundary enforces object-ness
+ * (`z.record(z.unknown())`) — scalars/arrays/strings are rejected here,
+ * Insight-017 defensive posture. Per-shape validation is consumer-side
+ * (e.g., the retrofitter validates `{commitSha?, actuallyChangedFiles?,
+ * skippedFiles?}`); the validator does not know the shape.
  */
 export const workItemStatusUpdateSchema = z.object({
   state: briefStateSchema,
@@ -45,6 +52,7 @@ export const workItemStatusUpdateSchema = z.object({
   runnerKind: runnerKindSchema.optional(),
   externalRunId: z.string().min(1).optional(),
   linkedProcessRunId: z.string().min(1).optional(),
+  responseBody: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type WorkItemBriefInputParsed = z.infer<typeof workItemBriefInputSchema>;

@@ -70,4 +70,6 @@ This insight is **not** Insight-200 (named-trigger parking). Insight-200 defers 
 
 **Absorption criterion:** this insight stays `active` until (a) at least one brief applies it end-to-end and ships a user-facing filesystem projection, AND (b) a second independent brief at a different seam re-applies it — at which point the pattern is proven and the Architect folds it into `docs/architecture.md` §Layer 6 as a first-class legibility subsection.
 
+**Status as of 2026-04-28:** condition (a) satisfied — Brief 228 (Project Retrofitter, shipped 2026-04-28) ships `.ditto/` substrate writes into the target repo's working tree (a real user-facing filesystem projection sibling to `.git/`, `.github/`, `.claude/`, `.catalyst/`; ADR-043 finalises the directory shape + the Catalyst-coexistence stance). Condition (b) pending Brief 199 (memory projection, still in `docs/briefs/`, not `complete/`). When Brief 199 ships, the Documenter at that closeout discharges the absorption gate, folds the principle into architecture.md §Layer 6, and archives this insight.
+
 **Do NOT pre-reserve brief numbers for applications of this insight** (per Insight-200's hygiene rule). Seam-by-seam briefs claim numbers at scheduling time.

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./design-system.css";
 
 /* Streamdown — Tailwind content scanning for streaming markdown (Brief 058) */
 @source "../../../node_modules/streamdown/dist/*.js";
@@ -76,6 +77,7 @@ button:disabled, [type="submit"]:disabled {
   --color-vivid: #059669;
   --color-vivid-deep: #3D5A48;
   --color-vivid-subtle: #ECFDF5;
+  --color-vivid-subtle-border: #D1F4E1;
 
   /* Semantic */
   --color-positive: #16a34a;
@@ -111,6 +113,10 @@ button:disabled, [type="submit"]:disabled {
   --text-xl--line-height: 1.3;
   --text-2xl: 1.953rem;
   --text-2xl--line-height: 1.2;
+  --text-3xl: 2.441rem;
+  --text-3xl--line-height: 1.15;
+  --text-4xl: 3.052rem;
+  --text-4xl--line-height: 1.1;
 
   /* Spacing — 4px grid */
   --spacing-1: 4px;
@@ -145,6 +151,7 @@ button:disabled, [type="submit"]:disabled {
     --color-vivid: #10B981;
     --color-vivid-deep: #6B8F71;
     --color-vivid-subtle: #1A2E22;
+    --color-vivid-subtle-border: #25453A;
 
     --color-positive: #22c55e;
     --color-caution: #E5A820;

@@ -15,12 +15,20 @@ import { EngineViewProvider } from "@/components/detail/engine-view";
 
 interface WorkspacePageProps {
   userId: string;
+  /** Brief 225 — controls visibility of the "Connect a project" CTA. */
+  projectOnboardingReady?: boolean;
 }
 
-export function WorkspacePage({ userId }: WorkspacePageProps) {
+export function WorkspacePage({
+  userId,
+  projectOnboardingReady = false,
+}: WorkspacePageProps) {
   return (
     <EngineViewProvider>
-      <Workspace userId={userId} />
+      <Workspace
+        userId={userId}
+        projectOnboardingReady={projectOnboardingReady}
+      />
     </EngineViewProvider>
   );
 }

@@ -66,6 +66,16 @@ const createProjectBody = z.object({
    * inserts the project AND a project_runners row in one transaction.
    */
   runnerConfig: runnerConfigBody.optional(),
+  /**
+   * Brief 225 — when `true` AND the env var `DITTO_PROJECT_ONBOARDING_READY`
+   * is set, the project is created with `kind='build'`, `status='analysing'`,
+   * and the `project-onboarding` process run is queued. The bearer is NOT
+   * generated yet (deferred to the analysing → active flip). When the env
+   * var is unset, this field is silently coerced to false (legacy Brief 223
+   * behaviour) so production never strands `analysing` projects whose
+   * onboarding surface is hidden.
+   */
+  kickOffOnboarding: z.boolean().optional(),
 });
 
 export async function GET(req: Request) {
@@ -75,8 +85,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const includeArchived = url.searchParams.get("includeArchived") === "true";
 
-  const { db } = await import("../../../../../../../src/db");
-  const { projects } = await import("../../../../../../../src/db/schema");
+  const { db } = await import("../../../../../../src/db");
+  const { projects } = await import("../../../../../../src/db/schema");
   const rows = await (includeArchived
     ? db.select().from(projects)
     : db.select().from(projects).where(ne(projects.status, "archived")));
@@ -101,7 +111,7 @@ export async function POST(req: Request) {
   // Per-kind discriminated-union validation (Brief 223 AC #13).
   if (data.runnerConfig) {
     const { validateRunnerConfig } = await import(
-      "../../../../../../../src/engine/runner-config-schemas"
+      "../../../../../../src/engine/runner-config-schemas"
     );
     const r = validateRunnerConfig(
       data.runnerConfig.kind,
@@ -119,13 +129,13 @@ export async function POST(req: Request) {
     }
   }
 
-  const { db } = await import("../../../../../../../src/db");
+  const { db } = await import("../../../../../../src/db");
   const { projects, projectRunners } = await import(
-    "../../../../../../../src/db/schema"
+    "../../../../../../src/db/schema"
   );
   const { kindToMode } = await import("@ditto/core");
   const { generateBearerToken, hashBearerToken } = await import(
-    "../../../../../../../src/engine/project-credentials"
+    "../../../../../../src/engine/project-credentials"
   );
 
   const existing = await db
@@ -140,6 +150,49 @@ export async function POST(req: Request) {
     );
   }
 
+  // Brief 225 — env-var-gated onboarding flow. When the gate is closed
+  // (production with the surface hidden), `kickOffOnboarding` silently
+  // coerces to false so legacy Brief 223 behaviour applies; this prevents
+  // stranded `analysing` projects.
+  const onboardingFlowReady =
+    process.env.DITTO_PROJECT_ONBOARDING_READY === "true";
+  const useOnboardingFlow = onboardingFlowReady && data.kickOffOnboarding === true;
+
+  if (useOnboardingFlow) {
+    const { createOnboardingProject } = await import(
+      "../../../../../../src/engine/projects/create-project-onboarding"
+    );
+    const result = await createOnboardingProject({
+      slug: data.slug,
+      name: data.name,
+      githubRepo: data.githubRepo,
+      defaultBranch: data.defaultBranch,
+      harnessType: data.harnessType,
+      briefSource: data.briefSource,
+      briefPath: data.briefPath,
+      deployTarget: data.deployTarget,
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json(
+      {
+        project: result.project,
+        // Bearer deferred to confirm-route — explicit null surfaces the
+        // contract change to API callers.
+        bearerToken: null,
+        bearerOnceWarning: false,
+        conversationUrl: result.conversationUrl,
+      },
+      { status: 201 },
+    );
+  }
+
+  // Legacy Brief 223 path — bearer generated up-front, optional first
+  // project_runners row inserted as a convenience wrapper.
   const bearerToken = generateBearerToken();
   const bearerHash = await hashBearerToken(bearerToken);
 
@@ -158,15 +211,14 @@ export async function POST(req: Request) {
       runnerChain: data.runnerChain as RunnerKind[] | undefined,
       deployTarget: data.deployTarget,
       runnerBearerHash: bearerHash,
-      // Status: 'active' iff a default runner is named, else 'analysing'
-      // (the BEFORE-flow case for Brief 224's onboarding analyser).
+      kind: "build",
+      // Status: 'active' iff a default runner is named, else 'analysing'.
       status: data.defaultRunnerKind ? "active" : "analysing",
     })
     .returning();
 
   const project = inserted[0];
 
-  // Optional first project_runners row — convenience wrapper per AC #3.
   if (data.runnerConfig) {
     await db.insert(projectRunners).values({
       projectId: project.id,

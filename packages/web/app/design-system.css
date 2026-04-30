@@ -1,0 +1,646 @@
+/* =========================================================================
+   Ditto Design System — Component CSS Layer (Brief 230)
+   =========================================================================
+   Source-of-truth-mirror: .context/attachments/design-package-2026-04-27/
+     - project/workspace/blocks.js (canonical class names + composition)
+     - project/Workspace.html       (canonical CSS for block primitives)
+     - project/colors_and_type.css  (token source-of-truth, mirrored to
+                                     packages/web/app/globals.css @theme)
+
+   This file ports the six block primitives + chrome + alex-line composition
+   helper from the Anthropic Claude Design package, plus the Ditto-original
+   .block.findings primitive (sectioned-list-with-tone-coded-header).
+
+   Hex literals from the source map mechanically to existing tokens (see
+   colors_and_type.css and Brief 230 §Constraints): white-on-vivid icons map
+   to color-accent-text; the bopt fill/border map to color-surface-raised
+   and color-border respectively; the pscore badge border maps to
+   color-vivid-subtle-border (added in Brief 230).
+
+   Selector structure: sub-classes (.dopt, .eline, .pstep, .recbadge, etc.)
+   are authored standalone (not nested under .block.<primitive>) so renderers
+   can compose them in articles, cards, or stand-alone blocks. Class names
+   match the design package verbatim — JSX uses className="block decision",
+   "dopt rec", "recbadge", etc.
+   ========================================================================= */
+
+@layer components {
+  /* ===========================================================
+     Block chrome (root + header + body + foot)
+     =========================================================== */
+
+  .block {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .block-head {
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+
+  .block-head .bkind {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .block-head .bkind svg {
+    width: 11px;
+    height: 11px;
+    stroke-width: 2;
+  }
+
+  .block-head .bkind .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-vivid);
+  }
+
+  .block-head .bopen {
+    font-size: 11.5px;
+    color: var(--color-text-muted);
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .block-head .bopen:hover {
+    color: var(--color-vivid-deep);
+    background: var(--color-vivid-subtle);
+  }
+
+  .bbody {
+    padding: 14px;
+  }
+
+  .block-foot {
+    padding: 8px 12px;
+    display: flex;
+    gap: 4px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-wrap: wrap;
+  }
+
+  /* ===========================================================
+     alex-line — chat-line annotation composition helper
+     =========================================================== */
+
+  .alex-line {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13.5px;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin-top: 6px;
+  }
+
+  .alex-line .alex-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-vivid);
+    color: var(--color-accent-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: -1px;
+  }
+
+  .alex-line .alex-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .alex-line .alex-body b {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  /* ===========================================================
+     block.breakdown — "Let's break it down" option list
+     =========================================================== */
+
+  .block.breakdown .bbody {
+    padding: 14px;
+  }
+
+  .block.breakdown .bintro {
+    font-size: 13.5px;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+    margin: 0 0 12px;
+  }
+
+  .block.breakdown .bopts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .block.breakdown .bopt {
+    padding: 10px 12px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    transition: all 120ms ease;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+
+  .block.breakdown .bopt:hover {
+    border-color: var(--color-vivid);
+    background: var(--color-vivid-subtle);
+  }
+
+  .block.breakdown .bopt .num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .block.breakdown .bopt:hover .num {
+    background: var(--color-vivid);
+    color: var(--color-accent-text);
+    border-color: var(--color-vivid);
+  }
+
+  .block.breakdown .bopt .otitle {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    line-height: 1.35;
+  }
+
+  .block.breakdown .bopt .odesc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  /* ===========================================================
+     block.decision — picker (recommended option + alternatives)
+     Sub-classes (.dopt, .recbadge, .dh, .dd, .blead, .dfoot, .dopts)
+     are also authored standalone below for non-.block.decision contexts.
+     =========================================================== */
+
+  .block.decision .bbody {
+    padding: 14px;
+  }
+
+  .blead {
+    font-size: 13.5px;
+    color: var(--color-text-primary);
+    line-height: 1.55;
+    margin: 0 0 12px;
+  }
+
+  .blead b {
+    font-weight: 600;
+  }
+
+  .dopts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dopt {
+    padding: 12px;
+    background: var(--color-background);
+    border: 1.5px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: all 120ms ease;
+    position: relative;
+  }
+
+  .dopt.rec {
+    border-color: var(--color-vivid);
+    background: var(--color-vivid-subtle);
+  }
+
+  .dopt:hover {
+    border-color: var(--color-vivid-deep);
+  }
+
+  .recbadge {
+    position: absolute;
+    top: -8px;
+    right: 10px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--color-vivid);
+    color: var(--color-accent-text);
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+
+  .dopt .dh {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 4px;
+  }
+
+  .dopt .dd {
+    font-size: 11.5px;
+    color: var(--color-text-secondary);
+    line-height: 1.45;
+  }
+
+  .dfoot {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--color-border);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.5;
+  }
+
+  /* ===========================================================
+     block.plan — step list with action icons
+     =========================================================== */
+
+  .block.plan .bbody {
+    padding: 0;
+  }
+
+  .plead {
+    padding: 12px 14px;
+    font-size: 13.5px;
+    color: var(--color-text-primary);
+    line-height: 1.55;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .pstep {
+    display: flex;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    align-items: flex-start;
+  }
+
+  .pstep:last-child {
+    border-bottom: none;
+  }
+
+  .pstep .num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-background);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pstep.done .num {
+    background: var(--color-vivid);
+    border-color: var(--color-vivid);
+    color: var(--color-accent-text);
+  }
+
+  .pstep .sbody {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pstep .st {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    line-height: 1.4;
+  }
+
+  .pstep .sm {
+    font-size: 11.5px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    line-height: 1.4;
+  }
+
+  .pstep .sm .own {
+    color: var(--color-vivid-deep);
+    font-weight: 500;
+  }
+
+  /* ===========================================================
+     block.compare — comparison table
+     =========================================================== */
+
+  .block.compare .bbody {
+    padding: 0;
+  }
+
+  .ctable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+
+  .ctable th,
+  .ctable td {
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .ctable th {
+    background: var(--color-background);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .ctable td {
+    color: var(--color-text-primary);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+
+  .ctable td:first-child {
+    font-weight: 500;
+    width: 28%;
+    color: var(--color-text-secondary);
+  }
+
+  .ctable tr.rec td {
+    background: var(--color-vivid-subtle);
+  }
+
+  .ctable tr.rec td:first-child {
+    color: var(--color-vivid-deep);
+  }
+
+  .ctake {
+    padding: 12px 14px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+    font-style: italic;
+    line-height: 1.5;
+    display: flex;
+    gap: 10px;
+  }
+
+  .ctake .amark {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-vivid);
+    color: var(--color-accent-text);
+    font-size: 9px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-style: normal;
+  }
+
+  /* ===========================================================
+     block.evidence — kv-pair list (NOT tone-coded section list;
+     see .block.findings for that semantic).
+     =========================================================== */
+
+  .block.evidence .bbody {
+    padding: 12px 14px;
+  }
+
+  .eline {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+    border-bottom: 1px dashed var(--color-border);
+  }
+
+  .eline > span:first-child {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.4;
+  }
+
+  .eline b {
+    flex-shrink: 0;
+    white-space: nowrap;
+    text-align: right;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eline:last-child {
+    border-bottom: none;
+  }
+
+  /* ===========================================================
+     block.people — hire/people-detail row list
+     =========================================================== */
+
+  .block.people .bbody {
+    padding: 0;
+  }
+
+  .prow {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .prow:last-child {
+    border-bottom: none;
+  }
+
+  .prow .pinfo {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .prow .pname {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .prow .psub {
+    font-size: 11.5px;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+
+  .prow .pwhy {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .prow .pscore {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-vivid-deep);
+    background: var(--color-vivid-subtle);
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--color-vivid-subtle-border);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===========================================================
+     block.findings — Ditto-original primitive (Brief 230 CRIT-3)
+     A sectioned-list-with-tone-coded-header. Used by AnalyserReportBlock
+     for Strengths (tone-positive), Watch-outs (tone-caution), Missing
+     (tone-negative). Distinct from .block.evidence (kv-pair semantic).
+
+     Renders as a tonal in-flow section, not a card — overrides .block
+     chrome (background/border/border-radius/overflow) so it can nest
+     inside a parent card wrapper without producing nested-card visuals.
+     =========================================================== */
+
+  .block.findings {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .findings-section {
+    padding: 12px 14px;
+  }
+
+  .finding-title {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  .finding-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    list-style: none;
+    padding: 0;
+  }
+
+  .finding-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    color: var(--color-text-primary);
+  }
+
+  .finding-icon {
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Tone modifiers — compound-class with .block.findings to scope. */
+
+  .block.findings.tone-positive {
+    background-color: color-mix(in srgb, var(--color-positive) 5%, transparent);
+  }
+  .block.findings.tone-positive .finding-icon {
+    color: var(--color-positive);
+  }
+
+  .block.findings.tone-caution {
+    background-color: color-mix(in srgb, var(--color-caution) 5%, transparent);
+  }
+  .block.findings.tone-caution .finding-icon {
+    color: var(--color-caution);
+  }
+
+  .block.findings.tone-negative {
+    background-color: color-mix(in srgb, var(--color-negative) 5%, transparent);
+  }
+  .block.findings.tone-negative .finding-icon {
+    color: var(--color-negative);
+  }
+
+  .block.findings.tone-info {
+    background-color: color-mix(in srgb, var(--color-info) 5%, transparent);
+  }
+  .block.findings.tone-info .finding-icon {
+    color: var(--color-info);
+  }
+
+  .block.findings.tone-vivid {
+    background-color: var(--color-vivid-subtle);
+  }
+  .block.findings.tone-vivid .finding-icon {
+    color: var(--color-vivid);
+  }
+}

@@ -295,7 +295,11 @@ export const reviewPatternHandler: HarnessHandler = {
           const retryResult = await executeStep(
             context.stepDefinition,
             retryInputs,
-            context.processDefinition
+            context.processDefinition,
+            undefined,
+            undefined,
+            context.stepRunId,
+            context.processRun.id,
           );
           context.stepResult = retryResult;
           totalCostCents += retryResult.costCents || 0;

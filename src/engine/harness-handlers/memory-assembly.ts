@@ -18,11 +18,77 @@
  */
 
 import { db, schema } from "../../db";
-import { eq, and, desc, ne } from "drizzle-orm";
+import { eq, and, desc, ne, or, isNull, inArray, sql } from "drizzle-orm";
 import type { HarnessHandler, HarnessContext } from "../harness";
 import { resolveTools } from "../tool-resolver";
 import { getCognitiveCoreCompact, getCognitiveModeExtension } from "../cognitive-core";
 import { resolveModeFromProcess, resolveGhostModeOverride } from "../cognitive-mode-resolver";
+
+/**
+ * Brief 227 — Project-aware scope predicate for memory loading.
+ *
+ * Returns the WHERE predicate that selects which memories load for the current
+ * step run. Handles three cases:
+ *
+ * 1. **Project-aware** (`projectId` set): process-scope memories from any
+ *    process belonging to the same project (project-mate sharing), plus
+ *    pre-project-era process-scope memories (source process `projectId=NULL` —
+ *    AC #12 backfill discipline), plus self-scope memories that apply globally
+ *    or contain the current projectId in `appliedProjectIds` (hybrid scope).
+ * 2. **Legacy fallback** (`projectId` IS NULL): preserves the original
+ *    single-process eq() behaviour for pre-project-era runs, plus self-scope
+ *    memories with `appliedProjectIds` IS NULL.
+ *
+ * Cross-project NOT bleeding: when the current process belongs to project X,
+ * memories tagged to a process belonging to project Y are NOT loaded.
+ */
+function buildProjectScopePredicate(
+  projectId: string | null,
+  currentProcessId: string,
+) {
+  if (projectId !== null) {
+    return or(
+      and(
+        eq(schema.memories.scopeType, "process"),
+        inArray(
+          schema.memories.scopeId,
+          db
+            .select({ id: schema.processes.id })
+            .from(schema.processes)
+            .where(
+              or(
+                eq(schema.processes.projectId, projectId),
+                // AC #12 — pre-project-era memories load across all projects
+                isNull(schema.processes.projectId),
+              ),
+            ),
+        ),
+      ),
+      and(
+        eq(schema.memories.scopeType, "self"),
+        or(
+          isNull(schema.memories.appliedProjectIds),
+          // SQLite-native array-contains via json_each lateral
+          sql`EXISTS (SELECT 1 FROM json_each(${schema.memories.appliedProjectIds}) WHERE value = ${projectId})`,
+        ),
+      ),
+    );
+  }
+
+  // Legacy fallback — pre-project-era current process. Preserves single-process
+  // scope match; self-scope memories load only when fully self-scoped (NULL
+  // appliedProjectIds — applies everywhere by definition).
+  return or(
+    and(
+      eq(schema.memories.scopeType, "process"),
+      eq(schema.memories.scopeId, currentProcessId),
+    ),
+    and(
+      eq(schema.memories.scopeType, "self"),
+      isNull(schema.memories.appliedProjectIds),
+    ),
+  );
+}
 
 /** Default token budget for memory injection (4 chars ≈ 1 token) */
 const DEFAULT_TOKEN_BUDGET = 2000;
@@ -96,6 +162,20 @@ export const memoryAssemblyHandler: HarnessHandler = {
       DEFAULT_TOKEN_BUDGET;
     const charBudget = tokenBudget * CHARS_PER_TOKEN;
 
+    // Brief 227 — projectId is normally threaded in by the caller
+    // (heartbeat.executeSingleStep). When absent (e.g., legacy/test contexts
+    // that don't pass it), fall back to a DB lookup so memory-assembly is
+    // robust against missing wiring. NULL means pre-project-era (legacy
+    // compat — falls back to single-process memory scope).
+    if (context.projectId === null) {
+      const [processRow] = await db
+        .select({ projectId: schema.processes.projectId })
+        .from(schema.processes)
+        .where(eq(schema.processes.id, context.processRun.processId))
+        .limit(1);
+      context.projectId = processRow?.projectId ?? null;
+    }
+
     // Load agent-scoped memories (if we have an agent ID)
     // Currently no agent assignment mechanism, so agent_role is used as scopeId
     const agentRole = context.stepDefinition.agent_role;
@@ -128,7 +208,13 @@ export const memoryAssemblyHandler: HarnessHandler = {
         );
     }
 
-    // Load process-scoped memories (excluding solution type — those have their own budget)
+    // Load process-scoped memories (excluding solution type — those have their own budget).
+    // Brief 227: project-aware filter — process-scope memories from project-mate
+    // processes plus self-scope memories applicable to this project.
+    const scopePredicate = buildProjectScopePredicate(
+      context.projectId,
+      context.processRun.processId,
+    );
     const processMemories = await db
       .select({
         type: schema.memories.type,
@@ -139,8 +225,7 @@ export const memoryAssemblyHandler: HarnessHandler = {
       .from(schema.memories)
       .where(
         and(
-          eq(schema.memories.scopeType, "process"),
-          eq(schema.memories.scopeId, context.processRun.processId),
+          scopePredicate,
           eq(schema.memories.active, true),
           ne(schema.memories.type, "solution"),
         )
@@ -268,6 +353,9 @@ export const memoryAssemblyHandler: HarnessHandler = {
     // --- Solution knowledge (Brief 060, AC9-10) ---
     // Separate budget for solution memories. Category-filtered, salience-sorted.
     const solutionCharBudget = SOLUTION_KNOWLEDGE_TOKEN_BUDGET * CHARS_PER_TOKEN;
+    // Brief 227: solution memories also follow project-aware scope. Reuse the
+    // same predicate built once above; the project-mate filter and self-scope
+    // applicability rules apply identically to the solution-type subset.
     const solutionMemories = await db
       .select({
         id: schema.memories.id,
@@ -279,8 +367,7 @@ export const memoryAssemblyHandler: HarnessHandler = {
       .from(schema.memories)
       .where(
         and(
-          eq(schema.memories.scopeType, "process"),
-          eq(schema.memories.scopeId, context.processRun.processId),
+          scopePredicate,
           eq(schema.memories.type, "solution"),
           eq(schema.memories.active, true),
         ),

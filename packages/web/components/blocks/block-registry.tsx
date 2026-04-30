@@ -36,6 +36,8 @@ import { WorkItemFormBlockComponent } from "./work-item-form-block";
 import { ConnectionSetupBlockComponent } from "./connection-setup-block";
 import { SendingIdentityChoiceBlockComponent } from "./sending-identity-choice-block";
 import { TrustMilestoneBlockComponent } from "./trust-milestone-block";
+import { AnalyserReportBlockComponent } from "./analyser-report-block";
+import { RetrofitPlanBlockComponent } from "./retrofit-plan-block";
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -96,6 +98,10 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <SendingIdentityChoiceBlockComponent block={block} onAction={onAction} />;
     case "trust_milestone":
       return <TrustMilestoneBlockComponent block={block} onAction={onAction} />;
+    case "analyser_report":
+      return <AnalyserReportBlockComponent block={block} onAction={onAction} />;
+    case "retrofit_plan":
+      return <RetrofitPlanBlockComponent block={block} onAction={onAction} />;
     default: {
       // Exhaustiveness check — TypeScript will error if a type is missing (AC15)
       const _exhaustive: never = block;

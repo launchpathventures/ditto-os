@@ -24,12 +24,23 @@ export function setSystemAgentResolver(
   systemAgentResolver = resolver;
 }
 
+/**
+ * Execute a single process step.
+ *
+ * `stepRunId` and `processRunId` (when supplied) are forwarded into the
+ * inputs that reach the system-agent handler under reserved keys
+ * `_stepRunId` / `_processRunId`. Side-effecting handlers read them to
+ * enforce the Insight-180 step-run guard. Existing handlers ignore the
+ * extra keys.
+ */
 export async function executeStep(
   step: StepDefinition,
   runInputs: Record<string, unknown>,
   processDefinition: ProcessDefinition,
   resolvedTools?: unknown,
   _processId?: string,
+  stepRunId?: string,
+  processRunId?: string,
 ): Promise<StepExecutionResult> {
   console.log(`  Executing step: ${step.name} (${step.executor})`);
 
@@ -39,7 +50,12 @@ export async function executeStep(
     const handler = systemAgentResolver(systemAgentName);
     if (handler) {
       console.log(`  System agent: ${systemAgentName}`);
-      return handler(runInputs);
+      const enrichedInputs = {
+        ...runInputs,
+        _stepRunId: stepRunId,
+        _processRunId: processRunId,
+      };
+      return handler(enrichedInputs);
     }
   }
 
@@ -69,6 +85,9 @@ export const stepExecutionHandler: HarnessHandler = {
         context.processRun.inputs,
         context.processDefinition,
         context.resolvedTools ?? undefined,
+        undefined,
+        context.stepRunId,
+        context.processRun.id,
       );
       context.stepResult = result;
     } catch (error) {
