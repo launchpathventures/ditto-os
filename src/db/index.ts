@@ -24,17 +24,34 @@ if (!fs.existsSync(dbDir)) {
 }
 
 // `timeout: 10_000` sets PRAGMA busy_timeout — when parallel vitest workers
-// race to set `journal_mode = WAL` against the same DB file, one wins and the
-// others wait the busy_timeout for the locking pragma to clear instead of
-// returning SQLITE_BUSY immediately. Without this, CI test jobs that
-// transitively import `src/db` from multiple suites trip the pragma race and
-// fail one suite at module load.
+// race against the same DB file, one wins the write lock and the others wait
+// up to that long instead of returning SQLITE_BUSY immediately.
 const sqlite = new Database(DB_PATH, { timeout: 10_000 });
 
-// WAL mode for better concurrent read performance. Setting it is idempotent
-// at the DB-file level (once it's WAL, subsequent connections inherit), but
-// the pragma itself takes a write lock — hence the busy_timeout above.
-sqlite.pragma("journal_mode = WAL");
+/**
+ * Set WAL mode. Setting it is idempotent at the DB-file level — once a
+ * connection sets it, the file stays in WAL until explicitly changed and
+ * subsequent connections inherit it. But the pragma itself requires an
+ * exclusive lock; busy_timeout doesn't fully serialise this against parallel
+ * vitest workers all opening the same file at boot. Skip the pragma when
+ * the file is already in WAL, and tolerate SQLITE_BUSY from a concurrent
+ * worker that's setting it right now (we'll inherit the same mode).
+ */
+const currentJournalMode = (
+  sqlite.pragma("journal_mode", { simple: true }) as string
+).toLowerCase();
+if (currentJournalMode !== "wal") {
+  try {
+    sqlite.pragma("journal_mode = WAL");
+  } catch (err) {
+    const isBusy =
+      err instanceof Error &&
+      (err as { code?: string }).code === "SQLITE_BUSY";
+    if (!isBusy) throw err;
+    // Another worker is setting WAL right now. The DB will be in WAL by the
+    // time our first query runs.
+  }
+}
 sqlite.pragma("foreign_keys = ON");
 
 export const db = drizzle(sqlite, { schema });
