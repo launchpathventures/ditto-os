@@ -149,15 +149,36 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
     },
 
     async deployService(serviceId, environmentId) {
-      const data = await gql<{ serviceInstanceDeploy: RailwayDeployment }>(
+      // Railway's serviceInstanceDeploy returns Boolean! — fire-and-forget.
+      // We separately query the most recent deployment to get an id we can poll.
+      await gql<{ serviceInstanceDeploy: boolean }>(
         `mutation($serviceId: String!, $environmentId: String!) {
-          serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId) {
-            id status
-          }
+          serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId)
         }`,
         { serviceId, environmentId },
       );
-      return data.serviceInstanceDeploy;
+
+      // The just-fired deployment may take a moment to appear in the
+      // deployments list; brief retry loop. ~10s budget is generous for
+      // Railway's normal indexing latency (~1-3s).
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const data = await gql<{
+          deployments: { edges: Array<{ node: RailwayDeployment }> };
+        }>(
+          `query($input: DeploymentListInput!) {
+            deployments(input: $input, first: 1) {
+              edges { node { id status } }
+            }
+          }`,
+          { input: { projectId, serviceId, environmentId } },
+        );
+        const node = data.deployments.edges[0]?.node;
+        if (node) return node;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      throw new Error(
+        `Railway: serviceInstanceDeploy fired but no deployment surfaced in list within 10s for service ${serviceId}`,
+      );
     },
 
     async createDomain(serviceId, environmentId) {
