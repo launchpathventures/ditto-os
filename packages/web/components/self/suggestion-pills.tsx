@@ -24,7 +24,7 @@ export function SuggestionPills({
           key={pill}
           type="button"
           onClick={() => onSelect(pill)}
-          className="shrink-0 rounded-full border border-border bg-surface-raised px-3 py-1.5 md:px-4 md:py-2 text-sm text-text-secondary transition-colors hover:border-vivid hover:text-vivid"
+          className="shrink-0 rounded-full border border-border bg-surface-raised px-3 py-1.5 md:px-4 md:py-2 text-sm text-text-primary transition-all duration-150 ease-out hover:-translate-y-px hover:border-text-primary/30 hover:bg-surface-raised"
         >
           {pill}
         </button>

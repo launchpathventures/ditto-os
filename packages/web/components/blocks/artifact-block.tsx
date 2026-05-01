@@ -55,7 +55,7 @@ export function ArtifactBlockComponent({
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {/* Type icon */}
           <div className="w-8 h-8 rounded-md bg-vivid-subtle flex items-center justify-center flex-shrink-0">
-            <IconComponent size={18} className="text-vivid-deep" />
+            <IconComponent size={18} className="text-text-primary" />
           </div>
 
           <div className="flex-1 min-w-0">

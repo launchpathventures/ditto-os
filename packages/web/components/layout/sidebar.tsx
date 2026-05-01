@@ -263,7 +263,7 @@ export function Sidebar({
             fontSize: 20,
             fontWeight: 700,
             letterSpacing: "-0.025em",
-            color: "var(--color-vivid)",
+            color: "var(--color-text-primary)",
             textTransform: "lowercase",
           }}
         >
@@ -291,7 +291,7 @@ export function Sidebar({
         )}
       </div>
 
-      {/* New chat CTA */}
+      {/* New chat CTA — ink-black, 8px radius (Amplemarket discipline) */}
       <div style={{ padding: 12 }}>
         <button
           onClick={onNewChat}
@@ -300,14 +300,14 @@ export function Sidebar({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            padding: "9px 10px",
-            background: "var(--color-vivid)",
-            border: "1px solid var(--color-vivid)",
+            padding: "10px 14px",
+            background: "var(--color-accent)",
+            border: "1px solid var(--color-accent)",
             borderRadius: 8,
             cursor: "pointer",
             fontSize: 13,
             fontWeight: 500,
-            color: "#fff",
+            color: "var(--color-accent-text)",
             fontFamily: "inherit",
             width: "100%",
             whiteSpace: "nowrap",
@@ -318,8 +318,8 @@ export function Sidebar({
             e.currentTarget.style.borderColor = "var(--color-accent-hover)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--color-vivid)";
-            e.currentTarget.style.borderColor = "var(--color-vivid)";
+            e.currentTarget.style.background = "var(--color-accent)";
+            e.currentTarget.style.borderColor = "var(--color-accent)";
           }}
         >
           <span style={{ width: 15, height: 15 }}>{icons.plus}</span>
@@ -330,9 +330,9 @@ export function Sidebar({
               fontFamily: "var(--font-mono)",
               fontSize: 10.5,
               padding: "1px 5px",
-              border: "1px solid rgba(255,255,255,0.3)",
+              border: "1px solid rgba(255,255,255,0.18)",
               borderRadius: 4,
-              background: "rgba(0,0,0,0.1)",
+              background: "rgba(255,255,255,0.08)",
               flexShrink: 0,
             }}
           >
@@ -712,13 +712,14 @@ function UserChip({ userName, orgName }: { userName?: string; orgName?: string }
           height: 28,
           minWidth: 28,
           borderRadius: "50%",
-          background: "linear-gradient(135deg, #ff4000, #cc3300)",
-          color: "#fff",
+          background: "var(--color-subtle-lavender)",
+          color: "var(--color-deep-indigo)",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           fontSize: 11,
           fontWeight: 600,
+          letterSpacing: "-0.01em",
         }}
       >
         {initials}
@@ -770,8 +771,8 @@ function WordmarkMark() {
         height: 28,
         marginBottom: 2,
         borderRadius: 8,
-        background: "var(--color-vivid)",
-        color: "#fff",
+        background: "var(--color-accent)",
+        color: "var(--color-accent-text)",
         fontSize: 13,
         fontWeight: 700,
         display: "inline-flex",
@@ -869,10 +870,17 @@ function NewChatIconOnly({ onClick }: { onClick: () => void }) {
         alignItems: "center",
         justifyContent: "center",
         borderRadius: 8,
-        background: "var(--color-vivid)",
-        color: "#fff",
+        background: "var(--color-accent)",
+        color: "var(--color-accent-text)",
         border: "none",
         cursor: "pointer",
+        transition: "background 150ms ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--color-accent-hover)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "var(--color-accent)";
       }}
     >
       <span style={{ width: 15, height: 15 }}>{icons.plus}</span>

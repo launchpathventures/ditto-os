@@ -266,12 +266,12 @@ function HighlightedMarkdown({
 
     if (startIdx === -1) {
       // Single block or deeply nested — highlight the block ancestor directly
-      blockAncestor.classList.add("bg-vivid/10", "border-l-2", "border-vivid", "rounded-r", "px-3", "py-2", "my-2");
+      blockAncestor.classList.add("bg-surface-raised", "border-l-2", "border-text-primary", "rounded-r", "px-3", "py-2", "my-2");
       return;
     }
 
     for (let i = Math.max(0, startIdx); i <= Math.max(startIdx, endIdx); i++) {
-      children[i]?.classList.add("bg-vivid/10", "border-l-2", "border-vivid", "rounded-r", "px-3", "py-1");
+      children[i]?.classList.add("bg-surface-raised", "border-l-2", "border-text-primary", "rounded-r", "px-3", "py-1");
     }
   }, [chunkText, content]);
 

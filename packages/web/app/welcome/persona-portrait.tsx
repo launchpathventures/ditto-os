@@ -1,51 +1,64 @@
 "use client";
 
 /**
- * PersonaPortrait — typographic initial badge for Alex/Mira.
+ * PersonaPortrait — animated brand-color orbs for Alex and Mira.
  *
- * Placeholder art until real illustrations land. The colour accents distinguish
- * the two personas without leaning on stereotypes — Alex is a warm sand tone
- * that echoes the Australian light; Mira is a cool slate that reads as London
- * weather.
+ * Each persona maps to one of the two Ditto gradient brand colors:
+ *   - Alex  → Phoenix Orange (warm orange → cream → lavender)
+ *   - Mira  → Cyan Glow      (lavender core → pale aqua → bright cyan)
+ *
+ * Both gradients are the exact radial specs from the brand sheet (off-axis
+ * centers preserved for the pearlescent quality). A soft white highlight
+ * layer drifts on a slow 11s loop to give the orb a living, breathing
+ * presence — light catching a pearl. Respects prefers-reduced-motion.
+ *
+ * No letter overlay — the orb itself carries the identity.
  */
 
 import type { PersonaId } from "@/lib/persona";
 
-const STYLES: Record<PersonaId, { bg: string; text: string; ring: string }> = {
-  alex: {
-    bg: "bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200",
-    text: "text-amber-900",
-    ring: "ring-amber-300/60",
-  },
-  mira: {
-    bg: "bg-gradient-to-br from-slate-100 via-indigo-100 to-slate-200",
-    text: "text-slate-900",
-    ring: "ring-slate-300/60",
-  },
+// Exact brand-sheet radial gradients. Preserve the off-axis percentages —
+// they're what makes the gradients feel atmospheric rather than centered.
+const ORB: Record<PersonaId, string> = {
+  alex:
+    "radial-gradient(386.06% 162.79% at -13.1926% -17.1008%, rgb(232, 64, 13) 0%, rgb(255, 238, 216) 26.1559%, rgb(208, 178, 255) 84.1533%)",
+  mira:
+    "radial-gradient(80.17% 109.2% at 52.1169% 62.5363%, rgb(208, 178, 255) 0%, rgb(198, 236, 233) 35.282%, rgb(153, 255, 249) 96.5565%)",
 };
 
-export function PersonaPortrait({
-  personaId,
-  size = "lg",
-  initial,
-}: {
+// Pearl-highlight overlay. Sits above the base gradient and drifts to give
+// the orb a living shimmer. Position-of-shine differs per persona to match
+// where each gradient's natural "light" already lives.
+const HIGHLIGHT: Record<PersonaId, string> = {
+  alex:
+    "radial-gradient(48% 38% at 26% 22%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 70%)",
+  mira:
+    "radial-gradient(42% 36% at 32% 28%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 72%)",
+};
+
+interface PersonaPortraitProps {
   personaId: PersonaId;
   size?: "sm" | "md" | "lg";
-  initial?: string;
-}) {
-  const letter = initial ?? (personaId === "alex" ? "A" : "M");
-  const style = STYLES[personaId];
-  const dims =
-    size === "sm" ? "h-10 w-10 text-lg"
-    : size === "md" ? "h-14 w-14 text-2xl"
-    : "h-20 w-20 text-4xl";
+}
 
+export function PersonaPortrait({ personaId, size = "lg" }: PersonaPortraitProps) {
+  const dim = size === "sm" ? 40 : size === "md" ? 56 : 80;
   return (
     <div
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-tight shadow-sm ring-2 ring-inset ${dims} ${style.bg} ${style.text} ${style.ring}`}
-      aria-hidden="true"
+      aria-hidden
+      className="ditto-orb relative shrink-0 overflow-hidden rounded-full"
+      style={{
+        width: dim,
+        height: dim,
+        background: ORB[personaId],
+        boxShadow:
+          "0 6px 18px -8px rgba(16, 5, 77, 0.28), inset 0 -2px 8px rgba(16, 5, 77, 0.18), inset 0 1px 1px rgba(255, 255, 255, 0.35)",
+      }}
     >
-      {letter}
+      <div
+        className="ditto-orb-highlight absolute inset-0"
+        style={{ background: HIGHLIGHT[personaId] }}
+      />
     </div>
   );
 }

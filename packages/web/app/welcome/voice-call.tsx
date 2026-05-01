@@ -472,7 +472,7 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
     return (
       <button
         onClick={handleStartCall}
-        className="flex items-center gap-2 rounded-full bg-vivid px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-vivid/90 hover:shadow-md active:scale-95"
+        className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-all hover:bg-accent-hover active:scale-[0.99]"
       >
         <Phone className="h-4 w-4" />
         Talk to {personaName || "Alex"}
@@ -484,7 +484,7 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
   if (callState === "connecting") {
     return (
       <div className="flex items-center gap-2">
-        <div className="h-3 w-3 animate-pulse rounded-full bg-vivid" />
+        <div className="h-3 w-3 animate-pulse rounded-full bg-text-primary" />
         <span className="text-sm text-text-secondary">Connecting...</span>
       </div>
     );
@@ -496,11 +496,11 @@ export const VoiceCall = forwardRef<VoiceCallHandle, VoiceCallProps>(function Vo
       <div className="flex items-center gap-3">
         <div className="relative flex h-6 w-6 items-center justify-center">
           <div
-            className={`absolute inset-0 rounded-full bg-vivid/20 ${
+            className={`absolute inset-0 rounded-full bg-text-primary/20 ${
               conversation.isSpeaking ? "animate-ping" : "animate-pulse"
             }`}
           />
-          <div className="relative h-2 w-2 rounded-full bg-vivid" />
+          <div className="relative h-2 w-2 rounded-full bg-text-primary" />
         </div>
 
         <span className="text-xs text-text-muted">{formatDuration(duration)}</span>

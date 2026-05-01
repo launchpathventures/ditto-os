@@ -44,16 +44,16 @@ export default function ProjectDetailPage({
   }, [slug]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex items-center justify-between border-b border-border bg-white px-4 py-4">
-        <Link href="/projects" className="text-sm text-text-secondary">
+    <div className="min-h-screen bg-background">
+      <nav className="flex items-center justify-between border-b border-border bg-surface px-4 py-4">
+        <Link href="/projects" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
           ← Projects
         </Link>
         {project && (
           <Link
             href={`/projects/${project.slug}/runners`}
-            className="rounded-lg bg-vivid px-3 py-1.5 text-sm font-semibold text-white"
-            style={{ minHeight: 44 }}
+            className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover transition-colors"
+            style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
           >
             Runners
           </Link>
@@ -62,7 +62,7 @@ export default function ProjectDetailPage({
 
       <main className="mx-auto max-w-3xl px-4 py-6">
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-2xl border border-negative/20 bg-negative/10 p-3 text-sm text-negative">
             {error}
           </div>
         )}
@@ -72,8 +72,8 @@ export default function ProjectDetailPage({
           <>
             <header>
               <div className="flex items-baseline gap-3">
-                <h1 className="text-xl font-bold text-text-primary">{project.name}</h1>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-text-secondary">
+                <h1 className="text-3xl font-semibold tracking-tight text-text-primary">{project.name}</h1>
+                <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-text-secondary">
                   {project.status}
                 </span>
               </div>
@@ -81,10 +81,10 @@ export default function ProjectDetailPage({
             </header>
 
             <section className="mt-6 space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Overview
               </h2>
-              <dl className="rounded-xl border border-border bg-white p-4 text-sm">
+              <dl className="rounded-3xl border border-border bg-surface p-6 text-sm shadow-[var(--shadow-medium)]">
                 <Row label="GitHub repo" value={project.githubRepo} />
                 <Row label="Default branch" value={project.defaultBranch} />
                 <Row label="Harness type" value={project.harnessType} />
@@ -97,7 +97,7 @@ export default function ProjectDetailPage({
             </section>
 
             <section className="mt-6 space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Recent dispatches
               </h2>
               <p className="text-sm text-text-muted">

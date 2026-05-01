@@ -43,7 +43,7 @@ function StepIcon({ status }: { status: ProcessStep["status"] }) {
   switch (status) {
     case "done":
       return (
-        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">
+        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-positive/10 text-positive text-xs font-bold">
           ✓
         </span>
       );

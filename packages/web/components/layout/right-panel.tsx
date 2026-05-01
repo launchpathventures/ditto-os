@@ -449,12 +449,12 @@ function SuggestionItem({
   const idx = index ?? 0;
   return (
     <div
-      className="bg-vivid-subtle rounded-lg"
+      className="rounded-lg border border-border bg-surface-raised"
       style={{ padding: "12px 16px" }}
     >
       <p
-        className="text-vivid-deep uppercase mb-1"
-        style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em" }}
+        className="text-text-muted uppercase mb-1"
+        style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em" }}
       >
         Suggestion
       </p>
@@ -465,7 +465,7 @@ function SuggestionItem({
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => onAction(`suggest-accept-${idx}-${ts}`, { suggestionType: "Briefing", content: text })}
-            className="text-xs font-medium px-3 py-1 rounded-full bg-vivid text-white hover:bg-vivid/90 transition-colors"
+            className="text-xs font-medium px-3 py-1 rounded-full bg-accent text-accent-foreground hover:bg-accent-hover transition-colors"
           >
             Accept
           </button>

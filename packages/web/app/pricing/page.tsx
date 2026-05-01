@@ -104,7 +104,7 @@ function FeatureCheck({ children }: { children: React.ReactNode }) {
     <li className="flex items-start gap-3">
       <Check
         size={16}
-        className="mt-0.5 shrink-0 text-vivid"
+        className="mt-0.5 shrink-0 text-text-primary"
         strokeWidth={2.5}
       />
       <span className="text-sm text-text-secondary">{children}</span>
@@ -158,7 +158,7 @@ export default function PricingPage() {
             <div className="mt-8">
               <Link
                 href="/#get-started"
-                className="inline-flex items-center gap-2 rounded-lg bg-vivid px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
               >
                 Talk to Alex
                 <ArrowRight size={16} />
@@ -171,7 +171,7 @@ export default function PricingPage() {
       {/* Success Fees — Network */}
       <section className="px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[720px]">
-          <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
             Network
           </p>
           <h2 className="mt-2 text-2xl font-bold text-text-primary">
@@ -230,9 +230,9 @@ export default function PricingPage() {
             </table>
           </div>
 
-          <div className="mt-6 rounded-lg border border-vivid/20 bg-vivid/5 px-5 py-4">
+          <div className="mt-6 rounded-lg border border-border bg-surface-raised px-5 py-4">
             <p className="text-sm text-text-secondary">
-              <span className="font-semibold text-vivid">
+              <span className="font-semibold text-text-primary">
                 Why outcome-based?
               </span>{" "}
               If we charged per send, we&apos;d be incentivised to send more.
@@ -248,7 +248,7 @@ export default function PricingPage() {
       <section className="border-t border-border bg-surface px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[960px]">
           <div className="mx-auto max-w-[720px] text-center">
-            <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
               Workspace
             </p>
             <h2 className="mt-2 text-2xl font-bold text-text-primary">
@@ -267,12 +267,12 @@ export default function PricingPage() {
                 key={tier.name}
                 className={`relative rounded-xl border p-6 transition-shadow hover:shadow-md ${
                   tier.popular
-                    ? "border-vivid bg-white shadow-sm"
+                    ? "border-text-primary bg-white shadow-sm"
                     : "border-border bg-white"
                 }`}
               >
                 {tier.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-vivid px-3 py-0.5 text-xs font-semibold text-white">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-0.5 text-xs font-semibold text-accent-foreground">
                     Most popular
                   </div>
                 )}
@@ -281,7 +281,7 @@ export default function PricingPage() {
                   <div
                     className={`flex h-9 w-9 items-center justify-center rounded-lg ${
                       tier.popular
-                        ? "bg-vivid text-white"
+                        ? "bg-accent text-accent-foreground"
                         : "bg-surface text-text-secondary"
                     }`}
                   >
@@ -313,7 +313,7 @@ export default function PricingPage() {
                     href="/#get-started"
                     className={`block w-full rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-colors ${
                       tier.popular
-                        ? "bg-vivid text-white hover:bg-accent-hover"
+                        ? "bg-accent text-accent-foreground hover:bg-accent-hover"
                         : "border border-border bg-white text-text-primary hover:bg-surface"
                     }`}
                   >
@@ -373,7 +373,7 @@ export default function PricingPage() {
             ].map((step, i, arr) => (
               <div key={step.stage} className="flex gap-4">
                 <div className="flex flex-col items-center">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-vivid text-xs font-bold text-white">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
                     {i + 1}
                   </div>
                   {i < arr.length - 1 && (
@@ -385,7 +385,7 @@ export default function PricingPage() {
                     <span className="text-xs font-medium text-text-muted">
                       {step.stage}
                     </span>
-                    <span className="rounded-full bg-vivid/10 px-2 py-0.5 text-xs font-semibold text-vivid">
+                    <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs font-semibold text-text-primary">
                       {step.label}
                     </span>
                   </div>
@@ -458,7 +458,7 @@ export default function PricingPage() {
           <div className="mt-6">
             <Link
               href="/#get-started"
-              className="inline-flex items-center gap-2 rounded-lg bg-vivid px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
             >
               Talk to Alex — it&apos;s free
               <ArrowRight size={16} />

@@ -78,11 +78,17 @@ export function ChatMessage({
   }, [text, role, variant]);
 
   if (role === "alex") {
+    // Hero variants used to display 24-30px headline-scale type, which
+    // reads as shouty for any message longer than a single line. Cap them
+    // to a slightly weighted body scale — the *first message* gets a
+    // gentle emphasis bump (semibold) but never breaks the chat reading
+    // rhythm. Long messages stay legible; short greetings still feel
+    // welcoming via weight, not size.
     const styles = {
       "hero-primary":
-        "text-2xl font-bold tracking-tight text-text-primary md:text-3xl md:leading-[1.15]",
+        "text-base font-semibold leading-relaxed text-text-primary md:text-[17px]",
       "hero-secondary":
-        "text-xl font-semibold tracking-tight text-text-primary md:text-2xl md:leading-[1.2]",
+        "text-base font-medium leading-relaxed text-text-primary md:text-[17px]",
       body: "text-base font-medium leading-relaxed text-text-primary md:text-[17px]",
     };
 
@@ -114,7 +120,7 @@ export function ChatMessage({
 
   return (
     <div className={`flex justify-end ${animate ? "animate-fade-in" : ""}`}>
-      <div className="max-w-[85%] rounded-2xl bg-vivid-subtle px-4 py-3">
+      <div className="max-w-[85%] rounded-2xl bg-surface-raised border border-border px-4 py-3">
         <p className="text-base text-text-primary whitespace-pre-wrap">{text}</p>
       </div>
     </div>
@@ -129,13 +135,13 @@ function UserPastedMessage({ text, animate }: { text: string; animate: boolean }
 
   return (
     <div className={`flex justify-end ${animate ? "animate-fade-in" : ""}`}>
-      <div className="max-w-[85%] rounded-2xl bg-vivid-subtle overflow-hidden">
+      <div className="max-w-[85%] rounded-2xl bg-surface-raised border border-border overflow-hidden">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
           className="flex w-full items-center gap-2 px-4 py-3 text-left"
         >
-          <FileText size={16} className="shrink-0 text-vivid" />
+          <FileText size={16} strokeWidth={1.6} className="shrink-0 text-text-secondary" />
           <span className="flex-1 text-sm font-medium text-text-primary">
             Pasted text — {lines.length} lines
           </span>

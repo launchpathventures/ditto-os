@@ -19,6 +19,26 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Eagerly dispatch the heavy engine imports at module load. In dev these
+// otherwise compile lazily on the first POST, adding 5-10s of JIT cost to
+// the visitor's first chat turn. Awaited again later — the second resolve
+// hits the warm module cache instantly. In production this is a no-op
+// (modules are pre-bundled).
+const networkChatModulePromise = import(
+  "../../../../../../../../src/engine/network-chat"
+);
+const llmModulePromise = import("../../../../../../../../src/engine/llm");
+const turnstileModulePromise = import(
+  "../../../../../../../../src/engine/turnstile"
+);
+const dbModulePromise = import("../../../../../../../../src/db");
+// Surface unhandled rejections silently — we'll re-await below where it
+// matters, and an unawaited promise is intentional here.
+networkChatModulePromise.catch(() => {});
+llmModulePromise.catch(() => {});
+turnstileModulePromise.catch(() => {});
+dbModulePromise.catch(() => {});
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -65,14 +85,38 @@ export async function POST(request: Request) {
     const forwarded = request.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
 
-    // Turnstile bot verification
-    const { verifyTurnstileToken } = await import("../../../../../../../../src/engine/turnstile");
-    const turnstile = await verifyTurnstileToken(turnstileToken, ip);
-    if (!turnstile.ok) {
-      return NextResponse.json(
-        { error: "Bot verification failed. Please refresh and try again." },
-        { status: 403 },
-      );
+    // Bot/abuse gates only run when no sessionId is presented. If the caller
+    // is already on a valid session, that session was created through a
+    // verified path (/persona interview-start) so re-verifying here is
+    // wasted Cloudflare + Redis RTT on every chat turn. Validate that the
+    // sessionId actually exists and is unexpired before trusting it.
+    let trustedSession = false;
+    if (sessionId) {
+      const { db, schema } = await dbModulePromise;
+      const { eq, sql, and } = await import("drizzle-orm");
+      const [existing] = await db
+        .select({ sessionId: schema.chatSessions.sessionId })
+        .from(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.sessionId, sessionId),
+            sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
+          ),
+        );
+      trustedSession = !!existing;
+    }
+
+    if (!trustedSession) {
+      // No (or invalid) session — apply the full bot/abuse gates that the
+      // /persona route would have applied at session-creation time.
+      const { verifyTurnstileToken } = await turnstileModulePromise;
+      const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstile.ok) {
+        return NextResponse.json(
+          { error: "Bot verification failed. Please refresh and try again." },
+          { status: 403 },
+        );
+      }
     }
 
     // Load env vars from root .env (override: false ensures platform vars take precedence)
@@ -83,21 +127,25 @@ export async function POST(request: Request) {
     } catch { /* env vars may be set via platform */ }
 
     const [{ handleChatTurnStreaming, checkIpRateLimit, hashIp }, llm] = await Promise.all([
-      import("../../../../../../../../src/engine/network-chat"),
-      import("../../../../../../../../src/engine/llm"),
+      networkChatModulePromise,
+      llmModulePromise,
     ]);
 
     if (!llm.isMockLlmMode()) {
       try { llm.initLlm(); } catch { /* already initialized */ }
     }
 
-    // Rate limit: return HTTP 429 so infrastructure can enforce
-    const ipAllowed = await checkIpRateLimit(hashIp(ip));
-    if (!ipAllowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 },
-      );
+    // Rate limit: only check on un-trusted (no-session) calls. Authenticated
+    // session callers are already gated by session creation having been
+    // rate-limited on the /persona path.
+    if (!trustedSession) {
+      const ipAllowed = await checkIpRateLimit(hashIp(ip));
+      if (!ipAllowed) {
+        return NextResponse.json(
+          { error: "Too many requests. Please try again later." },
+          { status: 429 },
+        );
+      }
     }
 
     // Use TransformStream so each write flushes independently to the client.

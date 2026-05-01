@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * "What I Know" card — shows key facts Alex has learned during the conversation.
- * Updates live as the chat progresses, giving the visitor confidence that
- * Alex is actually listening and building a picture.
+ * "What I Know" card — shows key facts the persona has learned during the
+ * conversation. Updates live as the chat progresses.
  *
- * Two variants:
- * - Full (desktop sidebar): styled card with icons per field
- * - Compact (mobile sticky): single line showing the latest captured field
+ * Treatment: ink-on-white, no chrome accent color. Eyebrow label + dotted
+ * 8-segment progress ticker + hairline-circle monochrome icons + hairline
+ * dividers between rows. The panel is a column, not a sidebar — it should
+ * read as a peer pane, not a tray.
  *
- * Provenance: ProcessOS /get-started pattern.
+ * Provenance: Jace AI right-rail, Granola sidebar, ManyChat segmented
+ * subnav (refero design research, May 2026).
  */
 
 import { User, Building2, Briefcase, MapPin, Target, MessageSquare, Compass, Layers } from "lucide-react";
@@ -38,48 +39,54 @@ export function LearnedContext({ learned }: { learned: Record<string, string | n
 
   const filledCount = entries.length;
   const totalFields = FIELDS.length;
-  const progressPct = Math.round((filledCount / totalFields) * 100);
 
   return (
-    <div className="animate-fade-in rounded-2xl border border-border bg-white shadow-sm">
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+    <div className="animate-fade-in rounded-2xl border border-border bg-white shadow-subtle">
+      {/* Header — eyebrow label + tabular counter */}
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
             What I know so far
           </p>
-          <span className="text-xs tabular-nums text-text-muted">
-            {filledCount}/{totalFields}
+          <span className="text-[11px] tabular-nums text-text-muted/80">
+            {filledCount} / {totalFields}
           </span>
         </div>
-        {/* Progress bar */}
-        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full rounded-full bg-vivid transition-all duration-500 ease-out"
-            style={{ width: `${progressPct}%` }}
-          />
+        {/* Dotted 8-segment progress ticker — ink dots fill from the left */}
+        <div className="mt-3 flex items-center gap-1.5" role="progressbar" aria-valuenow={filledCount} aria-valuemax={totalFields}>
+          {Array.from({ length: totalFields }).map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 w-1 rounded-full transition-colors duration-500 ${
+                i < filledCount ? "bg-text-primary" : "bg-border"
+              }`}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Fields */}
-      <div className="px-5 pb-4 pt-1">
-        <div className="space-y-3">
+      {/* Fields — hairline circle icons + ink labels, divided by 1px dashed hairlines */}
+      <div className="px-5 pb-5">
+        <ul className="divide-y divide-border/70">
           {entries.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex items-start gap-3 animate-fade-in">
-              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-vivid/10">
-                <Icon size={13} className="text-vivid" />
+            <li
+              key={key}
+              className="flex items-start gap-3 py-3 first:pt-1 animate-fade-in"
+            >
+              <div className="mt-[1px] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-white">
+                <Icon size={13} strokeWidth={1.6} className="text-text-secondary" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-muted">
                   {label}
                 </p>
-                <p className="text-sm text-text-primary leading-snug">
+                <p className="mt-0.5 text-[14px] font-medium leading-snug text-text-primary">
                   {value}
                 </p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </div>
   );
@@ -94,16 +101,16 @@ export function LearnedContextCompact({ learned }: { learned: Record<string, str
   const LastIcon = last.icon;
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border bg-white/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-vivid/10">
-        <LastIcon size={11} className="text-vivid" />
+    <div className="flex items-center gap-2 rounded-xl border border-border bg-white/95 px-3 py-1.5 text-xs shadow-subtle backdrop-blur-sm">
+      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border">
+        <LastIcon size={11} strokeWidth={1.6} className="text-text-secondary" />
       </div>
       <span className="font-semibold tabular-nums text-text-muted">
         {entries.length}/{FIELDS.length}
       </span>
       <span className="text-border">|</span>
       <span className="truncate text-text-secondary">
-        {last.label}: {last.value}
+        <span className="font-medium text-text-primary">{last.label}:</span> {last.value}
       </span>
     </div>
   );

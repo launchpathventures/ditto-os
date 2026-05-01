@@ -54,17 +54,37 @@ export function ChatHero({
   return (
     <div
       style={{
+        position: "relative",
         padding: "44px 40px 28px",
         maxWidth: 820,
         margin: "0 auto",
         width: "100%",
+        overflow: "hidden",
       }}
     >
+      {/* Phoenix Orange atmospheric wash — soft brand presence behind the
+          empty-state greeting. Fades to canvas before the template grid. */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "var(--gradient-phoenix-orange)",
+          opacity: 0.35,
+          maskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 70%)",
+          WebkitMaskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 70%)",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
       <h2
         style={{
-          fontSize: 24,
+          position: "relative",
+          zIndex: 1,
+          fontSize: 28,
           fontWeight: 600,
-          letterSpacing: "-0.015em",
+          letterSpacing: "-0.017em",
+          lineHeight: 1.1,
           margin: "0 0 10px",
         }}
       >
@@ -73,6 +93,8 @@ export function ChatHero({
       </h2>
       <p
         style={{
+          position: "relative",
+          zIndex: 1,
           fontSize: 14.5,
           color: "var(--color-text-secondary)",
           lineHeight: 1.55,
@@ -85,6 +107,8 @@ export function ChatHero({
       </p>
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gap: 8,

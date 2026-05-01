@@ -6,7 +6,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-[960px] px-6 py-12">
         <div className="grid gap-8 sm:grid-cols-3">
           <div>
-            <p className="text-lg font-bold text-vivid">ditto</p>
+            <p className="text-lg font-semibold tracking-tight text-text-primary">ditto</p>
             <p className="mt-2 text-sm text-text-muted">
               AI that remembers and improves.
             </p>
@@ -17,16 +17,16 @@ export function SiteFooter() {
               Product
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              <Link href="/how-it-works" className="text-sm text-text-secondary hover:text-vivid">
+              <Link href="/how-it-works" className="text-sm text-text-secondary hover:text-text-primary">
                 How It Works
               </Link>
-              <Link href="/chief-of-staff" className="text-sm text-text-secondary hover:text-vivid">
+              <Link href="/chief-of-staff" className="text-sm text-text-secondary hover:text-text-primary">
                 Chief of Staff
               </Link>
-              <Link href="/network" className="text-sm text-text-secondary hover:text-vivid">
+              <Link href="/network" className="text-sm text-text-secondary hover:text-text-primary">
                 Network
               </Link>
-              <Link href="/pricing" className="text-sm text-text-secondary hover:text-vivid">
+              <Link href="/pricing" className="text-sm text-text-secondary hover:text-text-primary">
                 Pricing
               </Link>
             </div>
@@ -37,7 +37,7 @@ export function SiteFooter() {
               Company
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              <Link href="/about" className="text-sm text-text-secondary hover:text-vivid">
+              <Link href="/about" className="text-sm text-text-secondary hover:text-text-primary">
                 About
               </Link>
             </div>

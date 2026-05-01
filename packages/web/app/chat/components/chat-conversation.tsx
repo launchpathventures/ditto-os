@@ -362,13 +362,13 @@ export function ChatConversation({
           )}
           {/* Brief 157 AC6: Progressive reveal — workspace prompt after first process */}
           {firstProcessCreated && (
-            <div className="my-4 p-4 rounded-lg border border-vivid/20 bg-vivid/5">
+            <div className="my-4 p-4 rounded-lg border border-border bg-surface-raised">
               <p className="text-sm text-text-primary">
                 Your first process <strong>{firstProcessCreated.name}</strong> is ready.
               </p>
               <a
                 href="/"
-                className="mt-2 inline-block text-sm font-medium text-vivid hover:underline"
+                className="mt-2 inline-block text-sm font-medium text-text-primary hover:underline"
               >
                 Open your workspace to see it in action &rarr;
               </a>
@@ -412,7 +412,7 @@ export function ChatConversation({
           <button
             type="submit"
             disabled={!input.trim() || isStreaming}
-            className="flex items-center justify-center w-8 h-8 rounded-full bg-vivid text-white disabled:opacity-30 transition-opacity"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-accent text-accent-foreground disabled:opacity-30 transition-opacity"
             aria-label="Send"
           >
             <ArrowRight className="w-4 h-4" />

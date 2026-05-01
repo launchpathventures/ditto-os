@@ -65,7 +65,7 @@ export default function ChatPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-2 h-2 rounded-full bg-vivid animate-pulse" />
+        <div className="w-2 h-2 rounded-full bg-text-primary animate-pulse" />
       </div>
     );
   }
@@ -110,7 +110,7 @@ function ChatNav() {
   return (
     <nav className="border-b border-border/40">
       <div className="max-w-[640px] mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="text-sm font-medium text-text-primary hover:text-vivid transition-colors">
+        <Link href="/" className="text-sm font-medium text-text-primary hover:text-text-secondary transition-colors">
           ditto
         </Link>
       </div>
@@ -152,8 +152,8 @@ function EmailRequestForm({ initialError }: { initialError: string | null }) {
   if (submitted) {
     return (
       <div className="max-w-sm text-center space-y-4">
-        <div className="w-3 h-3 rounded-full bg-vivid mx-auto" />
-        <h2 className="text-lg font-medium text-text-primary">Check your email</h2>
+        <div className="w-3 h-3 rounded-full bg-text-primary mx-auto" />
+        <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Check your email</h2>
         <p className="text-sm text-text-muted leading-relaxed">
           If you have an account, you'll receive a magic link shortly. Click it to continue our conversation.
         </p>
@@ -164,8 +164,8 @@ function EmailRequestForm({ initialError }: { initialError: string | null }) {
   return (
     <div className="max-w-sm w-full space-y-6">
       <div className="text-center space-y-2">
-        <div className="w-3 h-3 rounded-full bg-vivid mx-auto" />
-        <h2 className="text-lg font-medium text-text-primary">Continue your conversation</h2>
+        <div className="w-3 h-3 rounded-full bg-text-primary mx-auto" />
+        <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Continue your conversation</h2>
         <p className="text-sm text-text-muted">
           Enter your email and we'll send you a link to pick up where you left off.
         </p>
@@ -185,12 +185,12 @@ function EmailRequestForm({ initialError }: { initialError: string | null }) {
           placeholder="your@email.com"
           required
           autoFocus
-          className="w-full px-4 py-2.5 rounded-lg border border-border bg-surface text-text-primary placeholder:text-text-muted text-sm outline-none focus:ring-1 focus:ring-vivid/40"
+          className="w-full px-5 py-3 rounded-lg border border-border bg-background text-text-primary placeholder:text-text-muted text-base outline-none transition-colors focus:border-text-primary/40"
         />
         <button
           type="submit"
           disabled={!email.trim() || submitting}
-          className="w-full py-2.5 rounded-lg bg-vivid text-white text-sm font-medium disabled:opacity-50 transition-opacity"
+          className="w-full py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-semibold transition-all hover:bg-accent-hover active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed"
         >
           {submitting ? "Sending..." : "Send magic link"}
         </button>
@@ -198,7 +198,7 @@ function EmailRequestForm({ initialError }: { initialError: string | null }) {
 
       <p className="text-xs text-center text-text-muted">
         New here?{" "}
-        <Link href="/welcome" className="text-vivid hover:underline">
+        <Link href="/welcome" className="text-text-primary hover:underline">
           Start a conversation with Alex
         </Link>
       </p>

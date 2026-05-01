@@ -60,7 +60,7 @@ export function InsightCard({ item }: InsightCardProps) {
           </p>
           <div className="flex gap-3 mt-1">
             {taught ? (
-              <span className="text-xs text-green-600 font-medium">✓ Learned!</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-canary-yellow/60 px-2 py-0.5 text-xs font-semibold text-deep-indigo">✓ Learned!</span>
             ) : (
               <button
                 className="text-xs text-accent font-medium hover:text-accent-hover transition-colors disabled:opacity-50"

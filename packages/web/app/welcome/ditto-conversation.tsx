@@ -27,6 +27,7 @@ import { LearnedContext, LearnedContextCompact } from "./learned-context";
 import { VoiceCall, type VoiceCallHandle } from "./voice-call";
 import { ConversationProvider } from "@elevenlabs/react";
 import { PersonaPicker } from "./persona-picker";
+import { HeroBackdrop } from "@/components/hero-backdrop";
 import { PersonaPortrait } from "./persona-portrait";
 import { PERSONAS, otherPersona, type PersonaId } from "@/lib/persona";
 
@@ -197,6 +198,87 @@ export function DittoConversation() {
 
   // Test mode flag — when set, every page load is a fresh new user
   const [testMode, setTestMode] = useState(false);
+
+  // Pre-warm everything the visitor's first chat turn will need, while
+  // they're watching the preamble animation. Three layers:
+  //
+  //   1) GET /warmup — triggers the heavy engine module compilation in
+  //      dev (drizzle, network-chat, Anthropic SDK, etc.) and runs
+  //      llm.initLlm() in the background. ~5-10s of dev JIT cost moves
+  //      from the visitor's first tap to mount-time, hidden by the
+  //      preamble's fade-in. No-op in production.
+  //
+  //   2) POST /persona + POST /stream with empty bodies — fast 400s,
+  //      but they compile each route's own handler module + cause Next
+  //      to lazy-bundle the route. Same warmup goal, different chunks.
+  //
+  //   3) The preamble effect (below) fires POST /warmup with the
+  //      Turnstile token to PRE-CREATE the visitor's chat session
+  //      during the animation. By the time they pick a persona, the
+  //      /persona call is metadata-only (no Turnstile RTT, no session-
+  //      create) and /stream skips its bot/abuse gates — saving ~700ms
+  //      of round-trip cost from the user-visible path.
+  useEffect(() => {
+    fetch("/api/v1/network/chat/warmup").catch(() => {});
+    fetch("/api/v1/network/chat/persona", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).catch(() => {});
+    fetch("/api/v1/network/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).catch(() => {});
+  }, []);
+
+  // Pre-create the visitor's chat session DURING the preamble animation.
+  // Fires once preamble has reached line 2 (intent is clear) and only if
+  // we don't already have a session. The Turnstile widget normally has a
+  // token within ~500ms of mount, so by line 2 (~2s in) it should be
+  // ready. If not, we skip and fall back to the lazy-create path on the
+  // visitor's first /persona call.
+  const sessionPrewarmFiredRef = useRef(false);
+  useEffect(() => {
+    if (sessionPrewarmFiredRef.current) return;
+    if (sessionId) return; // already have one (returning visitor)
+    if (phase !== "preamble") return;
+    if (preamble < 2) return; // wait until intent is clear
+
+    sessionPrewarmFiredRef.current = true;
+    void (async () => {
+      const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+      let token: string | null = null;
+      // If Turnstile is configured, give the widget up to ~2s to populate
+      // its token. Otherwise hit the warmup endpoint without a token —
+      // the server will still warm imports + LLM init.
+      if (siteKey) {
+        for (let i = 0; i < 20; i++) {
+          if (turnstileToken.current) {
+            token = getTurnstileToken();
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      try {
+        const res = await fetch("/api/v1/network/chat/warmup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(token ? { turnstileToken: token } : {}),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.sessionId) {
+            setSessionId(data.sessionId);
+            if (!testMode) localStorage.setItem(SESSION_KEY, data.sessionId);
+          }
+        }
+      } catch {
+        /* warmup is best-effort; failure here doesn't block anything */
+      }
+    })();
+  }, [phase, preamble, sessionId, testMode, getTurnstileToken]);
 
   // Returning visitor — instant greeting, no API call. LLM kicks in when they type.
   useEffect(() => {
@@ -422,6 +504,7 @@ export function DittoConversation() {
     // first streamed token. sendMessageInMode clears it once deltas arrive.
     if (resumed.length === 0) setLoading(true);
 
+    let freshSessionId: string | null | undefined = undefined;
     try {
       // Include turnstileToken on the first interview-start when no session
       // exists yet — the server gates lazy session creation on it. Harmless
@@ -440,19 +523,19 @@ export function DittoConversation() {
       if (res.ok) {
         const data = await res.json();
         if (data.sessionId) {
+          freshSessionId = data.sessionId;
           setSessionId(data.sessionId);
           if (!testMode) localStorage.setItem(SESSION_KEY, data.sessionId);
         }
       }
     } catch { /* non-fatal — the UI proceeds either way */ }
     setPersonaBusy(false);
-    // If there are no prior turns with this persona, prompt the agent to open
-    // the conversation (interview mode, no user message). Fired AFTER the
-    // /persona round-trip completes so the /stream kickoff uses the session
-    // id /persona just created — otherwise /stream would mint a second,
-    // orphan session.
+    // Kick off the agent's opening turn immediately. We pass the fresh
+    // session id directly (avoiding the prior setTimeout-50ms hack that
+    // was waiting for setSessionId to flush) so /stream uses the new
+    // session without needing a render cycle to capture it.
     if (resumed.length === 0) {
-      setTimeout(() => kickoffInterview(picked), 50);
+      kickoffInterview(picked, freshSessionId ?? sessionId);
     }
   }
 
@@ -487,14 +570,21 @@ export function DittoConversation() {
     }, 50);
   }
 
-  /** Fire the first interview turn — no user message; the agent opens. */
-  async function kickoffInterview(persona: PersonaId) {
-    // Send a synthetic prompt that tells the LLM to open the conversation
-    // naturally. The `promptMode: "interview"` gate ensures it stays in
-    // interview mode, no funnel flags.
+  /** Fire the first interview turn — no user message; the agent opens.
+   *  Accepts an explicit sessionId so the kickoff can fire immediately after
+   *  /persona returns, without waiting for React to flush setSessionId. */
+  async function kickoffInterview(
+    persona: PersonaId,
+    freshSessionId?: string | null,
+  ) {
     await sendMessageInMode(
       "[INTERVIEW_START] Say hi in your own voice and ask one light opening question.",
-      { personaId: persona, promptMode: "interview", silentUserMessage: true },
+      {
+        personaId: persona,
+        promptMode: "interview",
+        silentUserMessage: true,
+        ...(freshSessionId !== undefined ? { overrideSessionId: freshSessionId } : {}),
+      },
     );
   }
 
@@ -508,6 +598,10 @@ export function DittoConversation() {
     /** Don't render the user message bubble — used for synthetic kickoff prompts
      *  ([INTERVIEW_START], [PERSONA_COMMITTED]). The server still sees it. */
     silentUserMessage?: boolean;
+    /** Override the sessionId from state — used immediately after /persona
+     *  returns a fresh session id so kickoffInterview can fire without
+     *  waiting for React to flush setSessionId. */
+    overrideSessionId?: string | null;
   }
 
   async function sendMessage(text: string) {
@@ -558,13 +652,19 @@ export function DittoConversation() {
     try {
       // Pass returning user's email so backend knows context
       const savedEmail = emailCaptured ? localStorage.getItem(EMAIL_KEY) : null;
-      const token = getTurnstileToken();
+      const effectiveSessionId =
+        opts.overrideSessionId !== undefined ? opts.overrideSessionId : sessionId;
+      // Only consume a fresh Turnstile token if there's no session yet —
+      // /stream skips bot verification when a trusted sessionId is presented,
+      // so consuming the token (which forces a widget re-verify) on every
+      // chat turn is wasted cost and was making sends feel slow.
+      const token = effectiveSessionId ? null : getTurnstileToken();
       const res = await fetch("/api/v1/network/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          sessionId,
+          sessionId: effectiveSessionId,
           context: "front-door",
           ...(savedEmail ? { returningEmail: savedEmail } : {}),
           ...(name.trim() ? { visitorName: name.trim() } : {}),
@@ -936,12 +1036,41 @@ export function DittoConversation() {
 
   return (
     <ConversationProvider>
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background">
+      {/* Phase-aware bottom-anchored hero. Preamble shows the morning
+          workspace floor; picker + conversation phases share a soft pastel
+          sky (atmosphere) anchored to the bottom of the viewport so the
+          chat composer sits gorgeously on top of it. The image is
+          decorative-only and sits at z-0 behind chrome. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-700 ease-in-out"
+        style={{ opacity: phase === "preamble" ? 1 : 0 }}
+      >
+        <HeroBackdrop
+          variant="workspace"
+          anchor="bottom"
+          height={420}
+          intensity={0.55}
+          priority
+        />
+      </div>
+      <div
+        className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-700 ease-in-out"
+        style={{ opacity: phase === "preamble" ? 0 : 1 }}
+      >
+        <HeroBackdrop
+          variant="atmosphere"
+          anchor="bottom"
+          height={560}
+          intensity={phase === "picker" ? 0.6 : 0.5}
+          priority
+        />
+      </div>
       {/* Turnstile invisible widget container */}
       <div ref={turnstileRef} style={{ display: "none" }} />
       {/* Minimal nav */}
-      <nav className="shrink-0 z-20 flex items-center justify-between bg-white px-6 py-5 md:px-10">
-        <Link href="/" className="text-xl font-bold text-vivid">
+      <nav className="relative z-20 shrink-0 flex items-center justify-between px-6 py-5 md:px-10">
+        <Link href="/" className="text-xl font-bold tracking-tight text-text-primary">
           ditto
         </Link>
         <div className="flex items-center gap-6">
@@ -961,12 +1090,14 @@ export function DittoConversation() {
       </nav>
 
       {/* Three-column layout: 25% blank | 50% chat | 25% context cards */}
-      <main className="flex min-h-0 flex-1 px-4 md:px-0">
+      <main className="relative z-10 flex min-h-0 flex-1 px-4 md:px-0">
         {/* Left spacer — blank on desktop */}
         <div className="hidden md:block md:w-1/4" />
 
-        {/* Center chat column — 50% on desktop, full width on mobile */}
-        <div className="flex min-h-0 w-full flex-1 flex-col py-4 md:w-1/2 md:flex-none md:py-0">
+        {/* Center chat column — 50% on desktop, full width on mobile.
+            md:pt-24 aligns the first message with the top of the sticky
+            right-rail panel (which uses top-24). */}
+        <div className="flex min-h-0 w-full flex-1 flex-col py-4 md:w-1/2 md:flex-none md:py-0 md:pt-24">
           {/* Intro phase — preamble pain points → Alex intro */}
           {showIntro && (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hidden">
@@ -976,9 +1107,9 @@ export function DittoConversation() {
                   <div className="flex items-end gap-3">
                     <span className="inline-block h-8 w-[3px] animate-cursor-blink bg-text-primary md:h-10" />
                     <div className="flex items-end gap-1.5 pb-1">
-                      <span className="h-2 w-2 rounded-full bg-vivid animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="h-2 w-2 rounded-full bg-vivid animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="h-2 w-2 rounded-full bg-vivid animate-bounce" style={{ animationDelay: "300ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-text-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-text-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-text-primary animate-bounce" style={{ animationDelay: "300ms" }} />
                     </div>
                   </div>
                 </div>
@@ -1019,22 +1150,22 @@ export function DittoConversation() {
               {/* Brief 152: Interview strip — visible only during the pre-commit interview.
                   Tells the visitor who they're with and gives Pick / Switch actions. */}
               {phase === "interview" && (
-                <div className="shrink-0 mb-3 flex items-center justify-between gap-3 rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 px-3 py-2.5 md:px-4 md:py-3">
+                <div className="shrink-0 mb-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised px-3 py-2.5 md:px-4 md:py-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <PersonaPortrait personaId={personaId} size="sm" />
                     <div className="min-w-0">
-                      <p className="text-xs text-text-muted">You&apos;re with</p>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-muted">You&apos;re with</p>
                       <p className="text-sm font-semibold text-text-primary truncate">
                         {personaMeta.name} <span className="font-normal text-text-muted">· {personaMeta.tagline.split(".")[0].toLowerCase()}</span>
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
                       onClick={handleSwitchPersona}
                       disabled={personaBusy}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-vivid/40 hover:text-text-primary disabled:opacity-40 md:text-sm"
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-white hover:text-text-primary disabled:opacity-40 md:text-sm"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
                       Try {otherMeta.name}
@@ -1043,7 +1174,7 @@ export function DittoConversation() {
                       type="button"
                       onClick={handleCommitPersona}
                       disabled={personaBusy}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-vivid px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40 md:text-sm"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40 md:text-sm"
                     >
                       <Check className="h-3.5 w-3.5" />
                       Continue with {personaMeta.name}
@@ -1104,7 +1235,7 @@ export function DittoConversation() {
                         "Want more? Set up a workspace to see everything Alex is doing and manage it yourself",
                       ].map((step, i) => (
                         <div key={i} className="flex items-start gap-3">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-vivid-subtle text-xs font-semibold text-vivid">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle-lavender text-xs font-semibold text-deep-indigo">
                             {i + 1}
                           </div>
                           <p className="text-base text-text-secondary">{step}</p>
@@ -1121,7 +1252,7 @@ export function DittoConversation() {
               {/* Name collection card — styled input, Alex's text provides the conversational context */}
               {showInput && requestName && !requestEmail && (
                 <div className="shrink-0 bg-white pb-4 pt-3">
-                  <form onSubmit={handleNameSubmit} className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-3">
+                  <form onSubmit={handleNameSubmit} className="rounded-2xl border border-border bg-surface/80 backdrop-blur-sm p-4 space-y-3">
                     <div className="flex gap-2">
                       <input
                         ref={inputRef}
@@ -1131,13 +1262,13 @@ export function DittoConversation() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleNameSubmit(e); } }}
-                        className="flex-1 rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                        className="flex-1 rounded-xl border border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                       />
                       <button
                         type="submit"
                         disabled={!name.trim()}
                         aria-label="Submit name"
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                       >
                         Go <ArrowRight size={16} />
                       </button>
@@ -1149,7 +1280,7 @@ export function DittoConversation() {
               {/* Location collection card */}
               {showInput && !requestName && requestLocation && !requestEmail && (
                 <div className="shrink-0 bg-white pb-4 pt-3">
-                  <form onSubmit={handleLocationSubmit} className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-3">
+                  <form onSubmit={handleLocationSubmit} className="rounded-2xl border border-border bg-surface/80 backdrop-blur-sm p-4 space-y-3">
                     <div className="flex gap-2">
                       <input
                         ref={inputRef}
@@ -1159,13 +1290,13 @@ export function DittoConversation() {
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleLocationSubmit(e); } }}
-                        className="flex-1 rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                        className="flex-1 rounded-xl border border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                       />
                       <button
                         type="submit"
                         disabled={!location.trim()}
                         aria-label="Submit location"
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                       >
                         Go <ArrowRight size={16} />
                       </button>
@@ -1177,7 +1308,7 @@ export function DittoConversation() {
               {/* Extra questions card — structured input for multi-question responses */}
               {showInput && !requestName && !requestLocation && !requestEmail && extraQuestions.length > 0 && (
                 <div className="shrink-0 bg-white pb-4 pt-3">
-                  <form onSubmit={handleExtraQuestionsSubmit} className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-4">
+                  <form onSubmit={handleExtraQuestionsSubmit} className="rounded-2xl border border-border bg-surface/80 backdrop-blur-sm p-4 space-y-4">
                     {extraQuestions.map((q, i) => (
                       <div key={i} className="space-y-1.5">
                         <label className="text-sm font-medium text-text-primary">{q}</label>
@@ -1186,14 +1317,14 @@ export function DittoConversation() {
                           value={questionAnswers[i] || ""}
                           onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [i]: e.target.value }))}
                           placeholder="Your answer"
-                          className="w-full rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                          className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                         />
                       </div>
                     ))}
                     <button
                       type="submit"
                       disabled={!Object.values(questionAnswers).some((v) => v?.trim())}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                     >
                       Send <ArrowRight size={16} />
                     </button>
@@ -1201,13 +1332,16 @@ export function DittoConversation() {
                 </div>
               )}
 
-              {/* Input area — always visible so the user can always talk to Alex */}
+              {/* Input area — always visible so the user can always talk to Alex.
+                  No opaque white background here — the pastel atmosphere
+                  backdrop is allowed to bleed through behind the composer
+                  pill so the input "sits gorgeously on top of" the gradient. */}
               {showInput && (
-                <div className="shrink-0 bg-white pb-2 pt-2 md:pb-4 md:pt-3 space-y-2 md:space-y-3">
+                <div className="shrink-0 pb-2 pt-2 md:pb-4 md:pt-3 space-y-2 md:space-y-3">
                   {/* Pasted text attachment chip */}
                   {pastedText && (
-                    <div className="flex items-center gap-2 rounded-xl bg-vivid-subtle/50 px-4 py-2.5">
-                      <FileText size={16} className="shrink-0 text-vivid" />
+                    <div className="flex items-center gap-2 rounded-xl border border-border bg-white/85 backdrop-blur-md px-4 py-2.5">
+                      <FileText size={16} strokeWidth={1.6} className="shrink-0 text-text-secondary" />
                       <span className="flex-1 truncate text-sm text-text-secondary">
                         Pasted text — {pastedText.split("\n").length} lines
                       </span>
@@ -1230,11 +1364,11 @@ export function DittoConversation() {
                   )}
                   {/* Brief 142b: Voice call card — hide when email verification is showing (unless call active) */}
                   {voiceReady && !done && sessionId && voiceToken && (!requestEmail || callActive) && (
-                    <div className="shrink-0 bg-white pb-1 pt-2 md:pb-2 md:pt-3">
-                      <div className={`rounded-xl md:rounded-2xl border-2 px-3 py-2.5 md:p-4 flex items-center justify-between ${
+                    <div className="shrink-0 pb-1 pt-2 md:pb-2 md:pt-3">
+                      <div className={`rounded-xl md:rounded-2xl border px-3 py-2.5 md:p-4 flex items-center justify-between shadow-[0_8px_24px_-12px_rgba(17,17,17,0.18)] ${
                         callActive
-                          ? "border-vivid/40 bg-vivid/5"
-                          : "border-vivid/20 bg-vivid-subtle/30"
+                          ? "border-text-primary/30 bg-white/90 backdrop-blur-md"
+                          : "border-border bg-white/85 backdrop-blur-md"
                       }`}>
                         <div className="flex-1">
                           <p className="text-xs md:text-sm font-medium text-text-primary">
@@ -1298,8 +1432,8 @@ export function DittoConversation() {
                       onChange={handleTextareaChange}
                       onKeyDown={handleTextareaKeyDown}
                       disabled={loading || !!statusMessage}
-                      className={`w-full resize-none rounded-xl md:rounded-2xl border-2 bg-white pl-4 pr-11 py-2 md:pl-5 md:pr-14 md:py-3 text-sm md:text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0 disabled:opacity-50 ${
-                        callActive ? "border-vivid/20" : "border-border"
+                      className={`w-full resize-none rounded-xl md:rounded-2xl border bg-white/90 backdrop-blur-md pl-4 pr-11 py-2.5 md:pl-5 md:pr-14 md:py-3.5 text-sm md:text-[16px] text-text-primary placeholder:text-text-muted shadow-[0_10px_28px_-12px_rgba(17,17,17,0.22)] focus:border-text-primary/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-text-primary/10 disabled:opacity-50 transition-colors ${
+                        callActive ? "border-text-primary/20" : "border-border"
                       }`}
                       style={{ maxHeight: "8rem" }}
                     />
@@ -1307,7 +1441,7 @@ export function DittoConversation() {
                       type="submit"
                       disabled={(!input.trim() && !pastedText) || loading || !!statusMessage}
                       aria-label="Send message"
-                      className="absolute right-2.5 bottom-2 md:right-3 md:bottom-auto md:top-1/2 md:-translate-y-1/2 inline-flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg bg-vivid text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      className="absolute right-2.5 bottom-2 md:right-3 md:bottom-auto md:top-1/2 md:-translate-y-1/2 inline-flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                     >
                       <ArrowRight size={14} className="md:hidden" />
                       <ArrowRight size={16} className="hidden md:block" />
@@ -1337,7 +1471,7 @@ export function DittoConversation() {
               {showInput && requestEmail && verifyStep && (
                 <div className="shrink-0 bg-white pb-4 pt-3">
                   {verifyStep === "email" && (
-                    <form onSubmit={handleEmailVerify} className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-3">
+                    <form onSubmit={handleEmailVerify} className="rounded-2xl border border-border bg-surface/80 backdrop-blur-sm p-4 space-y-3">
                       <div className="flex gap-2">
                         <input
                           ref={inputRef}
@@ -1346,13 +1480,13 @@ export function DittoConversation() {
                           placeholder="you@company.com"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="flex-1 rounded-xl border-2 border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                          className="flex-1 rounded-xl border border-border bg-white px-4 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                         />
                         <button
                           type="submit"
                           disabled={!email.trim()}
                           aria-label="Send verification code"
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
                           Verify <ArrowRight size={16} />
                         </button>
@@ -1365,7 +1499,7 @@ export function DittoConversation() {
                   )}
 
                   {verifyStep === "code" && (
-                    <form onSubmit={handleCodeSubmit} className="rounded-2xl border-2 border-vivid/20 bg-vivid-subtle/30 p-4 space-y-3">
+                    <form onSubmit={handleCodeSubmit} className="rounded-2xl border border-border bg-surface/80 backdrop-blur-sm p-4 space-y-3">
                       <p className="text-sm font-medium text-text-primary">
                         Check your inbox — I just sent a 6-digit code to <span className="font-semibold">{email}</span>
                       </p>
@@ -1380,13 +1514,13 @@ export function DittoConversation() {
                           placeholder="Enter 6-digit code"
                           value={verifyCode}
                           onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          className="flex-1 rounded-xl border-2 border-border bg-white px-4 py-2.5 text-center text-lg font-semibold tracking-[0.3em] text-text-primary placeholder:text-text-muted placeholder:tracking-normal placeholder:text-sm placeholder:font-normal focus:border-vivid focus:outline-none focus:ring-0"
+                          className="flex-1 rounded-xl border border-border bg-white px-4 py-2.5 text-center text-lg font-semibold tracking-[0.3em] text-text-primary placeholder:text-text-muted placeholder:tracking-normal placeholder:text-sm placeholder:font-normal focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                         />
                         <button
                           type="submit"
                           disabled={verifyCode.length !== 6}
                           aria-label="Confirm code"
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-vivid px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
                           Confirm
                         </button>
@@ -1402,7 +1536,7 @@ export function DittoConversation() {
                         <button
                           type="button"
                           onClick={(e) => { setVerifyError(""); handleEmailVerify(e as unknown as React.FormEvent); }}
-                          className="text-xs text-vivid hover:underline"
+                          className="text-xs font-medium text-text-primary underline-offset-4 hover:underline"
                         >
                           Resend code
                         </button>
@@ -1433,12 +1567,12 @@ export function DittoConversation() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       autoFocus
-                      className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                      className="flex-1 rounded-2xl border border-border bg-white px-5 py-3 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                     />
                     <button
                       type="submit"
                       aria-label="Submit email"
-                      className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover"
+                      className="inline-flex items-center gap-1 rounded-lg bg-accent px-5 py-3 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
                     >
                       Go <ArrowRight size={16} />
                     </button>
@@ -1448,7 +1582,7 @@ export function DittoConversation() {
                     placeholder="Your name (optional)"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-2xl border-2 border-border bg-white px-5 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    className="w-full rounded-2xl border border-border bg-white px-5 py-2.5 text-[16px] text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                   />
                   {errorMsg && (
                     <p className="text-sm text-negative">{errorMsg}</p>
@@ -1462,7 +1596,7 @@ export function DittoConversation() {
         {/* Right column — floating context cards, desktop only */}
         {/* Only shows after 4+ messages (past the intro/first exchange) */}
         <div className="hidden self-stretch md:block md:w-1/4">
-          <div className="sticky top-24 space-y-4 px-4">
+          <div className="sticky top-0 space-y-4 pt-24 pl-10 pr-4 lg:pl-14 xl:pl-16">
             {learned && !showIntro && (
               <LearnedContext learned={learned} />
             )}
@@ -1470,20 +1604,24 @@ export function DittoConversation() {
         </div>
       </main>
 
-      {/* Minimal footer — hidden during conversation to maximize chat space */}
-      <footer className={`flex items-center justify-between px-6 py-5 text-xs text-text-muted md:px-10 ${!showIntro ? "hidden" : ""}`}>
-        <span>&copy; {new Date().getFullYear()} Ditto</span>
-        <div className="flex gap-4">
-          <Link href="/network" className="hover:text-text-secondary">
+      {/* Minimal footer — visible on intro + picker (the brand-presenting
+          phases). Hidden once the visitor enters the conversation so the
+          chat surface gets full vertical room. The bar floats on a
+          frosted-glass backdrop so it stays legible over the bottom-
+          anchored hero image without drowning it. */}
+      <footer className={`relative z-10 flex items-center justify-between border-t border-border/60 bg-background/85 backdrop-blur-md px-6 py-4 text-xs text-text-secondary md:px-10 ${(showIntro || phase === "picker") ? "" : "hidden"}`}>
+        <span className="font-medium text-text-primary">&copy; {new Date().getFullYear()} Ditto</span>
+        <div className="flex gap-5">
+          <Link href="/network" className="hover:text-text-primary transition-colors">
             Network
           </Link>
-          <Link href="/chief-of-staff" className="hover:text-text-secondary">
+          <Link href="/chief-of-staff" className="hover:text-text-primary transition-colors">
             Chief of Staff
           </Link>
-          <Link href="/about" className="hover:text-text-secondary">
+          <Link href="/about" className="hover:text-text-primary transition-colors">
             About
           </Link>
-          <Link href="/admin" className="hover:text-text-secondary">
+          <Link href="/admin" className="hover:text-text-primary transition-colors">
             Admin
           </Link>
         </div>

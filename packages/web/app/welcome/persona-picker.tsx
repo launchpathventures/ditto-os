@@ -147,7 +147,7 @@ function PersonaCard({
   const ready = stream.status === "complete";
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-3xl border-2 border-border bg-white p-5 shadow-sm transition-all hover:border-vivid/40 hover:shadow-md md:p-6">
+    <div className="group flex flex-col overflow-hidden rounded-xl border border-white/40 bg-surface/70 p-5 shadow-[0_8px_32px_-12px_rgba(17,17,17,0.12)] backdrop-blur-md transition-all hover:bg-surface/85 hover:border-white/60 md:p-6">
       <div className="flex items-start gap-4">
         <PersonaPortrait personaId={personaId} size="lg" />
         <div className="flex-1 space-y-1">
@@ -177,9 +177,9 @@ function PersonaCard({
         <button
           type="button"
           onClick={onSelect}
-          className="inline-flex items-center gap-2 rounded-full bg-vivid px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md active:scale-95"
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-all hover:bg-accent-hover active:scale-[0.99]"
         >
-          <Mic className="h-3.5 w-3.5 opacity-80" />
+          <Mic className="h-3.5 w-3.5 opacity-70" />
           Try {meta.name}
           <ArrowRight className="h-4 w-4" />
         </button>

@@ -131,7 +131,7 @@ export function RetrofitPlanBlockComponent({ block, onAction }: Props) {
       {/* block-head: title + status pill */}
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-vivid-deep" />
+          <RefreshCw className="h-4 w-4 text-text-primary" />
           <span className="font-medium text-text-primary">Retrofit plan</span>
         </div>
         <StatusPill status={block.status} />

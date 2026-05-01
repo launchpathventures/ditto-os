@@ -11,7 +11,7 @@ interface Props {
 export function SuggestionBlockComponent({ block, onAction }: Props) {
   return (
     <div className="my-2 rounded-lg bg-vivid-subtle py-3 px-4">
-      <div className="text-xs font-semibold tracking-wider text-vivid-deep uppercase mb-1.5">
+      <div className="text-xs font-semibold tracking-wider text-text-primary uppercase mb-1.5">
         Suggestion
       </div>
       <p className="text-sm text-text-primary">{block.content}</p>
@@ -27,7 +27,7 @@ export function SuggestionBlockComponent({ block, onAction }: Props) {
               className={cn(
                 "text-xs font-medium px-3 py-1 rounded-full transition-colors",
                 action.style === "primary"
-                  ? "bg-vivid text-white hover:bg-vivid/90"
+                  ? "bg-accent text-accent-foreground hover:bg-accent-hover"
                   : "text-text-secondary hover:bg-surface-secondary",
               )}
             >

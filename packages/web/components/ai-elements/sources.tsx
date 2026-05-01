@@ -98,7 +98,7 @@ interface SourceProps {
 
 function Source({ name, type = "document", href, className }: SourceProps) {
   const content = (
-    <span className={cn("flex items-center gap-1.5 text-sm text-vivid hover:underline", className)}>
+    <span className={cn("flex items-center gap-1.5 text-sm text-text-primary hover:underline", className)}>
       <SourceTypeIcon type={type} size={14} />
       {name}
     </span>

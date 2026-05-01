@@ -153,7 +153,7 @@ function AtAGlanceCard({
         </p>
       )}
       {atAGlance.looksLike && (
-        <p className="mt-2 text-sm italic text-vivid-deep">
+        <p className="mt-2 text-sm italic text-text-secondary">
           Looks like:{" "}
           <span className="not-italic text-text-primary">
             {atAGlance.looksLike}
@@ -178,7 +178,7 @@ function NearestNeighboursList({ items }: { items: GoldStandardMatch[] }) {
               href={m.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 text-vivid hover:underline"
+              className="inline-flex items-center gap-0.5 text-text-primary hover:underline"
               title={m.rationale}
             >
               {m.name}
@@ -371,7 +371,7 @@ function PickerOption({
       className={cn(
         "dopt",
         recommended && "rec",
-        selected && !recommended && "border-vivid bg-vivid-subtle",
+        selected && !recommended && "border-text-primary bg-surface-raised",
       )}
     >
       {recommended && <span className="recbadge">Recommended</span>}

@@ -16,16 +16,20 @@
   --muted-foreground: var(--color-text-muted);
   --border: var(--color-border);
   --input: var(--color-border);
-  --ring: var(--color-vivid);
-  --primary: var(--color-vivid);
-  --primary-foreground: #ffffff;
+  /* Focus ring — Amplemarket uses a soft, dark-tinted focus indicator
+   * rather than a vibrant brand color. */
+  --ring: rgba(17, 17, 17, 0.18);
+  /* Ink-black primary (Amplemarket discipline): no distinct CTA color.
+   * Primary actions render as 8px-radius midnight-ink fills on canvas white. */
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-text);
   --secondary: var(--color-surface);
   --secondary-foreground: var(--color-text-primary);
   --accent: var(--color-accent);
   --accent-foreground: var(--color-accent-text);
   --destructive: var(--color-negative);
   --destructive-foreground: #ffffff;
-  --radius: 0.5rem;
+  --radius: 0.5rem; /* shadcn fallback — 8px */
 }
 
 /* Buttons should always show pointer cursor */
@@ -46,41 +50,67 @@ button:disabled, [type="submit"]:disabled {
 }
 
 /*
- * Ditto Design Tokens — Precise White Lab
- * Source: .impeccable.md — authoritative design spec
- * Palette: Canvas white + ink black + electric orange (single accent)
- * Inspiration: Humble (humbleops.com), Linear, Raycast, Framer
+ * Ditto Design Tokens — Amplemarket pivot
+ * Subtle dynamism on a crisp canvas. Orange becomes a soft-edged decorative
+ * gradient (Phoenix), not a chrome accent. CTAs are ink-black at 8px radius;
+ * cards/inputs at 12px. Single typeface (Inter, substitute for Labil Grotesk
+ * Variable). Shadows are inset hairlines, not heavy lifts.
  */
 
 @theme {
-  /* Foundation — Canvas White Lab. Surfaces lift through soft elevation,
-   * never heavy borders. Ghost/Alabaster provide subtle differentiation. */
-  --color-background: #fafafa;        /* Canvas White — primary page bg */
-  --color-surface: #fafafa;           /* Default surface, matches bg */
-  --color-surface-raised: #f1f1f1;    /* Ghost White — alt cards / sections */
-  --color-surface-subtle: #ecebe8;    /* Alabaster Gray — tertiary panels */
-  --color-border: #ecebe8;            /* Hairline border — muted */
-  --color-border-strong: #1c1c1c;     /* Ink black — sharp edges, inverted UI */
+  /* Foundation — Crisp Canvas. Pure white dominates; whisper/taupe panels
+   * provide subtle differentiation without breaking the neutral field. */
+  --color-background: #ffffff;        /* Canvas White — primary page bg */
+  --color-surface: #ffffff;           /* Default surface = canvas */
+  --color-surface-raised: #f4f3ef;    /* Whisper Gray — ghost panels, hover */
+  --color-surface-subtle: #ecebea;    /* Light Taupe — tertiary surface */
+  --color-border: #e5e3df;            /* Hairline border — muted */
+  --color-border-strong: #111111;     /* Midnight Ink — inverted UI */
 
   /* Text */
-  --color-text-primary: #1c1c1c;      /* Obsidian — headlines, critical */
-  --color-text-secondary: #6e6e6e;    /* Granite — secondary, nav */
-  --color-text-muted: #6e6e6e;        /* Granite — metadata */
+  --color-text-primary: #111111;      /* Midnight Ink — headlines, body */
+  --color-text-secondary: #6d6c6b;    /* Muted Ash — secondary, nav */
+  --color-text-muted: #6d6c6b;        /* Muted Ash — metadata */
 
-  /* Accent — Ink Black CTAs. Humble's discipline: no distinct CTA color;
-   * primary actions are ink-black pills on canvas white. */
-  --color-accent: #1c1c1c;
+  /* Accent — Ink-black CTAs. No distinct primary action color (Amplemarket
+   * discipline). Primary actions are 8px-radius midnight-ink fills. */
+  --color-accent: #111111;            /* Midnight Ink */
   --color-accent-hover: #000000;
-  --color-accent-subtle: #ecebe8;     /* Alabaster — subtle badge bg */
-  --color-accent-text: #fafafa;       /* Canvas white on black */
+  --color-accent-subtle: #ecebea;     /* Light Taupe — subtle badge bg */
+  --color-accent-text: #ffffff;       /* Canvas white on ink */
 
-  /* Vivid — Brand Signature: single Electric Orange accent.
-   * Used sparingly: tags, dividers, focus rings, hover edges, active dots.
-   * NEVER used as primary CTA background (Humble rule). */
-  --color-vivid: #ff4000;             /* Electric Orange */
-  --color-vivid-deep: #cc3300;        /* Deeper variant for hover/text */
-  --color-vivid-subtle: #fff1ec;      /* Orange tint bg */
-  --color-vivid-subtle-border: #ffd9c8;
+  /* Tailwind v4 canonical aliases — these are the names Tailwind utility
+   * classes look up (`bg-primary`, `text-accent-foreground`,
+   * `text-foreground`, `text-muted-foreground`, etc.). They alias to the
+   * Ditto tokens above so everything resolves through one source of truth. */
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-accent-text);
+  --color-accent-foreground: var(--color-accent-text);
+  --color-secondary: var(--color-surface);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-foreground: var(--color-text-primary);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-input: var(--color-border);
+  --color-ring: var(--color-text-primary);
+  --color-destructive: var(--color-negative);
+  --color-destructive-foreground: #ffffff;
+
+  /* Vivid — Phoenix Orange. Used as decorative gradient seed only:
+   * background washes, soft accent cards, never for chrome (no filled
+   * primary CTAs, no bold focus rings). */
+  --color-vivid: #e8400d;             /* Phoenix Orange */
+  --color-vivid-deep: #c4360a;        /* Deeper variant for text-on-light */
+  --color-vivid-subtle: #ffeed8;      /* Warm cream — gradient mid-stop */
+  --color-vivid-subtle-border: #f5e3c9;
+
+  /* Soft accent washes — Amplemarket "pillar" palette for decorative
+   * cards, badges, decorative bands. Not status colors. */
+  --color-petal-pink: #ffd7f0;
+  --color-mint-green: #b7efb2;
+  --color-canary-yellow: #ffef99;
+  --color-subtle-lavender: #e2ddfd;
+  --color-deep-indigo: #10054d;       /* Distinct element coloring */
+  --color-midnight-violet: #2e2460;   /* Violet badge accent (not CTA) */
 
   /* Semantic — utility colors, intentionally outside the brand palette */
   --color-positive: #16a34a;
@@ -88,67 +118,83 @@ button:disabled, [type="submit"]:disabled {
   --color-negative: #C4352A;
   --color-info: #2563eb;
 
-  /* Shadows — Humble's six-stop diffused soft elevation.
-   * Lifts elements gently rather than anchoring with heavy forms. */
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.02);
+  /* Shadows — Amplemarket subtle elevation. Inset hairline + diluted
+   * outset for floating elements; no heavy lifts. */
+  --shadow-subtle: rgba(17, 17, 17, 0.05) 0px 0px 0px 1px inset;
   --shadow-medium:
-    rgba(0, 0, 0, 0.03) 0px 0.706592px 0.706592px -0.416667px,
-    rgba(0, 0, 0, 0.03) 0px 1.80656px 1.80656px -0.833333px,
-    rgba(0, 0, 0, 0.03) 0px 3.62176px 3.62176px -1.25px,
-    rgba(0, 0, 0, 0.03) 0px 6.8656px 6.8656px -1.66667px,
-    rgba(0, 0, 0, 0.03) 0px 13.6468px 13.6468px -2.08333px,
-    rgba(0, 0, 0, 0.03) 0px 30px 30px -2.5px;
+    rgba(17, 17, 17, 0.04) 0px 1px 2px 0px,
+    rgba(17, 17, 17, 0.04) 0px 4px 8px 0px,
+    rgba(17, 17, 17, 0.04) 0px 0px 1px 0px;
   --shadow-large:
-    rgba(0, 0, 0, 0.04) 0px 0.706592px 0.706592px -0.416667px,
-    rgba(0, 0, 0, 0.04) 0px 1.80656px 1.80656px -0.833333px,
-    rgba(0, 0, 0, 0.04) 0px 3.62176px 3.62176px -1.25px,
-    rgba(0, 0, 0, 0.04) 0px 6.8656px 6.8656px -1.66667px,
-    rgba(0, 0, 0, 0.04) 0px 13.6468px 13.6468px -2.08333px,
-    rgba(0, 0, 0, 0.05) 0px 40px 40px -3px;
+    rgba(17, 17, 17, 0.12) 0px 26px 60px -6px,
+    rgba(17, 17, 17, 0.02) 0px 28px 28px -14px,
+    rgba(17, 17, 17, 0.04) 0px 6px 6px -3px,
+    rgba(17, 17, 17, 0.04) 0px 1px 1px -0.5px;
 
-  /* Border radius — Precise White Lab system.
-   * Cards 30px, controls 6px, buttons full pill, images 40px, large 70px. */
-  --radius-sm: 6px;                   /* controls, tooltips, micro */
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 24px;                 /* enclosed content block */
-  --radius-3xl: 30px;                 /* primary card radius (Humble) */
-  --radius-image: 40px;               /* image containers */
-  --radius-largeblock: 70px;          /* full-bleed feature blocks */
-  --radius-full: 9999px;              /* pill buttons, avatars (== 100px+) */
+  /* Decorative gradients — Phoenix Orange (warm) + Cyan Glow (cool).
+   * Apply as ambient backgrounds for hero sections, never as button fills. */
+  --gradient-phoenix-orange: radial-gradient(
+    386.06% 162.79% at -13.1926% -17.1008%,
+    rgb(232, 64, 13) 0%,
+    rgb(255, 238, 216) 26.1559%,
+    rgb(208, 178, 255) 84.1533%
+  );
+  --gradient-cyan-glow: radial-gradient(
+    80.17% 109.2% at 52.1169% 62.5363%,
+    rgb(208, 178, 255) 0%,
+    rgb(198, 236, 233) 35.282%,
+    rgb(153, 255, 249) 96.5565%
+  );
 
-  /* Typography — Bricolage Grotesque (display) + Geist (UI) */
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system,
+  /* Border radius — Amplemarket discipline.
+   * Buttons 8px, cards/inputs/badges 12px. No pill chrome (round pills are
+   * reserved for status tags). The 3xl/image/largeblock radii collapse to
+   * 12px so existing rounded-3xl consumers automatically render restrained. */
+  --radius-sm: 4px;                   /* micro chrome, tooltips */
+  --radius-md: 8px;                   /* buttons, nav items */
+  --radius-lg: 12px;                  /* cards, inputs, badges */
+  --radius-xl: 16px;                  /* large blocks, sheets */
+  --radius-2xl: 16px;                 /* alias of xl */
+  --radius-3xl: 12px;                 /* collapsed: card radius (was 30px) */
+  --radius-image: 12px;               /* image containers (was 40px) */
+  --radius-largeblock: 16px;          /* full-bleed blocks (was 70px) */
+  --radius-full: 9999px;              /* status tags, avatars only */
+
+  /* Typography — single typeface (Inter, substitute for Labil Grotesk
+   * Variable). --font-display aliases sans so existing font-display
+   * consumers resolve to the same family. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Bricolage Grotesque", "Geist", ui-sans-serif, system-ui,
-    -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 
-  /* Type scale — major third on body, dialed-in display sizes from Humble */
+  /* Type scale — Amplemarket. Body uses positive tracking; headings
+   * negative tracking; tightening grows with size. */
   --text-xs: 0.75rem;                  /* 12px caption */
-  --text-xs--line-height: 1.4;
+  --text-xs--line-height: 1.3;
+  --text-xs--letter-spacing: 0.025em;
   --text-sm: 0.875rem;                 /* 14px body */
-  --text-sm--line-height: 1.4;
-  --text-sm--letter-spacing: -0.007em;
+  --text-sm--line-height: 1.3;
+  --text-sm--letter-spacing: 0.018em;
   --text-base: 1rem;                   /* 16px body-lg */
-  --text-base--line-height: 1.4;
-  --text-base--letter-spacing: -0.02em;
-  --text-lg: 1.125rem;                 /* 18px subheading */
-  --text-lg--line-height: 1.4;
-  --text-lg--letter-spacing: -0.04em;
+  --text-base--line-height: 1.3;
+  --text-base--letter-spacing: 0;
+  --text-lg: 1.25rem;                  /* 20px subheading */
+  --text-lg--line-height: 1.1;
+  --text-lg--letter-spacing: -0.01em;
   --text-xl: 1.5rem;                   /* 24px heading-sm */
-  --text-xl--line-height: 1.2;
-  --text-xl--letter-spacing: -0.02em;
-  --text-2xl: 2rem;                    /* 32px heading */
-  --text-2xl--line-height: 1.15;
-  --text-2xl--letter-spacing: -0.02em;
-  --text-3xl: 2.625rem;                /* 42px heading-lg */
-  --text-3xl--line-height: 1.05;
+  --text-xl--line-height: 1.1;
+  --text-xl--letter-spacing: -0.011em;
+  --text-2xl: 1.75rem;                 /* 28px heading */
+  --text-2xl--line-height: 1.1;
+  --text-2xl--letter-spacing: -0.017em;
+  --text-3xl: 2.75rem;                 /* 44px heading-lg */
+  --text-3xl--line-height: 1.1;
   --text-3xl--letter-spacing: -0.03em;
-  --text-4xl: 3.625rem;                /* 58px display */
-  --text-4xl--line-height: 1.0;
-  --text-4xl--letter-spacing: -0.052em;
+  --text-4xl: 3.5rem;                  /* 56px display */
+  --text-4xl--line-height: 1;
+  --text-4xl--letter-spacing: -0.04em;
 
   /* Spacing — 4px grid, comfortable density */
   --spacing-1: 4px;
@@ -160,31 +206,32 @@ button:disabled, [type="submit"]:disabled {
   --spacing-8: 32px;
   --spacing-10: 40px;
   --spacing-12: 48px;
-  --spacing-16: 64px;                 /* section gap (Humble) */
-  --spacing-18: 72px;                 /* major section separation */
+  --spacing-14: 56px;                 /* section gap (Amplemarket) */
+  --spacing-16: 64px;
+  --spacing-18: 72px;
 }
 
-/* Dark mode token overrides — Precise White Lab inverted.
- * Ink black canvas, canvas-white text, electric orange retains hue. */
+/* Dark mode token overrides — Amplemarket inverted.
+ * Surface charcoal canvas, canvas-white text, phoenix orange unchanged. */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-background: #0e0e0e;
     --color-surface: #0e0e0e;
-    --color-surface-raised: #1a1a1a;
-    --color-surface-subtle: #161616;
-    --color-border: #1f1f1f;
-    --color-border-strong: #fafafa;
+    --color-surface-raised: #1a1918;
+    --color-surface-subtle: #272625;
+    --color-border: #2a2826;
+    --color-border-strong: #ffffff;
 
-    --color-text-primary: #fafafa;
-    --color-text-secondary: #a8a8a8;
-    --color-text-muted: #8a8a8a;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #a8a7a5;
+    --color-text-muted: #8a8987;
 
-    --color-accent: #fafafa;
-    --color-accent-hover: #ffffff;
-    --color-accent-subtle: #1f1f1f;
-    --color-accent-text: #0e0e0e;
+    --color-accent: #ffffff;
+    --color-accent-hover: #f4f3ef;
+    --color-accent-subtle: #272625;
+    --color-accent-text: #111111;
 
-    --color-vivid: #ff4000;
+    --color-vivid: #e8400d;
     --color-vivid-deep: #ff7a47;
     --color-vivid-subtle: #2a1410;
     --color-vivid-subtle-border: #3d1d14;
@@ -194,13 +241,13 @@ button:disabled, [type="submit"]:disabled {
     --color-negative: #E8453A;
     --color-info: #3B82F6;
 
-    --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-subtle: rgba(255, 255, 255, 0.06) 0px 0px 0px 1px inset;
     --shadow-medium:
-      rgba(0, 0, 0, 0.3) 0px 4px 16px,
-      rgba(0, 0, 0, 0.2) 0px 1px 3px;
+      rgba(0, 0, 0, 0.5) 0px 4px 16px,
+      rgba(0, 0, 0, 0.3) 0px 1px 3px;
     --shadow-large:
-      rgba(0, 0, 0, 0.5) 0px 16px 48px,
-      rgba(0, 0, 0, 0.3) 0px 4px 16px;
+      rgba(0, 0, 0, 0.6) 0px 26px 60px -6px,
+      rgba(0, 0, 0, 0.3) 0px 6px 6px -3px;
   }
 }
 
@@ -231,13 +278,14 @@ body {
 .prose-ditto em { font-style: italic; }
 .prose-ditto code { font-size: 0.875rem; background: var(--color-surface); padding: 0.125rem 0.375rem; border-radius: 4px; font-family: var(--font-mono); }
 .prose-ditto pre { background: var(--color-surface); padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: 0.75rem; border: 1px solid var(--color-border); }
-.prose-ditto blockquote { border-left: 2px solid var(--color-vivid); padding-left: 1rem; margin: 0.75rem 0; color: var(--color-text-secondary); }
+.prose-ditto blockquote { border-left: 2px solid var(--color-border-strong); padding-left: 1rem; margin: 0.75rem 0; color: var(--color-text-secondary); }
 .prose-ditto h1, .prose-ditto h2, .prose-ditto h3 { font-weight: 600; color: var(--color-text-primary); margin-top: 1.25rem; margin-bottom: 0.5rem; }
 .prose-ditto h1:first-child, .prose-ditto h2:first-child, .prose-ditto h3:first-child { margin-top: 0; }
 .prose-ditto h1 { font-size: 1.5625rem; letter-spacing: -0.01em; }
 .prose-ditto h2 { font-size: 1.25rem; letter-spacing: -0.01em; }
 .prose-ditto h3 { font-size: 1.0625rem; }
-.prose-ditto a { color: var(--color-vivid); text-decoration: underline; text-underline-offset: 2px; }
+.prose-ditto a { color: var(--color-text-primary); font-weight: 500; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--color-text-primary) 30%, transparent); text-underline-offset: 3px; transition: text-decoration-color 150ms ease; }
+.prose-ditto a:hover { text-decoration-color: var(--color-text-primary); }
 
 /* Reasoning shimmer — gradient sweep for "Thinking..." text */
 @keyframes reasoning-shimmer {
@@ -276,7 +324,7 @@ body {
   height: 1.1em;
   vertical-align: text-bottom;
   margin-left: 1px;
-  background-color: var(--color-vivid);
+  background-color: var(--color-text-primary);
   animation: cursor-blink 1s step-end infinite;
 }
 
@@ -337,6 +385,37 @@ body {
 
 .animate-reveal-ltr {
   animation: reveal-ltr 0.8s ease-out both;
+}
+
+/* Persona orb — animated brand-gradient avatar for Alex and Mira.
+ * The base gradient is static (so the orb's identity stays stable);
+ * a soft white highlight overlay drifts on an 11s loop to give the orb
+ * a living, pearlescent quality. */
+@keyframes ditto-orb-drift {
+  0%, 100% {
+    transform: translate(0%, 0%) scale(1);
+    opacity: 0.7;
+  }
+  33% {
+    transform: translate(10%, -6%) scale(1.12);
+    opacity: 0.95;
+  }
+  66% {
+    transform: translate(-7%, 8%) scale(0.9);
+    opacity: 0.55;
+  }
+}
+
+.ditto-orb-highlight {
+  animation: ditto-orb-drift 11s ease-in-out infinite;
+  transform-origin: center;
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ditto-orb-highlight {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

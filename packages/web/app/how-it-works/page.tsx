@@ -74,7 +74,7 @@ function StepList({
     <div className="space-y-6">
       {steps.map((step) => (
         <div key={step.num} className="flex gap-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-vivid text-sm font-semibold text-white">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
             {step.num}
           </div>
           <div>
@@ -109,7 +109,7 @@ export default function HowItWorksPage() {
       {/* Network section */}
       <section className="border-t border-border bg-surface px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[720px]">
-          <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
             Super-Connector
           </p>
           <h2 className="mt-2 text-2xl font-bold text-text-primary">
@@ -125,7 +125,7 @@ export default function HowItWorksPage() {
           <div className="mt-8">
             <Link
               href="/network"
-              className="inline-flex items-center gap-1 text-sm font-medium text-vivid hover:gap-2 transition-all"
+              className="inline-flex items-center gap-1 text-sm font-medium text-text-primary hover:gap-2 transition-all"
             >
               Learn more about the network <ArrowRight size={14} />
             </Link>
@@ -136,7 +136,7 @@ export default function HowItWorksPage() {
       {/* Chief of Staff section */}
       <section className="px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[720px]">
-          <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
             Chief of Staff
           </p>
           <h2 className="mt-2 text-2xl font-bold text-text-primary">
@@ -152,7 +152,7 @@ export default function HowItWorksPage() {
           <div className="mt-8">
             <Link
               href="/chief-of-staff"
-              className="inline-flex items-center gap-1 text-sm font-medium text-vivid hover:gap-2 transition-all"
+              className="inline-flex items-center gap-1 text-sm font-medium text-text-primary hover:gap-2 transition-all"
             >
               Learn more about the workspace <ArrowRight size={14} />
             </Link>
@@ -172,7 +172,7 @@ export default function HowItWorksPage() {
           <div className="mt-6">
             <Link
               href="/#get-started"
-              className="inline-flex items-center gap-2 rounded-lg bg-vivid px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
             >
               Get Started
               <ArrowRight size={16} />

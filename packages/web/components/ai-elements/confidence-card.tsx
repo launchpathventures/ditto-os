@@ -132,11 +132,11 @@ export function ConfidenceCard({
     <div
       className={cn(
         "my-1.5",
-        // Hero moment: surface-raised + rounded-xl + vivid-deep border (AC15)
+        // Hero moment: surface-raised + rounded-xl + ink border (AC15)
         isHeroMoment &&
-          "bg-surface-raised rounded-xl border-l-2 border-vivid-deep p-3",
+          "bg-surface-raised rounded-xl border-l-2 border-text-primary p-3",
         // User-expanded: typographic border-left only (AC15)
-        isUserExpanded && "border-l-2 border-vivid-deep pl-3",
+        isUserExpanded && "border-l-2 border-text-primary pl-3",
         className,
       )}
       data-testid="confidence-card"

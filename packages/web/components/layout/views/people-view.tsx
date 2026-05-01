@@ -94,13 +94,14 @@ function PersonCard({
   return (
     <div
       style={{
-        background: "var(--color-surface-raised)",
+        background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 12,
-        padding: "14px 16px",
+        padding: "16px 20px",
         display: "flex",
         gap: 14,
         alignItems: "flex-start",
+        boxShadow: "var(--shadow-subtle)",
       }}
     >
       <div
@@ -109,13 +110,14 @@ function PersonCard({
           height: 44,
           minWidth: 44,
           borderRadius: "50%",
-          background: "linear-gradient(135deg, #ff4000, #cc3300)",
-          color: "#fff",
+          background: "var(--color-petal-pink)",
+          color: "var(--color-deep-indigo)",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 16,
-          fontWeight: 600,
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: "-0.01em",
         }}
       >
         {person.initials}
@@ -161,13 +163,13 @@ function PersonCard({
       <button
         onClick={onAskAbout}
         style={{
-          padding: "6px 10px",
-          background: "var(--color-vivid-subtle)",
-          color: "var(--color-vivid-deep)",
-          border: "1px solid #ffd9c8",
-          borderRadius: 6,
+          padding: "6px 12px",
+          background: "var(--color-petal-pink)",
+          color: "var(--color-deep-indigo)",
+          border: "1px solid color-mix(in srgb, var(--color-petal-pink) 80%, var(--color-deep-indigo))",
+          borderRadius: 8,
           fontSize: 12,
-          fontWeight: 500,
+          fontWeight: 600,
           cursor: "pointer",
           fontFamily: "inherit",
           flexShrink: 0,

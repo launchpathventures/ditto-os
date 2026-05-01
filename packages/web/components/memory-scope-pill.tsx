@@ -36,7 +36,7 @@ export function MemoryScopePill({
 
   const baseClass =
     "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium " +
-    "bg-vivid-subtle border border-[#ffd9c8] text-vivid-deep " +
+    "bg-canary-yellow/60 border border-canary-yellow text-deep-indigo " +
     className;
 
   if (variant.kind === "project") {

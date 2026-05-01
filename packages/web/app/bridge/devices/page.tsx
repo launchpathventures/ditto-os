@@ -218,10 +218,10 @@ export default function DevicesPage() {
                 <span
                   className={`inline-block h-2 w-2 rounded-full ${
                     d.status === "active" && isOnline(d)
-                      ? "bg-green-500"
+                      ? "bg-positive"
                       : d.status === "revoked"
-                        ? "bg-red-400"
-                        : "bg-gray-400"
+                        ? "bg-negative"
+                        : "bg-text-muted"
                   }`}
                   aria-hidden
                 />

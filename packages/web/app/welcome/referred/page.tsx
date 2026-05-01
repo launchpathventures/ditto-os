@@ -247,7 +247,7 @@ function ReferredPageInner() {
     <div className="flex min-h-screen flex-col bg-white">
       {/* Minimal nav */}
       <nav className="flex items-center justify-between px-6 py-5 md:px-10">
-        <Link href="/" className="text-xl font-bold text-vivid">
+        <Link href="/" className="text-xl font-semibold tracking-tight text-text-primary">
           ditto
         </Link>
         <div className="flex items-center gap-6">
@@ -325,13 +325,13 @@ function ReferredPageInner() {
                         placeholder="What are you building or working on?"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                        className="flex-1 rounded-2xl border border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                       />
                       <button
                         type="submit"
                         disabled={!input.trim()}
                         aria-label="Send message"
-                        className="inline-flex items-center rounded-2xl bg-vivid px-4 py-3 text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                        className="inline-flex items-center rounded-2xl bg-accent px-4 py-3 text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                       >
                         <ArrowRight size={18} />
                       </button>
@@ -357,13 +357,13 @@ function ReferredPageInner() {
                           placeholder="you@company.com"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                          className="flex-1 rounded-2xl border border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                         />
                         <button
                           type="submit"
                           disabled={!email}
                           aria-label="Submit email"
-                          className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                          className="inline-flex items-center gap-1 rounded-2xl bg-accent px-5 py-3 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
                           Go <ArrowRight size={16} />
                         </button>
@@ -373,7 +373,7 @@ function ReferredPageInner() {
                         placeholder="Your name (optional)"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full rounded-2xl border-2 border-border bg-white px-5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                        className="w-full rounded-2xl border border-border bg-white px-5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                       />
                     </form>
                     <p className="text-xs text-text-muted">
@@ -392,12 +392,12 @@ function ReferredPageInner() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         autoFocus
-                        className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                        className="flex-1 rounded-2xl border border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                       />
                       <button
                         type="submit"
                         aria-label="Submit email"
-                        className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover"
+                        className="inline-flex items-center gap-1 rounded-2xl bg-accent px-5 py-3 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
                       >
                         Go <ArrowRight size={16} />
                       </button>
@@ -407,7 +407,7 @@ function ReferredPageInner() {
                       placeholder="Your name (optional)"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-border bg-white px-5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                      className="w-full rounded-2xl border border-border bg-white px-5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
                     />
                   </form>
                 )}
