@@ -1,10 +1,59 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-01 (Architect — **Bridge Capability Layer phase designed** (ADR-044 + parent Brief 234 + sub-briefs 235/236/237 + deferred Brief 238) + **Reviewer-passed REVISE → CRIT-fixes applied in-session** + **Railway dual-deployment runbook shipped** (`docs/deployment/railway.md` + Dockerfile healthcheck `$PORT` fix + `fly.toml` deletion). Status: ready for human approval; on approval → `/dev-builder Brief 235` (after final CRIT/IMP review-loop pass). Brief 233 entry preserved below.)
+**Last updated:** 2026-05-01 (Builder/Operator — **Auto-provisioning unblocked**: GHCR Docker image publish workflow shipped (`.github/workflows/docker-publish.yml`); stale `fly-deploy.yml` deleted; `.env.example` `DITTO_IMAGE_REF` updated to actual published image (`ghcr.io/launchpathventures/ditto-os:latest`); `docs/deployment/auto-provision.md` runbook ships covering one-time setup → provision → operational commands → troubleshooting. Substrate from Briefs 090/100/153 (already-shipped Railway provisioning saga) is now end-to-end usable from ditto.partners. **Bridge Capability Layer design** (ADR-044 + Briefs 234/235/236/237; Brief 238 deferred) preserved from earlier in this session below. Status: auto-provisioning ready to use as soon as: (a) workflow publishes first image on push to main, (b) GHCR package is marked public, (c) `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `ADMIN_PASSWORD` are set on ditto.partners.)
 
 ---
 
-## CURRENT — Architect: Bridge Capability Layer Phase + Railway Runbook (2026-05-01)
+## CURRENT — Builder/Operator: Auto-Provisioning Unblocked (2026-05-01)
+
+**Direct trigger:** user "Do it all - I want auto-provisioning to work" 2026-05-01, after audit confirmed the auto-provisioning saga (Brief 090 / 100 / 153) is production-ready code-wise but blocked on (a) no published Docker image at `DITTO_IMAGE_REF` and (b) outdated env-example default pointing at a non-existent image.
+
+**What was unblocked:**
+- The Network Service's `POST /api/v1/network/admin/provision` endpoint (`packages/web/app/api/v1/network/admin/provision/route.ts`) — already shipped, tested, idempotent, with full rollback. NOT touched in this session; verified working as designed.
+- The provisioning saga (`src/engine/workspace-provisioner.ts`, 726 lines, real Railway GraphQL calls) — already shipped, tested. NOT touched.
+- The acceptance-flow trigger (Brief 153 — inbound-email handler detects "yes" → fires `triggerWorkspaceProvisioning`) — already shipped. NOT touched.
+- The fleet upgrade / rollback / deprovision admin routes (Briefs 091, 100) — already shipped. NOT touched.
+
+**What was missing (now shipped this session):**
+- `.github/workflows/docker-publish.yml` — **CREATED**. Builds Ditto Docker image and publishes to `ghcr.io/launchpathventures/ditto-os` on every push to `main` and on tag pushes (`v*`). Tags: `:latest` (main), `:<version>` (tags), `:sha-<short>` (always). Uses `docker/build-push-action@v5` with GHA cache. Permissions: `packages: write`. Runs on `linux/amd64` (Railway runtime).
+- `.env.example` — `DITTO_IMAGE_REF` default updated from non-existent `ghcr.io/ditto/workspace:latest` to actual published image `ghcr.io/launchpathventures/ditto-os:latest` with note about adjusting org for forks.
+- `docs/deployment/auto-provision.md` — **CREATED**. Companion to `railway.md`. Covers: one-time setup (publish image, mark GHCR package public, configure env vars on ditto.partners), three provisioning triggers (curl admin endpoint / pnpm CLI / email-acceptance flow), what the saga does step-by-step, operational commands (fleet, deprovision, upgrade, rollback), troubleshooting matrix, what auto-provisioning *isn't* (no multi-region, no billing, no auto-deprovisioning).
+- `.github/workflows/fly-deploy.yml` — **DELETED**. Stale Fly.io artifact (sibling to fly.toml; Tim corrected earlier in session that production is Railway, not Fly).
+
+**What's left for Tim (operator clicks, not code):**
+1. Push this commit to `main` → workflow publishes first image (~5 min)
+2. Mark GHCR package public via package settings (one click; Railway needs to pull without registry credentials)
+3. Set on ditto.partners Railway service: `RAILWAY_API_TOKEN` (from `https://railway.com/account/tokens`), `RAILWAY_PROJECT_ID` (from project URL), `DITTO_IMAGE_REF=ghcr.io/launchpathventures/ditto-os:latest`, `ADMIN_PASSWORD` (if not already set)
+4. Curl: `POST https://ditto.partners/api/v1/network/admin/provision` with `{"userId": "tim"}` — provisioner spins up his personal workspace, sends magic-link welcome email
+
+**Provenance verified — saga internals untouched but read for accuracy:**
+- `src/engine/workspace-provisioner.ts:69-202` — `createRailwayClient` real GraphQL: `createService`, `deleteService`, `createVolume`, `deleteVolume`, `upsertVariables`, `deployService`, `createDomain`, `getDeploymentStatus`. All real fetch calls to `https://backboard.railway.com/graphql/v2`.
+- `src/engine/workspace-provisioner.ts:278-446` — `provisionWorkspace` saga: idempotency, stale recovery, env-id resolution, service creation, volume mount at `/data`, token generation, `NETWORK_AUTH_SECRET` generation (32-byte hex, line 346), env var injection (line 351-360 — includes `DITTO_NETWORK_URL`, `DITTO_NETWORK_TOKEN`, `DATABASE_PATH`, `NETWORK_AUTH_SECRET`, optional `WORKSPACE_OWNER_EMAIL`), deploy, domain, two-phase health check (Railway status → `/healthz?deep=true`), fleet record, networkUsers status update.
+- `src/engine/workspace-provisioner.ts:687-725` — full rollback on any failure (delete DB record, delete service which cascades volume, revoke token).
+- `packages/web/app/api/v1/network/admin/provision/route.ts:43-53` — env-var validation: returns 500 with named missing vars if `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `DITTO_IMAGE_REF` absent.
+
+**Reference docs touched (Insight-043 point-of-contact):**
+- `.env.example` — image-ref default refreshed
+- `docs/deployment/auto-provision.md` — created
+- `docs/state.md` — this entry
+- NO architecture.md / dictionary.md changes (no architectural surface change; auto-provisioning was already in scope per ADR-018 Track A1 + ADR-025; this session just unblocked it operationally)
+
+**Memory updates (user auto-memory — not in this repo):**
+- New: `feedback_assume_infrastructure_running.md` — "Don't assume Tim's infrastructure isn't deployed" (third infrastructure-state assumption error in this conversation; pattern correction captured)
+
+**Files added/modified/deleted (uncommitted at session start; will commit next):**
+- Created: `.github/workflows/docker-publish.yml`, `docs/deployment/auto-provision.md`
+- Modified: `.env.example` (DITTO_IMAGE_REF default), `docs/state.md` (this entry)
+- Deleted: `.github/workflows/fly-deploy.yml`
+
+**Next steps:**
+1. **For Tim (immediate):** push to `main` → first image publish → mark public → set Railway env vars on ditto.partners → curl the admin endpoint to provision his workspace
+2. **For Tim (when comfortable):** invite first prospect through ditto.partners' chat-then-email-acceptance flow (Brief 153 path); validate that the email-trigger end-to-end works for someone else
+3. **For follow-on Architect cycle (when Builder ready):** apply remaining IMP items from earlier in this session (Briefs 235-237 still need IMP-1, 5, 8, 9, 11-13 fixes pre-Builder)
+
+---
+
+## EARLIER THIS SESSION — Architect: Bridge Capability Layer Phase + Railway Runbook (2026-05-01)
 
 **Direct trigger:** user `/dev-architect` 2026-05-01, after design-conversation distilling that "the local app is a thin client to the cloud workspace, no local DB ever" — formalizing the architectural answer to Anthropic's Max-OAuth ban (Insight-158) AND multi-client UX (browser today, native Mac app later, mobile later). Same conversation also produced + shipped a Railway dual-deployment runbook for the user's immediate "get Ditto operational" need.
 
