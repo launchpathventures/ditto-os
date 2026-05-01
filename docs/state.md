@@ -1,5 +1,185 @@
 # Ditto — Current State
 
+**Last updated:** 2026-05-01 (Builder — **Admin fleet UI shipped** at `/admin/fleet` — single React page with provision form / fleet list / per-row deprovision / fleet-wide upgrade & rollback / recent upgrade history; consumes the existing `/api/v1/network/admin/{fleet,provision,deprovision,upgrade,rollback,upgrades}` endpoints; Bearer-token auth (localStorage `ditto-admin-token`, same pattern as `/admin/users/[userId]`). Link added from `/admin` nav. Type-check clean. **Earlier this session: auto-provisioning unblocked** (GHCR Docker image publish workflow `.github/workflows/docker-publish.yml`; stale `fly-deploy.yml` deleted; `.env.example` `DITTO_IMAGE_REF` updated to `ghcr.io/launchpathventures/ditto-os:latest`; `docs/deployment/auto-provision.md` runbook). **Even earlier: Bridge Capability Layer design** (ADR-044 + Briefs 234/235/236/237; Brief 238 deferred). Status: auto-provisioning ready to use as soon as: (a) workflow publishes first image on push to main, (b) GHCR package is marked public, (c) `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `ADMIN_PASSWORD` set on ditto.partners — then operator hits `/admin/fleet` and clicks "Provision".)
+
+---
+
+## CURRENT — Builder: Admin Fleet UI (2026-05-01, after auto-provisioning unblock)
+
+**Direct trigger:** user "Build it!!!" 2026-05-01, after audit confirmed no React surface existed for fleet/provisioning despite all admin endpoints being shipped + tested.
+
+**What ships:**
+- `packages/web/app/admin/fleet/page.tsx` — **CREATED**. Single ~500-line client component with:
+  - Token gate (Bearer auth via localStorage `ditto-admin-token`; clears + re-prompts on 401/403)
+  - Provision form (userId + optional imageRef override → `POST /api/v1/network/admin/provision`); shows result with workspaceUrl + serviceId; spinner says "Provisioning… (1-3 min)" since the saga returns synchronously
+  - Fleet table (`GET /api/v1/network/admin/fleet`) with columns: status badge, userId, workspaceUrl (external link), image tag, last health timestamp + health status, deprovision button per row
+  - Per-row deprovision with type-the-userId confirmation prompt (no separate confirm field needed; the route accepts `{userId}` only)
+  - Fleet-wide upgrade form (`POST /api/v1/network/admin/upgrade` — returns `{upgradeId, status: "in_progress"}` immediately; canary-first per Brief 091)
+  - Fleet-wide rollback button (`POST /api/v1/network/admin/rollback` — reverts each workspace to its own pre-upgrade image)
+  - Recent upgrades table (`GET /api/v1/network/admin/upgrades?limit=5`) showing history
+  - Refresh button + auto-fetch on token change
+  - Lucide icons + existing Tailwind tokens (`text-vivid`, `bg-vivid`, `border-border`, etc.) — matches `/admin/page.tsx` aesthetic
+- `packages/web/app/admin/page.tsx` — **MODIFIED**: added "Fleet" link in the nav alongside "Smoke Tests"
+
+**No new API endpoints created.** Page is pure UI over existing routes (Briefs 090, 091, 100, 153).
+
+**Auth pattern:** localStorage admin token + Bearer header — same as `/admin/users/[userId]/page.tsx`. The `/admin/page.tsx` cookie-then-token pattern is more elaborate but ultimately falls back to the same localStorage token; we use the simpler direct path.
+
+**Caveats / known limitations:**
+- No real-time saga progress visible during provisioning — the `provisionWorkspace` saga has an `onProgress` callback (used by the CLI) but no HTTP streaming endpoint exposes it. UI shows a long spinner. Future enhancement: SSE endpoint or DB polling.
+- No upgrade-in-progress live status — the upgrade endpoint returns `upgradeId` immediately and runs in background; `GET /api/v1/network/admin/upgrades` lists history but the running upgrade's per-workspace progress isn't streamed. Hit Refresh to see updates.
+- No log link to Railway dashboard per workspace — would be helpful but requires the Railway project ID to construct the URL; deferred.
+- No filter/search on the fleet table — fine for current scale (1-N workspaces); add when N grows.
+- Type-the-userId-to-confirm deprovision uses `prompt()`; not the prettiest UX (browser-native modal) but functional and unambiguous.
+
+**Type-check:** clean (`pnpm run type-check` — zero errors).
+
+**Files added/modified (uncommitted):**
+- Created: `packages/web/app/admin/fleet/page.tsx`
+- Modified: `packages/web/app/admin/page.tsx` (Fleet link added to nav)
+
+**Next step for Tim:** push to main → Docker workflow publishes image (~5 min) → mark GHCR package public → set Railway env vars (`RAILWAY_API_TOKEN`, `RAILWAY_PROJECT_ID`, `ADMIN_PASSWORD`) on ditto.partners → visit `https://ditto.partners/admin/fleet` → enter admin password → "Provision" → done.
+
+---
+
+## EARLIER — Builder/Operator: Auto-Provisioning Unblocked (2026-05-01)
+
+**Direct trigger:** user "Do it all - I want auto-provisioning to work" 2026-05-01, after audit confirmed the auto-provisioning saga (Brief 090 / 100 / 153) is production-ready code-wise but blocked on (a) no published Docker image at `DITTO_IMAGE_REF` and (b) outdated env-example default pointing at a non-existent image.
+
+**What was unblocked:**
+- The Network Service's `POST /api/v1/network/admin/provision` endpoint (`packages/web/app/api/v1/network/admin/provision/route.ts`) — already shipped, tested, idempotent, with full rollback. NOT touched in this session; verified working as designed.
+- The provisioning saga (`src/engine/workspace-provisioner.ts`, 726 lines, real Railway GraphQL calls) — already shipped, tested. NOT touched.
+- The acceptance-flow trigger (Brief 153 — inbound-email handler detects "yes" → fires `triggerWorkspaceProvisioning`) — already shipped. NOT touched.
+- The fleet upgrade / rollback / deprovision admin routes (Briefs 091, 100) — already shipped. NOT touched.
+
+**What was missing (now shipped this session):**
+- `.github/workflows/docker-publish.yml` — **CREATED**. Builds Ditto Docker image and publishes to `ghcr.io/launchpathventures/ditto-os` on every push to `main` and on tag pushes (`v*`). Tags: `:latest` (main), `:<version>` (tags), `:sha-<short>` (always). Uses `docker/build-push-action@v5` with GHA cache. Permissions: `packages: write`. Runs on `linux/amd64` (Railway runtime).
+- `.env.example` — `DITTO_IMAGE_REF` default updated from non-existent `ghcr.io/ditto/workspace:latest` to actual published image `ghcr.io/launchpathventures/ditto-os:latest` with note about adjusting org for forks.
+- `docs/deployment/auto-provision.md` — **CREATED**. Companion to `railway.md`. Covers: one-time setup (publish image, mark GHCR package public, configure env vars on ditto.partners), three provisioning triggers (curl admin endpoint / pnpm CLI / email-acceptance flow), what the saga does step-by-step, operational commands (fleet, deprovision, upgrade, rollback), troubleshooting matrix, what auto-provisioning *isn't* (no multi-region, no billing, no auto-deprovisioning).
+- `.github/workflows/fly-deploy.yml` — **DELETED**. Stale Fly.io artifact (sibling to fly.toml; Tim corrected earlier in session that production is Railway, not Fly).
+
+**What's left for Tim (operator clicks, not code):**
+1. Push this commit to `main` → workflow publishes first image (~5 min)
+2. Mark GHCR package public via package settings (one click; Railway needs to pull without registry credentials)
+3. Set on ditto.partners Railway service: `RAILWAY_API_TOKEN` (from `https://railway.com/account/tokens`), `RAILWAY_PROJECT_ID` (from project URL), `DITTO_IMAGE_REF=ghcr.io/launchpathventures/ditto-os:latest`, `ADMIN_PASSWORD` (if not already set)
+4. Curl: `POST https://ditto.partners/api/v1/network/admin/provision` with `{"userId": "tim"}` — provisioner spins up his personal workspace, sends magic-link welcome email
+
+**Provenance verified — saga internals untouched but read for accuracy:**
+- `src/engine/workspace-provisioner.ts:69-202` — `createRailwayClient` real GraphQL: `createService`, `deleteService`, `createVolume`, `deleteVolume`, `upsertVariables`, `deployService`, `createDomain`, `getDeploymentStatus`. All real fetch calls to `https://backboard.railway.com/graphql/v2`.
+- `src/engine/workspace-provisioner.ts:278-446` — `provisionWorkspace` saga: idempotency, stale recovery, env-id resolution, service creation, volume mount at `/data`, token generation, `NETWORK_AUTH_SECRET` generation (32-byte hex, line 346), env var injection (line 351-360 — includes `DITTO_NETWORK_URL`, `DITTO_NETWORK_TOKEN`, `DATABASE_PATH`, `NETWORK_AUTH_SECRET`, optional `WORKSPACE_OWNER_EMAIL`), deploy, domain, two-phase health check (Railway status → `/healthz?deep=true`), fleet record, networkUsers status update.
+- `src/engine/workspace-provisioner.ts:687-725` — full rollback on any failure (delete DB record, delete service which cascades volume, revoke token).
+- `packages/web/app/api/v1/network/admin/provision/route.ts:43-53` — env-var validation: returns 500 with named missing vars if `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `DITTO_IMAGE_REF` absent.
+
+**Reference docs touched (Insight-043 point-of-contact):**
+- `.env.example` — image-ref default refreshed
+- `docs/deployment/auto-provision.md` — created
+- `docs/state.md` — this entry
+- NO architecture.md / dictionary.md changes (no architectural surface change; auto-provisioning was already in scope per ADR-018 Track A1 + ADR-025; this session just unblocked it operationally)
+
+**Memory updates (user auto-memory — not in this repo):**
+- New: `feedback_assume_infrastructure_running.md` — "Don't assume Tim's infrastructure isn't deployed" (third infrastructure-state assumption error in this conversation; pattern correction captured)
+
+**Files added/modified/deleted (uncommitted at session start; will commit next):**
+- Created: `.github/workflows/docker-publish.yml`, `docs/deployment/auto-provision.md`
+- Modified: `.env.example` (DITTO_IMAGE_REF default), `docs/state.md` (this entry)
+- Deleted: `.github/workflows/fly-deploy.yml`
+
+**Next steps:**
+1. **For Tim (immediate):** push to `main` → first image publish → mark public → set Railway env vars on ditto.partners → curl the admin endpoint to provision his workspace
+2. **For Tim (when comfortable):** invite first prospect through ditto.partners' chat-then-email-acceptance flow (Brief 153 path); validate that the email-trigger end-to-end works for someone else
+3. **For follow-on Architect cycle (when Builder ready):** apply remaining IMP items from earlier in this session (Briefs 235-237 still need IMP-1, 5, 8, 9, 11-13 fixes pre-Builder)
+
+---
+
+## EARLIER THIS SESSION — Architect: Bridge Capability Layer Phase + Railway Runbook (2026-05-01)
+
+**Direct trigger:** user `/dev-architect` 2026-05-01, after design-conversation distilling that "the local app is a thin client to the cloud workspace, no local DB ever" — formalizing the architectural answer to Anthropic's Max-OAuth ban (Insight-158) AND multi-client UX (browser today, native Mac app later, mobile later). Same conversation also produced + shipped a Railway dual-deployment runbook for the user's immediate "get Ditto operational" need.
+
+**Strategic decision pinned:** ADR-044 commits Ditto's local-client architecture as **thin-client-to-cloud, capability-via-bridge** — local clients (browser today; native app future; mobile future) are renderings + capability surfaces, not workspaces in their own right. No local DB under any client (rejected — multi-master sync is the failure mode this ADR exists to prevent). The bridge protocol IS the load-bearing capability surface. Future native app = webview + bridge daemon in one binary, no second engine. ADR-044 explicitly does NOT decide native-shell choice (Tauri vs Electron vs alternatives) — that's a separate ADR when the native-app phase begins.
+
+**Documents produced (all uncommitted on this branch as of session end):**
+
+1. `docs/adrs/044-local-client-capability-surface.md` — strategic ADR; status `proposed`. Forces table, provenance (LSP capability-advertisement pattern; thick-client + cloud-DB shape from Linear/Cursor/Notion/1Password — Reviewer flagged the citations as rhetorical-not-factual since those products DO have local persistence; the "no local DB" decision stands on its own merits, not on the analogy). Updates required to `architecture.md` line 432 (extend bridge paragraph to capability-surface role).
+
+2. `docs/briefs/234-bridge-capability-layer-phase.md` — parent phase brief; status `draft`. Phase-level ACs (10 — refreshed post-Reviewer to include `bridgeEvents`-not-shared-with-`harnessEvents` (CRIT-4) and `bridge-dispatch.ts:179` switch-exhaustiveness (CRIT-5)). Defers Brief 238 explicitly per Reviewer CRIT-6 (Anthropic ToS).
+
+3. `docs/briefs/235-bridge-handler-registry.md` — sub-brief 1; status `draft`. 16 ACs. Foundational substrate: typed `BridgeHandler<P, R>` interface in `@ditto/core/bridge/handler-registry.ts`; `bridge.capabilities` advertisement frame; cloud-side capability persistence (`bridge_devices.capabilities` JSON column, **idx 0019 reserved per Insight-216/190**); backward-compat for legacy daemons (no advertisement → `["exec", "tmux.send"]` default). CRIT-7 fix applied: AC #10 backward-compat test replaced from "git stash + rebuild" with automated fake-daemon fixture in `bridge-server.test.ts`. CRIT-1 fix applied: `trustClass` → `trustTier` (existing type from `packages/core/src/db/schema.ts:35`, NOT new type).
+
+4. `docs/briefs/236-paired-device-awareness.md` — sub-brief 2; status `draft`. 15 ACs. Cloud-side `OnlineTracker` (in-memory only); **NEW `bridgeEvents` emitter parallel to `harnessEvents`** (CRIT-4 fix — typed-union extension would force every exhaustive switch to handle bridge events; parallel emitter is cleaner separation); SSE forwarding (single-tenant for this brief — CRIT-3 fix per Reviewer flagged that `/api/events/route.ts` has zero workspace scoping today; multi-tenant deferred to a future precursor brief); `CapabilityGatedButton` UI primitive (17th primitive); **devices view extension at `packages/web/app/bridge/devices/page.tsx`** (CRIT-2 fix — corrected from incorrect `packages/web/app/devices/page.tsx`). Reconciles SSE-driven updates with the existing 262-line page's 10s polling.
+
+5. `docs/briefs/237-file-operations-handler.md` — sub-brief 3; status `draft`. 17 ACs. `file.read` / `file.write` / `file.glob` / `file.grep` / `file.watch` daemon handlers; opt-in `~/.ditto/bridge-roots.json` allowed-roots model; path-traversal prevention via `fs.realpath` + allow-list check; chokidar entry to `docs/landscape.md`. **CRIT-5 fix applied:** AC #11 explicitly requires converting `bridge-dispatch.ts:179` `if/else` to exhaustive `switch (payload.kind)` with TS exhaustiveness check — prevents silent miscategorization of new file payloads in audit rows. **IMP-10 incorporated:** Insight-180 enforced via existing dispatcher-level guard only (no per-handler secondary check; secondary checks drift). Soft-prefer dependency on Brief 236 (UI gating is convenience; can ship without it).
+
+6. `docs/briefs/238-claude-cli-session-handler.md` — sub-brief 4; **status DEFERRED** per Reviewer CRIT-6. Original design preserved for re-entry. Anthropic Max ToS interpretation flagged as load-bearing decision — Reviewer escalated from "human decision" to CRITICAL, noting Insight-158's own framing that every other tool in the ecosystem (OpenClaw / Cursor / Continue / Windsurf / Cody) switched to BYOK; Ditto deliberately not switching is asymmetric exposure. Re-entry conditions documented in the brief: (a) Anthropic clarification, (b) Ditto/Anthropic relationship goes explicit, OR (c) brief restructured to ship behind `DITTO_BRIDGE_LLM_ENABLED=false` flag with operator self-attestation.
+
+**Reviewer pass (separate-context, 2026-05-01):** REVISE — 7 CRITICAL, 18 IMPORTANT, 10 MINOR + cross-brief observations.
+
+**CRIT items resolved in-session (5 of 7):**
+- CRIT-1 ✅ — `TrustClass` → `TrustTier` across 6 docs (existing type from `packages/core/src/db/schema.ts:35`)
+- CRIT-2 ✅ — devices view path corrected to `packages/web/app/bridge/devices/page.tsx` in Brief 236
+- CRIT-3 ✅ — Brief 236 downscoped to single-tenant SSE; multi-tenant flagged as precursor sub-brief for future
+- CRIT-4 ✅ — Brief 236 introduces `bridgeEvents` parallel emitter (NOT extending typed `harnessEvents` union)
+- CRIT-5 ✅ — Brief 237 AC #11 mandates exhaustive `switch (payload.kind)` with TS exhaustiveness in `bridge-dispatch.ts:179`
+- CRIT-6 ✅ (resolved by deferral) — Brief 238 deferred; phase ships without it
+- CRIT-7 ✅ — Brief 235 AC #10 replaced git-stash ritual with automated fake-daemon fixture
+
+**IMP items NOT yet applied (captured here as punch list for Builder pre-flight or follow-on Architect cycle):**
+- IMP-1: ADR-044 provenance citations (Linear/Cursor/Notion/1Password) are rhetorical not factual — drop or qualify honestly
+- IMP-2: Add observability for capability-staleness — devices view shows last `bridge.capabilities` frame timestamp per device
+- IMP-3: Brief 234 dependency on Brief 236 from Brief 237 should be soft (file-ops can ship without UI gating) — applied: parent brief now says "soft-prefers Brief 236"
+- IMP-5: Brief 235 — specify `BridgeHandler.execute(payload, ctx: BridgeHandlerContext)` shape with explicit context type (jobId / sendStream / sendResult / cancelSignal)
+- IMP-6: Brief 235 — capability frame size cap reduced from 64 KB to 4 KB (applied)
+- IMP-7: Brief 236 — SSE coalescing specified as trailing-edge (applied via "trailing-edge coalesced … final-state event after 500ms quiescent" in AC #3)
+- IMP-8: Brief 237 — path-traversal must use `fs.realpath` not just `path.resolve` (mentioned in §Constraints; Builder must enforce)
+- IMP-9: Brief 237 — `~/.ditto/bridge-roots.json` schema needs explicit Zod definition + startup validation cases
+- IMP-10: Brief 237 — drop per-handler `file.write` stepRunId check; rely on existing dispatcher-level guard only (applied: AC #12 rewritten)
+- IMP-11: Brief 237 — ContentBlock count update is concrete (28→29) not "verify count" hedge (still says "verify count" — applies in Builder pre-flight)
+- IMP-12: Brief 237 — pick `tinyglobby` OR `fast-glob` decisively, don't leave Builder choosing
+- IMP-13: Brief 237 — cloud-side watcher subscription invalidation on disconnect (currently only daemon-side)
+- IMP-14: Brief 238 (deferred) — `LlmProvider` casing fix (was `LLMProvider`)
+- IMP-15: Brief 238 (deferred) — exclusivity check between `DITTO_CONNECTION=claude-cli` and routing heuristic
+- IMP-16: Brief 238 (deferred) — accept stutter on mid-stream fallback as known UX wart
+- IMP-17: Brief 238 (deferred) — daemon should test claude-cli auth (not just `claude --version`) before registering capability
+- IMP-18: Brief 235 — Drizzle idx 0019 reservation explicit (applied)
+
+**Cross-brief observations (Reviewer):**
+- Capability versioning gap: per-capability version negotiation undefined — flagged as future-brief candidate
+- Per-capability revocation gap: no per-device capability disable surface — flagged for future
+- Observability gap: no debug log for routing decisions in Brief 238 (deferred)
+- Retry/backoff gap: file-ops have no transient-failure retry; flagged for follow-on
+- API response shape collision: Briefs 235 + 236 both modify `/api/v1/bridge/devices` route — Builder must sequence or consolidate
+- Scrubber extension collision: Briefs 237 + 238 (when 238 unblocks) both modify `bridge-dispatch.ts` CREDENTIAL_PATTERNS
+
+**Reviewer strategic note (verbatim):** "The phase delivers ADR-044 cleanly *if* you fix CRIT-1 through CRIT-5 (mechanical) and resolve CRIT-6 (Anthropic ToS) by either extracting Brief 238 from the phase or shipping it behind a default-off flag. The substrate (235/236) and file-ops handler (237) are ready to build with the IMPORTANT fixes; they're independently valuable and don't carry the ToS risk. The strongest version of this phase ships 235 + 236 + 237 in sequence and queues 238 behind explicit Anthropic clarification."
+
+**Decision (in-session, with user blanket approval to "do the work"):** Option B from Architect's recommendation — ship substrate (235/236/237) after CRIT fixes; defer 238. Phase Brief 234 sequencing updated; Brief 238 marked deferred with re-entry conditions.
+
+**Also shipped this session — Railway dual-deployment runbook + repo prep:**
+- `docs/deployment/railway.md` — created. Two-service topology (Network Service `ditto.partners` in public mode + Personal Workspace in workspace mode), step-by-step env var blocks for each, Phase 1 / Phase 2 / Phase 3 sequencing (workspace first; Network when ready; Phase 3 wire-up deferred until Network API matures). Also documents: setup persistence path (`/setup` writes `data/config.json` on Railway volume; LLM_PROVIDER + LLM_MODEL + ANTHROPIC_API_KEY env-var-only path skips wizard), Anthropic Max plan posture (cannot use directly per Insight-158; Local Bridge offloads heavy work to Mac via paired daemon).
+- `Dockerfile` — healthcheck updated from hardcoded `localhost:3000` to `${PORT:-3000}` (Railway port-injection-safe).
+- `fly.toml` — DELETED (stale Fly.io artifact; per memory note `project_deployment_railway.md`, Railway is the production target).
+
+**Memory updates (user auto-memory — not in this repo):**
+- New: `project_deployment_railway.md` — "Ditto deploys on Railway, not fly.io" (Tim corrected an earlier wrong claim from a stale fly.toml; memory captures the reality + the lesson)
+
+**Quality gates:**
+- `pnpm run type-check` — clean (verified post-Dockerfile/runbook changes; no code changes from briefs since briefs are docs)
+- All 6 design documents created; 4 of 5 active docs received CRIT fixes in-session; Brief 238 explicitly deferred
+
+**Files added/modified/deleted (uncommitted):**
+- Created: `docs/adrs/044-local-client-capability-surface.md`, `docs/briefs/234-bridge-capability-layer-phase.md`, `docs/briefs/235-bridge-handler-registry.md`, `docs/briefs/236-paired-device-awareness.md`, `docs/briefs/237-file-operations-handler.md`, `docs/briefs/238-claude-cli-session-handler.md`, `docs/deployment/railway.md`, `docs/state.md` (this entry)
+- Modified: `Dockerfile` (healthcheck `$PORT`)
+- Deleted: `fly.toml`
+
+**Next steps:**
+1. **For the user (immediate):** Deploy to Railway per `docs/deployment/railway.md` Phase 1 — get Tim's personal workspace operational. ETA: 30 minutes of Railway UI work + DNS if attaching custom domain. The runbook is the single source.
+2. **For follow-on Architect cycle (when Builder ready):** Apply remaining IMP items (1, 5, 8, 9, 11, 12, 13) to Briefs 235/236/237 before `/dev-builder Brief 235` is invoked.
+3. **For Documenter wrap (after this session):** Verify state.md drift; update `docs/roadmap.md` Phase 9 row with the Bridge Capability Layer phase pointer; consider whether ADR-044 warrants a ContentBlock-count audit (it doesn't change the count; Brief 237 will when implemented).
+4. **For future PM triage:** Brief 238 deferred — when does it re-enter the queue? Set a check-in (Anthropic policy review, ~quarterly) or wait for explicit signal.
+
+---
+
+## PRIOR — Architect Brief 233 (2026-04-30)
+
 **Last updated:** 2026-04-30 (Architect — Brief 233 (Runner Prompt-Body Channel) **drafted + Reviewer-approved + Status: ready**; awaits human approval. Discharges the Brief 228 implementation gap that Brief 232 confirmed: generic `runnerPromptBody?: string` convention on `workItem.context` + helper in core + three cloud-runner-adapter call-site updates + retrofitter writer rename + a defensive local-mac-mini retrofit-trigger guard until §Open Question resolves. Sibling to Brief 232 (prompt-body-OUT direction; Brief 232 was response-body-IN). Brief 232 Builder checkpoint preserved below; on approval → `/dev-builder Brief 233`.)
 
 **Architect — Brief 233 designed (2026-04-30):** Runner Prompt-Body Channel — discharges the Brief 228 implementation gap that Brief 232's Builder pre-flight CONFIRMED (`workItem.context.retrofitPrompt` is written by retrofitter at `retrofitter.ts:872, 900` but never read by any of the three cloud-runner adapters at `claude-code-routine.ts:190`, `claude-managed-agent.ts:261`, `github-action.ts:260`). Brief introduces a generic `runnerPromptBody?: string` convention on `workItem.context`, a small reader helper at `packages/core/src/work-items/runner-prompt.ts` (`getRunnerPromptBody({content, context})` — defensive read with fallback to `content`), three adapter call-site updates wiring the helper into the existing `composePrompt` / GH-Action `work_item_body` paths, and a retrofitter writer-site rename (`retrofitPrompt` → `runnerPromptBody`, never had a consumer so safe). 16 ACs (within Insight-004's 8-17 envelope), one integration seam (the runner-dispatch prompt-body wire). Engine-product split: helper → core (ProcessOS-consumable); adapter wires + retrofitter rename → product. Local-mac-mini stays UNCHANGED (its `workItem.content` reads at `local-mac-mini.ts:132, 137` are tmux keys / bash exec args — not LLM prompts); §Open Question (HUMAN APPROVAL REQUIRED) surfaces Path X (build a 4th cloud-runner-equivalent local Claude Code adapter) vs Path Y (forbid retrofit on local-mac-mini projects); Architect default Path Y. Until §Open Question resolves, this brief includes a defensive **local-mac-mini retrofit-trigger guard** at `rerun-project-retrofit.ts` + Builder-grep'd siblings — rejects with structured error to prevent silent no-op dispatches. **Reviewer pass:** PASS WITH FLAGS — 0 CRIT, 2 IMP all fixed in-session (IMP-1: 3rd context-overwrite at retrofitter.ts:799-806 added to AC #8 verification scope; IMP-2: local-mac-mini retrofit-trigger guard added as new AC #14), 5 MIN none-blocking. **Files:** `docs/briefs/233-runner-prompt-body-channel.md`. **No state.md drift this session beyond this entry.** **Next step:** human approval; on approval → `/dev-builder Brief 233`.

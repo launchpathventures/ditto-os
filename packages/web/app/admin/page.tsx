@@ -475,6 +475,12 @@ export default function AdminTeammatePage() {
         </div>
         <div className="flex items-center gap-4">
           <Link
+            href="/admin/fleet"
+            className="text-sm text-text-secondary hover:text-text-primary"
+          >
+            Fleet
+          </Link>
+          <Link
             href="/admin/smoke-tests"
             className="text-sm text-text-secondary hover:text-text-primary"
           >
