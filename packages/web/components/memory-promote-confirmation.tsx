@@ -136,9 +136,9 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
     return (
       <div
         data-state="success"
-        className="rounded-2xl border border-[#ffd9c8] bg-vivid-subtle p-4"
+        className="rounded-3xl border border-vivid-subtle-border bg-vivid-subtle p-5"
       >
-        <p className="text-sm text-vivid-deep font-medium">
+        <p className="text-sm text-text-primary font-medium">
           Promoted. The memory now applies on {state.appliedTo.join(" + ")}.
         </p>
       </div>
@@ -148,9 +148,9 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
   return (
     <div
       data-state={state.kind}
-      className="rounded-lg border border-border bg-surface p-4 space-y-3"
+      className="rounded-3xl border border-border bg-surface p-5 space-y-3 shadow-[var(--shadow-medium)]"
     >
-      <h3 className="text-sm font-semibold">Promote this memory to all projects</h3>
+      <h3 className="text-base font-semibold tracking-tight">Promote this memory to all projects</h3>
 
       {/* alex-line reversibility note */}
       <p className="text-xs text-text-secondary italic">
@@ -173,7 +173,7 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
       </div>
 
       {/* memory content (last-look review) */}
-      <blockquote className="border-l-2 border-vivid pl-3 text-sm italic">
+      <blockquote className="border-l-2 border-text-primary pl-3 text-sm italic">
         {props.memoryContent}
       </blockquote>
 
@@ -230,21 +230,21 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
               type="button"
               onClick={handlePromoteAll}
               disabled={state.kind === "loading"}
-              className="px-3 py-1.5 rounded bg-vivid text-white text-sm font-medium disabled:opacity-50"
+              className="px-5 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent-hover transition-colors disabled:opacity-50"
             >
               {state.kind === "loading" ? "Promoting…" : `Promote to all ${allCount}`}
             </button>
             <button
               type="button"
               onClick={props.onCancel}
-              className="px-3 py-1.5 rounded border border-border text-sm"
+              className="px-5 py-2 rounded-lg border border-border bg-surface text-sm font-medium hover:bg-surface-subtle transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => setRestrictOpen(true)}
-              className="px-3 py-1.5 text-sm text-vivid hover:underline"
+              className="px-3 py-1.5 text-sm text-text-primary hover:underline"
             >
               Restrict to specific…
             </button>
@@ -255,7 +255,7 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
               type="button"
               onClick={handlePromoteRestricted}
               disabled={state.kind === "loading" || picked.size === 0}
-              className="px-3 py-1.5 rounded bg-vivid text-white text-sm font-medium disabled:opacity-50"
+              className="px-5 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent-hover transition-colors disabled:opacity-50"
             >
               {state.kind === "loading"
                 ? "Promoting…"
@@ -264,7 +264,7 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
             <button
               type="button"
               onClick={() => setRestrictOpen(false)}
-              className="px-3 py-1.5 rounded border border-border text-sm"
+              className="px-5 py-2 rounded-lg border border-border bg-surface text-sm font-medium hover:bg-surface-subtle transition-colors"
             >
               Back
             </button>

@@ -744,9 +744,9 @@ function CenterHeader({ title, onNewChat }: { title: string; onNewChat: () => vo
     >
       <h1
         style={{
-          fontSize: 15,
+          fontSize: 16,
           fontWeight: 600,
-          letterSpacing: "-0.005em",
+          letterSpacing: "-0.011em",
           margin: 0,
           color: "var(--color-text-primary)",
         }}
@@ -842,9 +842,9 @@ function UniversalChatbar({
           style={{
             maxWidth: 760,
             margin: "0 auto 8px",
-            background: "var(--color-surface-raised)",
-            border: "1px solid #E6D4AA",
-            borderRadius: 10,
+            background: "color-mix(in srgb, var(--color-caution) 6%, var(--color-surface-raised))",
+            border: "1px solid color-mix(in srgb, var(--color-caution) 25%, var(--color-border))",
+            borderRadius: 16,
             padding: "12px 14px",
             display: "flex",
             alignItems: "flex-start",
@@ -907,9 +907,9 @@ function UniversalChatbar({
         style={{
           maxWidth: 760,
           margin: "0 auto",
-          background: "var(--color-surface-raised)",
+          background: "var(--color-surface)",
           border: "1px solid var(--color-border)",
-          borderRadius: 14,
+          borderRadius: 12,
           padding: "10px 12px 8px",
           boxShadow: "var(--shadow-subtle)",
           display: "flex",
@@ -923,12 +923,12 @@ function UniversalChatbar({
             display: "inline-flex",
             alignItems: "center",
             gap: 5,
-            padding: "4px 9px",
-            background: "var(--color-vivid-subtle)",
-            border: "1px solid #ffd9c8",
-            borderRadius: 999,
+            padding: "4px 10px",
+            background: "var(--color-surface-raised)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 12,
             fontSize: 11,
-            color: "var(--color-vivid-deep)",
+            color: "var(--color-text-secondary)",
             fontWeight: 500,
             marginBottom: 2,
           }}
@@ -970,12 +970,12 @@ function UniversalChatbar({
           aria-label="Send"
           disabled={!input.trim()}
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: "50%",
-            background: "var(--color-vivid)",
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: "var(--color-accent)",
             border: "none",
-            color: "#fff",
+            color: "var(--color-accent-text)",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -983,6 +983,7 @@ function UniversalChatbar({
             flexShrink: 0,
             opacity: input.trim() ? 1 : 0.35,
             marginBottom: 1,
+            transition: "opacity 150ms ease, background 150ms ease",
           }}
         >
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2}>
@@ -1016,17 +1017,20 @@ function BtnSm({
   primary?: boolean;
   ghost?: boolean;
 }) {
+  // Primary action = ink-black, 8px radius (Amplemarket discipline).
   const bg = primary
-    ? "var(--color-vivid)"
+    ? "var(--color-accent)"
     : ghost
       ? "transparent"
       : "var(--color-surface-raised)";
-  const color = primary ? "#fff" : "var(--color-text-primary)";
+  const color = primary
+    ? "var(--color-accent-text)"
+    : "var(--color-text-primary)";
   const border = primary
-    ? "var(--color-vivid)"
+    ? "var(--color-accent)"
     : ghost
       ? "transparent"
-      : "var(--color-border-strong)";
+      : "var(--color-border)";
   return (
     <button
       onClick={onClick}
@@ -1034,7 +1038,7 @@ function BtnSm({
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        padding: "5px 11px",
+        padding: "7px 14px",
         borderRadius: 8,
         fontSize: 12.5,
         fontWeight: 500,

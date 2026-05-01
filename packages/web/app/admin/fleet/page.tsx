@@ -89,12 +89,12 @@ function timeAgo(timestamp: string | null): string {
 function statusBadge(status: string, healthStatus: string | null) {
   const tone =
     status === "healthy" && healthStatus === "ok"
-      ? "bg-green-100 text-green-800"
+      ? "bg-positive/10 text-positive"
       : status === "provisioning"
-        ? "bg-blue-100 text-blue-800"
+        ? "bg-info/10 text-info"
         : status === "degraded" || status === "failed"
-          ? "bg-red-100 text-red-800"
-          : "bg-gray-100 text-gray-700";
+          ? "bg-negative/10 text-negative"
+          : "bg-surface-subtle text-text-secondary";
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
       {status}
@@ -334,7 +334,7 @@ export default function AdminFleetPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex flex-col bg-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <nav className="flex items-center justify-between px-6 py-5 md:px-10">
           <Link href="/" className="text-xl font-bold text-vivid">
             ditto
@@ -344,7 +344,7 @@ export default function AdminFleetPage() {
         <main className="flex flex-1 items-center justify-center px-4">
           <div className="w-full max-w-sm text-center">
             <Server size={32} className="mx-auto text-vivid mb-3" />
-            <h1 className="text-2xl font-bold text-text-primary">Fleet Admin</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-text-primary">Fleet Admin</h1>
             <p className="mt-2 text-sm text-text-secondary">
               Sign in with the <code className="text-xs">ADMIN_USERNAME</code> / <code className="text-xs">ADMIN_PASSWORD</code> set on this Network Service. We&apos;ll exchange them for a Bearer token.
             </p>
@@ -354,7 +354,7 @@ export default function AdminFleetPage() {
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
               disabled={loggingIn}
-              className="mt-6 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+              className="mt-6 w-full rounded-lg border border-border px-5 py-3 text-base focus:border-vivid focus:outline-none disabled:opacity-50"
             />
             <input
               type="password"
@@ -363,12 +363,12 @@ export default function AdminFleetPage() {
               onChange={(e) => setPasswordInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
               disabled={loggingIn}
-              className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+              className="mt-3 w-full rounded-lg border border-border px-5 py-3 text-base focus:border-vivid focus:outline-none disabled:opacity-50"
             />
             <button
               onClick={login}
               disabled={loggingIn || !usernameInput || !passwordInput}
-              className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl bg-vivid px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
               {loggingIn ? (
                 <><Loader2 size={16} className="animate-spin" /> Signing in…</>
@@ -396,9 +396,9 @@ export default function AdminFleetPage() {
   // ============================================================
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Nav */}
-      <nav className="flex items-center justify-between border-b border-border bg-white px-6 py-4 md:px-10">
+      <nav className="flex items-center justify-between border-b border-border bg-surface px-6 py-4 md:px-10">
         <div className="flex items-center gap-3">
           <Link
             href="/admin"
@@ -432,14 +432,14 @@ export default function AdminFleetPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-8">
         {error && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 flex items-center gap-2 rounded-2xl bg-negative/10 p-3 text-sm text-negative">
             <AlertCircle size={14} /> {error}
           </div>
         )}
 
         {/* Provision new workspace */}
-        <section className="mb-6 rounded-xl border border-border bg-white p-5">
-          <h2 className="mb-3 text-base font-semibold text-text-primary">
+        <section className="mb-6 rounded-3xl border border-border bg-surface p-6 shadow-[var(--shadow-medium)]">
+          <h2 className="mb-3 text-lg font-semibold tracking-tight text-text-primary">
             Provision new workspace
           </h2>
           <div className="flex flex-col gap-3 md:flex-row">
@@ -449,7 +449,7 @@ export default function AdminFleetPage() {
               value={provisionUserId}
               onChange={(e) => setProvisionUserId(e.target.value)}
               disabled={provisioning}
-              className="flex-1 rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+              className="flex-1 rounded-lg border border-border px-4 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
             />
             <input
               type="text"
@@ -457,12 +457,12 @@ export default function AdminFleetPage() {
               value={provisionImageRef}
               onChange={(e) => setProvisionImageRef(e.target.value)}
               disabled={provisioning}
-              className="flex-1 rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+              className="flex-1 rounded-lg border border-border px-4 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
             />
             <button
               onClick={provisionWorkspace}
               disabled={provisioning || !provisionUserId.trim()}
-              className="flex items-center justify-center gap-2 rounded-lg bg-vivid px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
             >
               {provisioning ? (
                 <>
@@ -476,7 +476,7 @@ export default function AdminFleetPage() {
             </button>
           </div>
           {provisionResult && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+            <div className="mt-3 flex items-start gap-2 rounded-2xl bg-positive/10 p-3 text-sm text-positive">
               <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium">
@@ -508,7 +508,7 @@ export default function AdminFleetPage() {
 
         {/* Fleet list */}
         <section className="mb-8">
-          <h2 className="mb-3 text-lg font-semibold text-text-primary">
+          <h2 className="mb-3 text-2xl font-semibold tracking-tight text-text-primary">
             Fleet ({fleet?.length ?? 0})
           </h2>
           {loading && !fleet && (
@@ -517,15 +517,15 @@ export default function AdminFleetPage() {
             </div>
           )}
           {fleet && fleet.length === 0 && (
-            <div className="rounded-xl border border-border bg-white p-8 text-center text-sm text-text-muted">
+            <div className="rounded-3xl border border-border bg-surface p-8 text-center text-sm text-text-muted shadow-[var(--shadow-medium)]">
               No workspaces provisioned yet. Use the form above to provision the first one.
             </div>
           )}
           {fleet && fleet.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-border bg-white">
+            <div className="overflow-x-auto rounded-3xl border border-border bg-surface shadow-[var(--shadow-medium)]">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50/50 text-left text-text-muted">
+                  <tr className="border-b border-border bg-surface-subtle/50 text-left text-text-muted">
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">User</th>
                     <th className="px-4 py-3">URL</th>
@@ -536,7 +536,7 @@ export default function AdminFleetPage() {
                 </thead>
                 <tbody>
                   {fleet.map((ws) => (
-                    <tr key={ws.id} className="border-b last:border-0 hover:bg-gray-50/50">
+                    <tr key={ws.id} className="border-b border-border last:border-0 hover:bg-surface-subtle/50">
                       <td className="px-4 py-3">{statusBadge(ws.status, ws.lastHealthStatus)}</td>
                       <td className="px-4 py-3 font-mono text-xs">{ws.userId}</td>
                       <td className="px-4 py-3">
@@ -584,8 +584,8 @@ export default function AdminFleetPage() {
         </section>
 
         {/* Fleet-wide actions */}
-        <section className="mb-6 rounded-xl border border-border bg-white p-5">
-          <h2 className="mb-3 text-base font-semibold text-text-primary">Fleet-wide actions</h2>
+        <section className="mb-6 rounded-3xl border border-border bg-surface p-6 shadow-[var(--shadow-medium)]">
+          <h2 className="mb-3 text-lg font-semibold tracking-tight text-text-primary">Fleet-wide actions</h2>
           <div className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row">
               <input
@@ -594,12 +594,12 @@ export default function AdminFleetPage() {
                 value={upgradeImageRef}
                 onChange={(e) => setUpgradeImageRef(e.target.value)}
                 disabled={upgrading}
-                className="flex-1 rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+                className="flex-1 rounded-lg border border-border px-4 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
               />
               <button
                 onClick={upgradeFleet}
                 disabled={upgrading || !upgradeImageRef.trim() || !fleet || fleet.length === 0}
-                className="flex items-center justify-center gap-2 rounded-lg bg-vivid px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
               >
                 {upgrading ? (
                   <>
@@ -620,7 +620,7 @@ export default function AdminFleetPage() {
               <button
                 onClick={rollbackFleet}
                 disabled={!fleet || fleet.length === 0}
-                className="flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-5 py-2 text-sm font-semibold text-negative hover:bg-negative/5 disabled:opacity-50"
               >
                 <RotateCcw size={14} /> Rollback last upgrade
               </button>
@@ -634,11 +634,11 @@ export default function AdminFleetPage() {
         {/* Upgrade history */}
         {upgrades && upgrades.length > 0 && (
           <section className="mb-6">
-            <h2 className="mb-3 text-base font-semibold text-text-primary">Recent upgrades</h2>
-            <div className="overflow-x-auto rounded-xl border border-border bg-white">
+            <h2 className="mb-3 text-lg font-semibold tracking-tight text-text-primary">Recent upgrades</h2>
+            <div className="overflow-x-auto rounded-3xl border border-border bg-surface shadow-[var(--shadow-medium)]">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50/50 text-left text-text-muted">
+                  <tr className="border-b border-border bg-surface-subtle/50 text-left text-text-muted">
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Image</th>
                     <th className="px-4 py-3">Started</th>
@@ -648,7 +648,7 @@ export default function AdminFleetPage() {
                 </thead>
                 <tbody>
                   {upgrades.map((u) => (
-                    <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50/50">
+                    <tr key={u.id} className="border-b border-border last:border-0 hover:bg-surface-subtle/50">
                       <td className="px-4 py-3">
                         <span className="text-xs font-medium text-text-primary">{u.status}</span>
                       </td>

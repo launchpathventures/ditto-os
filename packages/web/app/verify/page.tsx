@@ -67,7 +67,7 @@ export default function VerifyPage() {
     <div className="flex min-h-screen flex-col bg-white">
       {/* Minimal nav */}
       <nav className="flex items-center justify-between px-6 py-5 md:px-10">
-        <Link href="/" className="text-xl font-bold text-vivid">
+        <Link href="/" className="text-xl font-semibold tracking-tight text-text-primary">
           ditto
         </Link>
         <div className="flex items-center gap-6">
@@ -109,13 +109,13 @@ export default function VerifyPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoFocus
-                    className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                    className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-0"
                   />
                   <button
                     type="submit"
                     disabled={!email}
                     aria-label="Verify"
-                    className="inline-flex items-center rounded-2xl bg-vivid px-4 py-3 text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                    className="inline-flex items-center rounded-2xl bg-accent px-4 py-3 text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40"
                   >
                     <ArrowRight size={18} />
                   </button>
@@ -128,7 +128,7 @@ export default function VerifyPage() {
             <div className="animate-fade-in space-y-4">
               <div className="flex items-center gap-3">
                 <div className="h-6 w-6 rounded-full bg-vivid-subtle flex items-center justify-center">
-                  <Check size={14} className="text-vivid" />
+                  <Check size={14} className="text-text-primary" />
                 </div>
                 <p className="text-lg font-semibold text-text-primary">
                   Checking...
@@ -142,7 +142,7 @@ export default function VerifyPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="h-6 w-6 rounded-full bg-vivid-subtle flex items-center justify-center">
-                    <Check size={14} className="text-vivid" />
+                    <Check size={14} className="text-text-primary" />
                   </div>
                   <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">
                     Checking
@@ -171,7 +171,7 @@ export default function VerifyPage() {
                 <Link
                   href="/welcome/referred"
                   onClick={handleCtaClick}
-                  className="inline-flex items-center gap-2 text-base font-semibold text-vivid hover:underline"
+                  className="inline-flex items-center gap-2 text-base font-semibold text-text-primary hover:underline"
                 >
                   Tell me more <ArrowRight size={16} />
                 </Link>
@@ -188,7 +188,7 @@ export default function VerifyPage() {
               </p>
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 text-base font-semibold text-vivid hover:underline"
+                className="inline-flex items-center gap-2 text-base font-semibold text-text-primary hover:underline"
               >
                 Talk to Alex <ArrowRight size={16} />
               </Link>

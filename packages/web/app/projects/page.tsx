@@ -42,8 +42,8 @@ export default function ProjectsIndex() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex items-center justify-between border-b border-border bg-white px-4 py-4">
+    <div className="min-h-screen bg-background">
+      <nav className="flex items-center justify-between border-b border-border bg-surface px-4 py-4">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-xl font-bold text-vivid">
             ditto
@@ -53,8 +53,8 @@ export default function ProjectsIndex() {
         </div>
         <Link
           href="/projects/new"
-          className="rounded-lg bg-vivid px-4 py-2 text-sm font-semibold text-white"
-          style={{ minHeight: 44 }}
+          className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover transition-colors"
+          style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
         >
           New project
         </Link>
@@ -62,7 +62,7 @@ export default function ProjectsIndex() {
 
       <main className="mx-auto max-w-3xl px-4 py-6">
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-2xl border border-negative/20 bg-negative/10 p-3 text-sm text-negative">
             {error}
           </div>
         )}
@@ -72,15 +72,15 @@ export default function ProjectsIndex() {
         )}
 
         {projects && projects.length === 0 && (
-          <div className="rounded-xl border border-border bg-white p-6 text-center">
-            <h2 className="text-lg font-semibold text-text-primary">No projects yet</h2>
+          <div className="rounded-3xl border border-border bg-surface p-8 text-center shadow-[var(--shadow-medium)]">
+            <h2 className="text-2xl font-semibold tracking-tight text-text-primary">No projects yet</h2>
             <p className="mt-2 text-sm text-text-secondary">
               Create your first project to start dispatching work.
             </p>
             <Link
               href="/projects/new"
-              className="mt-4 inline-block rounded-lg bg-vivid px-4 py-2 text-sm font-semibold text-white"
-              style={{ minHeight: 44 }}
+              className="mt-4 inline-block rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover transition-colors"
+              style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
             >
               Create your first project
             </Link>
@@ -93,12 +93,12 @@ export default function ProjectsIndex() {
               <li key={p.id}>
                 <Link
                   href={`/projects/${p.slug}`}
-                  className="block rounded-xl border border-border bg-white p-4 hover:border-vivid"
+                  className="block rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-medium)] hover:border-vivid transition-colors"
                   style={{ minHeight: 44 }}
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="truncate font-semibold text-text-primary">{p.name}</h3>
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-text-secondary">
+                    <h3 className="truncate text-base font-semibold tracking-tight text-text-primary">{p.name}</h3>
+                    <span className="shrink-0 rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-text-secondary">
                       {p.status}
                     </span>
                   </div>
@@ -107,11 +107,11 @@ export default function ProjectsIndex() {
                     {p.githubRepo ? ` · ${p.githubRepo}` : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5">
+                    <span className="rounded bg-surface-subtle px-1.5 py-0.5">
                       harness: {p.harnessType}
                     </span>
                     {p.defaultRunnerKind && (
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5">
+                      <span className="rounded bg-surface-subtle px-1.5 py-0.5">
                         runner: {p.defaultRunnerKind}
                       </span>
                     )}

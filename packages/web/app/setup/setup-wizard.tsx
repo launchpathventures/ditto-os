@@ -120,7 +120,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-[520px] bg-surface-raised rounded-xl shadow-[var(--shadow-large)] p-10 relative">
+      <div className="w-full max-w-[520px] bg-surface-raised rounded-3xl shadow-[var(--shadow-large)] p-10 relative">
         {/* Progress Steps */}
         {step !== "success" && (
           <div className="flex items-center justify-center gap-2 mb-8">
@@ -152,7 +152,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
         {step === "scanning" && (
           <div className="text-center">
             <DotParticles size={28} className="mx-auto mb-5" />
-            <h1 className="text-xl font-semibold text-text-primary mb-2 tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold text-text-primary mb-2 tracking-[-0.02em]">
               Let&apos;s get you set up
             </h1>
             <p className="text-base text-text-secondary mb-7">
@@ -176,7 +176,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
                 </div>
               </div>
             </div>
-            <button disabled className="w-full py-3 px-6 rounded-full bg-vivid text-white text-base font-medium opacity-45 cursor-not-allowed">
+            <button disabled className="w-full py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-medium opacity-40 cursor-not-allowed">
               Continue
             </button>
           </div>
@@ -185,7 +185,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
         {/* State 2: Choose Connection */}
         {step === "connection" && (
           <div>
-            <h1 className="text-xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
               How should Ditto connect?
             </h1>
             <p className="text-base text-text-secondary text-center mb-7">
@@ -219,7 +219,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
                       <div className="text-[13px] text-text-muted mt-px">{option.description}</div>
                     </div>
                     {isCliOption && cliDetected && (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#EEFAF0] text-positive flex-shrink-0">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-positive/10 text-positive flex-shrink-0">
                         Detected
                       </span>
                     )}
@@ -238,7 +238,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
         {/* State 3: API Key */}
         {step === "apikey" && connectionOption && (
           <div>
-            <h1 className="text-xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
               Connect with an API key
             </h1>
             <p className="text-base text-text-secondary text-center mb-7">
@@ -254,14 +254,14 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
                 onChange={(e) => setApiKey(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleApiKeySubmit(); }}
                 placeholder={selectedConnection === "anthropic" ? "sk-ant-..." : "sk-..."}
-                className="w-full px-3.5 py-2.5 text-base border border-border rounded-md bg-background text-text-primary placeholder:text-text-muted outline-none transition-all focus:border-vivid focus:shadow-[0_0_0_3px_rgba(5,150,105,0.08)]"
+                className="w-full px-3.5 py-2.5 text-base border border-border rounded-lg bg-background text-text-primary placeholder:text-text-muted outline-none transition-all focus:border-text-primary/40 focus:ring-2 focus:ring-text-primary/10"
                 autoFocus
               />
             </div>
             <button
               onClick={handleApiKeySubmit}
               disabled={!apiKey.trim()}
-              className="w-full py-3 px-6 rounded-full bg-vivid text-white text-base font-medium transition-all hover:bg-vivid-deep hover:shadow-[var(--shadow-subtle)] active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed mb-3"
+              className="w-full py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-semibold transition-all hover:bg-accent-hover hover:shadow-[var(--shadow-subtle)] active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed mb-3"
             >
               Connect &amp; choose model
             </button>
@@ -277,7 +277,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
         {/* State 4: Choose Model */}
         {step === "model" && connectionOption && (
           <div>
-            <h1 className="text-xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold text-text-primary text-center mb-2 tracking-[-0.02em]">
               Which model should Ditto use?
             </h1>
             <p className="text-base text-text-secondary text-center mb-7">
@@ -325,7 +325,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
             <button
               onClick={handleSave}
               disabled={!selectedModel}
-              className="w-full py-3 px-6 rounded-full bg-vivid text-white text-base font-medium transition-all hover:bg-vivid-deep hover:shadow-[var(--shadow-subtle)] active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed mb-3"
+              className="w-full py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-semibold transition-all hover:bg-accent-hover hover:shadow-[var(--shadow-subtle)] active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed mb-3"
             >
               Get started
             </button>
@@ -349,7 +349,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
         {step === "success" && (
           <div className="text-center">
             <DotParticles size={48} className="mx-auto mb-4" />
-            <h1 className="text-xl font-semibold text-text-primary mb-2 tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold text-text-primary mb-2 tracking-[-0.02em]">
               You&apos;re ready
             </h1>
             <p className="text-base text-text-secondary mb-7">
@@ -358,7 +358,7 @@ export function SetupWizard({ detectedClis }: SetupWizardProps) {
             </p>
             <button
               onClick={handleComplete}
-              className="w-full py-3 px-6 rounded-full bg-vivid text-white text-base font-medium transition-all hover:bg-vivid-deep hover:shadow-[var(--shadow-subtle)] active:scale-[0.99]"
+              className="w-full py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-semibold transition-all hover:bg-accent-hover hover:shadow-[var(--shadow-subtle)] active:scale-[0.99]"
             >
               Let&apos;s go
             </button>

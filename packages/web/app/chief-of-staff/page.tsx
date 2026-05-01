@@ -21,7 +21,7 @@ export default function ChiefOfStaffPage() {
       {/* Hero */}
       <section className="px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[720px]">
-          <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
             Chief of Staff
           </p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-text-primary md:text-4xl">
@@ -52,7 +52,7 @@ export default function ChiefOfStaffPage() {
 
           <div className="mt-12 grid gap-6 sm:grid-cols-2">
             <div className="rounded-xl border border-border bg-white p-6">
-              <ShieldCheck size={24} className="text-vivid" />
+              <ShieldCheck size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Progressive trust
               </h3>
@@ -65,7 +65,7 @@ export default function ChiefOfStaffPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-6">
-              <RefreshCw size={24} className="text-vivid" />
+              <RefreshCw size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Corrections stick
               </h3>
@@ -78,7 +78,7 @@ export default function ChiefOfStaffPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-6">
-              <Eye size={24} className="text-vivid" />
+              <Eye size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Visible reasoning
               </h3>
@@ -90,7 +90,7 @@ export default function ChiefOfStaffPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-6">
-              <CheckCircle2 size={24} className="text-vivid" />
+              <CheckCircle2 size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Quiet oversight
               </h3>
@@ -176,7 +176,7 @@ export default function ChiefOfStaffPage() {
           <div className="mt-6">
             <Link
               href="/#get-started"
-              className="inline-flex items-center gap-2 rounded-lg bg-vivid px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
             >
               Get Started
               <ArrowRight size={16} />

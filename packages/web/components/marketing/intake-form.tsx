@@ -40,9 +40,9 @@ export function IntakeForm({ id }: { id?: string }) {
 
   if (state === "success") {
     return (
-      <div id={id} className="rounded-xl border border-vivid/20 bg-vivid-subtle p-6 text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-vivid">
-          <Check size={20} className="text-white" />
+      <div id={id} className="rounded-xl border border-vivid-subtle-border bg-vivid-subtle p-6 text-center">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-accent">
+          <Check size={20} className="text-accent-foreground" />
         </div>
         <h3 className="text-lg font-semibold text-text-primary">Check your email</h3>
         <p className="mt-2 text-sm text-text-secondary">
@@ -61,12 +61,12 @@ export function IntakeForm({ id }: { id?: string }) {
           placeholder="your@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="flex-1 rounded-lg border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-1 focus:ring-vivid"
+          className="flex-1 rounded-lg border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-1 focus:ring-text-primary/10"
         />
         <button
           type="submit"
           disabled={state === "submitting"}
-          className="inline-flex items-center gap-2 rounded-lg bg-vivid px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
           {state === "submitting" ? (
             <Loader2 size={16} className="animate-spin" />
@@ -84,7 +84,7 @@ export function IntakeForm({ id }: { id?: string }) {
         placeholder="Your name (optional)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-1 focus:ring-vivid"
+        className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-1 focus:ring-text-primary/10"
       />
 
       <input
@@ -92,7 +92,7 @@ export function IntakeForm({ id }: { id?: string }) {
         placeholder="What can Ditto help with? (optional)"
         value={need}
         onChange={(e) => setNeed(e.target.value)}
-        className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-1 focus:ring-vivid"
+        className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-1 focus:ring-text-primary/10"
       />
 
       {state === "error" && (

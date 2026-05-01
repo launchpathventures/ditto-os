@@ -150,10 +150,10 @@ function AgentRow({ agent, onClick }: { agent: ProcessSummary; onClick: () => vo
         : "var(--color-vivid)";
   const toneBg =
     tier === "autonomous"
-      ? "rgba(22,163,74,0.08)"
+      ? "color-mix(in srgb, var(--color-subtle-lavender) 60%, transparent)"
       : tier === "training"
-        ? "rgba(212,150,10,0.08)"
-        : "rgba(5,150,105,0.08)";
+        ? "color-mix(in srgb, var(--color-canary-yellow) 60%, transparent)"
+        : "color-mix(in srgb, var(--color-mint-green) 50%, transparent)";
 
   return (
     <button

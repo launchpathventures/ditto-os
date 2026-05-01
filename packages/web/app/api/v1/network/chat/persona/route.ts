@@ -23,6 +23,21 @@ export const dynamic = "force-dynamic";
 const VALID_PERSONAS = new Set(["alex", "mira"]);
 const VALID_ACTIONS = new Set(["interview-start", "commit", "reset"]);
 
+// Eagerly dispatch the heavy engine imports at module load. In dev mode
+// Next compiles these on the first POST, adding 5-10s of JIT cost to the
+// visitor's first persona pick. Pre-warming here makes that latency
+// disappear from the user-visible path. No-op in production.
+const dbModulePromise = import("../../../../../../../../src/db");
+const networkChatModulePromise = import(
+  "../../../../../../../../src/engine/network-chat"
+);
+const turnstileModulePromise = import(
+  "../../../../../../../../src/engine/turnstile"
+);
+dbModulePromise.catch(() => {});
+networkChatModulePromise.catch(() => {});
+turnstileModulePromise.catch(() => {});
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -47,11 +62,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
     }
 
-    const { db, schema } = await import("../../../../../../../../src/db");
+    const { db, schema } = await dbModulePromise;
     const { eq, sql, and } = await import("drizzle-orm");
-    const { recordFunnelEvent, loadOrCreateSession, hashIp, checkIpRateLimit } = await import(
-      "../../../../../../../../src/engine/network-chat"
-    );
+    const { recordFunnelEvent, loadOrCreateSession, hashIp, checkIpRateLimit } =
+      await networkChatModulePromise;
 
     let session: typeof schema.chatSessions.$inferSelect | null = null;
     if (rawSessionId) {
@@ -77,9 +91,7 @@ export async function POST(request: Request) {
       const forwarded = request.headers.get("x-forwarded-for");
       const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
 
-      const { verifyTurnstileToken } = await import(
-        "../../../../../../../../src/engine/turnstile"
-      );
+      const { verifyTurnstileToken } = await turnstileModulePromise;
       const turnstile = await verifyTurnstileToken(turnstileToken, ip);
       if (!turnstile.ok) {
         return NextResponse.json(

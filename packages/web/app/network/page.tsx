@@ -15,7 +15,7 @@ export default function NetworkPage() {
       {/* Hero */}
       <section className="px-6 py-16 md:py-24">
         <div className="mx-auto max-w-[720px]">
-          <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
             Super-Connector
           </p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-text-primary md:text-4xl">
@@ -63,7 +63,7 @@ export default function NetworkPage() {
 
           <div className="mt-12 grid gap-6 sm:grid-cols-3">
             <div className="rounded-xl border border-border bg-white p-6">
-              <Users size={24} className="text-vivid" />
+              <Users size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Named intermediary
               </h3>
@@ -76,7 +76,7 @@ export default function NetworkPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-6">
-              <Target size={24} className="text-vivid" />
+              <Target size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Relationship-first
               </h3>
@@ -88,7 +88,7 @@ export default function NetworkPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-6">
-              <MessageCircle size={24} className="text-vivid" />
+              <MessageCircle size={24} className="text-text-primary" />
               <h3 className="mt-3 text-sm font-semibold text-text-primary">
                 Memory compounds
               </h3>
@@ -115,7 +115,7 @@ export default function NetworkPage() {
 
           <div className="mt-12 grid gap-6 md:grid-cols-2">
             <div className="rounded-xl border border-border bg-white p-8">
-              <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
                 Selling
               </p>
               <h3 className="mt-2 text-lg font-semibold text-text-primary">
@@ -137,7 +137,7 @@ export default function NetworkPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-white p-8">
-              <p className="text-xs font-medium uppercase tracking-wider text-vivid">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-primary">
                 Connecting
               </p>
               <h3 className="mt-2 text-lg font-semibold text-text-primary">
@@ -198,7 +198,7 @@ export default function NetworkPage() {
           <div className="mt-6">
             <Link
               href="/#get-started"
-              className="inline-flex items-center gap-2 rounded-lg bg-vivid px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
             >
               Get Started
               <ArrowRight size={16} />

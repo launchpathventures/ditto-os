@@ -80,9 +80,9 @@ export default async function ProjectOnboardingPage({ params }: PageProps) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex items-center justify-between border-b border-border bg-white px-4 py-4">
-        <Link href="/projects" className="text-sm text-text-secondary">
+    <div className="min-h-screen bg-background">
+      <nav className="flex items-center justify-between border-b border-border bg-surface px-4 py-4">
+        <Link href="/projects" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
           ← Projects
         </Link>
         <span className="text-xs text-text-muted">
@@ -93,14 +93,14 @@ export default async function ProjectOnboardingPage({ params }: PageProps) {
         <header className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-baseline gap-3">
-              <h1 className="text-xl font-bold text-text-primary">
+              <h1 className="text-3xl font-semibold tracking-tight text-text-primary">
                 {project.name}
               </h1>
               <span
                 className={
                   project.status === "active"
-                    ? "rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
-                    : "rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+                    ? "rounded-full bg-positive/10 px-2 py-0.5 text-xs text-positive"
+                    : "rounded-full bg-caution/10 px-2 py-0.5 text-xs text-caution"
                 }
               >
                 {project.status}
@@ -147,8 +147,8 @@ export default async function ProjectOnboardingPage({ params }: PageProps) {
 
           {/* Analysing-flow placeholder */}
           {project.status === "analysing" && !analyserReport && !blockedAnalyser && (
-            <article className="rounded-xl border border-border bg-white p-4 text-sm">
-              <h3 className="font-medium text-text-primary">Onboarding report</h3>
+            <article className="rounded-3xl border border-border bg-surface p-6 text-sm shadow-[var(--shadow-medium)]">
+              <h3 className="text-base font-semibold tracking-tight text-text-primary">Onboarding report</h3>
               <p className="mt-2 whitespace-pre-line text-text-secondary">
                 Analyser is warming up — refresh in a moment.
               </p>
@@ -157,8 +157,8 @@ export default async function ProjectOnboardingPage({ params }: PageProps) {
 
           {/* Active-flow + no retrofit yet */}
           {project.status === "active" && !retrofitBlock && (
-            <article className="rounded-xl border border-border bg-white p-4 text-sm">
-              <h3 className="font-medium text-text-primary">
+            <article className="rounded-3xl border border-border bg-surface p-6 text-sm shadow-[var(--shadow-medium)]">
+              <h3 className="text-base font-semibold tracking-tight text-text-primary">
                 No retrofit yet
               </h3>
               <p className="mt-2 whitespace-pre-line text-text-secondary">

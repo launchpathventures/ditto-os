@@ -13,9 +13,9 @@
 
 import { useEffect, useRef } from "react";
 
-// Precise White Lab palette: ink black anchors with electric orange spark.
-// Most particles are obsidian/granite; a minority pulses orange for life.
-const COLORS = ["#1c1c1c", "#1c1c1c", "#6e6e6e", "#ff4000", "#1c1c1c"];
+// Amplemarket palette: midnight ink anchors with a single phoenix-orange spark.
+// Orange appears at ~1/8 frequency — restrained brand presence in motion.
+const COLORS = ["#111111", "#111111", "#6d6c6b", "#111111", "#111111", "#6d6c6b", "#111111", "#e8400d"];
 
 interface DotParticlesProps {
   size?: number;

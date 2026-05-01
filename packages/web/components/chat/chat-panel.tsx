@@ -162,6 +162,7 @@ export function ChatPanel({
                 style={{
                   fontSize: 14,
                   fontWeight: 600,
+                  letterSpacing: "-0.011em",
                   color: "var(--color-text-primary)",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -341,24 +342,36 @@ export function ChatPanel({
 /* ============================================================= */
 
 function AMark() {
+  // Phoenix-orange orb — Alex's brand identity. Same gradient + animated
+  // shimmer as <PersonaPortrait personaId="alex" />, scaled to the
+  // chat-panel's 22px thread-header inset.
   return (
     <div
+      aria-hidden
+      className="ditto-orb"
       style={{
         width: 22,
         height: 22,
         minWidth: 22,
         borderRadius: "50%",
-        background: "linear-gradient(135deg, #ff4000, #cc3300)",
-        color: "#fff",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 10,
-        fontWeight: 600,
+        background:
+          "radial-gradient(386.06% 162.79% at -13.1926% -17.1008%, rgb(232, 64, 13) 0%, rgb(255, 238, 216) 26.1559%, rgb(208, 178, 255) 84.1533%)",
         flexShrink: 0,
+        position: "relative",
+        overflow: "hidden",
+        boxShadow:
+          "0 3px 8px -4px rgba(16, 5, 77, 0.3), inset 0 -1px 4px rgba(16, 5, 77, 0.18), inset 0 1px 1px rgba(255, 255, 255, 0.35)",
       }}
     >
-      A
+      <div
+        className="ditto-orb-highlight"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(48% 38% at 26% 22%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 70%)",
+        }}
+      />
     </div>
   );
 }
@@ -411,12 +424,12 @@ function SendButton({ ready, onClick }: { ready: boolean; onClick: () => void })
       aria-label="Send"
       disabled={!ready}
       style={{
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        background: "var(--color-vivid)",
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        background: "var(--color-accent)",
         border: "none",
-        color: "#fff",
+        color: "var(--color-accent-text)",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -424,7 +437,7 @@ function SendButton({ ready, onClick }: { ready: boolean; onClick: () => void })
         flexShrink: 0,
         opacity: ready ? 1 : 0.35,
         marginBottom: 1,
-        transition: "opacity 150ms ease",
+        transition: "opacity 150ms ease, background 150ms ease",
       }}
     >
       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2}>

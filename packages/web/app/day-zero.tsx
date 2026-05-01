@@ -56,7 +56,8 @@ export function DayZero({ onComplete }: DayZeroProps) {
   return (
     <main className="min-h-screen flex items-start justify-center bg-background px-6" style={{ paddingTop: "120px", paddingBottom: "80px" }}>
       <div className="w-full max-w-[600px]">
-        {/* Self dot */}
+        {/* Self dot — small phoenix-orange accent (decorative use only,
+            disciplined under the Amplemarket palette). */}
         <div
           className="w-2.5 h-2.5 rounded-full bg-vivid mb-5"
           aria-hidden="true"
@@ -81,9 +82,9 @@ export function DayZero({ onComplete }: DayZeroProps) {
           different — and get to know you.
         </p>
 
-        {/* Difference callout — typographic flow, left border, no card */}
+        {/* Difference callout — typographic flow, ink-tinted left border. */}
         <div
-          className="pl-5 border-l-2 border-vivid-deep mb-9"
+          className="pl-5 border-l-2 border-text-primary/60 mb-9"
           style={{ opacity: 0, animation: "day-zero-fade 0.5s ease-out 0.9s forwards" }}
         >
           <div className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.06em] mb-3">
@@ -98,10 +99,10 @@ export function DayZero({ onComplete }: DayZeroProps) {
           </ul>
         </div>
 
-        {/* CTA */}
+        {/* CTA — Amplemarket discipline: ink-black, 8px radius, no orange. */}
         <button
           onClick={handleStart}
-          className="inline-flex items-center gap-2.5 py-3.5 px-8 rounded-full bg-vivid text-white text-base font-semibold transition-all hover:bg-vivid-deep focus-visible:outline-2 focus-visible:outline-vivid-deep focus-visible:outline-offset-2"
+          className="inline-flex items-center gap-2.5 py-3 px-6 rounded-lg bg-accent text-accent-foreground text-base font-medium transition-all hover:bg-accent-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-text-primary/40 focus-visible:outline-offset-2"
           style={{ opacity: 0, animation: "day-zero-fade 0.5s ease-out 1.1s forwards" }}
         >
           Let&apos;s get started

@@ -39,7 +39,7 @@ function StatusDot({ status }: { status: ConnectionSetupBlock["connectionStatus"
   const base = "w-2 h-2 rounded-full shrink-0";
   switch (status) {
     case "connected":
-      return <span className={cn(base, "bg-green-500")} />;
+      return <span className={cn(base, "bg-positive")} />;
     case "connecting":
       return <span className={cn(base, "bg-amber-500 animate-pulse")} />;
     case "error":

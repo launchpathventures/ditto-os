@@ -92,7 +92,7 @@ function ExpandedCitationView({
           )}
         </div>
         {source.matchConfidence !== undefined && (
-          <span className={`text-xs px-2 py-0.5 rounded-full ${source.matchConfidence >= 0.9 ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${source.matchConfidence >= 0.9 ? "bg-canary-yellow/60 text-deep-indigo" : "bg-caution/10 text-caution"}`}>
             {Math.round(source.matchConfidence * 100)}% match
           </span>
         )}
@@ -120,7 +120,7 @@ function ExpandedCitationView({
                 key={chunk.id}
                 className={`text-sm leading-relaxed p-2 rounded ${
                   idx === neighbors.targetIndex
-                    ? "bg-vivid/10 border border-vivid/20"
+                    ? "bg-surface-raised border border-border"
                     : "text-text-secondary"
                 }`}
               >
@@ -140,7 +140,7 @@ function ExpandedCitationView({
           <button
             onClick={onLoadNeighbors}
             disabled={neighbors?.loading}
-            className="text-xs text-vivid hover:text-vivid/80 transition-colors disabled:opacity-50"
+            className="text-xs text-text-primary hover:text-text-secondary transition-colors disabled:opacity-50"
           >
             {neighbors?.loading ? "Loading..." : "Show more context"}
           </button>
@@ -148,7 +148,7 @@ function ExpandedCitationView({
         {source.documentHash && onViewDocument && (
           <button
             onClick={onViewDocument}
-            className="text-xs text-vivid hover:text-vivid/80 transition-colors"
+            className="text-xs text-text-primary hover:text-text-secondary transition-colors"
           >
             View document
           </button>
@@ -246,7 +246,7 @@ export function KnowledgeCitationBlockComponent({
                       {formatCitationMeta(source)}
                     </span>
                     {source.matchConfidence !== undefined && (
-                      <span className={`text-xs ${source.matchConfidence >= 0.9 ? "text-green-600" : "text-amber-500"}`}>
+                      <span className={`text-xs font-medium ${source.matchConfidence >= 0.9 ? "text-deep-indigo" : "text-caution"}`}>
                         {Math.round(source.matchConfidence * 100)}%
                       </span>
                     )}
@@ -306,7 +306,7 @@ export function KnowledgeCitationBlockComponent({
                   <div className="mt-2">
                     <button
                       type="button"
-                      className="text-xs text-vivid hover:underline"
+                      className="text-xs text-text-primary hover:underline"
                       onClick={() =>
                         onAction?.("promote-memory-scope", {
                           memoryId: source.memoryId,

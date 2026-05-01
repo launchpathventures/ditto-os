@@ -67,7 +67,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-vivid);
+    background: var(--color-text-primary);
   }
 
   .block-head .bopen {
@@ -82,8 +82,8 @@
   }
 
   .block-head .bopen:hover {
-    color: var(--color-vivid-deep);
-    background: var(--color-vivid-subtle);
+    color: var(--color-text-primary);
+    background: var(--color-surface-raised);
   }
 
   .bbody {
@@ -117,7 +117,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: var(--color-vivid);
+    background: var(--color-text-primary);
     color: var(--color-accent-text);
     display: inline-flex;
     align-items: center;
@@ -175,8 +175,8 @@
   }
 
   .block.breakdown .bopt:hover {
-    border-color: var(--color-vivid);
-    background: var(--color-vivid-subtle);
+    border-color: color-mix(in srgb, var(--color-text-primary) 30%, transparent);
+    background: var(--color-surface-raised);
   }
 
   .block.breakdown .bopt .num {
@@ -196,9 +196,9 @@
   }
 
   .block.breakdown .bopt:hover .num {
-    background: var(--color-vivid);
+    background: var(--color-text-primary);
     color: var(--color-accent-text);
-    border-color: var(--color-vivid);
+    border-color: var(--color-text-primary);
   }
 
   .block.breakdown .bopt .otitle {
@@ -255,12 +255,12 @@
   }
 
   .dopt.rec {
-    border-color: var(--color-vivid);
-    background: var(--color-vivid-subtle);
+    border-color: var(--color-text-primary);
+    background: var(--color-surface-raised);
   }
 
   .dopt:hover {
-    border-color: var(--color-vivid-deep);
+    border-color: color-mix(in srgb, var(--color-text-primary) 50%, transparent);
   }
 
   .recbadge {
@@ -271,7 +271,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    background: var(--color-vivid);
+    background: var(--color-text-primary);
     color: var(--color-accent-text);
     padding: 2px 7px;
     border-radius: 999px;
@@ -349,8 +349,8 @@
   }
 
   .pstep.done .num {
-    background: var(--color-vivid);
-    border-color: var(--color-vivid);
+    background: var(--color-text-primary);
+    border-color: var(--color-text-primary);
     color: var(--color-accent-text);
   }
 
@@ -377,7 +377,7 @@
   }
 
   .pstep .sm .own {
-    color: var(--color-vivid-deep);
+    color: var(--color-text-primary);
     font-weight: 500;
   }
 
@@ -424,11 +424,11 @@
   }
 
   .ctable tr.rec td {
-    background: var(--color-vivid-subtle);
+    background: var(--color-surface-raised);
   }
 
   .ctable tr.rec td:first-child {
-    color: var(--color-vivid-deep);
+    color: var(--color-text-primary);
   }
 
   .ctake {
@@ -447,7 +447,7 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: var(--color-vivid);
+    background: var(--color-text-primary);
     color: var(--color-accent-text);
     font-size: 9px;
     font-weight: 700;
@@ -544,11 +544,11 @@
   .prow .pscore {
     font-size: 12px;
     font-weight: 600;
-    color: var(--color-vivid-deep);
-    background: var(--color-vivid-subtle);
+    color: var(--color-text-primary);
+    background: var(--color-surface-raised);
     padding: 3px 8px;
     border-radius: 999px;
-    border: 1px solid var(--color-vivid-subtle-border);
+    border: 1px solid var(--color-border);
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
   }

@@ -99,13 +99,13 @@ export function PostSubmission({
                   }
                 }}
                 disabled={submitting}
-                className="flex-1 rounded-2xl border-2 border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-vivid focus:outline-none focus:ring-0"
+                className="flex-1 rounded-2xl border border-border bg-white px-5 py-3 text-base text-text-primary placeholder:text-text-muted focus:border-text-primary/40 focus:outline-none focus:ring-2 focus:ring-text-primary/10"
               />
               <button
                 type="button"
                 onClick={handleAnswer}
                 disabled={submitting || !answer.trim()}
-                className="inline-flex items-center gap-1 rounded-2xl bg-vivid px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-2xl bg-accent px-5 py-3 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60"
               >
                 <ArrowRight size={18} />
               </button>
@@ -162,7 +162,7 @@ function Timeline() {
           "Alex starts working your network",
         ].map((step, i) => (
           <div key={i} className="flex items-start gap-3">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-vivid-subtle text-xs font-semibold text-vivid">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-white text-xs font-semibold tabular-nums text-text-primary">
               {i + 1}
             </div>
             <p className="text-base text-text-secondary">{step}</p>

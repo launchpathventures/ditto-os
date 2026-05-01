@@ -18,11 +18,11 @@ export function SiteNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-white/80 backdrop-blur-sm">
+    <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-[960px] items-center justify-between px-6 py-4">
         <Link
           href="/"
-          className="text-xl font-bold text-vivid"
+          className="text-xl font-bold tracking-tight text-text-primary"
         >
           ditto
         </Link>
@@ -33,9 +33,9 @@ export function SiteNav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`text-sm font-medium transition-colors hover:text-vivid ${
+              className={`text-sm font-medium transition-colors hover:text-text-primary ${
                 pathname === link.href
-                  ? "text-vivid"
+                  ? "text-text-primary"
                   : "text-text-secondary"
               }`}
             >
@@ -44,7 +44,7 @@ export function SiteNav() {
           ))}
           <Link
             href="/#get-started"
-            className="rounded-lg bg-vivid px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
           >
             Get Started
           </Link>
@@ -62,7 +62,7 @@ export function SiteNav() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="border-t border-border bg-white px-6 py-4 md:hidden">
+        <div className="border-t border-border bg-background px-6 py-4 md:hidden">
           <div className="flex flex-col gap-4">
             {navLinks.map((link) => (
               <Link
@@ -71,7 +71,7 @@ export function SiteNav() {
                 onClick={() => setMobileOpen(false)}
                 className={`text-sm font-medium ${
                   pathname === link.href
-                    ? "text-vivid"
+                    ? "text-text-primary"
                     : "text-text-secondary"
                 }`}
               >
@@ -81,7 +81,7 @@ export function SiteNav() {
             <Link
               href="/#get-started"
               onClick={() => setMobileOpen(false)}
-              className="rounded-lg bg-vivid px-4 py-2 text-center text-sm font-semibold text-white"
+              className="rounded-lg bg-accent px-4 py-2 text-center text-sm font-medium text-accent-foreground"
             >
               Get Started
             </Link>
