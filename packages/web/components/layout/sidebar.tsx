@@ -712,7 +712,7 @@ function UserChip({ userName, orgName }: { userName?: string; orgName?: string }
           height: 28,
           minWidth: 28,
           borderRadius: "50%",
-          background: "linear-gradient(135deg, #059669, #3D5A48)",
+          background: "linear-gradient(135deg, #ff4000, #cc3300)",
           color: "#fff",
           display: "inline-flex",
           alignItems: "center",

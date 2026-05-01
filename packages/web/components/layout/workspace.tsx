@@ -925,7 +925,7 @@ function UniversalChatbar({
             gap: 5,
             padding: "4px 9px",
             background: "var(--color-vivid-subtle)",
-            border: "1px solid #D1F4E1",
+            border: "1px solid #ffd9c8",
             borderRadius: 999,
             fontSize: 11,
             color: "var(--color-vivid-deep)",

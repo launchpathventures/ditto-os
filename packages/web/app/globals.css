@@ -46,79 +46,111 @@ button:disabled, [type="submit"]:disabled {
 }
 
 /*
- * Ditto Design Tokens
+ * Ditto Design Tokens — Precise White Lab
  * Source: .impeccable.md — authoritative design spec
- * Palette: Cool grey canvas + two-green signature (emerald + forest)
+ * Palette: Canvas white + ink black + electric orange (single accent)
+ * Inspiration: Humble (humbleops.com), Linear, Raycast, Framer
  */
 
 @theme {
-  /* Foundation — White canvas matching front-door. Pre-Workspace-redesign
-   * (2026-04) these were cool-grey (#EDEDF0 / #E2E2E6 / #D5D5DA / #BBBBC2);
-   * redesign moved surfaces to white with tinted border + raised fill. */
-  --color-background: #FFFFFF;
-  --color-surface: #FFFFFF;
-  --color-surface-raised: #FAFAFB;
-  --color-border: #E8E8ED;
-  --color-border-strong: #C8C8CE;
+  /* Foundation — Canvas White Lab. Surfaces lift through soft elevation,
+   * never heavy borders. Ghost/Alabaster provide subtle differentiation. */
+  --color-background: #fafafa;        /* Canvas White — primary page bg */
+  --color-surface: #fafafa;           /* Default surface, matches bg */
+  --color-surface-raised: #f1f1f1;    /* Ghost White — alt cards / sections */
+  --color-surface-subtle: #ecebe8;    /* Alabaster Gray — tertiary panels */
+  --color-border: #ecebe8;            /* Hairline border — muted */
+  --color-border-strong: #1c1c1c;     /* Ink black — sharp edges, inverted UI */
 
   /* Text */
-  --color-text-primary: #111118;
-  --color-text-secondary: #4A4A55;
-  --color-text-muted: #65656F;
+  --color-text-primary: #1c1c1c;      /* Obsidian — headlines, critical */
+  --color-text-secondary: #6e6e6e;    /* Granite — secondary, nav */
+  --color-text-muted: #6e6e6e;        /* Granite — metadata */
 
-  /* Accent — Phase 1: mapped to emerald green to preserve 83 existing usages.
-   * Phase 2 (follow-up brief): migrate accent usages to vivid, then set accent = black (#111118). */
-  --color-accent: #059669;
-  --color-accent-hover: #047857;
-  --color-accent-subtle: #E7E7EB;
-  --color-accent-text: #F9F9FB;
+  /* Accent — Ink Black CTAs. Humble's discipline: no distinct CTA color;
+   * primary actions are ink-black pills on canvas white. */
+  --color-accent: #1c1c1c;
+  --color-accent-hover: #000000;
+  --color-accent-subtle: #ecebe8;     /* Alabaster — subtle badge bg */
+  --color-accent-text: #fafafa;       /* Canvas white on black */
 
-  /* Vivid — Brand Signature (Two-Green System) */
-  --color-vivid: #059669;
-  --color-vivid-deep: #3D5A48;
-  --color-vivid-subtle: #ECFDF5;
-  --color-vivid-subtle-border: #D1F4E1;
+  /* Vivid — Brand Signature: single Electric Orange accent.
+   * Used sparingly: tags, dividers, focus rings, hover edges, active dots.
+   * NEVER used as primary CTA background (Humble rule). */
+  --color-vivid: #ff4000;             /* Electric Orange */
+  --color-vivid-deep: #cc3300;        /* Deeper variant for hover/text */
+  --color-vivid-subtle: #fff1ec;      /* Orange tint bg */
+  --color-vivid-subtle-border: #ffd9c8;
 
-  /* Semantic */
+  /* Semantic — utility colors, intentionally outside the brand palette */
   --color-positive: #16a34a;
   --color-caution: #D4960A;
   --color-negative: #C4352A;
   --color-info: #2563eb;
 
-  /* Shadows — cool-tinted (rgba 26,26,26) */
-  --shadow-subtle: 0 1px 3px rgba(26, 26, 26, 0.05);
-  --shadow-medium: 0 4px 16px rgba(26, 26, 26, 0.07);
-  --shadow-large: 0 8px 24px rgba(26, 26, 26, 0.12);
+  /* Shadows — Humble's six-stop diffused soft elevation.
+   * Lifts elements gently rather than anchoring with heavy forms. */
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-medium:
+    rgba(0, 0, 0, 0.03) 0px 0.706592px 0.706592px -0.416667px,
+    rgba(0, 0, 0, 0.03) 0px 1.80656px 1.80656px -0.833333px,
+    rgba(0, 0, 0, 0.03) 0px 3.62176px 3.62176px -1.25px,
+    rgba(0, 0, 0, 0.03) 0px 6.8656px 6.8656px -1.66667px,
+    rgba(0, 0, 0, 0.03) 0px 13.6468px 13.6468px -2.08333px,
+    rgba(0, 0, 0, 0.03) 0px 30px 30px -2.5px;
+  --shadow-large:
+    rgba(0, 0, 0, 0.04) 0px 0.706592px 0.706592px -0.416667px,
+    rgba(0, 0, 0, 0.04) 0px 1.80656px 1.80656px -0.833333px,
+    rgba(0, 0, 0, 0.04) 0px 3.62176px 3.62176px -1.25px,
+    rgba(0, 0, 0, 0.04) 0px 6.8656px 6.8656px -1.66667px,
+    rgba(0, 0, 0, 0.04) 0px 13.6468px 13.6468px -2.08333px,
+    rgba(0, 0, 0, 0.05) 0px 40px 40px -3px;
 
-  /* Border radius */
-  --radius-sm: 6px;
+  /* Border radius — Precise White Lab system.
+   * Cards 30px, controls 6px, buttons full pill, images 40px, large 70px. */
+  --radius-sm: 6px;                   /* controls, tooltips, micro */
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --radius-full: 9999px;
+  --radius-2xl: 24px;                 /* enclosed content block */
+  --radius-3xl: 30px;                 /* primary card radius (Humble) */
+  --radius-image: 40px;               /* image containers */
+  --radius-largeblock: 70px;          /* full-bleed feature blocks */
+  --radius-full: 9999px;              /* pill buttons, avatars (== 100px+) */
 
-  /* Typography — Major Third scale (1.25 ratio), 16px base */
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Typography — Bricolage Grotesque (display) + Geist (UI) */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Bricolage Grotesque", "Geist", ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 
-  --text-xs: 0.75rem;
-  --text-xs--line-height: 1.5;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.5;
-  --text-base: 1rem;
-  --text-base--line-height: 1.6;
-  --text-lg: 1.25rem;
+  /* Type scale — major third on body, dialed-in display sizes from Humble */
+  --text-xs: 0.75rem;                  /* 12px caption */
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.875rem;                 /* 14px body */
+  --text-sm--line-height: 1.4;
+  --text-sm--letter-spacing: -0.007em;
+  --text-base: 1rem;                   /* 16px body-lg */
+  --text-base--line-height: 1.4;
+  --text-base--letter-spacing: -0.02em;
+  --text-lg: 1.125rem;                 /* 18px subheading */
   --text-lg--line-height: 1.4;
-  --text-xl: 1.563rem;
-  --text-xl--line-height: 1.3;
-  --text-2xl: 1.953rem;
-  --text-2xl--line-height: 1.2;
-  --text-3xl: 2.441rem;
-  --text-3xl--line-height: 1.15;
-  --text-4xl: 3.052rem;
-  --text-4xl--line-height: 1.1;
+  --text-lg--letter-spacing: -0.04em;
+  --text-xl: 1.5rem;                   /* 24px heading-sm */
+  --text-xl--line-height: 1.2;
+  --text-xl--letter-spacing: -0.02em;
+  --text-2xl: 2rem;                    /* 32px heading */
+  --text-2xl--line-height: 1.15;
+  --text-2xl--letter-spacing: -0.02em;
+  --text-3xl: 2.625rem;                /* 42px heading-lg */
+  --text-3xl--line-height: 1.05;
+  --text-3xl--letter-spacing: -0.03em;
+  --text-4xl: 3.625rem;                /* 58px display */
+  --text-4xl--line-height: 1.0;
+  --text-4xl--letter-spacing: -0.052em;
 
-  /* Spacing — 4px grid */
+  /* Spacing — 4px grid, comfortable density */
   --spacing-1: 4px;
   --spacing-2: 8px;
   --spacing-3: 12px;
@@ -128,39 +160,47 @@ button:disabled, [type="submit"]:disabled {
   --spacing-8: 32px;
   --spacing-10: 40px;
   --spacing-12: 48px;
+  --spacing-16: 64px;                 /* section gap (Humble) */
+  --spacing-18: 72px;                 /* major section separation */
 }
 
-/* Dark mode token overrides — CSS custom property overrides only */
+/* Dark mode token overrides — Precise White Lab inverted.
+ * Ink black canvas, canvas-white text, electric orange retains hue. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: #111118;
-    --color-surface: #1A1A22;
-    --color-surface-raised: #222230;
-    --color-border: #2A2A35;
-    --color-border-strong: #3A3A45;
+    --color-background: #0e0e0e;
+    --color-surface: #0e0e0e;
+    --color-surface-raised: #1a1a1a;
+    --color-surface-subtle: #161616;
+    --color-border: #1f1f1f;
+    --color-border-strong: #fafafa;
 
-    --color-text-primary: #F9F9FB;
-    --color-text-secondary: #A0A0AD;
-    --color-text-muted: #8A8A96;
+    --color-text-primary: #fafafa;
+    --color-text-secondary: #a8a8a8;
+    --color-text-muted: #8a8a8a;
 
-    --color-accent: #10B981;
-    --color-accent-hover: #34D399;
-    --color-accent-subtle: #2A2A35;
-    --color-accent-text: #111118;
+    --color-accent: #fafafa;
+    --color-accent-hover: #ffffff;
+    --color-accent-subtle: #1f1f1f;
+    --color-accent-text: #0e0e0e;
 
-    --color-vivid: #10B981;
-    --color-vivid-deep: #6B8F71;
-    --color-vivid-subtle: #1A2E22;
-    --color-vivid-subtle-border: #25453A;
+    --color-vivid: #ff4000;
+    --color-vivid-deep: #ff7a47;
+    --color-vivid-subtle: #2a1410;
+    --color-vivid-subtle-border: #3d1d14;
 
     --color-positive: #22c55e;
     --color-caution: #E5A820;
     --color-negative: #E8453A;
     --color-info: #3B82F6;
 
-    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.2);
-    --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.3);
-    --shadow-large: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-medium:
+      rgba(0, 0, 0, 0.3) 0px 4px 16px,
+      rgba(0, 0, 0, 0.2) 0px 1px 3px;
+    --shadow-large:
+      rgba(0, 0, 0, 0.5) 0px 16px 48px,
+      rgba(0, 0, 0, 0.3) 0px 4px 16px;
   }
 }
 

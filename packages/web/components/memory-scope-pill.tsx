@@ -9,7 +9,7 @@
  *   - `Just for you`        — self-scope user-model / preference memories
  *   - `<N> projects`        — self-scope memory with appliedProjectIds=[a,b,...]
  *
- * Visual identity: vivid-subtle bg + #D1F4E1 border (Anthropic Claude Design
+ * Visual identity: vivid-subtle bg + vivid-subtle-border (Anthropic Claude Design
  * handoff bundle id `iK3gPHe3rGAErdm4ua2V-A`). Folder/globe/person/layers
  * glyphs from lucide-react per pill variant.
  */
@@ -36,7 +36,7 @@ export function MemoryScopePill({
 
   const baseClass =
     "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium " +
-    "bg-vivid-subtle border border-[#D1F4E1] text-vivid-deep " +
+    "bg-vivid-subtle border border-[#ffd9c8] text-vivid-deep " +
     className;
 
   if (variant.kind === "project") {

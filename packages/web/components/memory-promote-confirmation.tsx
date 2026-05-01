@@ -136,7 +136,7 @@ export function MemoryPromoteConfirmation(props: MemoryPromoteConfirmationProps)
     return (
       <div
         data-state="success"
-        className="rounded-lg border border-[#D1F4E1] bg-vivid-subtle p-4"
+        className="rounded-2xl border border-[#ffd9c8] bg-vivid-subtle p-4"
       >
         <p className="text-sm text-vivid-deep font-medium">
           Promoted. The memory now applies on {state.appliedTo.join(" + ")}.
