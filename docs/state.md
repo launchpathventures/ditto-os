@@ -1,10 +1,48 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-01 (Builder/Operator — **Auto-provisioning unblocked**: GHCR Docker image publish workflow shipped (`.github/workflows/docker-publish.yml`); stale `fly-deploy.yml` deleted; `.env.example` `DITTO_IMAGE_REF` updated to actual published image (`ghcr.io/launchpathventures/ditto-os:latest`); `docs/deployment/auto-provision.md` runbook ships covering one-time setup → provision → operational commands → troubleshooting. Substrate from Briefs 090/100/153 (already-shipped Railway provisioning saga) is now end-to-end usable from ditto.partners. **Bridge Capability Layer design** (ADR-044 + Briefs 234/235/236/237; Brief 238 deferred) preserved from earlier in this session below. Status: auto-provisioning ready to use as soon as: (a) workflow publishes first image on push to main, (b) GHCR package is marked public, (c) `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `ADMIN_PASSWORD` are set on ditto.partners.)
+**Last updated:** 2026-05-01 (Builder — **Admin fleet UI shipped** at `/admin/fleet` — single React page with provision form / fleet list / per-row deprovision / fleet-wide upgrade & rollback / recent upgrade history; consumes the existing `/api/v1/network/admin/{fleet,provision,deprovision,upgrade,rollback,upgrades}` endpoints; Bearer-token auth (localStorage `ditto-admin-token`, same pattern as `/admin/users/[userId]`). Link added from `/admin` nav. Type-check clean. **Earlier this session: auto-provisioning unblocked** (GHCR Docker image publish workflow `.github/workflows/docker-publish.yml`; stale `fly-deploy.yml` deleted; `.env.example` `DITTO_IMAGE_REF` updated to `ghcr.io/launchpathventures/ditto-os:latest`; `docs/deployment/auto-provision.md` runbook). **Even earlier: Bridge Capability Layer design** (ADR-044 + Briefs 234/235/236/237; Brief 238 deferred). Status: auto-provisioning ready to use as soon as: (a) workflow publishes first image on push to main, (b) GHCR package is marked public, (c) `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `ADMIN_PASSWORD` set on ditto.partners — then operator hits `/admin/fleet` and clicks "Provision".)
 
 ---
 
-## CURRENT — Builder/Operator: Auto-Provisioning Unblocked (2026-05-01)
+## CURRENT — Builder: Admin Fleet UI (2026-05-01, after auto-provisioning unblock)
+
+**Direct trigger:** user "Build it!!!" 2026-05-01, after audit confirmed no React surface existed for fleet/provisioning despite all admin endpoints being shipped + tested.
+
+**What ships:**
+- `packages/web/app/admin/fleet/page.tsx` — **CREATED**. Single ~500-line client component with:
+  - Token gate (Bearer auth via localStorage `ditto-admin-token`; clears + re-prompts on 401/403)
+  - Provision form (userId + optional imageRef override → `POST /api/v1/network/admin/provision`); shows result with workspaceUrl + serviceId; spinner says "Provisioning… (1-3 min)" since the saga returns synchronously
+  - Fleet table (`GET /api/v1/network/admin/fleet`) with columns: status badge, userId, workspaceUrl (external link), image tag, last health timestamp + health status, deprovision button per row
+  - Per-row deprovision with type-the-userId confirmation prompt (no separate confirm field needed; the route accepts `{userId}` only)
+  - Fleet-wide upgrade form (`POST /api/v1/network/admin/upgrade` — returns `{upgradeId, status: "in_progress"}` immediately; canary-first per Brief 091)
+  - Fleet-wide rollback button (`POST /api/v1/network/admin/rollback` — reverts each workspace to its own pre-upgrade image)
+  - Recent upgrades table (`GET /api/v1/network/admin/upgrades?limit=5`) showing history
+  - Refresh button + auto-fetch on token change
+  - Lucide icons + existing Tailwind tokens (`text-vivid`, `bg-vivid`, `border-border`, etc.) — matches `/admin/page.tsx` aesthetic
+- `packages/web/app/admin/page.tsx` — **MODIFIED**: added "Fleet" link in the nav alongside "Smoke Tests"
+
+**No new API endpoints created.** Page is pure UI over existing routes (Briefs 090, 091, 100, 153).
+
+**Auth pattern:** localStorage admin token + Bearer header — same as `/admin/users/[userId]/page.tsx`. The `/admin/page.tsx` cookie-then-token pattern is more elaborate but ultimately falls back to the same localStorage token; we use the simpler direct path.
+
+**Caveats / known limitations:**
+- No real-time saga progress visible during provisioning — the `provisionWorkspace` saga has an `onProgress` callback (used by the CLI) but no HTTP streaming endpoint exposes it. UI shows a long spinner. Future enhancement: SSE endpoint or DB polling.
+- No upgrade-in-progress live status — the upgrade endpoint returns `upgradeId` immediately and runs in background; `GET /api/v1/network/admin/upgrades` lists history but the running upgrade's per-workspace progress isn't streamed. Hit Refresh to see updates.
+- No log link to Railway dashboard per workspace — would be helpful but requires the Railway project ID to construct the URL; deferred.
+- No filter/search on the fleet table — fine for current scale (1-N workspaces); add when N grows.
+- Type-the-userId-to-confirm deprovision uses `prompt()`; not the prettiest UX (browser-native modal) but functional and unambiguous.
+
+**Type-check:** clean (`pnpm run type-check` — zero errors).
+
+**Files added/modified (uncommitted):**
+- Created: `packages/web/app/admin/fleet/page.tsx`
+- Modified: `packages/web/app/admin/page.tsx` (Fleet link added to nav)
+
+**Next step for Tim:** push to main → Docker workflow publishes image (~5 min) → mark GHCR package public → set Railway env vars (`RAILWAY_API_TOKEN`, `RAILWAY_PROJECT_ID`, `ADMIN_PASSWORD`) on ditto.partners → visit `https://ditto.partners/admin/fleet` → enter admin password → "Provision" → done.
+
+---
+
+## EARLIER — Builder/Operator: Auto-Provisioning Unblocked (2026-05-01)
 
 **Direct trigger:** user "Do it all - I want auto-provisioning to work" 2026-05-01, after audit confirmed the auto-provisioning saga (Brief 090 / 100 / 153) is production-ready code-wise but blocked on (a) no published Docker image at `DITTO_IMAGE_REF` and (b) outdated env-example default pointing at a non-existent image.
 
