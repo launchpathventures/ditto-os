@@ -108,7 +108,10 @@ function statusBadge(status: string, healthStatus: string | null) {
 
 export default function AdminFleetPage() {
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
+  const [usernameInput, setUsernameInput] = useState("admin");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
   const [fleet, setFleet] = useState<FleetWorkspace[] | null>(null);
   const [upgrades, setUpgrades] = useState<UpgradeRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -139,11 +142,38 @@ export default function AdminFleetPage() {
     }
   }, [token]);
 
-  function saveToken() {
-    if (!tokenInput) return;
-    localStorage.setItem(TOKEN_KEY, tokenInput);
-    setToken(tokenInput);
-    setTokenInput("");
+  async function login() {
+    if (!usernameInput || !passwordInput) return;
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      const res = await fetch("/api/v1/network/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: usernameInput, password: passwordInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      if (!data.token) {
+        throw new Error("Login response missing token");
+      }
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setPasswordInput("");
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
+    setFleet(null);
+    setUpgrades(null);
   }
 
   async function fetchFleet() {
@@ -316,25 +346,44 @@ export default function AdminFleetPage() {
             <Server size={32} className="mx-auto text-vivid mb-3" />
             <h1 className="text-2xl font-bold text-text-primary">Fleet Admin</h1>
             <p className="mt-2 text-sm text-text-secondary">
-              Enter the admin token (the same value as <code className="text-xs">ADMIN_PASSWORD</code> on this Network Service).
+              Sign in with the <code className="text-xs">ADMIN_USERNAME</code> / <code className="text-xs">ADMIN_PASSWORD</code> set on this Network Service. We&apos;ll exchange them for a Bearer token.
             </p>
             <input
+              type="text"
+              placeholder="Username"
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              disabled={loggingIn}
+              className="mt-6 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
+            />
+            <input
               type="password"
-              placeholder="Admin token"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveToken()}
-              className="mt-6 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none"
+              placeholder="Password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && login()}
+              disabled={loggingIn}
+              className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-vivid focus:outline-none disabled:opacity-50"
             />
             <button
-              onClick={saveToken}
-              disabled={!tokenInput}
-              className="mt-3 w-full rounded-2xl bg-vivid px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              onClick={login}
+              disabled={loggingIn || !usernameInput || !passwordInput}
+              className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl bg-vivid px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
-              Sign in
+              {loggingIn ? (
+                <><Loader2 size={16} className="animate-spin" /> Signing in…</>
+              ) : (
+                "Sign in"
+              )}
             </button>
+            {loginError && (
+              <p className="mt-3 text-xs text-red-600">
+                <AlertCircle size={12} className="inline mr-1" />
+                {loginError}
+              </p>
+            )}
             <p className="mt-4 text-xs text-text-muted">
-              Token is stored in <code>localStorage</code> as <code>ditto-admin-token</code>.
+              Token returned by <code>/api/v1/network/admin/login</code> is stored in <code>localStorage</code> as <code>ditto-admin-token</code>.
             </p>
           </div>
         </main>
@@ -360,17 +409,25 @@ export default function AdminFleetPage() {
           <span className="text-sm text-text-muted">/</span>
           <span className="text-sm font-medium text-text-primary">Fleet</span>
         </div>
-        <button
-          onClick={() => {
-            fetchFleet();
-            fetchUpgrades();
-          }}
-          disabled={loading}
-          className="flex items-center gap-1 text-sm text-text-secondary hover:text-text-primary disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              fetchFleet();
+              fetchUpgrades();
+            }}
+            disabled={loading}
+            className="flex items-center gap-1 text-sm text-text-secondary hover:text-text-primary disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+          <button
+            onClick={logout}
+            className="text-sm text-text-muted hover:text-text-secondary"
+          >
+            Sign out
+          </button>
+        </div>
       </nav>
 
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-8">

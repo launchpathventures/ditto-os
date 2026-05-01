@@ -35,22 +35,43 @@ On the Railway service hosting ditto.partners, set:
 RAILWAY_API_TOKEN=<railway personal token with project-write permission>
 RAILWAY_PROJECT_ID=<the Railway project ID where workspaces will land>
 DITTO_IMAGE_REF=ghcr.io/launchpathventures/ditto-os:latest
-ADMIN_PASSWORD=<strong password — used for /admin/* HTTP basic auth>
-ADMIN_USERNAME=admin   # if not already set
+ADMIN_USERNAME=admin                                       # any string; just don't leave it blank
+ADMIN_PASSWORD=<strong password>                           # generate with `openssl rand -base64 32`
+DITTO_NETWORK_URL=https://ditto.partners                   # so provisioned workspaces can call back to the Network
 ```
 
 Get the Railway API token from `https://railway.com/account/tokens` (workspace-scoped recommended). Get the Project ID from the Railway dashboard URL (`https://railway.com/project/<id>`).
 
-The provisioner deposits each new workspace as a service inside the same project. If you want workspaces in a different project than the Network Service, point `RAILWAY_PROJECT_ID` at that project; the Network Service can live in one project while the workspaces it provisions live in another.
+The provisioner deposits each new workspace as a service inside the project pointed at by `RAILWAY_PROJECT_ID`. Same project as ditto.partners is fine to start; you can move workspaces to a separate project later by changing this var.
 
-### 4. Verify the configuration
+### 4. Get an admin Bearer token
+
+The admin endpoints don't accept the password directly — you POST username/password to `/admin/login` and get back a `dnt_*` Bearer token, which you then use for everything else.
+
+```bash
+ADMIN_TOKEN=$(curl -sX POST https://ditto.partners/api/v1/network/admin/login \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"admin\",\"password\":\"<your-password>\"}" \
+  | jq -r .token)
+echo "Admin token: $ADMIN_TOKEN"
+```
+
+(Store it in a shell var, password manager, or just paste it into the `/admin/fleet` UI which handles login + token exchange for you.)
+
+Alternative — mint the token via CLI on the ditto.partners server:
+
+```bash
+pnpm cli network token create --user-id admin --admin
+```
+
+### 5. Verify the configuration
 
 ```bash
 curl -X GET https://ditto.partners/api/v1/network/admin/fleet \
-  -H "Authorization: Bearer $ADMIN_PASSWORD"
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
-Expect a JSON response listing currently-provisioned workspaces (empty array if none yet) with health status. If you get a 500 with "Server misconfigured", an env var is missing.
+Expect a JSON response listing currently-provisioned workspaces (empty array if none yet) with health status. If you get a 500 with "Server misconfigured", an env var is missing. If you get 401, the token is wrong/expired — re-run step 4.
 
 ---
 
@@ -62,7 +83,7 @@ Three triggers, same saga underneath.
 
 ```bash
 curl -X POST https://ditto.partners/api/v1/network/admin/provision \
-  -H "Authorization: Bearer $ADMIN_PASSWORD" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"userId": "tim"}'
 ```
@@ -134,23 +155,23 @@ Workspace seed (memories, person records, plans from prior network interaction) 
 
 ```bash
 # Fleet status (all workspaces, health)
-curl -H "Authorization: Bearer $ADMIN_PASSWORD" \
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   https://ditto.partners/api/v1/network/admin/fleet
 
 # Deprovision (DESTRUCTIVE — kills service + volume + revokes token)
-curl -X POST -H "Authorization: Bearer $ADMIN_PASSWORD" \
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"userId": "tim", "confirm": true}' \
+  -d '{"userId": "tim"}' \
   https://ditto.partners/api/v1/network/admin/deprovision
 
 # Fleet-wide image upgrade (canary-first; circuit-breaks after 2 consecutive failures)
-curl -X POST -H "Authorization: Bearer $ADMIN_PASSWORD" \
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"imageRef": "ghcr.io/launchpathventures/ditto-os:v1.1.0"}' \
   https://ditto.partners/api/v1/network/admin/upgrade
 
 # Rollback (reverts ALL workspaces upgraded by the last upgrade call)
-curl -X POST -H "Authorization: Bearer $ADMIN_PASSWORD" \
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
   https://ditto.partners/api/v1/network/admin/rollback
 ```
 
@@ -169,7 +190,7 @@ pnpm run cli network create-user --email tim.hgreen@gmail.com --persona-assignme
 
 # Then provision:
 curl -X POST https://ditto.partners/api/v1/network/admin/provision \
-  -H "Authorization: Bearer $ADMIN_PASSWORD" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"userId": "<your networkUsers.id>"}'
 ```
