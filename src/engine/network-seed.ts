@@ -14,6 +14,7 @@ import { db, schema } from "../db";
 import type { MemoryType, InteractionType, InteractionMode, InteractionOutcome } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { writeMemory } from "./legibility/write-memory";
 
 // ============================================================
 // Seed Schema (stable contract — Brief 087)
@@ -177,7 +178,7 @@ export async function importSeed(
 
   // Import memories as self-scoped
   for (const memory of seed.memories) {
-    await database.insert(schema.memories).values({
+    await writeMemory(database, {
       scopeType: "self",
       scopeId: seed.userId,
       type: memory.type as MemoryType,

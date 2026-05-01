@@ -11,6 +11,7 @@ import { db, schema } from "../db";
 import { eq, and } from "drizzle-orm";
 import { findPersonByEmailGlobal } from "./people";
 import type { LearnedContext } from "./network-chat";
+import { writeMemory, updateMemory } from "./legibility/write-memory";
 
 /** Map learned field keys to human-readable labels for memory content */
 const LEARNED_FIELD_LABELS: Record<string, string> = {
@@ -114,16 +115,11 @@ export async function persistLearnedContext(sessionId: string): Promise<void> {
         continue; // Identical — skip
       }
       // Update existing memory with new content
-      writes.push(
-        db
-          .update(schema.memories)
-          .set({ content, updatedAt: new Date() })
-          .where(eq(schema.memories.id, existing.id)),
-      );
+      writes.push(updateMemory(db, existing.id, { content }));
     } else {
       // Create new memory
       writes.push(
-        db.insert(schema.memories).values({
+        writeMemory(db, {
           scopeType: "person",
           scopeId: person.id,
           type: "user_model",
