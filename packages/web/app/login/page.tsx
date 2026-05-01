@@ -59,31 +59,31 @@ function LoginForm() {
     return (
       <div className="flex min-h-screen flex-col bg-white">
         <nav className="flex items-center px-6 py-5 md:px-10">
-          <span className="text-xl font-bold" style={{ color: "#059669" }}>ditto</span>
+          <span className="text-xl font-bold" style={{ color: "#1c1c1c", fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}>ditto</span>
         </nav>
         <main className="flex flex-1 items-center justify-center px-4">
           <div className="w-full max-w-sm text-center">
             <div
               className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
-              style={{ background: "rgba(5, 150, 105, 0.1)" }}
+              style={{ background: "#fff1ec" }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff4000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                 <polyline points="22,6 12,13 2,6" />
               </svg>
             </div>
-            <h1 className="text-xl font-semibold" style={{ color: "#111118" }}>Check your email</h1>
-            <p className="mt-2 text-sm" style={{ color: "#4A4A55" }}>
+            <h1 className="text-2xl font-semibold" style={{ color: "#1c1c1c", fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}>Check your email</h1>
+            <p className="mt-2 text-sm" style={{ color: "#6e6e6e" }}>
               We sent a login link to <strong>{email}</strong>.
               Click the link in the email to sign in.
             </p>
-            <p className="mt-4 text-xs" style={{ color: "#8A8A95" }}>
+            <p className="mt-4 text-xs" style={{ color: "#6e6e6e" }}>
               The link expires in 24 hours and can only be used once.
             </p>
             <button
               onClick={() => { setSent(false); setEmail(""); }}
               className="mt-6 text-sm underline transition-colors"
-              style={{ color: "#4A4A55" }}
+              style={{ color: "#6e6e6e" }}
             >
               Use a different email
             </button>
@@ -96,15 +96,15 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <nav className="flex items-center px-6 py-5 md:px-10">
-        <span className="text-xl font-bold" style={{ color: "#059669" }}>ditto</span>
+        <span className="text-xl font-bold" style={{ color: "#1c1c1c", fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}>ditto</span>
       </nav>
       <main className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-bold" style={{ color: "#111118" }}>Sign in to your workspace</h1>
-          <p className="mt-2 text-sm" style={{ color: "#4A4A55" }}>
+          <h1 className="text-3xl font-semibold" style={{ color: "#1c1c1c", fontFamily: "var(--font-display)", letterSpacing: "-0.03em", lineHeight: 1.05 }}>Sign in to your workspace</h1>
+          <p className="mt-3 text-base" style={{ color: "#6e6e6e", letterSpacing: "-0.02em" }}>
             Enter your email and we&apos;ll send you a magic link.
           </p>
-          <form onSubmit={handleSubmit} className="mt-6 space-y-3">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-3">
             <input
               type="email"
               placeholder="you@example.com"
@@ -112,19 +112,19 @@ function LoginForm() {
               onChange={(e) => setEmail(e.target.value)}
               autoFocus
               autoComplete="email"
-              className="w-full rounded-2xl border-2 bg-white px-4 py-3 text-[16px] placeholder:opacity-50 focus:outline-none"
+              className="w-full rounded-full border bg-white px-5 py-3.5 text-[16px] placeholder:opacity-50 focus:outline-none transition-colors"
               style={{
-                color: "#111118",
-                borderColor: "#D5D5DA",
+                color: "#1c1c1c",
+                borderColor: "#ecebe8",
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#059669")}
-              onBlur={(e) => (e.target.style.borderColor = "#D5D5DA")}
+              onFocus={(e) => (e.target.style.borderColor = "#ff4000")}
+              onBlur={(e) => (e.target.style.borderColor = "#ecebe8")}
             />
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-base font-semibold text-white transition-colors disabled:opacity-40"
-              style={{ background: "#059669" }}
+              className="flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-base font-semibold transition-colors disabled:opacity-40"
+              style={{ background: "#1c1c1c", color: "#fafafa" }}
             >
               {loading ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
@@ -150,7 +150,7 @@ export default function LoginPage() {
   return (
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "#059669" }} />
+        <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "#ff4000" }} />
       </div>
     }>
       <LoginForm />

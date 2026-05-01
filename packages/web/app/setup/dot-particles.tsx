@@ -13,7 +13,9 @@
 
 import { useEffect, useRef } from "react";
 
-const COLORS = ["#059669", "#059669", "#047857", "#3D5A48", "#10B981"];
+// Precise White Lab palette: ink black anchors with electric orange spark.
+// Most particles are obsidian/granite; a minority pulses orange for life.
+const COLORS = ["#1c1c1c", "#1c1c1c", "#6e6e6e", "#ff4000", "#1c1c1c"];
 
 interface DotParticlesProps {
   size?: number;
