@@ -16,8 +16,8 @@ import { HeroBackdrop } from "@/components/hero-backdrop";
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const error = searchParams.get("error");
-  const redirect = searchParams.get("redirect");
+  const error = searchParams?.get("error");
+  const redirect = searchParams?.get("redirect");
 
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);

@@ -1,0 +1,98 @@
+{
+  "totalMs": 30000,
+  "persona": "alex",
+  "stages": [
+    {
+      "stage": 0,
+      "block": "idle",
+      "ms": 0
+    },
+    {
+      "stage": 1,
+      "ms": 1200,
+      "streamMs": 7200,
+      "block": {
+        "type": "text",
+        "variant": "body",
+        "text": "Customer brief from Rob: Henderson bathroom reno. Pull out old vanity and shower, refit tile splashback, keep access tidy. Narrow stairwell, second floor, and the client says the budget is somewhere in the mid-teens."
+      }
+    },
+    {
+      "stage": 2,
+      "ms": 10200,
+      "checkpoints": [
+        {
+          "ms": 0,
+          "label": "Materials priced"
+        },
+        {
+          "ms": 3500,
+          "label": "Labour estimated"
+        },
+        {
+          "ms": 7000,
+          "label": "Margin check passed"
+        }
+      ],
+      "block": {
+        "type": "progress",
+        "entityType": "process_run",
+        "entityId": "demo-quote-bathroom-reno",
+        "currentStep": "Pricing materials",
+        "totalSteps": 3,
+        "completedSteps": 0,
+        "status": "running"
+      }
+    },
+    {
+      "stage": 3,
+      "ms": 21000,
+      "block": {
+        "type": "review_card",
+        "processRunId": "demo-quote-bathroom-reno",
+        "stepName": "Draft quote ready",
+        "outputText": "Rob - Henderson bathroom reno\n\nDraft quote: $14,200 + GST\n\n- Materials: $5,850\n- Labour: $6,900\n- Access allowance: $650\n\nNotes: Narrow stair access adds half a day. Budget sits inside the mid-teens range. Recommend sending with a 14-day validity window.",
+        "confidence": "high",
+        "knowledgeUsed": [
+          "Rob's margin rule",
+          "last 3 bathroom quotes",
+          "supplier price sheet"
+        ],
+        "actions": [
+          {
+            "id": "demo-send-quote",
+            "label": "Approve",
+            "style": "primary",
+            "payload": {
+              "demo": true
+            }
+          },
+          {
+            "id": "demo-edit-quote",
+            "label": "Edit",
+            "style": "secondary",
+            "payload": {
+              "demo": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage": 4,
+      "ms": 27800,
+      "block": {
+        "type": "suggestion",
+        "content": "Your Ditto would have this in your inbox before you're back in the truck. Want one?",
+        "reasoning": "Same process, every quote, with your corrections remembered.",
+        "actions": [
+          {
+            "id": "wedge-get-ditto",
+            "label": "Get your Ditto",
+            "style": "primary"
+          }
+        ]
+      }
+    }
+  ]
+}

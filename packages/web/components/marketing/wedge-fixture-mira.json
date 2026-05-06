@@ -1,0 +1,98 @@
+{
+  "totalMs": 30000,
+  "persona": "mira",
+  "stages": [
+    {
+      "stage": 0,
+      "block": "idle",
+      "ms": 0
+    },
+    {
+      "stage": 1,
+      "ms": 1200,
+      "streamMs": 7200,
+      "block": {
+        "type": "text",
+        "variant": "body",
+        "text": "Customer brief from Rob: Henderson bathroom renovation. The slipping part is access: second floor, narrow stairwell, and a client trying to keep the number in the mid-teens. I am turning that into a quote Rob can send without another pass."
+      }
+    },
+    {
+      "stage": 2,
+      "ms": 10200,
+      "checkpoints": [
+        {
+          "ms": 0,
+          "label": "Cost drivers isolated"
+        },
+        {
+          "ms": 3500,
+          "label": "Labour risk priced"
+        },
+        {
+          "ms": 7000,
+          "label": "Margin held"
+        }
+      ],
+      "block": {
+        "type": "progress",
+        "entityType": "process_run",
+        "entityId": "demo-quote-bathroom-reno",
+        "currentStep": "Finding the leverage point",
+        "totalSteps": 3,
+        "completedSteps": 0,
+        "status": "running"
+      }
+    },
+    {
+      "stage": 3,
+      "ms": 21000,
+      "block": {
+        "type": "review_card",
+        "processRunId": "demo-quote-bathroom-reno",
+        "stepName": "Draft quote ready",
+        "outputText": "Rob - Henderson bathroom renovation\n\nDraft quote: $14,200 + GST\n\n- Materials: $5,850\n- Labour: $6,900\n- Access allowance: $650\n\nNotes: The quote stays within the client's stated range while protecting margin. The access allowance is called out so it does not become invisible work.",
+        "confidence": "high",
+        "knowledgeUsed": [
+          "Rob's pricing standard",
+          "bathroom quote history",
+          "supplier sheet"
+        ],
+        "actions": [
+          {
+            "id": "demo-send-quote",
+            "label": "Approve",
+            "style": "primary",
+            "payload": {
+              "demo": true
+            }
+          },
+          {
+            "id": "demo-edit-quote",
+            "label": "Edit",
+            "style": "secondary",
+            "payload": {
+              "demo": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage": 4,
+      "ms": 27800,
+      "block": {
+        "type": "suggestion",
+        "content": "Your Ditto would have the quote ready before Rob is back in the truck. The leverage is not faster typing; it is not losing the judgement twice.",
+        "reasoning": "A process that carries the pricing rule forward every time.",
+        "actions": [
+          {
+            "id": "wedge-get-ditto",
+            "label": "Get your Ditto",
+            "style": "primary"
+          }
+        ]
+      }
+    }
+  ]
+}
