@@ -91,6 +91,10 @@ export function DittoConversation() {
   // through (or is skipped), VISITED_KEY is set so subsequent loads bypass it.
   const [firstTime, setFirstTime] = useState(false);
   const [preamble, setPreamble] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
+  // Brief 253 follow-up: returning desktop visitors auto-start the wedge replay.
+  // Decided once on mount from localStorage[VISITED_KEY] + viewport. Mobile keeps
+  // user-initiated play (smaller viewport, autoplay is more jarring there).
+  const [autoStartWedge, setAutoStartWedge] = useState(false);
   // Brief 152: persona selection flow.
   const [phase, setPhase] = useState<Phase>("preamble");
   const [personaId, setPersonaId] = useState<PersonaId>("alex");
@@ -244,6 +248,10 @@ export function DittoConversation() {
     // Brief 253: first-time visitor \u2192 staged preamble. Returning visitors who
     // never converted skip straight to the Tripoli v2 hero.
     if (!visited) setFirstTime(true);
+    // Brief 253 follow-up: returning desktop visitors auto-start the wedge.
+    if (visited && !savedEmail && window.matchMedia("(min-width: 768px)").matches) {
+      setAutoStartWedge(true);
+    }
   }, []);
 
   // Brief 253: staged preamble timing \u2014 exact cadence from commit 1b6b63e.
@@ -1118,6 +1126,7 @@ export function DittoConversation() {
                 <div className="order-2 min-w-0 animate-fade-in-slow lg:row-span-2">
                   <Wedge
                     persona={personaId}
+                    autoStart={autoStartWedge}
                     onComplete={openPersonaPicker}
                   />
                 </div>

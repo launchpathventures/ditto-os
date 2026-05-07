@@ -38,6 +38,9 @@ interface WedgeFixture {
 
 interface WedgeProps {
   persona?: PersonaId;
+  /** Returning desktop visitors auto-start the replay on mount. Reduced motion
+   *  and hidden-tab mounts opt out so the demo isn't burned off-screen. */
+  autoStart?: boolean;
   onComplete?: () => void;
   onSkip?: () => void;
 }
@@ -176,7 +179,7 @@ function blockForStage(stage: WedgeStage, elapsed: number): ContentBlock | null 
   return stage.block;
 }
 
-export function Wedge({ persona = "alex", onComplete, onSkip }: WedgeProps) {
+export function Wedge({ persona = "alex", autoStart = false, onComplete, onSkip }: WedgeProps) {
   const fixture = fixtures[persona] ?? fixtures.alex;
   const reducedMotion = usePrefersReducedMotion();
   const [status, setStatus] = useState<ReplayStatus>("idle");
@@ -186,6 +189,7 @@ export function Wedge({ persona = "alex", onComplete, onSkip }: WedgeProps) {
   const skipTrackedRef = useRef(false);
   const lastPersonaRef = useRef(persona);
   const elapsedRef = useRef(0);
+  const autoStartedRef = useRef(false);
 
   const track = useCallback((event: Parameters<typeof trackMarketingEvent>[0]) => {
     trackMarketingEvent(event, {
@@ -224,6 +228,22 @@ export function Wedge({ persona = "alex", onComplete, onSkip }: WedgeProps) {
     setMotionOverride(false);
     setStatus("idle");
   }, [persona, reset]);
+
+  // Brief 253 follow-up: returning desktop visitor autoplay. One-shot per mount.
+  // Skipped when reduced motion is on (the static reducedStatic view is more
+  // accessible) or the tab is hidden (don't burn the demo off-screen).
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current) return;
+    if (reducedMotion) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    autoStartedRef.current = true;
+    reset();
+    completionTrackedRef.current = false;
+    skipTrackedRef.current = false;
+    setMotionOverride(false);
+    setStatus("playing");
+    track("wedge_autoplay");
+  }, [autoStart, reducedMotion, reset, track]);
 
   useEffect(() => {
     if (status !== "playing" || !rootRef.current) return;

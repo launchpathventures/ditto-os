@@ -2,6 +2,7 @@
 
 type MarketingEventName =
   | "wedge_play_pressed"
+  | "wedge_autoplay"
   | "wedge_completed"
   | "wedge_skipped"
   | "wedge_replayed";
