@@ -95,6 +95,34 @@ export const ALEX_RESPONSE_TOOL: LlmToolDefinition = {
         description:
           "When you are proposing a plan or approach (REFLECT & PROPOSE stage), put ONLY the plan/approach text here. This is the specific 'here is what I will do' content — not the conversational lead-in, not the follow-up question. The frontend renders this in a visually distinct card. Null when you're not proposing anything.",
       },
+      beat2Action: {
+        type: ["object", "null"],
+        description:
+          "Use only after a clear recap: one concrete email draft the visitor can send, edit, or pause inline. Null otherwise. Never include multiple unrelated actions.",
+        properties: {
+          to: {
+            type: ["string", "array"],
+            items: { type: "string" },
+            description: "Recipient email address or addresses.",
+          },
+          subject: {
+            type: "string",
+            description: "Email subject.",
+          },
+          body: {
+            type: "string",
+            description: "Email body.",
+          },
+          header: {
+            type: "string",
+            description: "Plain-language card header, e.g. Want me to send this to ops@example.com?",
+          },
+          recipientLabel: {
+            type: ["string", "null"],
+            description: "Human-readable recipient label.",
+          },
+        },
+      },
       learned: {
         type: "object",
         description:
@@ -258,6 +286,11 @@ NOW set done to true. ALWAYS set done after EMAIL_CAPTURED — never leave the c
 
 The user leaves having seen Alex already working — real names, real companies, real reasons. Not a promise. Not a ticket number. Proof. But if search fails, the user still leaves with a clear next step.
 
+### BEAT 1 RECAP -> BEAT 2 DO
+After email is known and you have enough context to say "what this person needs in the next day is X", open the next turn with a short recap in their words before asking anything new. The recap is 1-2 sentences: the live problem, why it matters, and the smallest useful first move.
+
+If that recap reveals one concrete email you can send now, populate beat2Action with exactly one draft: recipient, subject, and body. The visible card owns the button words; your text should set up the choice in plain language and keep the action singular. If the visitor asks to change it, talk through the edit in the next turn rather than presenting a form.
+
 ### MODE SWITCHING
 Capabilities are additive, not exclusive. If the conversation reveals a second need:
 - Acknowledge it naturally. Don't announce a "mode switch."
@@ -293,6 +326,7 @@ The alex_response tool (MUST call after every reply):
 - detectedMode: "connector" | "sales" | "cos" | "both" | null. Can change. If outreach mode is ambiguous, ask.
 - learned: REQUIRED EVERY turn. Cumulative — carry all CONFIRMED facts forward. CRITICAL: Only include what the visitor has explicitly stated or confirmed. Never populate fields from your own questions, inferences, or suggestions. If you asked "do you want help with outreach?" and they haven't answered, do NOT put that in the problem field. The visitor sees this live in the UI — wrong entries destroy trust. Fields: name, business, role, industry, location, target, problem, channel.
 - searchQuery / fetchUrl: for web search or direct URL fetch. Use fetchUrl for URLs, not searchQuery.
+- beat2Action: null unless the current turn has one concrete email draft after the recap. If set, the card buttons are Send it / Edit first / Not yet.
 `.trim();
 
 const REFERRED_PROCESS = `
@@ -502,6 +536,11 @@ If the user already shared a URL that was fetched: don't ask for their website a
 ### MODE SWITCHING
 Capabilities are additive. If a second need emerges, acknowledge naturally, explain, update detectedMode.`;
 
+  const BEAT_2 = `
+### BEAT 1 RECAP -> BEAT 2 DO
+After email is known and you can name the live problem, open with a short recap in their words: the problem, why it matters, and the smallest useful first move.
+If there is one concrete email worth sending now, populate beat2Action with one draft only. The card owns the Send it / Edit first / Not yet buttons. If they want changes, handle that by conversation, not a form.`;
+
   const RULES = `
 ## Rules
 - React with substance, then ask one thing. The system enforces one question — if you ask two, the second gets cut.
@@ -538,7 +577,7 @@ Sound like Alex — warm, direct, opinionated. Not an interviewer ticking boxes.
     if (s) includedStages.push(stageMap[s]);
   }
 
-  return [PREAMBLE, ...includedStages, MODE_SWITCHING, RULES].join("\n");
+  return [PREAMBLE, ...includedStages, BEAT_2, MODE_SWITCHING, RULES].join("\n");
 }
 
 // ============================================================

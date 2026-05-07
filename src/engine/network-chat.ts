@@ -11,7 +11,7 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { createCompletion, extractText, extractToolUse, getConfiguredModel, type LlmToolDefinition } from "./llm";
@@ -24,10 +24,18 @@ import { webSearch } from "./web-search";
 import { fetchUrlContent, type FetchResult } from "./web-fetch";
 import { geolocateIp } from "./geo";
 import type { LlmMessage } from "./llm";
-import type { ContentBlock } from "./content-blocks";
+import type { AuthorizationRequestBlock, ContentBlock } from "./content-blocks";
 import { buildFrontDoorBlocks } from "./network-chat-blocks";
 import type { PersonaId } from "../db/schema";
 import type { ChatSessionStage } from "../db/schema/frontdoor";
+import {
+  authorizationGateHandler,
+  createHarnessContext,
+  type AuthorizationGateRequest,
+  type AuthorizationResult,
+} from "@ditto/core";
+import { gmailAuthorizedSend } from "./tools/gmail-authorized-send";
+import { writeMemory } from "./legibility/write-memory";
 
 // ============================================================
 // Tool Call Extraction
@@ -60,6 +68,7 @@ interface AlexToolArgs {
   searchQuery: string | null;
   fetchUrl: string | null;
   plan: string | null;
+  beat2Action: Record<string, unknown> | null;
   learned: LearnedContext | null;
   extraQuestions: string[];
 }
@@ -88,6 +97,7 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
       searchQuery: null,
       fetchUrl: null,
       plan: null,
+      beat2Action: null,
       learned: null,
       extraQuestions: [],
     };
@@ -123,6 +133,10 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
     plan:
       typeof args.plan === "string" && args.plan.trim()
         ? args.plan.trim()
+        : null,
+    beat2Action:
+      args.beat2Action && typeof args.beat2Action === "object"
+        ? args.beat2Action as Record<string, unknown>
         : null,
     learned:
       args.learned && typeof args.learned === "object"
@@ -645,6 +659,8 @@ export interface ChatPipelineOptions {
    *  pre-commit mini-chat, `main` for the committed front door. When omitted,
    *  derived from session.stage. */
   promptMode?: PromptMode;
+  /** Structured action payload from an inline content block affordance. */
+  actionPayload?: Record<string, unknown>;
 }
 
 export async function loadOrCreateSession(
@@ -1389,7 +1405,7 @@ export async function handleChatTurn(
     session.learned = mergeLearned(session.learned, rawExtracted.learned);
   }
   const extracted = enforceStageGates(rawExtracted, session);
-  let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
+  let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, beat2Action, extraQuestions } = extracted;
 
   // Brief 152: strip all funnel flags in interview/intro mode.
   if (nonStreamIsInterview) {
@@ -1401,6 +1417,7 @@ export async function handleChatTurn(
     detectedMode = null;
     searchQuery = null;
     fetchUrl = null;
+    beat2Action = null;
     extraQuestions = [];
   }
 
@@ -1651,6 +1668,318 @@ export type ChatStreamEvent =
   | { type: "done" }
   | { type: "error"; message: string };
 
+function readAuthActionPayload(payload: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  const action = payload?.authorizationAction;
+  return action && typeof action === "object" ? action as Record<string, unknown> : null;
+}
+
+type PendingChatAuthorization = {
+  block: AuthorizationRequestBlock;
+  toolName: "gmail-authorized-send";
+  toolInput: Record<string, unknown>;
+  expiresAtMs: number;
+};
+
+const AUTHORIZATION_PENDING_EVENT = "chat_authorization_pending";
+const AUTHORIZATION_CLOSED_EVENT = "chat_authorization_closed";
+const AUTHORIZATION_EVENTS = new Set<AuthorizationGateRequest["event"]>([
+  "pending",
+  "send-it",
+  "edit-first",
+  "not-yet",
+  "expired",
+  "retry",
+  "explain",
+  "retry-item",
+]);
+
+const pendingChatAuthorizations = new Map<string, PendingChatAuthorization>();
+
+function authorizationPreviewFromPayload(action: Record<string, unknown>): ContentBlock[] | null {
+  const preview = action.preview;
+  return Array.isArray(preview) ? preview as ContentBlock[] : null;
+}
+
+function readAuthorizationEvent(value: unknown): AuthorizationGateRequest["event"] | null {
+  return typeof value === "string" && AUTHORIZATION_EVENTS.has(value as AuthorizationGateRequest["event"])
+    ? value as AuthorizationGateRequest["event"]
+    : null;
+}
+
+function authorizationKey(sessionId: string, authorizationId: string): string {
+  return `${sessionId}:${authorizationId}`;
+}
+
+function isAuthorizationRequestBlock(block: ContentBlock): block is AuthorizationRequestBlock {
+  return block.type === "authorization-request";
+}
+
+function publicAuthorizationResult(result: AuthorizationRequestBlock["executionResult"]): AuthorizationRequestBlock["executionResult"] {
+  if (!result) return null;
+  const { reasonForLog: _reasonForLog, ...publicResult } = result;
+  return publicResult;
+}
+
+function sanitizeAuthorizationBlock(block: AuthorizationRequestBlock): AuthorizationRequestBlock {
+  const { toolName: _toolName, toolInput: _toolInput, ...publicBlock } = block;
+  return {
+    ...publicBlock,
+    executionResult: publicAuthorizationResult(publicBlock.executionResult),
+  };
+}
+
+function cleanupExpiredAuthorizations(now = Date.now()): void {
+  for (const [key, pending] of pendingChatAuthorizations) {
+    if (pending.expiresAtMs <= now) {
+      pendingChatAuthorizations.delete(key);
+    }
+  }
+}
+
+function pendingAuthorizationFromMetadata(metadata: unknown): PendingChatAuthorization | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+  const block = record.block as ContentBlock | undefined;
+  const toolInput = record.toolInput;
+  const expiresAtMs = record.expiresAtMs;
+  if (
+    !block ||
+    !isAuthorizationRequestBlock(block) ||
+    record.toolName !== "gmail-authorized-send" ||
+    !toolInput ||
+    typeof toolInput !== "object" ||
+    typeof expiresAtMs !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    block,
+    toolName: "gmail-authorized-send",
+    toolInput: toolInput as Record<string, unknown>,
+    expiresAtMs,
+  };
+}
+
+async function rememberPendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+  pending: PendingChatAuthorization,
+): Promise<void> {
+  pendingChatAuthorizations.set(authorizationKey(sessionId, authorizationId), pending);
+  await db.insert(schema.funnelEvents).values({
+    sessionId,
+    event: AUTHORIZATION_PENDING_EVENT,
+    surface: "front-door",
+    metadata: {
+      authorizationId,
+      block: pending.block,
+      toolName: pending.toolName,
+      toolInput: pending.toolInput,
+      expiresAtMs: pending.expiresAtMs,
+    },
+  });
+}
+
+async function closePendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+  state: AuthorizationRequestBlock["state"],
+): Promise<void> {
+  pendingChatAuthorizations.delete(authorizationKey(sessionId, authorizationId));
+  await db.insert(schema.funnelEvents).values({
+    sessionId,
+    event: AUTHORIZATION_CLOSED_EVENT,
+    surface: "front-door",
+    metadata: {
+      authorizationId,
+      state,
+    },
+  });
+}
+
+async function loadPendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+): Promise<PendingChatAuthorization | null> {
+  const cached = pendingChatAuthorizations.get(authorizationKey(sessionId, authorizationId));
+  if (cached) return cached;
+
+  const [row] = await db
+    .select({
+      event: schema.funnelEvents.event,
+      metadata: schema.funnelEvents.metadata,
+    })
+    .from(schema.funnelEvents)
+    .where(
+      and(
+        eq(schema.funnelEvents.sessionId, sessionId),
+        inArray(schema.funnelEvents.event, [AUTHORIZATION_PENDING_EVENT, AUTHORIZATION_CLOSED_EVENT]),
+        sql`json_extract(${schema.funnelEvents.metadata}, '$.authorizationId') = ${authorizationId}`,
+      ),
+    )
+    .orderBy(desc(schema.funnelEvents.createdAt))
+    .limit(1);
+
+  if (!row || row.event !== AUTHORIZATION_PENDING_EVENT) return null;
+  const pending = pendingAuthorizationFromMetadata(row.metadata);
+  if (!pending) return null;
+  pendingChatAuthorizations.set(authorizationKey(sessionId, authorizationId), pending);
+  return pending;
+}
+
+async function registerPendingChatAuthorization(sessionId: string, block: ContentBlock): Promise<ContentBlock> {
+  if (!isAuthorizationRequestBlock(block)) return block;
+
+  const authorizationId = block.authorizationId;
+  const toolName = block.toolName;
+  const toolInput = block.toolInput;
+  if (
+    block.state !== "pending" ||
+    !authorizationId ||
+    toolName !== "gmail-authorized-send" ||
+    !toolInput ||
+    typeof toolInput !== "object"
+  ) {
+    return sanitizeAuthorizationBlock(block);
+  }
+
+  const expiresAtMs = block.expiresAt ? Date.parse(block.expiresAt) : NaN;
+  await rememberPendingChatAuthorization(sessionId, authorizationId, {
+    block: sanitizeAuthorizationBlock(block),
+    toolName,
+    toolInput,
+    expiresAtMs: Number.isFinite(expiresAtMs) ? expiresAtMs : Date.now() + 30 * 60 * 1000,
+  });
+  cleanupExpiredAuthorizations();
+  return sanitizeAuthorizationBlock(block);
+}
+
+function expiredAuthorizationBlock(actionPayload: Record<string, unknown>): AuthorizationRequestBlock {
+  return {
+    type: "authorization-request",
+    state: "expired",
+    header: typeof actionPayload.header === "string" ? actionPayload.header : "This request expired.",
+    preview: authorizationPreviewFromPayload(actionPayload),
+    recipientLabel: typeof actionPayload.recipientLabel === "string" ? actionPayload.recipientLabel : null,
+    actionClass: actionPayload.actionClass === "multi-recipient-send" ? "multi-recipient-send" : "email-send",
+    executionResult: null,
+    expiresAt: null,
+    authorizationId: typeof actionPayload.authorizationId === "string" ? actionPayload.authorizationId : undefined,
+  };
+}
+
+function shouldForgetAuthorization(state: AuthorizationRequestBlock["state"]): boolean {
+  return state === "succeeded" || state === "rejected" || state === "edit-requested" || state === "expired";
+}
+
+async function executeChatAuthorizationAction(
+  session: ChatSession,
+  actionPayload: Record<string, unknown>,
+): Promise<ContentBlock> {
+  const event = readAuthorizationEvent(actionPayload.event);
+  const authorizationId = typeof actionPayload.authorizationId === "string"
+    ? actionPayload.authorizationId
+    : null;
+
+  if (!authorizationId) {
+    return expiredAuthorizationBlock(actionPayload);
+  }
+
+  cleanupExpiredAuthorizations();
+  const pending = await loadPendingChatAuthorization(session.sessionId, authorizationId);
+  if (!pending) {
+    return expiredAuthorizationBlock(actionPayload);
+  }
+  const effectiveEvent: AuthorizationGateRequest["event"] = !event || pending.expiresAtMs <= Date.now()
+    ? "expired"
+    : event;
+
+  const request: AuthorizationGateRequest = {
+    authorizationId,
+    event: effectiveEvent,
+    header: pending.block.header,
+    preview: pending.block.preview,
+    recipientLabel: pending.block.recipientLabel,
+    actionClass: pending.block.actionClass,
+    expiresAt: pending.block.expiresAt,
+    createdAt: typeof actionPayload.createdAt === "string" ? actionPayload.createdAt : undefined,
+    toolCall: {
+      toolName: pending.toolName,
+      input: pending.toolInput,
+      execute: async (input, stepRunId): Promise<AuthorizationResult> => {
+        return gmailAuthorizedSend({
+          stepRunId,
+          to: input.to as string | string[],
+          subject: input.subject as string,
+          body: input.body as string,
+          draftId: input.draftId as string | undefined,
+        });
+      },
+    },
+  };
+
+  const ctx = createHarnessContext({
+    processRun: {
+      id: `chat-session:${session.sessionId}`,
+      processId: "greeter-beat-2",
+      inputs: {},
+    },
+    stepDefinition: {
+      id: "greeter-beat-2-authorization",
+      name: "Greeter Beat 2 authorization",
+      executor: "chat",
+    },
+    processDefinition: {
+      name: "Greeter Beat 2 authorization",
+      id: "greeter-beat-2",
+      version: 1,
+      status: "active",
+      description: "One-shot authorized Greeter side effect",
+      inputs: [],
+      steps: [],
+      outputs: [],
+      quality_criteria: [],
+      feedback: { metrics: [], capture: [] },
+      trust: { initial_tier: "supervised", upgrade_path: [], downgrade_triggers: [] },
+    },
+    trustTier: "supervised",
+    stepRunId: `chat-auth-${randomUUID()}`,
+  });
+  ctx.recordAuthorizationOutcome = async (record) => {
+    await writeMemory(db, {
+      scopeType: "process",
+      scopeId: "greeter-beat-2",
+      type: "context",
+      source: "feedback",
+      sourceId: authorizationId,
+      content: `Greeter Beat 2 authorization outcome: ${record.state}${record.recipientLabel ? ` for ${record.recipientLabel}` : ""}.`,
+      metadata: {
+        sessionId: session.sessionId,
+        processRunId: record.processRunId,
+        stepRunId: record.stepRunId,
+        state: record.state,
+        actionClass: record.actionClass,
+        recipientLabel: record.recipientLabel,
+        idleMsBeforeExpire: record.idleMsBeforeExpire ?? null,
+      },
+      confidence: 0.4,
+    });
+  };
+  ctx.authorizationRequest = request;
+
+  await authorizationGateHandler.execute(ctx);
+  const blocks = ctx.stepResult?.outputs.contentBlocks;
+  const block = Array.isArray(blocks) ? blocks[0] : null;
+  if (!block || typeof block !== "object") {
+    throw new Error("authorization-gate returned no content block");
+  }
+  if (isAuthorizationRequestBlock(block) && shouldForgetAuthorization(block.state)) {
+    await closePendingChatAuthorization(session.sessionId, authorizationId, block.state);
+  }
+  return isAuthorizationRequestBlock(block) ? sanitizeAuthorizationBlock(block) : block as ContentBlock;
+}
+
 /**
  * Streaming version of handleChatTurn.
  * Yields SSE events: session ID, text deltas, then metadata + done.
@@ -1692,6 +2021,38 @@ export async function* handleChatTurnStreaming(
     yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
     return;
+  }
+
+  const authorizationAction = readAuthActionPayload(options?.actionPayload);
+  if (authorizationAction) {
+    try {
+      const block = await executeChatAuthorizationAction(session, authorizationAction);
+      yield { type: "content-block", block };
+      const state = block.type === "authorization-request" ? block.state : "pending";
+      const followUp = state === "succeeded"
+        ? "Sent. I'll watch for the reply from here."
+        : state === "edit-requested"
+          ? "What should I change?"
+          : state === "rejected"
+            ? "No problem. I won't send it."
+            : state === "failed"
+              ? "That didn't send. We can retry or adjust it."
+              : "";
+      if (followUp) {
+        session.messages.push({ role: "assistant", content: followUp });
+        await saveSession(session);
+        yield { type: "text-delta", text: followUp };
+      }
+      yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: false, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: session.learned as LearnedContext | null, extraQuestions: [] };
+      yield { type: "done" };
+      return;
+    } catch (error) {
+      console.warn("[network-chat] Authorization action failed:", (error as Error).message);
+      yield { type: "text-delta", text: "I couldn't do that just now. Try again in a minute." };
+      yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: false, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: session.learned as LearnedContext | null, extraQuestions: [] };
+      yield { type: "done" };
+      return;
+    }
   }
 
   // Resolve model
@@ -1823,7 +2184,7 @@ export async function* handleChatTurnStreaming(
     session.learned = mergeLearned(session.learned, streamRawExtracted.learned);
   }
   const streamExtracted = enforceStageGates(streamRawExtracted, session);
-  let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
+  let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, beat2Action, learned, extraQuestions } = streamExtracted;
 
   // Brief 152: interview/intro mode strips all funnel-advancement flags.
   // The user hasn't picked a persona yet — we must not ask for email, mark
@@ -1839,6 +2200,7 @@ export async function* handleChatTurnStreaming(
     searchQuery = null;
     fetchUrl = null;
     plan = null;
+    beat2Action = null;
     extraQuestions = [];
   }
 
@@ -1970,13 +2332,14 @@ export async function* handleChatTurnStreaming(
   // Brief 137: Emit content blocks after text, before metadata (Insight-110 boundary)
   const frontDoorBlocks = buildFrontDoorBlocks({
     plan,
+    beat2Action,
     detectedMode,
     learned,
     stage: streamConversationStage,
     enrichmentText: lastEnrichmentText,
   });
   for (const block of frontDoorBlocks) {
-    yield { type: "content-block", block };
+    yield { type: "content-block", block: await registerPendingChatAuthorization(session.sessionId, block) };
   }
 
   // Brief 126: Safety net — if email was captured but enrichment didn't set done.

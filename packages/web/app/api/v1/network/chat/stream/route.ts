@@ -42,7 +42,7 @@ dbModulePromise.catch(() => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken, personaId, promptMode } = body as {
+    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken, personaId, promptMode, actionPayload } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       turnstileToken?: string;
       personaId?: string;
       promptMode?: string;
+      actionPayload?: Record<string, unknown>;
     };
 
     // Brief 152: intro mode sends an empty string (the card just wants the LLM
@@ -175,6 +176,7 @@ export async function POST(request: Request) {
           {
             personaId: safePersonaId,
             promptMode: safePromptMode,
+            actionPayload,
           },
         )) {
           await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));

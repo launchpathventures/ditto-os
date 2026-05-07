@@ -13,6 +13,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
 import { eq, and } from "drizzle-orm";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 // ============================================================
 // Prompt Tests (no DB or LLM needed)
@@ -205,7 +207,51 @@ describe("network-chat-prompt", () => {
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("requestName");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("fetchUrl");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("plan");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("beat2Action");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("learned");
+    });
+
+    it("adds Beat 1 recap and Beat 2 directive without forbidden card copy", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door", undefined, "activate").toLowerCase();
+      expect(prompt).toContain("beat 1 recap");
+      expect(prompt).toContain("beat 2 do");
+      for (const forbidden of [
+        "authorize",
+        "execute",
+        "trigger",
+        "confirm action",
+        "this will",
+        "ok to proceed",
+      ]) {
+        expect(prompt).not.toContain(forbidden);
+      }
+    });
+  });
+
+  describe("authorization block safety", () => {
+    it("strips internal reasonForLog before returning public authorization blocks", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain("function publicAuthorizationResult");
+      expect(source).toContain("reasonForLog: _reasonForLog");
+      expect(source).toContain("executionResult: publicAuthorizationResult");
+    });
+
+    it("validates public authorization events before executing the gate", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain("const AUTHORIZATION_EVENTS");
+      expect(source).toContain("function readAuthorizationEvent");
+      expect(source).toContain("const effectiveEvent");
+      expect(source).toContain("!event || pending.expiresAtMs <= Date.now()");
+      expect(source).not.toContain(': "send-it";');
+    });
+
+    it("persists pending authorization state beyond the in-process map", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain('const AUTHORIZATION_PENDING_EVENT = "chat_authorization_pending"');
+      expect(source).toContain("async function rememberPendingChatAuthorization");
+      expect(source).toContain("async function loadPendingChatAuthorization");
+      expect(source).toContain("async function closePendingChatAuthorization");
     });
   });
 });

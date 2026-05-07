@@ -18,6 +18,7 @@ import { InputRequestBlockComponent } from "./input-request-block";
 import { KnowledgeCitationBlockComponent } from "./knowledge-citation-block";
 import { ProgressBlockComponent } from "./progress-block";
 import { DataBlockComponent } from "./data-block";
+import { AuthorizationRequestBlockComponent } from "./authorization-request-block";
 import { ImageBlockComponent } from "./image-block";
 import { CodeBlockComponent } from "./code-block";
 import { ReasoningTraceBlockComponent } from "./reasoning-trace-block";
@@ -62,6 +63,8 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <ProgressBlockComponent block={block} />;
     case "data":
       return <DataBlockComponent block={block} />;
+    case "authorization-request":
+      return <AuthorizationRequestBlockComponent block={block} onAction={onAction} />;
     case "image":
       return <ImageBlockComponent block={block} />;
     case "code":

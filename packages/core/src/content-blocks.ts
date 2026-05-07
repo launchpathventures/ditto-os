@@ -174,6 +174,63 @@ export interface DataBlock {
   annotations?: Record<string, FieldAnnotation>;
 }
 
+// ============================================================
+// AuthorizationRequestBlock — Greeter Beat 2 side-effect gate
+// ============================================================
+
+export type AuthorizationRequestState =
+  | "pending"
+  | "accepted"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "rejected"
+  | "edit-requested"
+  | "partial"
+  | "expired";
+
+export type AuthorizationActionClass =
+  | "email-send"
+  | "sms-send"
+  | "calendar-invite"
+  | "list-share"
+  | "multi-recipient-send";
+
+export interface AuthorizationResult {
+  status: "sent" | "failed" | "partial";
+  messageId?: string;
+  sentAt?: string;
+  recipients?: string[];
+  reasonForVisitor?: string;
+  reasonForLog?: string;
+  partial?: Array<{
+    id: string;
+    recipient: string;
+    status: "sent" | "failed";
+    reasonForVisitor?: string;
+  }>;
+}
+
+/** AuthorizationRequestBlock — one explicit user decision before a side effect. */
+export interface AuthorizationRequestBlock {
+  type: "authorization-request";
+  state: AuthorizationRequestState;
+  header: string;
+  preview: ContentBlock[] | null;
+  recipientLabel: string | null;
+  actionClass: AuthorizationActionClass;
+  executionResult: AuthorizationResult | null;
+  expiresAt: string | null;
+  /** Optional server/client correlation id for affordance events. */
+  authorizationId?: string;
+  /**
+   * Optional one-shot tool reference for server-side wiring. Product renderers
+   * should strip these fields before sending the block to an untrusted client.
+   */
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
+}
+
 /** ImageBlock — Visual content */
 export interface ImageBlock {
   type: "image";
@@ -645,6 +702,7 @@ export type ContentBlock =
   | KnowledgeCitationBlock
   | ProgressBlock
   | DataBlock
+  | AuthorizationRequestBlock
   | ImageBlock
   | CodeBlock
   | ReasoningTraceBlock
@@ -769,6 +827,24 @@ export function renderBlockToText(block: ContentBlock): string {
       ]
         .filter(Boolean)
         .join("\n");
+    }
+
+    case "authorization-request": {
+      const lines = [
+        block.header,
+        block.recipientLabel ? `Recipient: ${block.recipientLabel}` : "",
+        `State: ${block.state}`,
+        block.executionResult?.status === "sent"
+          ? `Sent: ${(block.executionResult.recipients ?? []).join(", ")}`
+          : "",
+        block.executionResult?.status === "failed"
+          ? `Could not send: ${block.executionResult.reasonForVisitor ?? "Try again."}`
+          : "",
+        block.preview
+          ? block.preview.map((child) => renderBlockToText(child)).join("\n")
+          : "",
+      ];
+      return lines.filter(Boolean).join("\n");
     }
 
     case "image":

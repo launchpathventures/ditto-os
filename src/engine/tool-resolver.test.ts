@@ -104,6 +104,21 @@ tools:
 }
 
 describe("tool-resolver", () => {
+  describe("Greeter Beat 2 built-in tools", () => {
+    it("resolves gmail-authorized-send and exposes a Gmail send schema", () => {
+      const result = resolveTools(["gmail-authorized-send"]);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe("gmail_authorized_send");
+      expect(result.tools[0].input_schema.required).toEqual(["to", "subject", "body"]);
+    });
+
+    it("rejects prompt-referenced Gmail tool names that are not resolved", async () => {
+      const result = resolveTools(["gmail-authorized-send"]);
+      const output = await result.executeIntegrationTool("gmail_authorized_send_typo", {});
+      expect(output).toContain("authorisation rejected");
+    });
+  });
+
   // ============================================================
   // CRM Built-in Tools (Brief 097)
   // ============================================================

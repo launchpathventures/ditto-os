@@ -83,6 +83,49 @@ interface BuiltInTool {
 }
 
 const builtInTools: Record<string, BuiltInTool> = {
+  // ---- Greeter Beat 2 tools (Brief 248) ----
+  "gmail-authorized-send": {
+    definition: {
+      name: "gmail_authorized_send",
+      description:
+        "Prepare a Gmail send that must be wrapped by the authorization gate before it is sent. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          to: {
+            type: "array",
+            items: { type: "string" },
+            description: "Recipient email address or addresses",
+          },
+          subject: {
+            type: "string",
+            description: "Email subject line",
+          },
+          body: {
+            type: "string",
+            description: "Email body text",
+          },
+          draftId: {
+            type: "string",
+            description: "Optional draft correlation id",
+          },
+        },
+        required: ["to", "subject", "body"],
+      },
+    },
+    execute: async (input: Record<string, unknown>, executionStepRunId?: string): Promise<string> => {
+      const { gmailAuthorizedSend } = await import("./tools/gmail-authorized-send");
+      const result = await gmailAuthorizedSend({
+        stepRunId: executionStepRunId,
+        to: input.to as string | string[],
+        subject: input.subject as string,
+        body: input.body as string,
+        draftId: input.draftId as string | undefined,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
   // ---- CRM tools (Brief 097) ----
   "crm.send_email": {
     staged: true,

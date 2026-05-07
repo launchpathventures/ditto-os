@@ -13,13 +13,25 @@
  */
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { AlertTriangle, Check, Loader2, PauseCircle, Pencil, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getToolDisplayLabel } from "./tool-display-names";
 
 // --- Context ---
 
+export type ConfirmationState =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "edit-requested"
+  | "partial"
+  | "expired";
+
 interface ConfirmationContextValue {
-  state: "pending" | "accepted" | "rejected";
+  state: ConfirmationState;
   title: string;
 }
 
@@ -34,7 +46,7 @@ function useConfirmationContext() {
 // --- Composable Subcomponents ---
 
 interface ConfirmationRootProps {
-  state: "pending" | "accepted" | "rejected";
+  state: ConfirmationState;
   title: string;
   children: ReactNode;
   className?: string;
@@ -44,7 +56,13 @@ function ConfirmationRoot({ state, title, children, className }: ConfirmationRoo
   const borderColor = {
     pending: "border-[var(--color-caution)]",
     accepted: "border-[var(--color-positive)]",
+    executing: "border-[var(--color-vivid)]",
+    succeeded: "border-[var(--color-positive)]",
+    failed: "border-[var(--color-negative)]",
     rejected: "border-border",
+    "edit-requested": "border-[var(--color-caution)]",
+    partial: "border-[var(--color-caution)]",
+    expired: "border-border",
   }[state];
 
   return (
@@ -79,7 +97,7 @@ function ConfirmationRequest({
   className?: string;
 }) {
   const { state } = useConfirmationContext();
-  if (state !== "pending") return null;
+  if (state !== "pending" && state !== "edit-requested" && state !== "expired") return null;
   return (
     <div className={cn("text-sm text-text-secondary mt-1", className)}>
       {children}
@@ -98,9 +116,7 @@ function ConfirmationAccepted({
   if (state !== "accepted") return null;
   return (
     <div className={cn("flex items-center gap-1.5 text-sm text-positive mt-1", className)}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 6 9 17l-5-5" />
-      </svg>
+      <Check className="h-3.5 w-3.5" aria-hidden="true" />
       {children ?? "Approved"}
     </div>
   );
@@ -117,10 +133,75 @@ function ConfirmationRejected({
   if (state !== "rejected") return null;
   return (
     <div className={cn("flex items-center gap-1.5 text-sm text-text-muted mt-1", className)}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m18 6-12 12" /><path d="m6 6 12 12" />
-      </svg>
+      <X className="h-3.5 w-3.5" aria-hidden="true" />
       {children ?? "Rejected"}
+    </div>
+  );
+}
+
+function ConfirmationExecuting({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const { state } = useConfirmationContext();
+  if (state !== "executing") return null;
+  return (
+    <div className={cn("flex items-center gap-1.5 text-sm text-text-secondary mt-1", className)}>
+      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      {children ?? "Working..."}
+    </div>
+  );
+}
+
+function ConfirmationSucceeded({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const { state } = useConfirmationContext();
+  if (state !== "succeeded") return null;
+  return (
+    <div className={cn("flex items-center gap-1.5 text-sm text-positive mt-1", className)}>
+      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+      {children ?? "Done"}
+    </div>
+  );
+}
+
+function ConfirmationFailed({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const { state } = useConfirmationContext();
+  if (state !== "failed") return null;
+  return (
+    <div className={cn("flex items-start gap-1.5 text-sm text-negative mt-1", className)}>
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+      <div>{children ?? "Something went wrong."}</div>
+    </div>
+  );
+}
+
+function ConfirmationPartial({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const { state } = useConfirmationContext();
+  if (state !== "partial") return null;
+  return (
+    <div className={cn("text-sm text-text-secondary mt-1", className)}>
+      {children}
     </div>
   );
 }
@@ -128,36 +209,70 @@ function ConfirmationRejected({
 function ConfirmationActions({
   onAccept,
   onReject,
+  onEdit,
+  variant = "default",
+  labels,
   className,
 }: {
   onAccept: () => void;
   onReject: () => void;
+  onEdit?: () => void;
+  variant?: "default" | "trio";
+  labels?: {
+    accept?: string;
+    edit?: string;
+    reject?: string;
+  };
   className?: string;
 }) {
   const { state } = useConfirmationContext();
-  if (state !== "pending") return null;
+  if (state === "edit-requested") return null;
+  const disabled = state === "expired";
+  if (state !== "pending" && !disabled) return null;
+  const isTrio = variant === "trio";
   return (
-    <div className={cn("flex items-center gap-2 mt-2", className)}>
+    <div className={cn("flex flex-col gap-2 mt-3 sm:flex-row sm:items-center", className)}>
       <button
         onClick={onAccept}
+        disabled={disabled}
         className={cn(
-          "px-3 py-1 text-xs font-medium rounded-[var(--radius-full)] transition-colors",
-          "bg-[var(--color-vivid)] text-white hover:opacity-90",
+          "inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] transition-colors",
+          "bg-[var(--color-vivid)] text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45",
         )}
       >
-        Go ahead
+        {isTrio ? <Send className="h-3.5 w-3.5" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+        {labels?.accept ?? "Go ahead"}
       </button>
+      {isTrio && (
+        <button
+          onClick={onEdit}
+          disabled={disabled}
+          className={cn(
+            "inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] transition-colors",
+            "border border-border text-text-secondary hover:text-text-primary hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-45",
+          )}
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          {labels?.edit ?? "Edit first"}
+        </button>
+      )}
       <button
         onClick={onReject}
+        disabled={disabled}
         className={cn(
-          "px-3 py-1 text-xs font-medium rounded-[var(--radius-full)] transition-colors",
-          "border border-border text-text-secondary hover:text-text-primary hover:border-border-strong",
+          "inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] transition-colors",
+          "border border-border text-text-secondary hover:text-text-primary hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-45",
         )}
       >
-        Hold on
+        {isTrio ? <PauseCircle className="h-3.5 w-3.5" aria-hidden="true" /> : <X className="h-3.5 w-3.5" aria-hidden="true" />}
+        {labels?.reject ?? "Hold on"}
       </button>
     </div>
   );
+}
+
+function ConfirmationActionsTrio(props: Omit<Parameters<typeof ConfirmationActions>[0], "variant">) {
+  return <ConfirmationActions {...props} variant="trio" />;
 }
 
 // --- Backward-Compatible Default Export ---
@@ -223,5 +338,10 @@ export {
   ConfirmationRequest,
   ConfirmationAccepted,
   ConfirmationRejected,
+  ConfirmationExecuting,
+  ConfirmationSucceeded,
+  ConfirmationFailed,
+  ConfirmationPartial,
   ConfirmationActions,
+  ConfirmationActionsTrio,
 };

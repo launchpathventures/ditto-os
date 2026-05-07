@@ -46,6 +46,7 @@ import {
   broadcastDirectClassifierHandler,
   outboundQualityGateHandler,
   modelPurposeResolverHandler,
+  authorizationGateHandler,
 } from "@ditto/core";
 import { hasInteractionSince, hasAnyInteractionSince } from "./people";
 import { deliverOutput } from "./process-io";
@@ -86,6 +87,7 @@ const sharedPipeline = (() => {
   pipeline.register(identityRouterHandler);           // 2. core — Brief 116 (sets sendingIdentity)
   pipeline.register(voiceCalibrationHandler);         // 3. core — Brief 116 (needs sendingIdentity)
   pipeline.register(modelPurposeResolverHandler);     // 4. core — Brief 128 (reads stepDef signals → ModelPurpose)
+  pipeline.register(authorizationGateHandler);        // 4b. core — Brief 248 (explicit-ok side-effect gate)
   // Execution
   pipeline.register(stepExecutionHandler);            // 5. core
   // Post-execution
