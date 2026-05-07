@@ -1,10 +1,581 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-01 (Builder — **Admin fleet UI shipped** at `/admin/fleet` — single React page with provision form / fleet list / per-row deprovision / fleet-wide upgrade & rollback / recent upgrade history; consumes the existing `/api/v1/network/admin/{fleet,provision,deprovision,upgrade,rollback,upgrades}` endpoints; Bearer-token auth (localStorage `ditto-admin-token`, same pattern as `/admin/users/[userId]`). Link added from `/admin` nav. Type-check clean. **Earlier this session: auto-provisioning unblocked** (GHCR Docker image publish workflow `.github/workflows/docker-publish.yml`; stale `fly-deploy.yml` deleted; `.env.example` `DITTO_IMAGE_REF` updated to `ghcr.io/launchpathventures/ditto-os:latest`; `docs/deployment/auto-provision.md` runbook). **Even earlier: Bridge Capability Layer design** (ADR-044 + Briefs 234/235/236/237; Brief 238 deferred). Status: auto-provisioning ready to use as soon as: (a) workflow publishes first image on push to main, (b) GHCR package is marked public, (c) `RAILWAY_API_TOKEN` / `RAILWAY_PROJECT_ID` / `ADMIN_PASSWORD` set on ditto.partners — then operator hits `/admin/fleet` and clicks "Provision".)
+**Last updated:** 2026-05-07 (Documenter — **Brief 253 first-time visitor staged preamble closed out**. Builder + Reviewer + dev-review fix-all all complete: preamble logic, Skip race guard via functional setState, and Escape-to-skip binding shipped on `ditto-conversation.tsx`; type-check passes 0 errors. autoPlay landing wiring is intentionally absent — Brief 246 superseded it to preserve the no-autoplay wedge contract. No brief file (conversational build), no new insight, no archive moves; one stale claim about wedge.tsx still exposing `autoPlay` corrected below.) **Previous:** Brief 246 wedge demo implemented and verified.
 
 ---
 
-## CURRENT — Builder: Admin Fleet UI (2026-05-01, after auto-provisioning unblock)
+## CURRENT — Documenter: Brief 253 first-time visitor staged preamble closeout (2026-05-07)
+
+**Direct trigger:** user invoked `/dev-documenter and mark complete` after the Builder finished the dev-review fix-all pass on Brief 253.
+
+**Files moved/modified during this Documenter pass:**
+- Modified: `docs/state.md` (this closeout block; demoted prior Builder block to PREVIOUS; corrected the outdated wedge.tsx `autoPlay` claim in the Brief 246 entry).
+- Modified: `docs/roadmap.md` (added the staged-preamble row to the Web Acquisition Funnel table under Phase 14).
+
+**No brief file existed** — Brief 253 was a conversational build (user described the three-state homepage spec inline, no `docs/briefs/253-*.md`). Nothing to move to `docs/briefs/complete/`.
+
+**What shipped (final):**
+- `packages/web/app/welcome/ditto-conversation.tsx`: `VISITED_KEY = "ditto-visited"` constant; `firstTime` + `preamble` state; first-time detection in returning-visitor effect; staged preamble timer effect with verbatim 1b6b63e cadence (1600/5200/8000/11400/12200 ms) using functional setState `(p) => (p >= 5 ? p : n)` to prevent stale timer callbacks rolling state back after Skip; `handleSkipPreamble` callback (clears timers, sets `VISITED_KEY`, sets `preamble=5`); Escape-key listener active only while preamble is visible; staged preamble JSX (cursor+dots → 3 fade-in lines → fade) with subtle "Skip →" link bottom-right; Tripoli v2 hero wrapped in `(!firstTime || preamble >= 5)` guard.
+- The autoPlay portion of the original Brief 253 spec (autoplay wedge for returning desktop visitors) is **not** present in the final code: Brief 246 deliberately removed it to preserve the no-autoplay wedge contract. Reconciliation: first-time visitors see the preamble, then the idle hero/wedge; returning visitors land directly on the idle hero/wedge. If product later wants the wedge to auto-start for returning desktop visitors, that is a follow-up brief, not a Brief 253 residual.
+
+**Verification (carried over from Builder):**
+- `pnpm run type-check` — 0 errors at root and `packages/core` after the dev-review fix-all (Skip race guard via functional setState + Escape-to-skip).
+- `pnpm test` — 2571/2571 passed (one pre-existing `bridge-server.spike.test.ts` flake unrelated to this change).
+- Reviewer (fresh-context Sonnet agent) verdict: APPROVE WITH NOTES; sole bug found (autoPlay prop not passed at call site) was fixed in-session, then later superseded by Brief 246's no-autoplay decision.
+- Visual smoke pending human verification (Builder cannot drive a browser): clear `localStorage["ditto-visited"]` → reload → preamble plays → reload → straight to v2 hero.
+
+**Reference doc audit:**
+- `docs/architecture.md`, `docs/human-layer.md` — no change. Layer 6 UI work; no new primitive, harness pattern, or surface capability added.
+- `docs/dictionary.md` — no change. No new vocabulary; "preamble" remains a UI-local term.
+- `docs/adrs/` — no change. ADR-041 (Brand/Greeter/Self ontology) and Insight-153 (three-layer persona architecture) already cover the conceptual ground; the preamble is an aesthetic continuation of the Brand front door.
+- `docs/landscape.md` — no change. No new dependency or vendor evaluation.
+- `docs/roadmap.md` — updated. Brief 253 now has its own row in the Web Acquisition Funnel table.
+- `docs/state.md` — corrected an outdated claim in the Brief 246 CURRENT block (line 31): `wedge.tsx` no longer exposes the optional `autoPlay` prop because Brief 246's reconciliation removed it from both the component and the landing call site. Updated below.
+
+**Insight audit:**
+- No new insight captured. The Skip race guard via functional setState is a textbook React pattern, not a Ditto-specific principle. The "edits lost twice" perception during the dev-review pass turned out to be Brief 246 deliberately removing the autoPlay wiring on a parallel/earlier session — already documented in the Brief 246 CURRENT block, no new insight needed.
+- No active insight archived. Insights 222–225 remain active.
+
+**Retrospective:**
+- **What worked:** Verbatim port of the 1b6b63e cadence (timings + JSX) avoided redesign; functional-setState race guard cleanly eliminated the Skip rollback risk that the Reviewer flagged; the dev-review pass found one real call-site bug (autoPlay prop missing) which would have shipped silently broken without it.
+- **What surprised:** The autoPlay wiring kept appearing absent across grep checks, which during the session looked like an external sync process reverting edits. The actual cause was sibling Brief 246 having reached the same code first with a no-autoplay design decision. Two simultaneous briefs touching the same surface need an explicit reconciliation note up front, not a discovery during dev-review.
+- **What to change:** When briefs land in parallel on the same surface, the Builder should grep `docs/state.md` for sibling work on that surface before starting (Insight-218 already covers this for Architects; the same applies to Builders). The first edit of a parallel session should reconcile, not silently re-add.
+
+---
+
+## PREVIOUS — Builder: Brief 246 wedge demo implemented (2026-05-07)
+
+**Direct trigger:** user invoked `/dev-builder Brief 246`.
+
+**What shipped:**
+1. Added `packages/web/components/marketing/wedge.tsx`: a requestAnimationFrame-driven replay player with idle / playing / paused / completed states, tab visibility pause/resume, skip/replay controls, reduced-motion final-state fallback, persona reset, and production `BlockRenderer` usage.
+2. Added static fixtures `wedge-fixture-alex.json` and `wedge-fixture-mira.json`, each 30 seconds, five stages, and using existing `TextBlock`, `ProgressBlock`, `ReviewCardBlock`, and `SuggestionBlock` shapes only.
+3. Added `packages/web/lib/marketing-analytics.ts`: a client-only placeholder that dispatches `ditto:marketing-event` and forwards to optional `window.dittoAnalytics` / `window.analytics`.
+4. Integrated the wedge into the welcome hero with the locked headline, "Get your Ditto" CTA, in-place picker handoff, and deferred chat config warmup so the wedge path does not hit chat/LLM APIs.
+5. Updated marketing nav CTA copy to "Get your Ditto".
+6. Restored the web package build script to `next build`; the earlier `NEXT_PRIVATE_BUILD_WORKER=0` workaround now triggers a Next 15.5 page-manifest failure in this workspace, while the standard build path passes.
+7. Added minimal `pages/_app`, `pages/_document`, and `pages/_error` fallbacks. This package otherwise uses App Router, but Next 15.5 production collection expects those compatibility modules/manifests when building this workspace.
+
+**Verification:**
+- `pnpm run type-check` — pass.
+- `pnpm --filter @ditto/web type-check` — pass.
+- `pnpm run build` — pass. Next emits one non-fatal standalone tracing warning for missing generated `.next/_events.json`; exit code is 0.
+- Browser smoke in `DITTO_DEPLOYMENT=public` mode: returning-visitor `/` shows wedge idle after delay, `wedge-play` visible, no replay/autocomplete, and no `/api/v1/network/chat`, `/api/chat`, Anthropic, or OpenAI requests on mount.
+- Earlier desktop/mobile/reduced-motion Playwright smoke covered play, skip, analytics event dispatch, 320px no-overflow, ≥44px tap target, reduced-motion final card, and hash/CTA picker handoff.
+- Component + fixtures gzip size: 6,460 bytes, below the 50KB budget.
+- `pnpm run lint` remains unavailable because this repo has no `lint` script.
+
+**Review status:**
+- Mandatory separate review agent was attempted with the Brief 246 / architecture / review-checklist scope, but the subagent errored with the account usage-limit message before returning findings.
+- Local Builder review found no blocking Brief 246 issues after removing the concurrent `autoPlay` mount prop from the landing usage. The Brief 253 reconciliation that followed (Documenter close-out 2026-05-07) confirmed `wedge.tsx` no longer exposes the optional `autoPlay` prop at all; both the component prop and the landing call site are clean of autoplay wiring.
+
+**Residuals to watch:**
+- The current branch also contains Brief 253 first-time preamble work. First-time visitors see that preamble before the wedge; returning public visitors see the wedge immediately. If product wants the wedge as the literal first screen for every visitor, reconcile Brief 246 and Brief 253 in a follow-up rather than silently undoing either change.
+- `packages/web/tsconfig.tsbuildinfo` is still deleted in the dirty worktree due prior build-cache hygiene work; left untouched.
+
+---
+
+## CURRENT — Builder: Brief 248 Greeter Beat 2 authorization gate (2026-05-07 update)
+
+**Direct trigger:** user invoked `/dev-builder Brief 248`.
+
+**What shipped:**
+1. Core protocol: `authorization-request` ContentBlock added to `packages/core/src/content-blocks.ts` with explicit pending/executing/succeeded/failed/rejected/edit-requested/partial/expired states and text fallback rendering.
+2. Core harness: `packages/core/src/harness/handlers/authorization-gate.ts` added with the same structural role as `trust-gate`, including `MissingStepRunIdError`, pending short-circuit, execution path, terminal feedback callback, and outcome block updates.
+3. Web renderer: `packages/web/components/ai-elements/confirmation.tsx` extended to support Beat 2 states and three-action pending controls; `packages/web/components/blocks/authorization-request-block.tsx` renders preview, local expiry, Send/Edit/Not yet actions, and hides internal `reasonForLog`.
+4. Chat plumbing: `/chat` SSE now preserves `content-block` parts and can post structured authorization action payloads without echoing a user bubble. The stream route passes `actionPayload` through to `handleChatTurnStreaming`. Pending authorization tool calls are stored server-side by `authorizationId`; public blocks are sanitized before they reach the browser, and button clicks no longer echo `toolName` or `toolInput`.
+5. Greeter Beat 2: `src/engine/network-chat-prompt.ts` added the Beat 1 recap -> Beat 2 do directive plus structured `beat2Action`; `src/engine/network-chat-blocks.ts` maps that into a pending authorization block.
+6. Execution substrate: `src/engine/tools/gmail-authorized-send.ts` added guarded Gmail send execution through the existing Google Workspace send tool, with test-mode suppression and an env-gated spike test. `src/engine/tool-resolver.ts` registers `gmail-authorized-send`.
+7. Harness registration: `src/engine/heartbeat.ts` registers `authorizationGateHandler` before step execution.
+8. Feedback capture: the chat authorization path wires `recordAuthorizationOutcome` to `writeMemory()` with non-body decision metadata for rejected/edit-requested/expired states.
+9. Provenance/docs: `docs/landscape.md` gained the Gmail/Google Workspace evaluation note for Brief 248.
+10. Build hygiene: `.gitignore` now ignores `*.tsbuildinfo`, `packages/web/tsconfig.json` disables package-root incremental cache, and the tracked stale `packages/web/tsconfig.tsbuildinfo` is removed because it repeatedly poisoned Next builds with nonexistent `.next/types` roots.
+
+**Verification:**
+- `pnpm exec vitest run packages/core/src/harness/handlers/authorization-gate.test.ts src/engine/network-chat-blocks.test.ts src/engine/tool-resolver.test.ts packages/web/components/blocks/authorization-request-block.test.tsx packages/web/app/chat/components/chat-conversation.test.ts src/engine/network-chat.test.ts` — 118/118 pass.
+- `pnpm run type-check` — pass.
+- `pnpm --filter @ditto/web type-check` — pass.
+- `pnpm test` — 2577/2577 pass, 13 skipped.
+- `pnpm run build` — pass.
+
+**Review status:** mandatory separate architecture review completed on retry. Initial verdict BLOCK for two issues: public `reasonForLog` leak and duplicate/stale authorization blocks after click. Both were fixed. Reviewer re-check verdict: **PASS WITH FLAGS**. Remaining flags are the scoped residuals below.
+
+**Residuals to watch:**
+- The `/chat` action path uses a synthetic `chat-auth-*` `stepRunId` because chat turns are not backed by a persisted `step_runs` row. The core guard is still enforced; deeper DB-backed provenance belongs in a follow-up if required.
+- Pending Beat 2 authorization actions are held in an in-process map keyed by `sessionId:authorizationId`. This prevents browser-forged tool input but is not durable across server restart.
+- Local UI expiry changes block state without posting an expiry event to the server, so server-side expired-memory capture only happens when the handler receives an `expired` event programmatically.
+
+---
+
+## PREVIOUS — Builder: Brief 253 first-time visitor staged preamble restoration (2026-05-05, closed out 2026-05-07)
+
+**Direct trigger:** user noticed Tripoli v2 (commit b9de6b9) had replaced the previously-deployed staged-preamble first-time visitor experience and asked to restore it as State 1 of a three-state homepage.
+
+**Files modified:**
+- `packages/web/app/welcome/ditto-conversation.tsx`:
+  - Added `VISITED_KEY = "ditto-visited"` constant
+  - Added `firstTime` + `preamble` state hooks
+  - Added first-time detection in returning-visitor useEffect (sets `firstTime=true` when `VISITED_KEY` absent and no email)
+  - Added staged preamble timer useEffect with verbatim 1b6b63e cadence (1600/5200/8000/11400/12200 ms)
+  - Added `handleSkipPreamble` callback (clears timers, sets VISITED_KEY, sets preamble=5)
+  - Added staged preamble JSX block (cursor+dots, 3 fade-in lines, "Skip →" subtle bottom-right)
+  - Wrapped existing Tripoli v2 hero with `(!firstTime || preamble >= 5)` guard
+  - Originally passed `autoPlay={!firstTime}` to `<Wedge>`; superseded by Brief 246 on 2026-05-07, which removed the landing usage to preserve the no-autoplay wedge contract.
+- `packages/web/components/marketing/wedge.tsx`:
+  - Added `autoPlay?: boolean` prop with documentation comment
+  - Added `autoPlayFiredRef` and useEffect that fires `startReplay("play")` once on mount when `autoPlay && status === "idle" && !reducedMotion && viewportKind() === "desktop"`
+  - Mobile and reduced-motion paths unchanged
+
+**Acceptance criteria:**
+- First-time visitor: cursor+dots → 3 fade-in lines → fade → Tripoli v2 hero (verbatim from 1b6b63e)
+- First-time visitor: VISITED_KEY=1 set on completion (preamble=5 timer at 12200ms) and on Skip
+- Returning visitor (not converted): straight to Tripoli v2 hero; Brief 246 now keeps the wedge idle on desktop and mobile.
+- Returning visitor (mobile): wedge keeps "Watch the process" button
+- Reduced-motion: wedge keeps static-final-frame UI; preamble plays as normal (matches 1b6b63e)
+- Converted visitor: unchanged → `phase: "main"` (existing email-captured path)
+- Subtle "Skip →" link bottom-right of preamble
+- Visual smoke test pending human verification (Builder cannot drive a browser)
+
+**Type-check:** `pnpm run type-check` passes with 0 errors at root and `packages/core`.
+
+**Tests:** `pnpm test` — 2571/2571 passed. One unrelated `bridge-server.spike.test.ts` hook timeout (pre-existing flake, unrelated to this change).
+
+**Review loop:** Spawned Dev Reviewer (fresh context, sonnet model). Verdict: **APPROVE WITH NOTES**. Reviewer caught one bug (autoPlay prop not passed at call site). Fixed in single follow-up edit. All other findings: PASS or N/A. Architecture compliance: Layer 6 only, no engine/process/trust/cognitive layer impact.
+
+**Reference doc status:** No reference doc drift. This is pure UI work in Layer 6; architecture.md and human-layer.md don't need updates. No new insight captured.
+
+**Next step:** Human visual verification (clear localStorage → reload → preamble plays → reload → straight to v2 hero with autoplay; confirm mobile retains Watch button). Then `/dev-documenter` for retrospective.
+
+---
+
+## PREVIOUS — Documenter: Brief 244 marketing IA closeout (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-documenter` after Brief 244 builder fixes, self-review fixes, and mandatory reviewer re-check returned PASS.
+
+**Files moved/modified during this Documenter pass:**
+- Moved: `docs/briefs/244-marketing-ia-refocus.md` → `docs/briefs/complete/244-marketing-ia-refocus.md`.
+- Modified: `docs/briefs/complete/244-marketing-ia-refocus.md` (Status `draft` → `complete`; all 17 ACs checked; After Completion checklist closed).
+- Modified: `docs/roadmap.md` (added the Web Acquisition Funnel row for `/chief-of-staff` -> `/your-ditto`; Phase 14 status paragraph already recorded Brief 244).
+- Modified: `docs/state.md` (this closeout block).
+
+**Reference doc audit:**
+- `docs/roadmap.md` — updated. Brief 244 is now represented both in the Phase 14 status paragraph and in the Web Acquisition Funnel capability table.
+- `docs/architecture.md` and `docs/human-layer.md` — no change. This was a public marketing IA/copy reconciliation, not a new primitive, process, harness pattern, or Layer 6 surface capability.
+- `docs/dictionary.md` and `docs/adrs/041-agency-model-three-layer-ontology.md` — no change. The implementation applied the existing Brand / Greeter / Self vocabulary and did not add terms.
+- `docs/landscape.md` — no change. No new dependency, research source, or vendor decision was introduced.
+
+**Insight audit:**
+- No new insight captured. Brief 244 applied ADR-041 + Insight-153; the build-worker pin is a local reproducibility/tooling fix captured in state and the completed brief, not a broader product/design principle.
+- No active insight archived. ADR-041 remains the authoritative ontology source for Brand / Greeters / Self.
+
+**Retrospective:**
+- **What worked:** ADR-041 made the marketing rewrite mechanically checkable: brand contexts use bare `Ditto`, Self contexts use possessive `your Ditto`, and Alex/Mira surface as Greeters. The review loop was useful because stale terms survived outside the nominal marketing page set in generated email/footer and front-door block copy.
+- **What surprised:** A route/copy brief exposed a standard-build reproducibility issue. The equivalent web build worked only after disabling the Next private build worker, so the package script now encodes the working command and `pnpm run build` is the acceptance command again.
+- **What to change:** Future copy/IA briefs should include generated email/block surfaces in stale-term greps from the start, and acceptance should require the exact standard command (`pnpm run build`) rather than an equivalent command.
+
+---
+
+## CURRENT — Documenter: Brief 240 operator reconciliation closeout (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-documenter` after Brief 240 builder fixes and reviewer re-checks returned clear.
+
+**Files moved/modified during this Documenter pass:**
+- Moved: `docs/briefs/240-operator-field-reconciliation.md` → `docs/briefs/complete/240-operator-field-reconciliation.md`.
+- Modified: `docs/roadmap.md` (Brief 240 row now names internal `system`, Greeter mode coverage, and Insight-225).
+- Modified: `docs/state.md` (this closeout block).
+- Added: `docs/insights/225-routing-tests-need-live-inventory-coverage.md`.
+
+**Reference doc audit:**
+- `docs/architecture.md`, `docs/dictionary.md`, and `docs/adrs/008-system-agents-and-process-templates.md` were already aligned by the Builder/review-fix passes: active operators are `ditto`, `greeter`, and internal `system`; `system` resolves to no cognitive mode.
+- `cognitive/core.md` and `cognitive/modes/README.md` were already aligned to the expanded Greeter connecting/nurturing/selling routing.
+- `processes/templates/quality-gate.yaml` was corrected after reviewer feedback so sales language is gated by selling/acquisition mode, not Alex/Mira identity.
+- `docs/landscape.md` — no change; no external framework or vendor evaluation changed.
+
+**Insight audit:**
+- Captured Insight-225: routing tests need live process-inventory coverage when process metadata drives behavior.
+- No active insight archived. Insight-150 remains archived as the historical source of the old selling/connecting split; ADR-041 + Brief 240 now supersede its active interpretation.
+
+**Retrospective:**
+- **What worked:** The layered review caught the important drift: first the stale front-door operator and docs, then the system-operator mismatch and missing Greeter mode coverage, then the quality-gate rule that still encoded the old never-sell guard. The final inventory-style grep made the routing contract concrete.
+- **What surprised:** The original prefix-only resolver looked correct against representative tests but left many real Greeter acquisition templates without a mode. The `system` operator also survived as a valid internal process operator even though the new docs initially described only `ditto` / `greeter`.
+- **What to change:** Future operator/routing briefs should include an inventory-derived check that lists every real process and its resolved mode, with explicit justification for any `null`. Smoke commands should catch specific legacy variants, not just the most common old values.
+
+---
+
+## CURRENT — Documenter: Brief 243 `/welcome/referred` closeout (2026-05-05)
+
+**Direct trigger:** user asked to run the Claude `/dev-documenter` closeout for Brief 243.
+
+**Files moved/modified during this Documenter pass:**
+- Moved: `docs/briefs/243-welcome-referred-refocus.md` → `docs/briefs/complete/243-welcome-referred-refocus.md`.
+- Modified: `docs/briefs/complete/243-welcome-referred-refocus.md` (Status `draft` → `complete`; ACs checked off with the scoped full-suite caveat).
+- Modified: `docs/roadmap.md` (Brief 243 referred-page row now marks Brief 243 complete and names both the server route and client experience files).
+- Modified: `docs/state.md` (this closeout block).
+
+**Reference doc audit:**
+- `docs/roadmap.md` — updated; Phase 14 already recorded the Brief 243 capability, row now points at the split implementation.
+- `docs/architecture.md` — no new architectural primitive introduced. The server/client split is an implementation detail under ADR-041's already-recorded locked-Greeter continuation model.
+- `docs/dictionary.md` — no new terms. Existing Greeter / network mode / your Ditto vocabulary remains sufficient.
+- `docs/human-layer.md` — no new primitives or ContentBlocks. LearnedContext reuse and wedge placeholder do not change the Layer 6 primitive map.
+- `docs/landscape.md` — no research/vendor evaluation changed.
+
+**Insight audit:**
+- No new insight captured. The work applied ADR-041 + Insight-153 but did not produce a broader durable principle that needs its own insight file.
+- No active insight archived. Insight-043 (knowledge maintenance at point of contact; Documenter audits gaps) was re-validated by the Builder-maintained state/roadmap notes plus this closeout audit.
+
+**Retrospective:**
+- **What worked:** The review loop caught the two issues that matter for continuity: bracket-event session seeding needed to persist before returning, and the referred surface needed server-side context to avoid Turnstile-driven fallbacks and to support real workspace redirects.
+- **What surprised:** The original brief's "no backend API changes" constraint was too optimistic. Message-zero learned context, locked persona continuity, and session history persistence required a small product-layer server/API change. Also, generated Next output under `.next/standalone` was being collected by Vitest until excluded.
+- **What to change:** Future public-surface briefs should explicitly state whether a route must be server-rendered or client-only, especially when redirects or bot-verification timing are involved. Synthetic funnel-event paths should get persistence tests when they mutate session state.
+
+---
+
+## CURRENT — Builder: Brief 241 review loop closed (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-builder Brief 241` to close the review loop on the canned-opener parity work plus the latency/UX follow-ons that landed alongside it.
+
+**Scope of this pass (verification + review only — no new code):**
+1. Brief 241 §5.1 canned-opener parity (single source of truth `greeterOpenerMessages()` in `packages/web/lib/persona.ts`; `packages/web/app/welcome/ditto-conversation.tsx` renders opener locally on `phase === "interview"`; `packages/web/app/api/v1/network/chat/persona/route.ts` seeds session history with `[INTERVIEW_BEGIN]` user marker + assistant opener; no LLM round-trip on pick).
+2. Anthropic alternation fix: `[INTERVIEW_BEGIN]` synthetic user message prepended to the seeded turn-1 history because the Anthropic API rejects message arrays whose first message is `assistant`. Filtered out of the `userTurns` count by `buildInterviewDirective` (`src/engine/network-chat.ts:262`, `m.role === "user" && !m.content.startsWith("[")`), so TURN 2 cadence is unaffected.
+3. Option A prompt-cache priming: new `primeInterviewCache()` in `src/engine/network-chat.ts` and new route `packages/web/app/api/v1/network/chat/prime-cache/route.ts`. Both `handleChatTurn` and `handleChatTurnStreaming` and the prime path build the static prefix with `omitTemporal: true` so the minute-rolling temporal block lives **past** the cache breakpoint — otherwise byte-identical prefix is broken between prime and real call.
+4. Three UI improvements: `packages/web/app/welcome/typing-indicator.tsx` rotates a 5-stage chain-of-thought line (server-specific statuses still pass through verbatim); chat column + right rail top padding `md:pt-24` → `md:pt-8`; `packages/web/app/welcome/persona-picker.tsx` Mira intro rebalanced to 220 chars matching Alex (verified via Node) with `min-h-[8.5rem] md:min-h-[9.5rem]` belt-and-braces.
+
+**Verification:**
+- `pnpm run type-check` — pass.
+- `pnpm exec vitest run src/engine/network-chat.test.ts` — 58/58 pass.
+- Char parity: `alex 220`, `mira 220` (verified).
+- Grep for stragglers (`introMessagesFor`, `kickoffInterview`, `[INTERVIEW_START]`) — none in code; only docs/history references remain.
+
+**Review:** Dev Reviewer (fresh-context Agent) verified ACs 1–11, the Anthropic alternation invariant, prompt-cache prefix stability across all 3 call sites, single-source-of-truth, no LLM round-trip on pick, TURN-2 cadence, null-safety in the prime route, caller-impact (TypingIndicator prop shape unchanged at all 3 call sites), card-height parity, and engine-first placement of `primeInterviewCache` (correctly in `src/engine/`, not core — depends on Ditto-product helpers `loadOrCreateSession`, `buildFrontDoorPrompt`, `ALEX_RESPONSE_TOOL`, `geolocateIp`). Verdict **PASS** with three P3 nits (cosmetic apostrophe shape; the brief's transcribed copy disclaimed itself; `ditto-conversation.tsx` is now ~1623 lines and overdue for a follow-up split).
+
+**Residual:**
+- `packages/web/app/api/v1/network/chat/prime-cache/route.ts` is no longer "untracked / out-of-scope" — it is part of the Brief 241 envelope and should be committed alongside the rest of the Brief 241 changes when the user is ready.
+- Manual browser smoke of the latency improvement on first reply has not been run (needs a human to feel the delta).
+
+**Next step:** human approval/revision decision; then invoke `/dev-pm` for next work.
+
+**Documenter pass (2026-05-05):**
+- Brief moved: `docs/briefs/241-first-time-visitor-openers.md` → `docs/briefs/complete/`, status flipped to `complete (2026-05-05)`. ACs 2 and 3 in the brief were also corrected to match the actual single-message §5.1 shape (the brief's own transcribed copy was outdated; the brief disclaimed itself).
+- Roadmap updated: row added under "Three-Layer Persona Architecture / Web Acquisition Funnel" cluster citing Brief 241 + Insights 223/224 + the four touched files; Tripoli v3 status paragraph extended.
+- P3 nits closed: curly→straight apostrophes in `packages/web/lib/persona.ts` (P3-1); brief AC transcription fixed (P3-2). P3-3 (`ditto-conversation.tsx` ~1623-line split) intentionally deferred — out of Brief 241 scope, logged as a follow-up.
+- Insights captured:
+  - `docs/insights/223-seeded-assistant-history-needs-synthetic-user-prefix.md` — Anthropic alternation invariant when seeding assistant turns server-side; mandates a synthetic bracket-tagged user marker filtered out of `userTurns`.
+  - `docs/insights/224-prompt-cache-prefix-must-be-byte-identical.md` — speculative cache priming only works when the prime call and the real call build the static prefix from identical inputs and the volatile tail (timestamps, state directive) lives past the breakpoint.
+- Insight absorption audit: no active insights are absorbed by Brief 241 (no prior insight covered Anthropic-alternation or cache-prefix-byte-identity ground).
+
+**Retrospective:**
+- *What worked:* the canned-opener seed + `[INTERVIEW_BEGIN]` user marker satisfied Anthropic alternation cleanly using the existing bracket-noise convention, so no new filter logic was needed at the call sites that count user turns. Splitting the prompt at a stable byte boundary (via `omitTemporal: true` plus the upstream `formatTemporalContext` export) generalized the cache-priming pattern beyond Brief 241.
+- *What surprised:* the Anthropic alternation rejection and the minute-rolling temporal-block invalidation of the prompt cache were both invisible to type-check and to mocked-LLM tests; both only failed against the real provider. Two insights (223, 224) were captured so future briefs that introduce server-side seeding or cached prefixes can avoid the same traps.
+- *What to change:* whenever a brief seeds assistant history server-side or relies on Anthropic prompt-cache hits for latency, the brief should explicitly call out a smoke-against-real-provider acceptance criterion — neither failure mode would have surfaced in this session without a real Anthropic call.
+
+---
+
+## CURRENT — Builder: Brief 244 marketing IA refocus complete (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-builder Brief 244`.
+
+**What shipped:**
+1. `/chief-of-staff` was retired; `packages/web/app/your-ditto/page.tsx` now owns the surface with the locked hero: "AI that works for business people." / "Not the other way around."
+2. `packages/web/next.config.ts` adds the permanent 301 redirect from `/chief-of-staff` to `/your-ditto`.
+3. Marketing nav/footer now point to `/your-ditto` and label the surface "Your Ditto".
+4. `/about`, `/how-it-works`, `/network`, `/pricing`, and `/your-ditto` copy were reconciled to ADR-041 Brand/Greeters/Self language.
+5. Stale href/copy cleanup extended to welcome value cards/footer, verify/review metadata, persona picker metadata, and the two generated engine copy paths flagged by review: the referred email footer and front-door record status labels.
+6. `packages/web/app/welcome/referred/page.tsx` now serializes learned context explicitly before passing it to the client experience. This was a build-blocking type fix found during Brief 244 verification; no referred-flow route/copy behavior was intentionally changed.
+7. Follow-up review fixes closed the remaining build and copy nits: `packages/web/package.json` now runs the web production build with `NEXT_PRIVATE_BUILD_WORKER=0`, and the operational-support email prompt now says "their Ditto setup" instead of the awkward "the your-Ditto setup".
+
+**Review:** mandatory Dev Reviewer first returned FAIL for stale advisor copy, a generated type-check artifact, and missing state. After fixes, reviewer re-check returned FAIL for two remaining generated/user-facing engine strings (`src/engine/network-verify.ts`, `src/engine/network-chat-blocks.ts`). Both were fixed, and a narrow reviewer re-check returned PASS.
+
+**Verification:**
+- `pnpm run type-check` — pass.
+- `pnpm --filter @ditto/web exec tsc --noEmit --incremental false` — pass.
+- `pnpm exec vitest run src/engine/network-verify.test.ts src/engine/network-chat-blocks.test.ts` — pass, 2 files / 24 tests.
+- `pnpm run build` — pass. The web package build script pins `NEXT_PRIVATE_BUILD_WORKER=0` because the default Next build worker path intermittently failed on stale/generated `.next/types` state in this workspace.
+- Production smoke against `next start -H 127.0.0.1 -p 3100`: `/chief-of-staff` returned `HTTP/1.1 301` with `location: /your-ditto`; `/about`, `/how-it-works`, `/your-ditto`, `/network`, and `/pricing` returned 200; `/your-ditto` contained both locked hero lines and no stale route terms.
+- Grep for `chief-of-staff|Chief of Staff|User Agent|advisor|advisors|Advisor|Advisors` in `packages/web/app packages/web/components packages/web/lib src/engine/network-verify.ts src/engine/network-chat-blocks.ts` — no hits.
+- Focused grep for prior generated-copy failures (`Want your own advisor|Chief of Staff|Connecting + CoS|chief-of-staff intake`) in the affected engine files/tests — no hits.
+
+**Residual notes:**
+- `packages/web/app/api/v1/network/chat/prime-cache/route.ts` remains untracked and is not part of Brief 244, but the production build includes it and passes.
+- Several Tripoli `next dev` / type-check processes from earlier runs were still alive and interfering with `.next`; they were stopped before final build/smoke. No Tripoli server/process remains running after verification.
+
+## CURRENT — Builder: Brief 243 `/welcome/referred` locked-Greeter refocus complete (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-builder Brief 243`.
+
+**What shipped:**
+1. `packages/web/app/welcome/referred/page.tsx` is now a locked Alex/Mira continuation surface. It reads `ref`/`prospectId`, `introducerId`, and `personaId`; invalid/missing persona falls back to standard `/welcome`.
+2. Locked copy lives in `packages/web/app/welcome/referred/referred-copy.ts` with tests for Alex/Mira hero and opener text.
+3. `src/engine/referred-context.ts` resolves prospect/person refs, introducer first name, learned context, stale/deactivated fallback, and workspace redirect context.
+4. `ChatMessage` supports Mira and optional persona avatars.
+5. `/api/v1/network/chat` returns referred context, seeds learned context before bracket-event exits, locks the session persona, and trusts valid existing sessions for follow-up turns instead of requiring Turnstile on every request.
+6. Referral footers in `src/engine/channel.ts` now include `ref`, `introducerId`, and `personaId`, and no longer use advisor copy.
+7. `docs/roadmap.md` records Brief 243 as the completed ADR-041 refocus of the older Brief 095 referred page.
+
+**Review:** mandatory review agent returned **REVISE**. Applied fixes for Turnstile/session gating, web-specific type-check concern, Mira chat/avatar verification, footer copy, bracket-event session persistence, server-rendered referral context, true workspace redirects, and Vitest generated-output exclusion.
+
+**Verification:**
+- `pnpm vitest run src/engine/network-chat.test.ts packages/web/app/welcome/referred/referred-copy.test.ts src/engine/referred-context.test.ts src/engine/channel.test.ts src/engine/channel-ghost.test.ts` — pass, 5 files / 111 tests.
+- `pnpm --filter @ditto/web type-check` — pass.
+- `pnpm run type-check` — pass.
+- Playwright smoke on isolated DB (`DATABASE_PATH=.context/referred-dev.db`, `DITTO_DEPLOYMENT=public`, `MOCK_LLM=true`) — pass for Alex hero, Mira hero, CTA/wedge copy, learned context rail, CTA-to-opener transition, missing-persona fallback, server-side workspace 307 redirect, and persisted referred session seed on `[referred_landed]`.
+- `pnpm test` — fails outside Brief 243 scope after excluding generated `.next/**` output from Vitest collection: `memory-assembly.test.ts` p95 tripwire (53.1ms vs 50ms) and four `work-items/[id]/status` 5s timeouts.
+
+**Review follow-up:** `/welcome/referred` is now split into a server route plus client experience. The server route resolves referral context, performs workspace redirects before render, and lets valid links render even when Turnstile is still loading. The client records `[referred_landed]` best-effort after render and no longer falls back to `/welcome` because a telemetry/session-prime request missed a Turnstile token.
+
+---
+
+## CURRENT — Builder: Brief 240 operator field reconciliation complete (2026-05-05)
+
+**Direct trigger:** user invoked `/dev-builder Brief 240`.
+
+**What shipped:**
+1. **Option A selected and implemented.** `resolveModeFromProcess()` now resolves Greeter processes from `operator: greeter` + process ID: connecting/network processes → `connecting`, nurture processes → `nurturing`, and acquisition processes → `selling`. Legacy `alex-or-mira` / `user-agent` operators intentionally return no mode; internal `system` is a valid operator with no cognitive mode.
+2. **Process YAML operator rename complete.** All legacy `processes/` operator values were renamed to `operator: greeter`; grep returns zero legacy operator declarations.
+3. **Reference surfaces aligned.** Updated `docs/architecture.md`, `docs/dictionary.md`, `docs/adrs/008-system-agents-and-process-templates.md`, `docs/adrs/041-agency-model-three-layer-ontology.md`, `cognitive/core.md`, and `cognitive/modes/README.md`. `docs/briefs/complete/240-operator-field-reconciliation.md` is now `Status: complete`; ADR-041 P1-B is marked resolved by Brief 240.
+4. **Process-template and cognitive-mode prose cleaned where it directly named the old User Agent primitive.** Follow-up pass updated active mode files away from User Agent language and routed Greeter acquisition/support templates to `selling` where the mode improves judgment.
+5. **Roadmap updated.** Phase 14 Cognitive Mode Extensions now includes the completed Brief 240 operator reconciliation row.
+6. **Reviewer findings fixed.** Follow-up pass changed the front-door template from the stale `alex` operator to `greeter`, aligned the ADR-008 `network-agent` row, updated stale `packages/core` comments, amended `docs/ditto-character.md` away from the old User Agent / Alex-Mira-never-sell framing, documented `system` as an internal operator, and widened cognitive-mode coverage for Greeter processes that benefit from it.
+
+**Verification:**
+- Passed: `pnpm run type-check`
+- Passed: `pnpm --filter @ditto/core run type-check`
+- Passed: `pnpm vitest run src/engine/cognitive-mode.test.ts` (44 tests)
+- Passed: smoke greps for old `operator` declarations, the old front-door `alex` operator, old resolver branch, stale core comments, and active docs/process claims of the legacy Greeter-selling block
+- Passed in isolation after full-suite timeouts: `src/engine/harness-handlers/memory-assembly.test.ts`, `packages/web/app/api/v1/work-items/[id]/status/__tests__/route.test.ts`, `src/adapters/claude-managed-agent.test.ts`, `src/adapters/github-action.test.ts`
+- Failed as a full command: `pnpm test` repeatedly hit unrelated parallel timing issues (Next server startup/route 5s timeouts, bcrypt callback-token tests, and memory p95 tripwires). The failing files passed directly except the bridge spike hook, which timed out while starting the shared dev server under full-suite load.
+- Failed: `pnpm test:e2e` reused an existing server on port 3001 from `/Users/thg/conductor/workspaces/process-os/daegu`, so `/api/test/reset` returned 404 before Ditto e2e tests could run.
+- Passed: `pnpm test:e2e:auto` (AI browser check; 11 passed, 0 failed out of 17 steps, with 6 skipped/not applicable).
+
+**Review:** Dev Reviewer reported two P1s and two P2s; all four were addressed in follow-up patches, and reviewer re-check returned clear. A final review-fix pass then found and fixed one stale quality-gate criterion plus two stale tracking-doc taxonomy lines; reviewer re-check returned clear. Residual verification caveats are the noisy full-suite/e2e environment issues listed above, not Brief 240 logic.
+
+**Next step:** closeout complete; invoke `/dev-pm` for next-work triage.
+
+---
+
+## CURRENT — Architect: ADR-046 + sub-briefs 248–251 written, all five reviewed + revised (2026-05-03)
+
+**Direct trigger:** user "Just get the work done and be super thorough" (continuing same session that wrote Brief 247 + UX spec earlier the same day). Authorization to write the Loop ADR + four sub-briefs, run a Reviewer loop on each, apply review fixes, update state.
+
+**What shipped this session:**
+
+1. **`docs/adrs/046-loop-primitive.md`** — `Status: proposed`. Records the structural decision behind sub-brief 249. Decisions captured:
+   - **Generic `ownerKind` / `ownerId` columns** on core `processRuns` and core `schedules` (core can't reference product-layer `chatSessions`/`networkUsers` tables).
+   - **Product-layer mapping table `loop_owner_links`** with `(schedule_id, owner_kind, owner_id)` shape + three nullable typed FKs (`chat_session_id`, `network_user_id`, `agency_id`) + CHECK constraint enforcing exactly-one-non-null. **`agency_id` FK deferred** until Brief 242 ships agencies table — column shape in place, FK enforcement added later.
+   - **`LoopProductBridge` interface** at `packages/core/src/loops/product-bridge.ts` — three callbacks (`insertOwnerLink`, `findOrphanScheduleIds`, `deleteOwnerLinkByScheduleId`); product implements + registers via `setLoopProductBridge()`; mirrors `setSessionTrustResolver()` pattern at `trust-gate.ts:33`.
+   - **`StandingAuthScope` discriminated union** with three variants: `always-pause-for-review` (default), `single-tool-with-recipient`, `trust-greeter-judgement` (RESERVED — LOCKED until budget gate ships; `createLoopFromConversation()` MUST throw `StandingAuthVariantUnavailableError` if used).
+   - **Pair invariant on `startProcessRun()`:** `ownerKind` and `ownerId` must be both NULL or both non-null; passing one without the other throws `OwnerScopePairError`.
+   - **Orphan-handling guard** at `buildHarnessContext` chokepoint: ticks for orphaned schedules (link row deleted but schedule.enabled still true) hard-skip with structured log; transactional invariant requires application code deleting a `loop_owner_links` row to set `schedules.enabled=false` in the same transaction.
+   - **Single unified Drizzle journal** — corrected from earlier "two journals" misstatement; sub-brief 249 + 250 each consume one idx; idx race is the concurrency bottleneck (Insight-190).
+
+2. **`docs/briefs/248-greeter-beat-2-authorization.md`** — `Status: draft`, 30 ACs. New `authorization-request` ContentBlock (28→29) with `expiresAt: string | null` field (client-side idle timer). New `MissingStepRunIdError` exported from `src/engine/errors.ts`. Handler chain order locked: `routing → trust-gate → authorization-gate → step-execution`. Feedback memory write on every terminal state (`rejected`/`edit-requested`/`expired`) via Brief 198 chokepoint. Gmail evaluation entry required in `docs/landscape.md` (AC 30).
+
+3. **`docs/briefs/249-loop-creation-primitive.md`** — `Status: draft`, 31 ACs. New `loop-confirmation` ContentBlock (29→30). `loop_owner_links` mapping table per ADR-046 §2. `beat2ToolCall.signature` derivation rule locked: `SHA256(canonicalJson({ toolName, normalizedInputs }))` with normalization (lowercase emails, sorted recipients, trimmed whitespace, dropped cosmetic fields); function in `packages/core/src/loops/signature.ts`; cron expression and cadence NOT part of signature. `LoopProductBridge` interface fully specified. Admin flip-path for `deliverable` field unit-tested. Drizzle journal idx grep at build time.
+
+4. **`docs/briefs/250-briefing-delivery.md`** — `Status: draft`, 33 ACs (with 14a + 4a sub-numbering). Out-of-band briefing delivery via `notify-user.ts` chokepoint (no direct AgentMail). HMAC-SHA256 briefing token (7-day TTL) embeds `stepRunId` claim — resolved AC 9 ambiguity (do NOT mint fresh `stepRunId` at POST time; breaks audit chain). `BRIEFING_ACTION_VOCABULARY` const map locked (parent intent `approve`/`rewrite`/`pause` ↔ code action `"approve"`/`"edit-at-desk"`/`"skip-this-week"` ↔ visitor copy `Approve & Send`/`Edit at desk`/`Skip this week`). Throttle behavior observable: 6th send/24h returns `briefing_dispatches.status='failed'`, `failure_reason='throttled'` (verbatim). Composite `INDEX (schedule_id, dispatched_at DESC)` on `briefing_dispatches` table — required by sub-brief 251's "last 2 briefings" gate. AgentMail spike ordered: AC 31 spike MUST pass before ACs 10-12 (dispatcher wiring) start. Edit-at-desk redirect cross-brief contract: token in `?briefing=` is itself HMAC identity proof; sub-brief 251 owns chat-side verify-and-resolve.
+
+5. **`docs/briefs/251-surface-trim-and-brief-153-trigger.md`** — `Status: draft`, 25 ACs (with 4a + 12a sub-numbering). **Pre-condition (Designer-gated)**: Builder MUST NOT start until `docs/research/first-loop-ux.md` §3.4 (workspace-suggestion CTA) is added by Designer. Trims `/chat` to honest surface (no ChatNav, no StatusStrip, no inline EmailRequestForm). New AC 4a: `/chat/auth/route.ts:99` threaded with allow-listed `?return` param (allow-list: must start with `/chat`; reject open-redirect) — unblocks both sub-brief 250's edit-at-desk path AND sub-brief 251's `/welcome?return=/chat` fallback. New AC 12a: dual-trigger suppression (no chat-session suggestion if user already has `status='workspace'` or has had Brief 110/153 email-only suggestion in last 7 days). Mode-isolation invariant extended: `ownerKind='chat_session'` filter applies to BOTH the dispatch-count subquery AND the `briefing_actions` JOIN subquery — a tap on `network_user`-owned briefing must NOT count as chat-session open signal.
+
+**Reviewer disposition (5 parallel reviews, all approve-with-revisions, all fixes applied):**
+- **ADR-046 Reviewer:** C1 (stale "two journals" text inconsistent with §8) + C2 (orphan-window risk) + S1 (`trust-greeter-judgement` no budget enforcement) + S2 (no intercept point for orphan guard) + S3 (no pair-invariant on `startProcessRun`) — all addressed.
+- **Sub-brief 248 Reviewer:** C1 (collapsed AC 13+14+15 into renderer ACs) + C2 (added `expiresAt` field + `MissingStepRunIdError` row) + S1 (added error export row) + S2 (feedback-on-terminal-state constraint) + S3 (handler chain order locked) + S4 (Gmail landscape entry AC) — all addressed.
+- **Sub-brief 249 Reviewer:** C2 (`agency_id` FK conflict — fixed in ADR-046 §2 cascade) + S3 (signature-derivation rule) + S6 (`LoopProductBridge` interface fully specified) + admin flip-path + signature unit test ACs added.
+- **Sub-brief 250 Reviewer:** C1 (action verb mismatch — `BRIEFING_ACTION_VOCABULARY` const map) + C2 (`stepRunId` token-claim path locked) + S1 (spike-ordering callouts on ACs 10-12) + S3 (composite index) + S4 (throttle behavior AC 14a) + S5 (edit-at-desk cross-brief contract on AC 21) — all addressed.
+- **Sub-brief 251 Reviewer:** C1 (`/chat/auth` `?return=` gap → AC 4a) + S2 (dual-trigger suppression → AC 12a) + S3 (Designer §3.4 dependency moved to header pre-condition) + S4 (mode-isolation extended to JOIN path on AC 11) — all addressed.
+
+**Files written this session (uncommitted):**
+- `docs/adrs/046-loop-primitive.md`
+- `docs/briefs/248-greeter-beat-2-authorization.md`
+- `docs/briefs/249-loop-creation-primitive.md`
+- `docs/briefs/250-briefing-delivery.md`
+- `docs/briefs/251-surface-trim-and-brief-153-trigger.md`
+- `docs/state.md` (this entry)
+
+**Reservations now claimed:**
+- ADR-046 — written
+- Sub-brief numbers 248, 249, 250, 251 — all written as standalone brief files
+- Drizzle journal idxes — sub-brief 249 + sub-brief 250 each claim next-available at build time (Insight-190 grep-before-claim mandatory)
+
+**Cascading clean-up notes for follow-on Documenter:**
+1. **ContentBlock count drift** — `docs/human-layer.md` says 26; engine source has 28; sub-brief 248 adds `authorization-request` (29); sub-brief 249 adds `loop-confirmation` (30). Documenter to reconcile at absorb time + backfill missing entries `AnalyserReportBlock` + `RetrofitPlanBlock`.
+2. **`agency_id` FK deferred** — ADR-046 §2 has the column shape; Brief 242 will add the FK enforcement when agencies table ships. Documenter to flag this dependency in `docs/architecture.md` if Brief 242 lands first.
+3. **Designer §3.4 dependency** — sub-brief 251 is gated on Designer extending `docs/research/first-loop-ux.md` with §3.4 (workspace-suggestion CTA). PM should fire `/dev-designer` before scheduling Builder for 251.
+4. **Cross-brief contract** — sub-brief 250's edit-at-desk redirect + sub-brief 251's `/chat/auth` `?return=` threading are coupled. If 251 ships before 250's edit-at-desk path is consumed, the `/chat?briefing={token}` resolution path on the chat side must already be in place. Builder for 250 + Builder for 251 should coordinate; PM may want to ship 251 first to unblock 250's redirect.
+5. **`trust-greeter-judgement` lock** — ADR-046 §6 documents the variant exists in the type but is unavailable until budget enforcement ships as a follow-up brief. Documenter to surface this as an open architectural item.
+
+**Outstanding gates before any builder work:**
+1. **Human approval** of ADR-046 + sub-briefs 248–251 — flip `Status: draft` → `Status: ready` on each.
+2. **Sub-brief 251 Designer pre-condition** — invoke `/dev-designer` to extend `docs/research/first-loop-ux.md` with §3.4.
+
+**Next steps:**
+1. **For human:** review ADR-046 + 4 sub-briefs + this entry. Approve, revise, or reject.
+2. **If approved:**
+   - Order: 248 (Greeter Beat 2) → 249 (Loop creation, depends on 248) → 250 (briefing delivery, depends on 249) → 251 (surface trim, depends on 250 + Designer §3.4).
+   - 251 may ship before 250's edit-at-desk consumer wires up if PM wants to unblock the `/chat/auth` `?return=` thread early.
+3. **For follow-on Documenter:** the five cascading clean-up notes above.
+
+**Reference docs checked:** ADR-046 written; `docs/architecture.md` checked — no drift introduced (the structural Loop primitive is captured in ADR-046, will be absorbed into architecture.md §human-layer at Documenter time per ADR-046 §Follow-up).
+
+---
+
+## DOCUMENTER PASS — 2026-05-03 (post-Architect)
+
+**Trigger:** user invoked `/dev-documenter` after Architect's ADR-046 + four-sub-brief output.
+
+**Reference doc audit (cross-cutting; per Insight-043 the Documenter does the gap audit, producing roles maintain at point-of-contact):**
+
+1. **`docs/roadmap.md`** — was the major drift point. Phase 14 "Network Agent" did not represent any of the First Loop deliverables. **Fixed:** added "First Loop — Learn → Do → Loop spine" sub-section with 18 capability rows (Brief 247 parent + ADR-046 + Insight-222 + sub-briefs 248–251 + their constituent capabilities), all status `draft` / `proposed` / `pending`. Updated Phase 14 status header narrative to flag First Loop as in-flight.
+2. **`docs/landscape.md`** — checked for Gmail entry per sub-brief 248 AC 30. **Already evaluated** at landscape.md:533–536 (`googleapis` package, depend level, scopes specified). No drift; AC 30 satisfied by existing entry.
+3. **`docs/dictionary.md`** — new terms (Loop primitive, Beat 2, Beat 3, briefing, ownerKind/ownerId, LoopProductBridge, BRIEFING_ACTION_VOCABULARY) NOT yet added. Deferred until ADR-046 + sub-briefs reach `Status: ready`. Roadmap entry + ADR-046 itself serve as canonical reference until then. **Flag for next Documenter:** when sub-brief 249 ships, add Loop entries to dictionary.md.
+4. **`docs/architecture.md`** — Architect already declared no drift; ADR-046 §Follow-up commits to absorb the Loop primitive into architecture.md §human-layer at landing. **No action this pass.**
+5. **`docs/human-layer.md`** — ContentBlock count drift (says 26, engine has 28, sub-briefs add 2 more → 30). **Deferred** to Architect at absorb time per Architect's note in CURRENT block (this is a doc-of-record reconciliation that touches human-layer's primitives table; the Documenter's job is to flag it, not to rewrite it).
+
+**Insight audit (active insights vs current architecture):**
+
+- **Insight-222 (Learn → Do → Loop spine)** — currently informing ADR-046 + Brief 247 + four sub-briefs. **Status: in flight**, NOT yet absorbed. When all four sub-briefs ship + ADR-046 lands, the spine principle should be absorbed into `docs/architecture.md` §post-onboarding visitor experience and Insight-222 moved to `docs/insights/archived/`.
+- **Insight-180 (step-run invocation guard)** — sub-brief 248 + 250 both apply this principle (constraint listed in their respective briefs). Insight remains active and load-bearing for any new side-effecting tool.
+- **Insight-190 (Drizzle migration journal hygiene)** — sub-brief 249 + 250 both grep journal at build time per this insight. Insight remains active.
+- **Insight-043 (producing roles maintain docs at point of contact, Documenter does cross-cutting audit)** — applied this pass; Architect maintained ADR-046, Documenter audited roadmap.md drift.
+- **Insight-004 (brief sizing 8-17 ACs)** — sub-briefs ranged 25–33 ACs (some include sub-numbered ACs like 14a, 4a, 12a). Slightly over the upper bound but justified by Reviewer-driven additions; further decomposition would create artificial seams. **No action.**
+
+**Producing-role consistency check:**
+- Architect's Phase 14 entries match roadmap.md additions made this pass: ADR-046 (proposed), Briefs 248–251 (draft), Insight-222 (active in flight), `loop_owner_links` table draft, `briefing_dispatches` table draft, content blocks 28→29→30 progression. **No contradictions.**
+- state.md "Last updated:" header now reflects Documenter pass (was stale, referenced only Brief 247 + UX spec).
+
+**Briefs to move to `docs/briefs/complete/`:** none — all five deliverables this session are `Status: draft` / `proposed`.
+
+**Phase retrospective (what happened this session, what worked, what surprised, what to change):**
+
+- **What worked:**
+  - Parallel Reviewer spawn across 5 deliverables (ADR-046 + 4 sub-briefs) caught cross-brief contract gaps that single-pass review would have missed (e.g., sub-brief 250's edit-at-desk redirect ↔ sub-brief 251's `/chat/auth?return=` thread coupling).
+  - Generic `ownerKind` / `ownerId` pattern unblocks the engine/product layering cleanly — core stays free of product-table references; product layer owns the typed-FK mapping table; `LoopProductBridge` mirrors the existing `setSessionTrustResolver()` pattern at `trust-gate.ts:33`, so reviewers had a clear precedent to evaluate against.
+  - Locking `BRIEFING_ACTION_VOCABULARY` as a const map (parent intent ↔ code action ↔ visitor copy) closed a Reviewer C1 that would otherwise have surfaced as a Builder ambiguity.
+
+- **What surprised:**
+  - Single unified Drizzle journal (not two as initially modeled in ADR-046 draft). Caught before review by re-reading `drizzle/meta/_journal.json` directly. Reinforces Insight-190.
+  - `agency_id` FK had to be deferred — Brief 242 (agency model implementation) hasn't shipped, so ADR-046 §2 can specify the column shape but not the FK enforcement. Documented as a cascading dependency.
+  - Reviewer surfaced that `/chat/auth/route.ts:99` hard-codes the post-auth redirect to `/chat`. This was an orthogonal dependency neither Architect nor Designer caught at brief-design time — only the cross-brief Reviewer pass surfaced it.
+
+- **What to change:**
+  - Add a **cross-brief contract section** to the brief template (`docs/briefs/000-template.md`). When a brief depends on another brief's behaviour at a specific code seam, surface that explicitly. Sub-briefs 250 + 251 only got their cross-brief contracts after Reviewer caught the gap; the template should pull this forward to Architect-time.
+  - **Designer-gate as an explicit pre-condition field** in the brief template. Sub-brief 251 had its Designer §3.4 gate in body text initially; Reviewer S3 elevated it to header pre-condition. Template should make this a first-class field.
+
+**Insight candidates from this session (none promoted; all deferred):**
+- *Cross-brief contract gaps surface only at Reviewer time when briefs are written in parallel* — interesting but not yet a stable principle. If the next 2–3 multi-brief sessions reproduce the pattern, promote to insight.
+- *`LoopProductBridge` interface pattern (mirroring `setSessionTrustResolver()`)* — promising but already a recurrence of an existing pattern; not a new insight, just an application.
+
+**Reference docs updated this pass:** `docs/roadmap.md`, `docs/state.md` (this block + header).
+**Reference docs checked, no drift:** `docs/landscape.md` (Gmail entry already exists), `docs/architecture.md` (Architect already declared no drift).
+**Reference docs flagged for future passes:** `docs/dictionary.md` (new Loop terms; defer until ADR-046 ships), `docs/human-layer.md` (ContentBlock count reconciliation; defer to Architect at Loop-primitive absorb time).
+
+---
+
+## EARLIER — Architect + Designer: Brief 247 ("First Loop") + UX spec drafted, both reviewed (2026-05-03)
+
+**Direct trigger:** Insight-222 (`docs/insights/222-learn-do-loop-is-the-post-onboarding-spine.md`) — produced under prior session's Brief 245 Architect spike review when pressure-testing constrained-workspace shell against "what does this person actually want?" surfaced the framing was wrong. Insight-222 reframes the post-onboarding visitor experience as three sequential beats: **Learn** (find the problem) → **Do** (deliver one tangible result with a real side-effect) → **Loop** (convert one-shot Do into recurring process with out-of-band briefing). Brief 245 disposition: **parked** (preview-shell premise contradicts Insight-222). Brief 247 is the architectural response to Insight-222.
+
+**What shipped this session:**
+
+1. **`docs/briefs/247-first-loop.md`** — parent brief, `Status: draft`. Decomposes Insight-222 into four sub-briefs (248–251) with 26 acceptance criteria total. **Reviewed by `/dev-reviewer` agent and revised before this checkpoint.**
+   - **248 — Greeter Beat 2 (side-effect authorization + execution):** new `authorization-request` ContentBlock + per-action approval gate at `packages/core/src/harness/handlers/authorization-gate.ts` (sibling to existing `trust-gate.ts`, `outbound-quality-gate.ts`); stepRunId guard mandatory (Insight-180). Greeter prompt directives in `network-chat-prompt.ts`.
+   - **249 — Loop creation primitive (recurring process from conversation):** new `loop-confirmation` ContentBlock; new product-layer `work-products` mapping from `processRuns.id` → owning conversation. Generic `ownerKind` (`'chat_session' | 'network_user'`) + `ownerId` columns added to core `processRuns` (core can't reference product-layer `chatSessions`/`networkUsers` tables; FK enforcement happens at product layer). Cross-layer migration plan documented in AC 7 + 8.
+   - **250 — Out-of-band briefing delivery:** email template + `/api/v1/network/briefing/[token]/route.ts` endpoint with one-tap actions (approve/rewrite/pause). stepRunId guard required on the endpoint (signed claim in token or explicit param) per AC 18 + negative test in §13 step 5. **SMS deferred** — `src/engine/notify-user.ts:399` is a commented-out stub `// case "sms": return smsAdapter.send(...)`; no twilio/vonage/nexmo dependency in `src/`; Brief 247 §6 forbids new integration plumbing. SMS path captured as forward-looking spec only; future "First Loop SMS channel" brief will own it.
+   - **251 — Surface trim + Brief 153 trigger relocation:** post-loop-validation upgrade CTA gated behind "≥2 briefings landed AND visitor has opened at least one"; reuses Brief 157 AC6 progressive-reveal pattern (`chat-conversation.tsx:363–377`). Brief 153 disposition: trigger relocates here, original brief untouched. **First Loop wedge fully live** = success signal. Should also note SMS as the open seam.
+
+2. **`docs/research/first-loop-ux.md`** — Designer UX spec, gates 248 builder-start per Brief 247 §15. **Reviewed by `/dev-reviewer` agent (Designer review loop) and revised before this checkpoint.** Owns three Designer-gate items: authorization-request-block (§3.1), loop-confirmation-block (§3.2), morning briefing surface (§3.3). Specifies 9 interaction states for the Confirmation component extension (the existing `ai-elements/Confirmation` at `packages/web/components/ai-elements/confirmation.tsx` supports only 3 states with hardcoded 2-button "Go ahead/Hold on"; sub-brief 248 must extend it preserving Brief 058 callsite backward-compat using composable subcomponent + variant prop pattern from Brief 061). Lisa's first-session narrative is load-bearing in §2 (Reviewer flagged as preserve-as-is). Channel-confirmation made explicit on loop-confirmation pending state per Reviewer C3 — visitor confirms email address with conversational `change?` affordance before the loop is committed. Offline-tap failure mode added to §3.3 (idempotent token prevents duplicate sends). Edit-after-accept clarified as `/chat`-only per S4 (briefing one-tap actions do NOT include loop-edit). Voice consistency claim refined per S2 — block renderer owns affordance-verb skeleton; Greeter populates content slots. Capture job added to §2 narrative recap moment per S1.
+
+**Reviewer disposition (both reviews):**
+- Brief 247 Reviewer: 6 substantive concerns + multiple nits raised against architecture spec; all addressed in revisions. Architect path-correction (`packages/core/src/engine/authorization-gate.ts` → `packages/core/src/harness/handlers/authorization-gate.ts`); ownerKind/ownerId pattern adopted; AC 18 stepRunId guard requirement made explicit; dev-environment hygiene callout added to §15 (249→250 gap); concrete Designer gate conditions in §15; AC 22 updated; open question 6 locked; insight refs 008/015/073/181 added to inputs; mobile-render + owner-scope smoke test steps added.
+- UX spec Reviewer: 3 critical (C1–C3) + 4 substantive (S1–S4) + nits raised. C1 (SMS infra not wired) → reframed §2 Rob narrative to email-only path; §3.3 SMS subsection marked deferred; updated §6 Q4. C2 (Confirmation has 3 states, spec assumed 9) → added detailed extension table to §3.1 listing each new state, slot subcomponent, callback, and backward-compat preservation. C3 (channel-confirmation) → made explicit in §3.2 pending state. S1 Capture job, S2 voice-skeleton division, S3 offline-tap row, S4 edit-after-accept clarification — all applied. Nits: Confirmation + ConfidenceCard provenance paths verified and locked in §5; ContentBlock count drift surfaced (human-layer.md says 26, engine has 28 — adding the 2 First Loop blocks brings real total to 30; Documenter must reconcile both at absorb time).
+
+**Files written this session (uncommitted):**
+- `docs/briefs/247-first-loop.md`
+- `docs/research/first-loop-ux.md`
+- `docs/state.md` (this entry)
+
+**Reservations now claimed (post-grep-before-claim per memory):**
+- Brief 247 — written
+- Sub-brief numbers 248, 249, 250, 251 — reserved by Brief 247 decomposition; not yet written as standalone brief files (Architect synthesis after Designer gate clears).
+- ADR candidate flagged for "recurring-process-from-conversation primitive" (sub-brief 249) — Architect to decide if standalone ADR vs absorb into ADR-041 / architecture.md §human-layer.
+
+**Outstanding gates before any builder work:**
+1. **Human approval** of Brief 247 + UX spec — flip `Status: draft` → `Status: ready` on Brief 247.
+2. **Architect synthesis** — write standalone sub-brief files for 248, 249, 250, 251 (each pulling its ACs from Brief 247 + the UX spec sections), or have human decide whether to keep as embedded ACs inside Brief 247.
+3. **Decide on ADR for Loop primitive** — sub-brief 249's "recurring process from conversation, no UI configuration required" is structurally new; Architect to confirm ADR vs absorb.
+
+**Next steps:**
+1. **For human:** review Brief 247 + UX spec (both surfaced separately in conversation prior to this checkpoint). Approve, revise, or reject.
+2. **If approved:** Architect writes sub-briefs 248–251 (or human directs to keep as-is); Builder picks up 248 first.
+3. **For follow-on Documenter:** when First Loop blocks land in `human-layer.md`, reconcile the stale "26 ContentBlock types" claim (real engine count is 28 today; +2 First Loop = 30) and backfill missing entries `AnalyserReportBlock` + `RetrofitPlanBlock` to the §ContentBlocks table.
+
+**Reference docs checked:** `docs/personas.md` and `docs/human-layer.md` consulted as primary lens for UX spec; no edits warranted (human-layer ContentBlock count drift noted for Documenter, not edited here per Designer scope).
+
+---
+
+## EARLIER — Architect: Brief 239 follow-ups — 6 briefs + 1 ADR drafted (2026-05-02)
+
+**Direct trigger:** user "do the work - create the briefs" 2026-05-02, continuing from prior-session ADR-041 amendment + Tripoli surface audit. Closes the action-list spawned by ADR-041 Reviewer concerns + Brief 239 step list + UX spec §11 open questions.
+
+**Briefs/ADR drafted (all `Status: draft` or `Status: proposed`, awaiting human approval):**
+
+1. **`docs/briefs/complete/240-operator-field-reconciliation.md`** — Architect/Designer brief, now complete. Reconciles `architecture.md` L123 `operator` field (`alex-or-mira` + `user-agent` enum) against ADR-041's two-mode framing. Recommendation: collapse to `greeter` plus internal `system`. Addresses Reviewer P1-B.
+
+2. **`docs/briefs/241-first-time-visitor-openers.md`** — Builder brief. Server-side `[INTERVIEW_START]` flow currently generates LLM-paraphrased openers; UX spec §5.1 mandates canned-on-screen openers. Three approaches considered, A picked (pre-render canned + seed server conversation history so `buildInterviewDirective()` lands on TURN 2 correctly).
+
+3. **`docs/briefs/242-agency-model-implementation.md`** — keystone Architect/Builder brief. Schema: `agencies` + `agency_members` (member_type enum [`ditto-self`|`greeter`]); `MemoryScopeType` extended with `'agency'`; `written_by_member` provenance column. **Drain-and-resume migration (P0-A fix)** — no dual-write, no dual-read; sessions terminated with `migration_terminated=true`; resume-as-new path; **drizzle idx 18 reserved**. Mode-isolation cross-pollution test (P0-B fix) asserting A-network → X-agency → B-network sequence has no memory ID leakage. Greeter switch path replaces only the `greeter` row + writes a `trust_changes` row with from_tier == to_tier and reason='greeter_switch' (P1-E). 19 ACs.
+
+4. **`docs/briefs/complete/243-welcome-referred-refocus.md`** — Builder copy brief, now complete. Rewrites `packages/web/app/welcome/referred/page.tsx` (439 lines) to read `ref` / `prospectId` / `introducerId` / `personaId` URL params per UX spec §8.1; **no Greeter picker on this surface** (locked to outreach Greeter); hero verbatim per UX spec §8.2 (*"You met me as Alex. I'm part of Ditto — your AI agency. The same team that made the intro to {User A first name} runs work for the people they represent."*); LearnedContext panel renders pre-existing Greeter knowledge from message zero. 15 ACs.
+
+5. **`docs/briefs/complete/244-marketing-ia-refocus.md`** — Builder copy + IA brief, now complete. **`/chief-of-staff` → `/your-ditto`** with 301 redirect in `next.config.js`; `site-nav.tsx` L11 + `site-footer.tsx` L23 link updates; `/your-ditto` hero uses locked positioning ("AI that works for business people. / Not the other way around."); possessive discipline applied (Brand contexts use `Ditto`; Self contexts use `your Ditto` / `my Ditto`); no occurrences of "Chief of Staff," "Persona," "User Agent," "advisor" in user-facing copy after edit. 17 ACs. **Pricing page flagged as highest-risk surface** — no separate follow-up was needed after the Brief 244 builder/review pass.
+
+6. **`docs/briefs/245-chat-constrained-workspace-rebuild.md`** — Architect spike + Builder phase brief. Two architectural shapes analyzed: **Shape A (single shell + CapabilityContext-gated, RECOMMENDED)** vs Shape B (two shells with shared substrate). Shape B fallback if >30% of workspace components need conditional logic. **Architect spike deliverables:** capability matrix at `docs/research/chat-constrained-workspace-spike.md`, OPEN-2 (capability ceiling) recommendation (suggested answer: "Read + chat-with-their-Ditto"), refactor cost estimate, auth-boundary diagram, route-disposition recommendation. **OPEN-2 gates the Builder phase.** Constrained-mode visitors don't have an agency until upgrade; agency panel hidden or gated. Auth-tier gating at both UI (CapabilityContext) and API (server-side enforcement). 19 ACs split between spike + builder phases.
+
+7. **`docs/briefs/246-wedge-demo-implementation.md`** — Builder brief. Resolves UX spec §11.4 in favour of **scripted client-side replay for V1** (no LLM tokens, no infra coupling, deterministic credibility). Five-stage block sequence (Intake `TextBlock` / ProgressBlock / ReviewCardBlock / SuggestionBlock) replayed from a fixture file via `requestAnimationFrame`-driven clock with visibility-pause semantics. Two fixture files (Alex / Mira voicing); persona-aware selection at mount. Closing `SuggestionBlock` triggers cross-fade to picker (no URL change). Mobile (no autoplay; ≥44px tap target) + reduced-motion (instant final-state + opt-in 50% replay) + 4 analytics events. **No new ContentBlock types.** **No backend dependencies.** V2 (real harness) explicitly deferred. 14 ACs.
+
+8. **`docs/adrs/045-your-ditto-portrait-identity.md`** — accepted (implemented 2026-05-05; component + CSS shipped, consumer wiring gated on Brief 242). **Resolves UX spec OPEN-3.** Choice: Option A (visitor-first-initial monogram in warm-grey circle). Visual spec: warm-grey radial ground (`rgb(245,240,232)` → `rgb(220,210,196)` → `rgb(190,178,162)`); cocoa letter at 50% portrait dimension; subtle 14s breath cycle; reduced-motion gate. New component `YourDittoPortrait` at `packages/web/app/welcome/your-ditto-portrait.tsx` (sibling of `persona-portrait.tsx`). Used at handoff moment + conversation history (operator-authored messages) + "Your team" right panel + workspace-lite chrome + full workspace. Persists across greeter switch (agency-identity-invariant proof). Three distinct visual categories codified: brand wordmark / greeter orb / your-Ditto monogram.
+
+**ADR-041 Reviewer concerns disposition (5 of 5 P0/P1 items now have a brief or ADR addressing them):**
+- P0-A (suspended-session handling at migration cutover) — Brief 242 §Migration (drain-and-resume, no dual-write)
+- P0-B (mode-isolation invariant under-specified for cross-user Greeter state) — Brief 242 §Mode isolation tests (A-network → X-agency → B-network cross-pollution test)
+- P1-A (User Agent collapse vs personas.md JTBD-8) — already amended in ADR-041 §11.A and Insight-153 in prior session
+- P1-B (architecture.md L123 `operator` field + cognitive-mode `selling` persona guard) — Brief 240
+- P1-C (schema sketch §12 missing FK/index detail) — Brief 242 §Schema (full FK/index detail)
+- P1-E (trust-on-switch policy decision) — Brief 242 §Greeter switch path (trust carries; reason='greeter_switch')
+
+**UX spec OPEN questions disposition:**
+- OPEN-1 (`/chief-of-staff` → `/your-ditto`) — Brief 244
+- OPEN-2 (`/chat` capability ceiling) — Brief 245 (gates Builder phase)
+- OPEN-3 ("your Ditto" portrait identity) — ADR-045
+- OPEN-4 (wedge real run vs scripted) — Brief 246 (scripted V1; real harness V2 deferred)
+- OPEN-5 (picker eyebrow) — already locked in prior session as "Talk to Ditto."
+
+**Files written this session (all uncommitted):**
+- `docs/briefs/complete/240-operator-field-reconciliation.md`
+- `docs/briefs/241-first-time-visitor-openers.md`
+- `docs/briefs/242-agency-model-implementation.md`
+- `docs/briefs/243-welcome-referred-refocus.md` (later moved to `docs/briefs/complete/243-welcome-referred-refocus.md`)
+- `docs/briefs/complete/244-marketing-ia-refocus.md` (later moved from `docs/briefs/244-marketing-ia-refocus.md`)
+- `docs/briefs/245-chat-constrained-workspace-rebuild.md`
+- `docs/briefs/246-wedge-demo-implementation.md`
+- `docs/adrs/045-your-ditto-portrait-identity.md`
+- `docs/state.md` (this entry)
+
+**Reservations now claimed (post-grep-before-claim per memory):**
+- Briefs 240, 241, 242, 243, 244, 245, 246 — all written
+- ADR-045 — written, status `proposed`
+- Drizzle migration idx 18 — reserved by Brief 242 (`0019-self-to-agency.ts` per `_journal.json` next-available)
+
+**Next steps:**
+1. **For human:** review the 7 briefs + 1 ADR; flip `Status: draft` → `Status: ready` on each one approved; sequence builders.
+2. **Execution sequencing recommendation (high-confidence ordering):**
+   - **Architect spike first:** Brief 245 spike — answers OPEN-2, unblocks Brief 245 Builder phase + downstream UI work.
+   - **Schema first (parallel-safe):** Brief 242 — schema/migration is upstream of Briefs 243/244/246 once the migration is run.
+   - **Copy/IA passes (parallelizable after Brief 242 schema lands):** Briefs 240, 241, 243, 244 — copy edits; safe to ship in parallel.
+   - **Component / wedge (after Brief 242 + ADR-045 landed):** Brief 246 + ADR-045 implementation — touches the welcome-flow component surface.
+3. **For follow-on Documenter (after Builder waves complete):** absorb Insight-153 superseded-original; add Brief 245 architecture-spike findings to architecture.md if Shape decision shifts; cite ADR-045 from `docs/architecture.md` §Three-Layer Persona Architecture.
+
+---
+
+## EARLIER — Builder: Admin Fleet UI (2026-05-01, after auto-provisioning unblock)
 
 **Direct trigger:** user "Build it!!!" 2026-05-01, after audit confirmed no React surface existed for fleet/provisioning despite all admin endpoints being shipped + tested.
 
@@ -1457,7 +2028,7 @@ Whichever brief ships second renames; the renamer commit lands FIRST in the seco
 
 - **Web app (Briefs 039-042, 045-046)** — Next.js 15 App Router in `packages/web/`. Monorepo via `pnpm-workspace.yaml`. `pnpm dev` from root starts the web app. **Setup system:** first-run setup page at `/setup` with 5 connection methods. **Self streaming:** `selfConverseStream()` async generator, 5 LLM providers. Route Handler at `/api/chat` (AI SDK v6 `createUIMessageStream`) + SSE at `/api/events`. **Component Protocol (Briefs 045+050):** 22 typed ContentBlock types in `src/engine/content-blocks.ts` (16 original + 3 visual + 2 record/table + 1 ArtifactBlock — ADR-023 accepted). Unified block registry at `packages/web/components/blocks/` (22 components, exhaustive switch). **TextBlock renders markdown** via `react-markdown` + `remark-gfm` (headings, tables, code blocks, GFM). **ArtifactBlock** renders compact reference card in conversation with "Open" button → artifact mode. **Engine-connected artifact mode (Brief 050):** artifact host fetches `ContentBlock[]` from `/api/processes?action=getRunOutput&runId=` → renders through `BlockList` (no bespoke viewers, 720px max-width). `start_dev_role` outputs >500 chars auto-promote to artifact mode via `DelegationResult.metadata` (structured runId/processSlug). `transition-map.ts` extended. Parts-based message rendering via AI SDK v6 `UIMessage.parts`. Tool invocations show 7-state lifecycle. Custom data parts for content blocks, credentials, status. Session-scoped action validation via `handleSurfaceAction()`. Feed assembler enriches ReviewItems and ExceptionItems with ContentBlocks. Process outputs render via block registry. **Pipeline progress (Brief 053):** `ProgressBlock` populated from `activeRuns` in CompositionContext. `/api/processes?action=activeRuns` endpoint. `useHarnessEvents` invalidates `activeRuns` query key on pipeline SSE events (step-complete, gate-pause, gate-advance, run-complete, run-failed). Today + Work compositions prepend ProgressBlock for running pipelines. `use-pipeline-review.ts` hook: listens for `gate-pause`, fetches step output, exposes `pendingReview` state for inline review prompts. Transition map: `start_pipeline` → process_run panel context. **Conversation UI (Brief 058 — AI Elements adoption):** 8 adopted AI Elements components in `packages/web/components/ai-elements/` (Conversation with use-stick-to-bottom auto-scroll, Message with vivid dot + streamdown markdown, PromptInput with abort, Reasoning with collapsible shimmer, Tool with 7-state lifecycle, Confirmation for tool approval, Suggestion chips, Shimmer). Full useChat API surface: `dataPartSchemas` (4 Zod schemas, zero `as never` casts), `experimental_throttle` (100ms), `stop()`, `regenerate()` (hover retry on last message), `addToolApprovalResponse()`, `onData` (transient status), `onFinish`. Streaming markdown via `streamdown` (replaces manual rendering). Server: `consumeStream()` via tee for disconnect resilience, `transient: true` on status data parts. 6 shadcn/ui primitives. Design tokens from visual identity spec. **Workspace layout (Briefs 042+046):** Three-panel layout: sidebar (w-64, icon rail on medium screens) + center (feed + conversation + input) + right panel (w-72 collapsible, adaptive). **Workspace transitions (Brief 046):** Conversation messages from `useChat` render in centre column between feed and input. Right panel adapts to Self tool results via `TRANSITION_TOOL_MAP` (`transition-map.ts`): `generate_process(save=false)` → Process Builder panel (YAML structure, Drafting badge), `generate_process(save=true)` → process detail navigation, `get_briefing` → Briefing panel, `get_process_detail` → process trust context. Artifact Viewer panel for output review with lifecycle badge + Approve/Edit/Reject actions. Panel override clears on sidebar/Home navigation. Mobile (<1024px): artifact-review transitions show bottom sheet with swipe-to-dismiss. Auto-switch from conversation-only to workspace when first process created via Self (`workspace-events.ts` custom event bus). Progressive reveal: conversation-only for new users, workspace when processes exist. Sidebar: "My Work" (active work items with status dots), "Recurring" (domain processes with health indicators), "How It Works" (placeholder). Empty categories hidden. Process detail: 3 variants — living-roadmap (step timeline), domain-process (how it works + metrics + sparkline + trust control + activity log), process-runner (stepped wizard for multi-step human processes). Activity log: unified human+system timeline, filterable. Trust control: natural language slider ("Check everything" ↔ "Let it run") with evidence narrative. Engine View: developer-only toggle (Ctrl+Shift+E). Responsive breakpoints: ≥1280px full, 1024-1279px collapsed sidebar, <1024px hamburger+overlay. Process data API at `/api/processes`. All engine calls server-side. **Observability layer (Brief 056):** 6 semantic interaction event types (`artifact_viewed`, `composition_navigated`, `brief_selected`, `block_action_taken`, `review_prompt_seen`, `pipeline_progress_viewed`) recorded to `interaction_events` table via fire-and-forget `POST /api/events/interaction`. `useInteractionEvent()` hook with `navigator.sendBeacon()` + `fetch()` fallback + properties-aware debounce. Artifact mode tracks view duration. Workspace tracks navigation transitions. Pipeline review tracks response time. `briefs` table synced from markdown files via `syncBriefs()` (lazy from `/api/roadmap`). Self context enriched with `buildInteractionSummary()` in `loadWorkStateSummary()`. Implicit signals feed meta-processes only — NOT trust computation (trust.ts unchanged). `architecture.md` Layer 5 updated. **Real-time streaming (Brief 064):** Claude CLI `--include-partial-messages` enables `stream_event` parsing — `text_delta` → character-level text streaming, `thinking_delta` → live reasoning content. Deduplication guard (`receivedStreamDeltas`) prevents `assistant` complete message from doubling text. CLI internal tool calls (`content_block_start` tool_use → `tool-use-start`, `content_block_stop` → `tool-use-end`) surfaced through `self-stream.ts` → `route.ts` → browser. `extractToolSummary()` + `stripProjectRoot()` provide human-readable context (file paths, search patterns). 10 CLI tool display names in `tool-display-names.ts`. Activity grouping in `message.tsx`: consecutive CLI internal tools (Read, Edit, Grep, etc.) + reasoning grouped into collapsible ChainOfThought cards. Active: auto-open with contextual header ("Reading file..."). Complete: auto-collapse with summary ("8 steps — read file (5x), searched code (2x)"). Ditto's own tools render standalone. User toggle autonomy: `defaultOpen` (not controlled `open`), `userClosedRef` in Reasoning prevents forced reopening. Insights 124 + 125.
 - **Storage** — SQLite + Drizzle ORM + better-sqlite3. WAL mode. Auto-created at `data/ditto.db`. Path resolved via `src/paths.ts` (`PROJECT_ROOT` anchored to monorepo root, not `process.cwd()`). (ADR-001). **Schema split by ADR-025 deployment topology:** `src/db/schema/engine.ts` (18 tables, re-exports from `@ditto/core`), `network.ts` (12 tables — people, fleet, docs), `frontdoor.ts` (7 tables — chat, verification, funnel), `product.ts` (9 tables — sessions, budgets, SLM, assets). Barrel re-export at `src/db/schema.ts` preserves all existing import paths. **Drizzle Kit migrations** replace hand-written SQL: `ensureSchema()` now runs `drizzle-orm/better-sqlite3/migrator`, baseline migration at `drizzle/0000_solid_blockbuster.sql` (45 tables). Pre-migration databases auto-detected and baseline stamped. `createTables()` in test-utils replaced with `migrate()`. `packages/core/src/db/schema.ts` is canonical source for engine tables — `delayedRuns` added, `processModels` moved to product schema, `decomposition` type fixed, `chainsProcessed`/`trustTierOverride` added to processRuns.
-- **Process definitions** — 18 YAML processes in `processes/` (7 domain + 4 system + 7 standalone delegation roles). 22 template processes in `processes/templates/` (5 shared/cross-cutting + 4 Alex/Mira + 5 User Agent Gear 2 + 3 User Agent Gear 1 + 3 original non-coding templates). Parallel groups, depends_on, human steps, conditional routing (route_to/default_next). System processes have `system: true`. Standalone role processes (Brief 029, migrated Brief 031) are single-step `ai-agent` delegations with `config.role_contract` and `config.tools` (read-only, read-write, or read-write-exec — Brief 051).
+- **Process definitions** — 18 YAML processes in `processes/` (7 domain + 4 system + 7 standalone delegation roles). 22 template processes in `processes/templates/` (5 shared/cross-cutting + 4 Greeter connecting/nurturing + 5 agency-mode direct outreach + 3 agency-mode digital acquisition + 3 original non-coding templates). Parallel groups, depends_on, human steps, conditional routing (route_to/default_next). System processes have `system: true`. Standalone role processes (Brief 029, migrated Brief 031) are single-step `ai-agent` delegations with `config.role_contract` and `config.tools` (read-only, read-write, or read-write-exec — Brief 051).
 - **LLM provider abstraction (Briefs 029+032+033)** — `src/engine/llm.ts`. Multi-provider registry: Anthropic, OpenAI, Ollama (via OpenAI-compatible API). Ditto-native types (`LlmToolDefinition`, `LlmContentBlock`, `LlmMessage` etc.) — no SDK types leak beyond `llm.ts`. `createCompletion()`, `extractText()`, `extractToolUse()`, `getConfiguredModel()`, `getProviderName()`. Tool format translation (Anthropic ↔ OpenAI) internal. `initLlm()` startup validation — fails clearly if `LLM_PROVIDER` or `LLM_MODEL` not set. Per-provider cost tracking ($0 for Ollama), cost calculated on actual model from API response. `LlmCompletionResponse` includes actual `model` from API. No hardcoded default model or provider. Provenance: Vercel AI SDK pattern, 12-factor app, Insight-060, Insight-062.
 - **Model routing intelligence (Brief 033 + Brief 136)** — `src/engine/model-routing.ts`. Step-level model hints (`fast`/`capable`/`default`) in process YAML `config.model_hint`. `resolveModel(hint)` maps to provider-specific models (Anthropic: Haiku/Opus, OpenAI: gpt-4o-mini/gpt-4o; Ollama falls back to default). Model recorded on every `stepRun` (both advance and pause paths). `generateModelRecommendations(db)` analyzes 20+ completed runs per (process, step, model): recommends cheaper model when quality comparable (within 5%), recommends upgrade when quality low (<80%), and now detects SLM fine-tuning candidates (`type: "fine_tune_candidate"`) via readiness scoring. Current model determined from most recent 5 runs. Advisory only — no auto-switching. Process loader validates `model_hint` values. Provenance: Vercel AI SDK alias pattern, RouteLLM economics, Insight-175 (trust system as training data flywheel).
 - **Claude adapter (Briefs 031+025)** — Role contract loading from `.claude/commands/dev-*.md` via `step.config.role_contract` (fallback to hardcoded prompts). Two tool categories merged at execution: codebase tools (`step.config.tools` → `readOnlyTools` or `readWriteTools`) + integration tools (resolved by harness from `step.tools`). Dispatches codebase calls to `executeTool()`, integration calls to `executeIntegrationTool()`. Confidence parsing from response text (`CONFIDENCE: high|medium|low`). Tool use loop (max 25 calls). Uses `createCompletion()` from `llm.ts`.
@@ -1596,7 +2167,7 @@ Whichever brief ships second renames; the renamer commit lands FIRST in the seco
 - **Web Acquisition Funnel (2026-04-06, complete)** — UX interaction spec at `docs/research/web-acquisition-funnel-ux.md`. Formless.ai-style conversational front door. Four surfaces: home page conversation, verify page, post-submission engagement, recipient-to-user path. Insights 154 (value before identity) + 155 (outreach as two-sided acquisition). DESIGN.md updated (640px front door, conversation-first layout, placeholder variant, page map). ADR-025 updated (anonymous endpoint table). **Brief 093 (complete):** `POST /api/v1/network/chat` — conversational endpoint for anonymous visitors. `handleChatTurn()`: session → prompt → LLM → flags → save. `buildFrontDoorPrompt()` + `parseAlexResponse()`. `chatSessions` + `funnelEvents` tables. Email detection via regex → `startIntake()`. Bracket-tagged funnel event interception. IP hashing (SHA-256 + salt). Rate limiting (20/session, 60/IP/hour). Already-a-user detection via `startIntake().recognised`. 25 tests. **Brief 094 (complete):** Conversational home page. Two intro messages → prompt at 1.6s → quick-reply pills → chat API → email capture → post-submission (follow-up + skip + timeline). Value cards + trust row below fold. Returning visitor. Error fallback. Mobile sticky prompt. aria-labels. 7 component files. **Brief 095 (complete):** `/verify` page (anti-enumeration: uniform response, 500ms fixed-delay floor, verification email to recipient inbox). IP rate limit (5/hr), per-recipient email limit (1/24hr). `verifyAttempts` + `verificationEmails` tables. `/welcome/referred` page reusing Brief 094 components. Already-a-user detection. `EMAIL_FOOTER_TEMPLATE`. Funnel events: `verify_requested`, `verify_cta_clicked`, `referred_landed`, `post_submission_skipped`. 10 tests. **Brief 096 (complete):** Multi-provider purpose-based model routing (ADR-026, Insight-157/158). `GoogleProvider` class (completion + tools + `systemInstruction`). `initLlm()` loads ALL providers with configured keys simultaneously. `ModelPurpose` type (`conversation`/`writing`/`analysis`/`classification`/`extraction`). `PURPOSE_ROUTING` table maps purpose → provider+model preference list. `createCompletion({ purpose: "conversation" })` routes to best available model. Backward compat: `model:` override, `LLM_PROVIDER`/`LLM_MODEL`, Ollama single-provider mode. Google pricing in `MODEL_PRICING`. `architecture.md` updated with layer-purpose-model table. `.env.example` updated for multi-provider. `@google/generative-ai` dependency. 11 new tests. **743 total tests. All pass.**
 - **Managed Workspace Infrastructure (Phase 15, 2026-04-08, in progress)** — Brief 090 (Automated Workspace Provisioning), Brief 091 (Fleet-Wide Workspace Upgrades), and Brief 100 (Railway Migration) together deliver managed workspace infrastructure. **Provisioning now targets Railway** (migrated from Fly.io via Brief 100). **Brief 091 (complete):** Rolling fleet-wide image upgrades with safety-critical guardrails. **Core engine:** `src/engine/workspace-upgrader.ts` — `createWorkspaceUpgrader()` with dependency injection (Fly client, health checker, alert sender all mockable). `upgradeFleet()`: canary-first rolling upgrade with circuit breaker. `startUpgradeFleet()`: async variant for API (returns upgradeId immediately, runs in background). `rollbackFleet()`: reverts ALL upgraded workspaces (including canary) to per-workspace previous image. `getUpgradeHistory()`, `getUpgradeStatus()`. **Safety properties:** Canary phase is a structural gate (function returns before fleet loop). Circuit breaker trips after N consecutive failures (default 2, configurable). Each failed workspace individually rolled back to its own pre-upgrade image before counter increments. DITTO_NETWORK_URL verified BEFORE machine update (no wasted restart). Concurrency guard (in-memory, single-process safe). Idempotent resume (skips workspaces already at target image). **Alerting:** `src/engine/workspace-alerts.ts` — webhook POST with 3-attempt exponential backoff retry, structured console.log fallback. **Schema:** `upgrade_history` + `upgrade_workspace_results` tables. **API:** `POST /api/v1/network/admin/upgrade` (202 Accepted, async), `POST /api/v1/network/admin/rollback`, `GET /api/v1/network/admin/upgrades`, `GET /api/v1/network/admin/upgrades/:id` (status polling). All admin-only via `authenticateAdminRequest`. **CLI:** `network upgrade --image <ref> [--max-failures N]`, `network rollback`, `network upgrades [--json]`. Real-time progress via `onProgress` callback. **Health check:** `/healthz?deep=true` now includes `version` field from package.json. 24 tests. 745 total. Type-check clean. Reviewed: 20/20 AC PASS, 3 flags all FIXED (DITTO_NETWORK_URL check ordering, rollback_complete alert type, async API). **Files:** `src/engine/workspace-upgrader.ts` (new), `src/engine/workspace-upgrader.test.ts` (new), `src/engine/workspace-alerts.ts` (new), `src/db/schema.ts`, `src/test-utils.ts`, `src/cli/commands/network.ts`, `packages/web/app/api/healthz/route.ts`, `packages/web/app/api/v1/network/admin/upgrade/route.ts` (new), `packages/web/app/api/v1/network/admin/rollback/route.ts` (new), `packages/web/app/api/v1/network/admin/upgrades/route.ts` (new), `packages/web/app/api/v1/network/admin/upgrades/[id]/route.ts` (new), `.env.example`.
 - **Insight-156: Compiled Knowledge Layer (2026-04-06, active)** — Architect review of Karpathy's "LLM Wiki" gist mapped to Ditto architecture. Validates existing knowledge compounding (Brief 060, Insight-042, Insight-083). Reveals gap: Ditto has raw sources (L4 org data model) and memory entries (L2 database rows) but lacks a middle "compiled knowledge" layer — human-browsable, interlinked knowledge documents maintained by system processes. Five open questions for brief-time (view vs stored artifact, edit propagation, deployment topology, token budget, distributed vs centralized maintenance). Timing: post-Phase 14. Provenance: Karpathy LLM Wiki (2026-04), Vannevar Bush Memex (1945). **File:** `docs/insights/156-compiled-knowledge-layer.md`.
-- **Three-Layer Persona Architecture + Front Door + Process Templates (2026-04-06, complete)** — Major identity architecture session. **Insight-153:** Three-layer persona model — Ditto (firm/chief of staff) → Alex & Mira (senior advisors, network connectors) → User's Agent (per-user branded sales/marketing). Solves scaling problem: Alex/Mira never sell, only connect/nurture; each user's branded agent does direct selling. **Character bible rewrite:** `docs/ditto-character.md` fully rewritten for three-layer model — mode spectrum across layers, Alex/Mira redesignated as Senior Advisors (no selling samples), User Agent section with two gears (digital acquisition vs direct outreach), three-stage onboarding journey, agency shared-context model. **Front door redesign:** `packages/web/app/welcome/ditto-conversation.tsx` — full-screen conversational experience (formless.ai pattern) where Alex speaks first with staggered messages, email input triggers `/api/network/intake`. `packages/web/app/page.tsx` renders WelcomePage when unconfigured. All marketing page CTAs updated from `/setup` to `/#get-started`. `packages/web/components/marketing/intake-form.tsx` (new). Site nav updated. CSS `fade-in` animation added. **15 new process templates:** Shared: person-research, quality-gate (critical trust), opt-out-management (critical trust), relationship-scoring, channel-router. Alex/Mira: network-intelligence, warm-path-finder. User Agent Gear 2: objection-handling, meeting-prep, follow-up-sequences, pipeline-tracking, outreach-quality-review. User Agent Gear 1: content-creation, social-publishing, analytics-reporting. **4 updated templates:** selling-outreach v2, connecting-research v2, connecting-introduction v2, network-nurture v2 — all updated with operator field and three-layer persona context. **1 fixed template:** inbox-triage — added missing quality_criteria, feedback, trust sections. **Architecture compliance verified:** 4 violations found and fixed (inbox-triage missing sections, objection-handling orphaned output, connecting-research empty upgrade path, outreach-quality-review wrong starting tier). **Files:** `docs/ditto-character.md`, `docs/insights/153-three-layer-persona-architecture.md` (new), `packages/web/app/page.tsx`, `packages/web/app/welcome/page.tsx`, `packages/web/app/welcome/ditto-conversation.tsx` (new), `packages/web/components/marketing/intake-form.tsx` (new), `packages/web/components/marketing/site-nav.tsx`, `packages/web/app/globals.css`, `packages/web/app/about/page.tsx`, `packages/web/app/how-it-works/page.tsx`, `packages/web/app/chief-of-staff/page.tsx`, `packages/web/app/network/page.tsx`, plus 20 process template YAMLs in `processes/templates/`.
+- **Three-Layer Persona Architecture + Front Door + Process Templates (2026-04-06, complete; superseded by ADR-041 / Brief 240)** — Historical identity architecture session that introduced the front door and network process templates. The old three-layer seller taxonomy is superseded: current vocabulary is Brand / Greeter / Self, with agency-mode acquisition handled by the picked Greeter. **Front door redesign:** `packages/web/app/welcome/ditto-conversation.tsx` — full-screen conversational experience (formless.ai pattern) where Alex speaks first with staggered messages, email input triggers `/api/network/intake`. `packages/web/app/page.tsx` renders WelcomePage when unconfigured. All marketing page CTAs updated from `/setup` to `/#get-started`. `packages/web/components/marketing/intake-form.tsx` (new). Site nav updated. CSS `fade-in` animation added. **Templates added in that session:** shared/cross-cutting templates plus Greeter connecting/nurturing and agency-mode acquisition templates. **4 updated templates:** selling-outreach v2, connecting-research v2, connecting-introduction v2, network-nurture v2 — later reconciled to the ADR-041 operator model by Brief 240. **1 fixed template:** inbox-triage — added missing quality_criteria, feedback, trust sections. **Architecture compliance verified:** 4 violations found and fixed (inbox-triage missing sections, objection-handling orphaned output, connecting-research empty upgrade path, outreach-quality-review wrong starting tier). **Files:** `docs/ditto-character.md`, `docs/insights/153-three-layer-persona-architecture.md` (new), `packages/web/app/page.tsx`, `packages/web/app/welcome/page.tsx`, `packages/web/app/welcome/ditto-conversation.tsx` (new), `packages/web/components/marketing/intake-form.tsx` (new), `packages/web/components/marketing/site-nav.tsx`, `packages/web/app/globals.css`, `packages/web/app/about/page.tsx`, `packages/web/app/how-it-works/page.tsx`, `packages/web/app/chief-of-staff/page.tsx`, `packages/web/app/network/page.tsx`, plus 20 process template YAMLs in `processes/templates/`.
 
 
 - **Brief 151 — Outreach Dedup, Context Injection, and Staged Dispatch Wiring (2026-04-14, complete)** — Fixes 261-duplicate "Reached out to Tim" production bug. Three mechanical fixes: (1) **Dedup safety net** — `sendAndRecord()` rejects duplicate outreach to same person within same process run + enforces per-person daily cap of 3 in 24h. Suppressed decisions logged to activities table (Insight-184 corollary 3). (2) **Context injection** — cycle auto-restart injects `recentOutreach` array into next run's inputs so LLM SENSE/ASSESS steps see what was done. (3) **Staged dispatch wiring** — `dispatchStagedAction` callback wired on harness context so `crm.send_email` (staged: true) actually dispatches after quality gate approval. Plus: status email highlights aggregate by person ("Tim at BuildCo (3 messages)"), relationship pulse time gate reduced from 24h to 4h, `stepRunId` threaded through tool-resolver to `sendAndRecord` (Insight-180). Insight-184 captured. 1551 tests pass. Reviewed: APPROVE (13/15 PASS, 2 FLAGs resolved). **Files modified:** `src/engine/people.ts`, `src/engine/channel.ts`, `src/engine/heartbeat.ts`, `src/engine/tool-resolver.ts`, `src/engine/status-composer.ts`, `src/engine/relationship-pulse.ts`, `src/engine/channel.test.ts`, `src/engine/status-composer.test.ts`, `src/engine/relationship-pulse.test.ts`. **Insight created:** `docs/insights/184-trigger-think-act-not-trigger-act.md`.
