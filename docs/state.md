@@ -1,10 +1,137 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-08 (Builder — **Brief 255 implemented; pending human approval**. `/network` now ships the single-viewport persona-neutral Surface A, `/network/chat?mode=` ships the split Surface B shell with lane-specific Q0, `ChatContext` accepts `expert`/`client`, Instrument Serif is loaded via `next/font/google` and constrained to the hero verb in this sub-brief, and public/workspace deployment routing was verified. Mandatory reviewer found 2 HIGH + 1 MEDIUM issues; all were fixed before closeout. Verification: focused Vitest 16/16 pass, `pnpm run type-check` pass, `pnpm test` 2595/2595 pass with 13 skipped, `pnpm run build` pass, expect-cli browser sweep pass, manual Playwright smoke pass. Full `pnpm test:e2e` remains red on pre-existing workspace/chat/admin e2e instability unrelated to `/network`; initial run also reused another workspace's port 3001 server.) **Previous:** Architect Brief 254 decomposed into 7 implementation sub-briefs (255-261), reviewed + revised (2026-05-08).
+**Last updated:** 2026-05-09 (Builder — **Brief 262 (Network/Workspace Tier Reclassification) implemented and reviewed.** Created `src/db/schema/harness.ts` (housing `reviewPages` — chose `harness.ts` over `engine.ts` via the brief's documented escape hatch, since `engine.ts` is a thin re-export from `@ditto/core`) and `src/db/schema/knowledge.ts` (housing `documents` + `documentContent`); stripped 3 tables from `network.ts` (now exactly 8 sqliteTable declarations); updated schema barrel `index.ts` with new re-exports. **Evidence:** type-check zero errors; full pnpm test 191/194 files passed (3 skipped, 2622 tests passing); `drizzle-kit generate` reports "No schema changes, nothing to migrate" (AC #5 zero column drift confirmed); workspace + public boot modes both clean ("Ready in 6.4s" / "Ready in 6.1s"); zero importers reach into network.ts for the moved symbols. Reviewer (fresh context) verdict: APPROVE WITH FIXES — 2 doc-drift items (state.md + Brief 254 sub-brief table both said `reviewPages → engine.ts`); both corrected. Pending human approval; Brief 263 unblocked.) **Previous:** Architect — ADR-048 + Brief 262 + Brief 263 drafted, reviewed + revised (2026-05-09). Builder Brief 256 implemented; pending human approval. Builder Brief 255 implemented; pending human approval.
 
 ---
 
-## CURRENT — Builder: Brief 255 network landing + chat context implemented (pending human approval, 2026-05-08)
+## CURRENT — Builder: Brief 262 (Network/Workspace Tier Reclassification) implemented + reviewed (2026-05-09)
+
+**Direct trigger:** human invoked `/dev-builder 262` after Architect produced Brief 262 + 263 + ADR-048. Brief 262 is foundation step 1 of parent Brief 254 — must ship before Brief 263's Postgres migration so the migration scope is the correct 8-table network surface (not 11 with mis-tiered workspace tables).
+
+**What was implemented:**
+- **NEW `src/db/schema/harness.ts` (60 lines)** — workspace-tier harness primitives not yet in `@ditto/core`. Houses `reviewPages` (relocated from `network.ts`) + `reviewPageStatusValues` enum. Header documents tier classification + Brief 262 provenance + `personId` cross-tier soft-FK invariant.
+- **NEW `src/db/schema/knowledge.ts` (60 lines)** — workspace-tier knowledge-base primitives. Houses `documents` + `documentContent` (relocated from `network.ts`) + `documentSourceValues` enum. Header documents per-workspace knowledge stance per ADR-036 §1.
+- **MODIFIED `src/db/schema/network.ts` (398 → 338 lines)** — stripped 3 sqliteTable declarations + 4 enum/type unions. Now exactly 8 tables: `people`, `interactions`, `networkUsers`, `adminFeedback`, `networkTokens`, `managedWorkspaces`, `upgradeHistory`, `upgradeWorkspaceResults`. Header rewritten to document post-Brief 262 surface.
+- **MODIFIED `src/db/schema/index.ts`** — added `export * from "./harness.js"` + `export * from "./knowledge.js"`. Header documents the 6-file schema split (engine / harness / knowledge / network / frontdoor / product) and Brief 262 relocation provenance.
+- **No importer updates required** — all consumers use the schema barrel pattern (`schema.reviewPages`, `schema.documents`, `schema.documentContent`); none direct-imported from `network.ts`.
+
+**Architectural call (deviation from default):** Brief 262 defaulted `reviewPages` to `engine.ts`, but the implementer used the brief's documented escape hatch ("implementer may choose `frontdoor.ts` or a new `harness.ts` if a stronger semantic case applies") and created `harness.ts` instead. Rationale: `src/db/schema/engine.ts` is a thin re-export from `@ditto/core` per the engine-first rule; adding a declaration there would either require touching `packages/core/` (excluded by Brief 262 Non-Goals) or breaking the file's re-export contract. `harness.ts` is the correct workspace-tier home for a Ditto-product harness primitive that isn't yet promoted into `@ditto/core`.
+
+**Acceptance criteria (10 ACs):**
+- AC #1 (network.ts → 8 tables): PASS — grep returns exactly 8.
+- AC #2 (reviewPages homed in workspace-tier file): PASS — `src/db/schema/harness.ts:42`.
+- AC #3 (documents + documentContent homed in same workspace-tier file): PASS — both in `src/db/schema/knowledge.ts` (line 32, 50).
+- AC #4 (no importer breakage — schema barrel preserves symbol names): PASS — type-check zero errors; all callers compile.
+- AC #5 (zero column drift): PASS — `pnpm drizzle-kit generate` reports "No schema changes, nothing to migrate".
+- AC #6 (no direct imports from network.ts for moved symbols): PASS — grep `from .*db/schema/network.*(reviewPages|documents|documentContent)` returns zero matches.
+- AC #7 (boot test, both deployment modes): PASS — workspace mode "Ready in 6.4s"; public mode "Ready in 6.1s"; zero schema errors in either.
+- AC #8 (test suites): PASS — full `pnpm test` 191 files / 2622 tests pass (3 files / 13 tests skipped — pre-existing).
+- AC #9 (smoke test executable verbatim from brief): PASS — all 11 verification blocks executed.
+- AC #10 (PR description per brief requirements): PENDING (PR not yet opened; will be done at merge time).
+
+**Mandatory review (fresh context, separate agent):**
+- **Verdict: APPROVE WITH FIXES** (no Critical issues).
+- **Important #1 (I1) — Doc drift in state.md and Brief 254**: Both said "moving reviewPages to engine.ts"; actual destination is `harness.ts`. **Fixed** in both files; state.md previous-Architect entry rewritten to describe the actual `harness.ts` choice + rationale; Brief 254 sub-brief 262 row corrected.
+- **Important #2 (I2) — `personId` cross-tier comment**: present and correct (`harness.ts:38–41`). PASS.
+- **Nit #1 (N1) — pre-existing cross-tier import in network.ts** (`processRuns` from `engine.js`): not a Brief 262 defect; Brief 263 explicitly handles it via the no-engine-import invariant test (AC #8). No action.
+- **Nit #2 (N2) — Brief 262 status header**: still `draft`; Documenter to lift to `complete` at retrospective.
+- **Nit #3 (N3) — `documents` symbol genericness**: forward-looking note for Brief 258's `network_user_kb_documents`; not a 262 defect.
+
+**Verification commands run:**
+- `pnpm run type-check` → zero errors (twice, before + after smoke test).
+- `pnpm test` → 191 passed | 3 skipped (194 files); 2622 passed | 13 skipped tests.
+- `pnpm exec rg "^export const \w+ = sqliteTable" src/db/schema/network.ts | wc -l` → 8.
+- `pnpm exec rg "^export const reviewPages = sqliteTable" src/db/schema/` → one match in `harness.ts`.
+- `pnpm exec rg "^export const documents = sqliteTable" src/db/schema/` → one match in `knowledge.ts`.
+- `pnpm exec rg "^export const documentContent = sqliteTable" src/db/schema/` → one match in `knowledge.ts`.
+- `pnpm exec rg "from .*db/schema/network.*(reviewPages|documents|documentContent)" src packages` → zero matches.
+- `pnpm drizzle-kit generate` → "No schema changes, nothing to migrate".
+- `pnpm dev` (workspace) → "Ready in 6.4s", no `(no such table|relation does not exist).*(review_pages|documents|document_content)` in log.
+- `DITTO_DEPLOYMENT=public pnpm dev` → "Ready in 6.1s", same clean log.
+
+**Insight candidate (deferred per brief):** "Schema-file location is a tier declaration; treat it as load-bearing, not cosmetic." Brief 262 surfaced this — the original placement of `reviewPages`/`documents`/`documentContent` in `network.ts` was historical accident, but the file location implied a tier classification that didn't match the importers. Documenter to write up at retrospective if it's genuinely generalizable beyond this single instance.
+
+**Pending:** human approval of the implementation; then `/dev-documenter` for retrospective + insight capture; then Brief 263 (Network Tier Postgres Migration) is unblocked.
+
+---
+
+## PREVIOUS — Architect: ADR-048 + Brief 262 + Brief 263 (Postgres migration foundation) drafted, reviewed + revised (2026-05-09)
+
+**Direct trigger:** user directive on 2026-05-08 — "I think we should scope for supabase now" — authorizing pre-trigger execution of ADR-036 §2's named Postgres-migration framework. Architect owns trigger-fire decision per ADR-036 §2 "Named-trigger hygiene"; pre-trigger marginal-cost rationale captured in ADR-048 §Why Now.
+
+**What was produced:**
+- **ADR-048** (`docs/adrs/048-network-postgres-migration-supabase.md`) — supersedes ADR-036 §2 in-part. Specifies (a) Supabase Postgres host (already wired via `.env` for Storage), (b) FTS5 → tsvector plan = N/A (verified zero FTS5 usage), (c) cutover plan via Brief 262 (reclass) → Brief 263 (migration) using `ensureNetworkSchema()` wrapping `migrate()` from `drizzle-orm/postgres-js/migrator`, (d) rollback triggers (sustained latency regression / vendor outage parity / cost surprise) within 30-day window. Reframes original "zero-downtime cutover" as "pre-launch empty-tables migration" — no production network rows exist, so traditional cutover doesn't apply.
+- **Brief 262** (`docs/briefs/262-network-workspace-tier-reclassification.md`) — Network/Workspace Tier Reclassification. Reduces network surface from 11 `sqliteTable` declarations to 8 by moving `reviewPages` to a new `harness.ts` (workspace harness primitive not yet in `@ditto/core`, used by `review-pages.ts`/`runner-pause.ts`; chosen over `engine.ts` per the brief's escape hatch since `engine.ts` is a thin re-export from `@ditto/core` and Brief 262 Non-Goals prohibit touching `packages/core/`) and `documents` + `documentContent` to a new `knowledge.ts` (workspace knowledge ingest cluster). 10 ACs, single integration seam (schema barrel). SQLite throughout; `drizzle-kit generate` produces zero migrations. Pre-Postgres preparation; lands first.
+- **Brief 263** (`docs/briefs/263-network-tier-postgres-migration-supabase.md`) — Network Tier Postgres Migration — Schema Split + Supabase Cutover. ADR-036 §3 file-split + §2 dialect swap (sqliteTable → pgTable) + `networkDb` connection setup + boot-time `ensureNetworkSchema()` migrator + cutover. 14 ACs (under Insight-004 cap of 17). Test fixture: `SUPABASE_DB_URL_TEST` connection + `withNetworkDbTransaction(testFn)` per-test rollback helper. Includes lightweight query-timing instrumentation (slow >100ms WARN log) so ADR-048 §(d) rollback trigger #1 has data from Day 1.
+- **ADR-036 status updated** — lifted from `proposed` to `accepted` (§1 + §3 in force; §2 superseded-in-part by ADR-048). §3 build-ownership line amended to reference Brief 263 (with Brief 262 reclassification predecessor).
+- **Parent Brief 254 updated to revision 2.2** — sub-brief table now lists 262 (reclass) + 263 (migration) as foundation steps; build order 262 → 263 → 255 → 256 ∥ 258 → 257 → 259 → 260 → 261; all sub-brief Depends-on columns updated to gate through 263; Insight-190 constraint extended to dual journals; schema-path note pivots from post-262 to post-263.
+
+**Mandatory review:** fresh-context Reviewer evaluated ADR-048 + initial Brief 262 (which was the migration brief at the time) and found:
+- **Critical #1 (C1) — Wrong table count.** Original brief claimed "12 sqliteTable declarations"; manual walk found 11. Fixed: re-verified via `^export const (\w+) = sqliteTable` grep; corrected throughout to "8 (post-262 reclassification)".
+- **Critical #2 (C2) — Wrong symbol names.** Original AC #8 listed `networkPersons`/`networkInteractions`; actual symbols are `people`/`interactions` (no network prefix). Smoke-test grep would have missed entire tables. Fixed: enumerated actual 8 symbols (`people`, `interactions`, `networkUsers`, `adminFeedback`, `networkTokens`, `managedWorkspaces`, `upgradeHistory`, `upgradeWorkspaceResults`); rewrote grep to per-symbol loop.
+- **Critical #3 (C3, structural) — Three mis-tiered tables in scope.** `reviewPages`, `documents`, `documentContent` were in `network.ts` but are workspace-tier (used by workspace harness `review-pages.ts`/`runner-pause.ts`/knowledge ingest). Migrating them to Postgres would have broken the workspace harness. Fixed: split scope into Brief 262 (reclassification, lands first) + Brief 263 (migration on the 8-table subset). Renamed original 262 → 263; created new 262 for reclass.
+- **Critical #5 (C5) — Tautological invariant test.** Original AC #9 tested "no `processRunId`-style column has FK" but only one such column exists, so test only catches what's already known. Fixed: rewrote AC #8 to assert `packages/core/src/db/network/schema.ts` has zero imports from `src/db/schema/engine.ts`/`frontdoor.ts`/`product.ts` (no-engine-import invariant test).
+- **Important #6 (I6) — Toothless rollback trigger.** ADR-048 §(d) trigger #1 references "p95 query latency" but no such telemetry existed. Fixed: added Brief 263 AC #11 — lightweight query timing instrumentation (slow >100ms WARN log) so trigger has data from Day 1.
+- **Important #7 (I7) — Hand-waved test fixtures.** §Constraints "every test must be updated" conflicted with §Non-Goals "no test-time Postgres container infrastructure." Fixed: committed to `SUPABASE_DB_URL_TEST` (separate test database in same Supabase project) + `withNetworkDbTransaction(testFn)` per-test rollback helper.
+- **Important #8 (I8) — `drizzle-kit migrate` may not exist.** Fixed: clarified AC #5 to use `ensureNetworkSchema()` wrapping `migrate()` from `drizzle-orm/postgres-js/migrator` at boot.
+- **Important #9 (I9) — Insight-180 silence.** Side-effecting functions weren't addressed. Fixed: added explicit one-line Constraint that no new harness side-effecting functions land in this brief.
+- **Nit #10 (N10), #12 (N12), #13 (N13)** — ADR status not lifted; reservation language; minor wording. All applied.
+
+After fixes, AC count was rebalanced: Brief 262 = 10 ACs; Brief 263 = 14 ACs (down from 19 by consolidation, both well under Insight-004 cap of 17).
+
+**Verification:**
+- ADR-048 acceptance criteria block updated to reference Briefs 262 + 263 (split executable in two PRs).
+- ADR-036 status header lifted to `accepted` and §3 build-ownership amended.
+- Parent Brief 254 status header updated to revision 2.2 (2026-05-09); sub-brief table re-rendered.
+- All eight enumerated network-tier symbols verified by grep against `src/db/schema/network.ts`.
+- All seventeen network-tier enum value tuples enumerated for Brief 263 dialect-swap scope.
+- Pre-trigger override authority re-verified via ADR-036 §2's "Named-trigger hygiene" framework (Architect owns decision; this ADR documents the exercise).
+
+**Build order (post-2026-05-09):** 262 (reclass) → 263 (Postgres migration) → 255 → 256 ∥ 258 → 257 → 259 → 260 → 261.
+
+**Pending:** Human approval of (a) ADR-048, (b) Brief 262, (c) Brief 263, (d) ADR-036 status lift. Once approved → `/dev-builder 262` to execute reclassification first, then `/dev-builder 263` for the Postgres migration. Sub-briefs 255/256 already implemented (pending human approval) against pre-263 SQLite shape — they will need a brief follow-up patch once 263 lands to swap importers from `db` → `networkDb` and re-test against Postgres dialect (covered by 263's "all importers cut over" AC).
+
+---
+
+## PREVIOUS — Builder: Brief 256 expert lane profile card + handle implemented (pending human approval, 2026-05-08)
+
+**Direct trigger:** user invoked `/dev-builder 256`.
+
+**What shipped:**
+- Added canonical `NetworkProfileCardBlock` to `@ditto/core`, re-exported it through engine/web type seams, registered the web block renderer, and kept `ReviewCardBlock` structurally unchanged by test.
+- Added `costLabel?: string | null` as the forward-compatible `AuthorizationRequestBlock` stub required by downstream sub-briefs.
+- Added `networkUsers.handle` and `networkUsers.card` with Drizzle migration `0019_add_handle_and_card_to_network_users`; journal/snapshot resequenced after generation.
+- Added pure expert intake helper (`src/engine/network-expert-intake.ts`) owning Q1-Q6, anti-persona fallback, visibility parsing, handle normalization, and deterministic card construction.
+- Replaced the expert prompt pass-through with the dedicated expert-lane directive, including exact Q1-Q6 order, anti-persona escape hatch, no-authorization/no-costLabel guardrail, and verbatim workspace upsell copy.
+- Added reserved-handle validation, conflict alternatives, and a hardened `POST /api/v1/network/handle` route that derives identity from the lane session rather than trusting `body.email`, validates card shape at runtime, persists the card, and fires the expert upsell once per user/session/lane.
+- Implemented the in-chat profile card renderer, live preview pane fill/sharpen behavior, mobile sticky preview chip with editable expanded surface, and post-card actions: "Tweak this with me", "Open for opportunities", "Find me clients".
+- Updated Surface A preview to reuse the canonical card renderer when real card data is available.
+- Updated `packages/core/SETUP_PROMPT.md` to mention network profile cards without a stale content-block count.
+
+**Mandatory review:** separate reviewer initially found:
+- CRITICAL: `@ditto/web` package type-check failed on `narrativeMd` and `ModeToggle` prop shape.
+- HIGH: handle route trusted `body.email` as write authority.
+- HIGH: mobile expanded preview lacked edit controls.
+- MEDIUM: card payload was not runtime-validated before persistence.
+- MEDIUM: deterministic intake lived only in the client shell.
+- MEDIUM: card builder hardcoded Alex instead of threading assigned Greeter.
+
+All six were fixed. Reviewer re-check returned **PASS** with only residual note that the browser smoke was run by Builder, not the read-only reviewer.
+
+**Verification:**
+- `pnpm vitest run src/engine/network-expert-intake.test.ts src/engine/network-chat-prompt.test.ts src/engine/network-chat-lane.test.ts src/engine/handle-claim.test.ts src/engine/network-upsell-tracker.test.ts packages/core/src/content-blocks.test.ts packages/web/app/network/chat/preview-pane.test.tsx packages/web/app/api/v1/network/handle/route.test.ts packages/web/components/marketing/network-landing.test.ts` — 43/43 pass.
+- `pnpm --filter @ditto/web type-check` — pass.
+- `pnpm type-check` — pass.
+- `pnpm --filter @ditto/web build` — pass.
+- Playwright smoke at 375px: completed Q1-Q6, anti-persona fallback appeared, no horizontal overflow before/after opening "Tap to see your card →", expanded preview included visible `Name` textbox and `Claim` button.
+- `/people/timhgreen` returns 404, as expected until Brief 259.
+- `pnpm test` full-suite attempted twice. First run had 3 unrelated failures that passed when rerun directly; second run had unrelated 5s timeouts/cross-test init failures in bridge/library/system-agent/status-route files. The 5 failed files passed directly (71/71).
+
+**No brief move yet:** Brief 256 remains in `docs/briefs/` until human approval.
+
+---
+
+## PREVIOUS — Builder: Brief 255 network landing + chat context implemented (pending human approval, 2026-05-08)
 
 **Direct trigger:** user invoked `/dev-builder 255`.
 

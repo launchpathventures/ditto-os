@@ -1,9 +1,10 @@
 # ADR-036: Database Tier Strategy — SQLite-per-Workspace + Named Network→Postgres Threshold
 
 **Date:** 2026-04-20
-**Status:** proposed
-**Extends:** ADR-001 (SQLite via Drizzle ORM for Storage) — does not supersede
-**Related:** ADR-025 (Centralized Network Service), ADR-030 (Deployment Mode Flag)
+**Status:** accepted (§1 + §3 in force; §2 superseded-in-part)
+**Updated:** 2026-05-08 — §2 superseded-in-part by ADR-048 (Network Tier Postgres Migration — Execution on Supabase Postgres). The named-trigger framework codified in §2 is preserved as a pattern (rollback triggers in ADR-048 §(d) re-use it); the §2-specific decision to run on SQLite-until-trigger-fires is replaced by pre-trigger execution per ADR-048's "Why Now" rationale. §3 file split is *executed* via Brief 263 (originally co-traveling with Brief 202 per §3 build ownership; that did not happen — Brief 263 carries it, preceded by Brief 262 which reclassifies 3 mis-tiered tables out of the network surface).
+**Extends:** ADR-001 (SQLite via Drizzle ORM for Storage) — does not supersede; workspace tier (§1) reaffirmed unchanged
+**Related:** ADR-025 (Centralized Network Service), ADR-030 (Deployment Mode Flag), ADR-048 (Network Tier Postgres Migration — Execution)
 
 ## Context
 
@@ -34,6 +35,8 @@ Each workspace is its own independent SQLite file in its own directory. Switchin
 - **No migration path to Postgres for this tier.** This is the terminal shape.
 
 ### 2. Network tier: SQLite today. Postgres at a named threshold.
+
+> **2026-05-08 update:** This section is **superseded-in-part by ADR-048**. The named-trigger framework below remains a useful pattern (ADR-048's rollback triggers re-use it), but the "SQLite today, migrate at trigger" decision is replaced by "pre-trigger execution to Supabase Postgres via Brief 262." See ADR-048 §Why Now for the rationale (collapsed marginal cost, six in-flight Brief 254 sub-briefs touching network schema, unexecuted §3 file split).
 
 The Network tier is structurally multi-writer and multi-tenant. SQLite is correct while the deployment serves a small population; it stops being correct before the population reaches scale.
 
@@ -68,7 +71,7 @@ Today the Network and Workspace schemas cohabit `src/db/schema/*.ts` and share o
 
 **Why now, pre-trigger:** when the Postgres migration fires, it should be a bounded, mechanical operation touching only the Network tier. Co-tenanted schemas would force a risky cross-tier migration under time pressure. Separating now costs ~1 sub-brief; separating later is a war-time migration.
 
-**Build ownership:** this split is scoped into **Brief 202** (Hired-Agent Primitive: Schema + YAML + DB Mirror) as a co-travelling work item, because Brief 202 is already touching the workspace schema root and the natural cleave happens at the same commit. If the split grows beyond a single build session, spin it out as a dedicated Brief 207 with its own acceptance criteria. Not a standalone follow-up behind a trigger — this happens in the hire-agents phase.
+**Build ownership:** ~~this split is scoped into **Brief 202** (Hired-Agent Primitive: Schema + YAML + DB Mirror) as a co-travelling work item~~. **2026-05-08 update:** Brief 202 shipped without executing this split. The split is now executed via **Brief 263** (Network Tier Postgres Migration — Schema Split + Supabase Cutover) as a co-traveling work item alongside the §2 dialect swap, preceded by **Brief 262** (Network/Workspace Tier Reclassification) which first moves three mis-tiered tables (`reviewPages`, `documents`, `documentContent`) out of `src/db/schema/network.ts` into workspace-tier files. The two-brief sequence reduces the network surface from 11 tables to 8 before the dialect swap. The changes touch the same code paths; folding them into one chain avoids a second touch on the same files.
 
 ## Provenance
 
