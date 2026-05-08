@@ -11,15 +11,16 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, inArray, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { createCompletion, extractText, extractToolUse, getConfiguredModel, type LlmToolDefinition } from "./llm";
 import { createStreamingCompletion, type StreamEvent } from "./llm-stream";
 import { isSpendCeilingReached, recordFrontDoorSpend } from "./spend-ceiling";
-import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage, type PromptMode } from "./network-chat-prompt";
+import { buildFrontDoorPrompt, formatTemporalContext, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage, type PromptMode } from "./network-chat-prompt";
 import { startIntake, sendActionEmail, sendCosActionEmail } from "./self-tools/network-tools";
 import { getPersonByEmail, findPersonByEmailGlobal, getPersonMemories } from "./people";
+import { assignPersona } from "./persona";
 import { webSearch } from "./web-search";
 import { fetchUrlContent, type FetchResult } from "./web-fetch";
 import { geolocateIp } from "./geo";
@@ -28,6 +29,7 @@ import type { AuthorizationRequestBlock, ContentBlock } from "./content-blocks";
 import { buildFrontDoorBlocks } from "./network-chat-blocks";
 import type { PersonaId } from "../db/schema";
 import type { ChatSessionStage } from "../db/schema/frontdoor";
+import { buildReferredConversationOpener } from "./referred-context";
 import {
   authorizationGateHandler,
   createHarnessContext,
@@ -255,18 +257,23 @@ function buildStateDirective(session: ChatSession): string {
 
 /**
  * Interview cadence: this is a FIRST MEETING, not the main work. Three turns
- * max. Every reply after turn 1 MUST make a concrete statement about how
- * {persona} would help — not just collect more facts. By turn 3 the commit
- * ask is the ONLY question on the table. Real problem-solving, plans,
- * email-capture, and detailed fact-gathering belong in the post-commit
- * front door — not here.
+ * max. TURN 1 (OPEN) is the canned greeter opener that already rendered on
+ * screen and was seeded into session history when the visitor picked the
+ * persona — the LLM never produces it. So the LLM's first response is
+ * TURN 2 (SHOW VALUE / NUDGE), and the second is TURN 3 (COMMIT ASK). Every
+ * reply MUST make a concrete statement about how {persona} would help — not
+ * just collect more facts. By turn 3 the commit ask is the ONLY question on
+ * the table. Real problem-solving, plans, email-capture, and detailed
+ * fact-gathering belong in the post-commit front door — not here.
  */
 function buildInterviewDirective(session: ChatSession): string {
   const personaId = (session.personaId ?? "alex") as "alex" | "mira";
   const selfName = personaId === "alex" ? "Alex" : "Mira";
   const otherName = personaId === "alex" ? "Mira" : "Alex";
   // Count genuine user turns — exclude synthetic system prompts like
-  // "[INTERVIEW_START]" / "[PERSONA_COMMITTED]" which are engine artifacts.
+  // "[PERSONA_COMMITTED]" which are engine artifacts. The canned greeter
+  // opener (assistant role) is already in session.messages but doesn't affect
+  // this count since we filter on role === "user".
   const userTurns = (session.messages ?? []).filter(
     (m) => m.role === "user" && !m.content.startsWith("["),
   ).length;
@@ -274,13 +281,10 @@ function buildInterviewDirective(session: ChatSession): string {
   const lines: string[] = ["\n\n## THIS TURN — first-meeting cadence (this OVERRIDES the reaction-then-question pattern in your voice spec)"];
   lines.push(
     `You are in INTERVIEW mode. This is a first meeting, not the main work. The UI shows "Continue with ${selfName}" and "Try ${otherName}" buttons above the chat. The actual front-door work (understanding their business, proposing a plan, asking for email) starts ONLY after they click "Continue with ${selfName}". Do NOT start that work here.`,
+    `TURN 1 (your canned opener — already on screen and in conversation history): the visitor has just been greeted with your locked opener line and an invitation to share what they're working on. Do NOT repeat the opener. Do NOT re-introduce yourself. Your first reply IS TURN 2.`,
   );
 
   if (userTurns <= 1) {
-    lines.push(
-      `TURN 1 — OPEN. Reply shape: one warm reaction sentence + ONE light opening question. Don't interrogate. Don't sketch pathways yet. Don't propose.`,
-    );
-  } else if (userTurns === 2) {
     lines.push(
       `TURN 2 — SHOW YOUR VALUE, THEN NUDGE. Your reply MUST follow this shape and order:`,
       `  1. One sentence reacting to what they said.`,
@@ -293,9 +297,11 @@ function buildInterviewDirective(session: ChatSession): string {
       `  • "I'd take 'I want more of X' and go make X happen, rather than talking you through how to do it yourself."`,
     );
   } else {
-    // Turn 3+ — commit ask is mandatory
+    // userTurns >= 2 — commit ask is mandatory. Display turn = userTurns + 1
+    // because the canned opener is TURN 1 (not in userTurns) and the LLM's
+    // first reply was TURN 2.
     lines.push(
-      `TURN ${userTurns} — COMMIT ASK (mandatory). The first meeting has run its course. Reply shape:`,
+      `TURN ${userTurns + 1} — COMMIT ASK (mandatory). The first meeting has run its course. Reply shape:`,
       `  1. One short sentence reflecting what you've picked up about them.`,
       `  2. Your commit question — e.g. "Keen to keep going with me, or want to try ${otherName} first?" in your voice. This is your ONE AND ONLY question.`,
       `Your "question" field MUST be that commit question. Your "suggestions" field MUST be: ["Continue with ${selfName}", "Try ${otherName}", "Need a moment"]. Under NO circumstances ask another fact-finding or exploratory question — if they hedge, be warmer but firmer. A short advisor earns trust by asking for the decision, not by piling on more questions.`,
@@ -508,6 +514,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (anonymous /welcome)
 const AUTHENTICATED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (authenticated /chat)
 const MAX_MESSAGES_PER_SESSION = 20;
 const MAX_MESSAGES_PER_IP_PER_HOUR = 60;
+const MAX_NETWORK_LANE_OPENS_PER_IP_PER_HOUR = 30;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_EXTRACT_REGEX = /[^\s@,]+@[^\s@,]+\.[^\s@,]+/;
 
@@ -562,6 +569,26 @@ export function hashIp(ip: string): string {
 // ============================================================
 
 export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "chat_message",
+    MAX_MESSAGES_PER_IP_PER_HOUR,
+  );
+}
+
+export async function checkNetworkLaneOpenRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "network_lane_opened",
+    MAX_NETWORK_LANE_OPENS_PER_IP_PER_HOUR,
+  );
+}
+
+async function checkIpEventRateLimit(
+  ipHash: string,
+  event: string,
+  maxPerHour: number,
+): Promise<boolean> {
   const oneHourAgoMs = Date.now() - 60 * 60 * 1000;
   const result = await db
     .select({ count: sql<number>`count(*)` })
@@ -570,10 +597,10 @@ export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
       and(
         sql`json_extract(${schema.funnelEvents.metadata}, '$.ipHash') = ${ipHash}`,
         sql`${schema.funnelEvents.createdAt} > ${oneHourAgoMs}`,
-        sql`${schema.funnelEvents.event} = 'chat_message'`,
+        eq(schema.funnelEvents.event, event),
       ),
     );
-  return (result[0]?.count ?? 0) < MAX_MESSAGES_PER_IP_PER_HOUR;
+  return (result[0]?.count ?? 0) < maxPerHour;
 }
 
 // ============================================================
@@ -752,6 +779,187 @@ async function saveSession(session: ChatSession): Promise<void> {
       ...(session.authenticatedEmail ? { expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS) } : {}),
     })
     .where(eq(schema.chatSessions.sessionId, session.sessionId));
+}
+
+export type NetworkLaneContext = Extract<ChatContext, "expert" | "client">;
+
+export function normalizeNetworkLaneContext(value: string | null | undefined): NetworkLaneContext {
+  return value === "client" ? "client" : "expert";
+}
+
+export function buildNetworkLaneOpener(
+  personaId: PersonaId,
+  context: NetworkLaneContext,
+): string {
+  const name = personaId === "mira" ? "Mira" : "Alex";
+  const object = context === "client" ? "what you need" : "what you're hunting";
+  return `Hi — I'm ${name}. Walk me through ${object}.`;
+}
+
+function isNetworkLaneOpener(content: string | undefined): boolean {
+  return /^Hi — I'm (Alex|Mira)\. Walk me through (what you're hunting|what you need)\.$/.test(
+    content ?? "",
+  );
+}
+
+async function assignAnonymousNetworkLanePersona(): Promise<PersonaId> {
+  const [alexResult] = await db
+    .select({ count: count() })
+    .from(schema.people)
+    .where(eq(schema.people.personaAssignment, "alex"));
+
+  const [miraResult] = await db
+    .select({ count: count() })
+    .from(schema.people)
+    .where(eq(schema.people.personaAssignment, "mira"));
+
+  const alexCount = alexResult?.count ?? 0;
+  const miraCount = miraResult?.count ?? 0;
+  return alexCount <= miraCount ? "alex" : "mira";
+}
+
+async function resolveNetworkLanePersonaForEmail(email: string): Promise<PersonaId | null> {
+  const [networkUser] = await db
+    .select({
+      id: schema.networkUsers.id,
+      personId: schema.networkUsers.personId,
+      personaAssignment: schema.networkUsers.personaAssignment,
+    })
+    .from(schema.networkUsers)
+    .where(eq(schema.networkUsers.email, email));
+
+  if (networkUser?.personaAssignment) {
+    return networkUser.personaAssignment;
+  }
+
+  if (networkUser?.personId) {
+    const assignment = await assignPersona(networkUser.personId);
+    await db
+      .update(schema.networkUsers)
+      .set({ personaAssignment: assignment, updatedAt: new Date() })
+      .where(eq(schema.networkUsers.id, networkUser.id));
+    return assignment;
+  }
+
+  const person = await findPersonByEmailGlobal(email);
+  if (person) {
+    return assignPersona(person.id);
+  }
+
+  return null;
+}
+
+async function resolveNetworkLaneUserName(email: string | null): Promise<string | null> {
+  if (!email) return null;
+
+  const [networkUser] = await db
+    .select({ name: schema.networkUsers.name })
+    .from(schema.networkUsers)
+    .where(eq(schema.networkUsers.email, email));
+
+  if (networkUser?.name?.trim()) {
+    return networkUser.name.trim();
+  }
+
+  const person = await findPersonByEmailGlobal(email);
+  return person?.name?.trim() || null;
+}
+
+async function resolveNetworkLanePersona(
+  session: ChatSession,
+  preferAuthenticatedEmail = false,
+): Promise<PersonaId> {
+  const email = session.authenticatedEmail?.trim().toLowerCase();
+  if (email && preferAuthenticatedEmail) {
+    const assignedPersona = await resolveNetworkLanePersonaForEmail(email);
+    if (assignedPersona) return assignedPersona;
+  }
+
+  if (session.personaId) return session.personaId;
+
+  if (email) {
+    const assignedPersona = await resolveNetworkLanePersonaForEmail(email);
+    if (assignedPersona) return assignedPersona;
+  }
+
+  return assignAnonymousNetworkLanePersona();
+}
+
+export interface NetworkLaneSession {
+  sessionId: string;
+  context: NetworkLaneContext;
+  personaId: PersonaId;
+  greeterName: string;
+  userName: string | null;
+  opener: string;
+  messages: Array<{ role: "assistant" | "user"; content: string }>;
+}
+
+export interface InitializeNetworkLaneSessionOptions {
+  authenticatedEmail?: string | null;
+}
+
+export async function initializeNetworkLaneSession(
+  sessionId: string | null,
+  context: NetworkLaneContext,
+  ip: string,
+  options?: InitializeNetworkLaneSessionOptions,
+): Promise<NetworkLaneSession> {
+  const ipHash = hashIp(ip);
+  const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const providedEmail = options?.authenticatedEmail?.trim().toLowerCase() || null;
+  const sessionEmail = session.authenticatedEmail?.trim().toLowerCase() || null;
+  const authenticatedEmail = providedEmail || sessionEmail;
+  const userName = await resolveNetworkLaneUserName(authenticatedEmail);
+  const personaId = await resolveNetworkLanePersona(
+    {
+      ...session,
+      authenticatedEmail,
+    },
+    Boolean(providedEmail),
+  );
+  const opener = buildNetworkLaneOpener(personaId, context);
+  const first = session.messages[0];
+  const messages =
+    session.messages.length === 0 || isNetworkLaneOpener(first?.content)
+      ? [{ role: "assistant" as const, content: opener }]
+      : session.messages.map((message) => ({
+          role: message.role === "user" ? "user" as const : "assistant" as const,
+          content: message.content,
+        }));
+
+  await db
+    .update(schema.chatSessions)
+    .set({
+      context,
+      personaId,
+      stage: "main",
+      messages,
+      updatedAt: new Date(),
+      ...(authenticatedEmail
+        ? {
+            authenticatedEmail,
+            expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS),
+          }
+        : {}),
+    })
+    .where(eq(schema.chatSessions.sessionId, session.sessionId));
+
+  await recordFunnelEvent(session.sessionId, "network_lane_opened", context, {
+    ipHash,
+    mode: context,
+    personaId,
+  });
+
+  return {
+    sessionId: session.sessionId,
+    context,
+    personaId,
+    greeterName: personaId === "mira" ? "Mira" : "Alex",
+    userName,
+    opener,
+    messages,
+  };
 }
 
 /**
@@ -1238,8 +1446,63 @@ export interface ChatTurnResult {
   rateLimited?: boolean;
   suggestions?: string[];
   detectedMode?: DetectedMode;
+  learned?: LearnedContext | null;
   extraQuestions?: string[];
   testMode?: boolean;
+}
+
+function getStringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getLearnedMetadata(metadata: Record<string, unknown> | undefined): LearnedContext | null {
+  const value = metadata?.learned;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const learned: LearnedContext = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      learned[key as keyof LearnedContext] = raw.trim();
+    }
+  }
+  return Object.keys(learned).length > 0 ? learned : null;
+}
+
+function seedReferredSession(
+  session: ChatSession,
+  context: ChatContext,
+  funnelMetadata: Record<string, unknown> | undefined,
+  options?: Pick<ChatPipelineOptions, "personaId" | "promptMode">,
+): boolean {
+  if (context !== "referred" || !options?.personaId) return false;
+
+  let changed = false;
+  if (session.personaId !== options.personaId) {
+    session.personaId = options.personaId;
+    changed = true;
+  }
+  if (session.stage !== "main") {
+    session.stage = "main";
+    changed = true;
+  }
+
+  const seedLearned = getLearnedMetadata(funnelMetadata);
+  if (seedLearned) {
+    const before = JSON.stringify(session.learned ?? {});
+    session.learned = mergeLearned(session.learned, seedLearned);
+    if (JSON.stringify(session.learned ?? {}) !== before) changed = true;
+  }
+
+  const introducerFirstName = getStringMetadata(funnelMetadata, "introducerFirstName");
+  if (session.messages.length === 0 && introducerFirstName) {
+    session.messages.push({
+      role: "assistant",
+      content: buildReferredConversationOpener(introducerFirstName),
+    });
+    changed = true;
+  }
+
+  return changed;
 }
 
 export async function handleChatTurn(
@@ -1267,9 +1530,13 @@ export async function handleChatTurn(
 
   // Load or create session
   const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const referredSessionSeeded = seedReferredSession(session, context, funnelMetadata, options);
 
   // Rate limit: per-session
   if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     return {
       reply: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us.",
       sessionId: session.sessionId,
@@ -1287,7 +1554,10 @@ export async function handleChatTurn(
   if (funnelEventMatch) {
     const eventName = funnelEventMatch[1];
     await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
-    return { reply: "", sessionId: session.sessionId };
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
+    return { reply: "", sessionId: session.sessionId, learned: session.learned };
   }
 
   // Record chat message event
@@ -1382,16 +1652,25 @@ export async function handleChatTurn(
   // Infer conversation stage for stage-gated prompting (Insight-170: token efficiency)
   const conversationStage = inferConversationStage(session);
   const nonStreamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
+  // Split prompt into a static prefix (cacheable) and a dynamic tail.
+  // Cache hit requires byte-identical prefix across calls — so the temporal
+  // block (minute-rolling) and the state directive (per-turn userTurns /
+  // learned-context) live PAST the breakpoint. Everything cacheable —
+  // cognitive core, persona voice, process, visitor location — sits before.
+  const nonStreamStaticPrefix = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
     personaId: nonStreamPersonaId,
     promptMode: nonStreamPromptMode,
-  }) + buildStateDirective(session);
+    omitTemporal: true,
+  });
+  const nonStreamTemporal = formatTemporalContext(visitorContext?.location?.timezone);
+  const systemPrompt = nonStreamStaticPrefix + nonStreamTemporal + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
     maxTokens: 400,
+    cacheBreakpoints: [nonStreamStaticPrefix.length],
     ...(model ? { model } : {}),
   };
   const response = await createCompletion(llmRequest);
@@ -1642,6 +1921,7 @@ export async function handleChatTurn(
     done,
     suggestions,
     detectedMode,
+    learned: session.learned,
     extraQuestions,
     ...(isTestMode() ? { testMode: true } : {}),
   };
@@ -2011,12 +2291,16 @@ export async function* handleChatTurnStreaming(
 
   // Load or create session
   const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const referredSessionSeeded = seedReferredSession(session, context, funnelMetadata, options);
 
   // Emit session ID immediately so the frontend can store it
   yield { type: "session", sessionId: session.sessionId, ...(isTestMode() ? { testMode: true } : {}) };
 
   // Rate limit: per-session
   if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
     yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
@@ -2064,6 +2348,9 @@ export async function* handleChatTurnStreaming(
   if (funnelEventMatch) {
     const eventName = funnelEventMatch[1];
     await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     yield { type: "done" };
     return;
   }
@@ -2142,16 +2429,23 @@ export async function* handleChatTurnStreaming(
   const streamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
   const streamPromptMode: PromptMode = earlyPromptMode;
   const isInterviewTurn = isPreCommitTurn;
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel, {
+  // Split prompt: static prefix gets cached. Temporal (minute-rolling) and
+  // state directive (userTurns / learned) live past the breakpoint so the
+  // cache stays valid across the prime-cache → first-reply window.
+  const streamStaticPrefix = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel, {
     personaId: streamPersonaId,
     promptMode: streamPromptMode,
-  }) + buildStateDirective(session);
+    omitTemporal: true,
+  });
+  const streamTemporal = formatTemporalContext(visitorContext?.location?.timezone);
+  const systemPrompt = streamStaticPrefix + streamTemporal + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
     maxTokens: options?.maxTokens || 400,
+    cacheBreakpoints: [streamStaticPrefix.length],
     ...(model ? { model } : {}),
   };
 
@@ -2466,6 +2760,83 @@ export async function* handleChatTurnStreaming(
   // Send metadata and done
   yield { type: "metadata", requestName, requestLocation, requestEmail, done, suggestions, detectedMode, emailCaptured, plan, learned, extraQuestions, voiceReady, voiceToken: voiceTokenOut };
   yield { type: "done" };
+}
+
+// ============================================================
+// Anthropic prompt-cache priming
+// ============================================================
+
+/**
+ * Pre-warm Anthropic's prompt cache for an interview session before the
+ * visitor sends their first reply.
+ *
+ * Builds the EXACT same static prefix that handleChatTurnStreaming will
+ * build on the real first-reply call (same persona, promptMode=interview,
+ * same visitorContext, same conversationStage, omitTemporal=true) and
+ * fires a throwaway maxTokens:1 completion with cacheBreakpoints set at
+ * the prefix boundary. The next real call from this session reuses the
+ * cached prefix and skips the prefill cost (~1.5–2s on Claude Sonnet).
+ *
+ * Fire-and-forget. Errors are swallowed — priming is purely an optimisation.
+ * Returns immediately if the session isn't in interview stage or has no
+ * persona, since there's nothing meaningful to prime.
+ */
+export async function primeInterviewCache(
+  sessionId: string,
+  ip: string,
+  context: ChatContext = "front-door",
+): Promise<void> {
+  try {
+    const ipHash = hashIp(ip);
+    const session = await loadOrCreateSession(sessionId, context, ipHash);
+    if (!session.personaId || session.stage !== "interview") {
+      return;
+    }
+
+    const geo = await geolocateIp(ip, ipHash);
+    const visitorContext: VisitorContext | undefined = geo ? { location: geo } : undefined;
+
+    const conversationStage = inferConversationStage(session);
+    const personaId: PersonaId = session.personaId;
+    const promptMode: PromptMode = "interview";
+
+    const staticPrefix = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
+      personaId,
+      promptMode,
+      omitTemporal: true,
+    });
+    const temporal = formatTemporalContext(visitorContext?.location?.timezone);
+    const systemPrompt = staticPrefix + temporal + buildStateDirective(session);
+
+    // Append a bracket-tagged probe user turn so the call is a valid
+    // Anthropic shape (last message must be user). Bracketed content is
+    // engine-noise convention (matches [INTERVIEW_BEGIN], [EMAIL_CAPTURED]).
+    const llmMessages: LlmMessage[] = [
+      ...session.messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: "[PRIME_CACHE]" },
+    ];
+
+    let model: string | undefined;
+    try {
+      model = getConfiguredModel();
+    } catch {
+      return; // mock mode — nothing to prime
+    }
+
+    await createCompletion({
+      system: systemPrompt,
+      messages: llmMessages,
+      tools: [ALEX_RESPONSE_TOOL],
+      maxTokens: 1,
+      cacheBreakpoints: [staticPrefix.length],
+      ...(model ? { model } : {}),
+    });
+  } catch (err) {
+    console.warn("[primeInterviewCache] non-fatal:", err);
+  }
 }
 
 // Brief 148: Re-export from dedicated module (avoids circular dep with magic-link.ts)

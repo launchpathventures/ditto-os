@@ -17,8 +17,8 @@
  * without auth (AC11).
  *
  * Deployment mode (see ../lib/deployment.ts):
- * - `public`    — `/welcome` and `/admin` are publicly routable; `/` (root)
- *                 bypasses auth so the front door can render.
+ * - `public`    — `/welcome`, `/network`, and `/admin` are publicly routable;
+ *                 `/` (root) bypasses auth so the front door can render.
  * - `workspace` — `/welcome` and `/admin` are hard-404'd at the edge and are
  *                 not in the public list; `/` falls through to the auth check.
  */
@@ -67,7 +67,7 @@ const BASE_PUBLIC_PREFIXES = [
 ];
 
 /** Additional public prefixes enabled only in `public` deployment mode. */
-const PUBLIC_MODE_PREFIXES = ["/welcome", "/admin"];
+const PUBLIC_MODE_PREFIXES = ["/welcome", "/network", "/admin"];
 
 /**
  * Prefixes that are hard-404'd in `workspace` mode — these surfaces are

@@ -1,6 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { Instrument_Serif } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  display: "swap",
+  variable: "--font-instrument-serif",
+});
 
 export const metadata: Metadata = {
   title: "Ditto",
@@ -45,7 +54,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-background text-text-primary antialiased">
+      <body className={`${instrumentSerif.variable} min-h-screen bg-background text-text-primary antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -353,6 +353,58 @@ Same stages as the front door (GATHER → REFLECT & PROPOSE → DELIVER → GATH
 Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool with your suggestions and state flags.
 `.trim();
 
+const EXPERT_LANE_PROCESS = `
+## Your Task: Expert Lane Profile Card Intake
+
+You are helping an expert become legible to the network. Your job is not to make a generic bio. Your job is to extract the sharpest useful version of their card: what people hire them for, who should not hire them, who should, where they are unusually strong, and whether they are actually open for new work.
+
+The frontend renders a live \`NetworkProfileCardBlock\` as you learn. Keep the conversation short, direct, and card-shaped. Do not switch into the broader front-door sales process.
+
+## Fixed Intake Order
+
+Ask these six questions in exactly this order, one per turn:
+
+1. "When somebody hires you, what's the actual thing they're paying you for?"
+2. "Who's the worst fit for you? I'd rather know that first."
+3. "Tell me about a client you'd want more of. What were they like before they hired you?"
+4. "Three things you're better at than most people in your field. Just three."
+5. "What's the line about you that would make somebody say 'oh, I should talk to them'?"
+6. "Are you actually open for new work right now? It's fine to say no — I won't promote you if you're not."
+
+## Anti-Persona Escape Hatch
+
+Question 2 is intentionally awkward. If the user cannot answer or gives a vague answer, offer a soft fallback instead of forcing it. Use language like: "Don't worry, I'll keep this soft. Pick one or rewrite it: people who want a slide deck, not a pipeline / teams shopping for free advice / leaders who want strategy without implementation." If they still do not know, leave \`antiPersonaMd\` null. The card will show a "still asking" placeholder.
+
+## Visibility Semantics
+
+If the answer to question 6 is yes/open/available, set the card visibility to public/on-request according to the user's wording and say you will still check with them before reaching out. If they are not open, visibility stays off or on-request and you must say you will not promote them.
+
+## Card Contract
+
+Build toward a \`NetworkProfileCardBlock\`:
+- handle: normalized public handle, claimed separately by the route.
+- name: user's display name when known.
+- oneLineRole: the strongest hook from question 5, falling back to question 1.
+- signalDots: six dots for value, fit, client, edge, hook, open.
+- badges: up to three short phrases from question 4.
+- narrativeMd: answer to question 1.
+- antiPersonaMd: answer to question 2, or null when the escape hatch is needed.
+- greeterCuratedBy: alex for this lane.
+- visibility: public, on-request, or off.
+
+Do not emit an AuthorizationRequestBlock here. Do not mention costLabel. Pricing and paid authorization are deferred until a later workspace flow.
+
+## Workspace Upsell
+
+Only after the card is complete and the user chooses "Open for opportunities" or "Find me clients", use this upsell once per user/session:
+
+"Card's ready. I'll save this and you can chat with me at \`ditto.partners/people/{handle}\` — share that link with anyone curious about you. One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**"
+
+## How to Respond
+
+Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool. Keep question, suggestions, and learned aligned with the single current intake question. Do not ask for email, do not request location, do not set done, and do not start web search from this lane.
+`.trim();
+
 // ============================================================
 // Visitor Context
 // ============================================================
@@ -584,7 +636,7 @@ Sound like Alex — warm, direct, opinionated. Not an interviewer ticking boxes.
 // Public API
 // ============================================================
 
-export type ChatContext = "front-door" | "referred" | "review";
+export type ChatContext = "front-door" | "referred" | "review" | "expert" | "client";
 
 /** Conversation stage for stage-gated prompt injection (Insight-170: token efficiency) */
 export type ConversationStage = "gather" | "reflect" | "deliver" | "details" | "activate" | null;
@@ -728,7 +780,7 @@ If you emit any of the above flags, the server will silently strip them — don'
  * Build a concise temporal context block (<50 tokens).
  * Uses the visitor's timezone when available, otherwise UTC.
  */
-function formatTemporalContext(visitorTimezone?: string): string {
+export function formatTemporalContext(visitorTimezone?: string): string {
   const tz = visitorTimezone || "UTC";
   const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-AU", {
@@ -751,6 +803,13 @@ export interface FrontDoorPromptOptions {
   promptMode?: PromptMode;
   /** Optional sibling persona to mention in the interview nudge copy. */
   otherPersonaId?: PersonaId;
+  /**
+   * When true, omit the "## Current Time" block from the prompt. Callers that
+   * cache the prefix should set this and append the temporal block past the
+   * cache breakpoint, otherwise the minute-rolling timestamp will invalidate
+   * the cache between calls.
+   */
+  omitTemporal?: boolean;
 }
 
 export function buildFrontDoorPrompt(
@@ -773,6 +832,13 @@ export function buildFrontDoorPrompt(
     processInstructions = INTERVIEW_PROCESS;
   } else if (context === "referred") {
     processInstructions = REFERRED_PROCESS;
+  } else if (context === "expert") {
+    processInstructions = EXPERT_LANE_PROCESS;
+  } else if (context === "client") {
+    // TODO(Brief 257): replace this pass-through with client-lane directives.
+    processInstructions = conversationStage
+      ? getStageGatedInstructions(conversationStage)
+      : FRONT_DOOR_PROCESS;
   } else if (conversationStage) {
     processInstructions = getStageGatedInstructions(conversationStage);
   } else {
@@ -785,7 +851,9 @@ export function buildFrontDoorPrompt(
   const isIntro = promptMode === "intro";
 
   const contextBlock = !isIntro && visitorContext ? formatVisitorContext(visitorContext) : "";
-  const temporalBlock = isIntro ? "" : formatTemporalContext(visitorContext?.location?.timezone);
+  const temporalBlock = isIntro || options?.omitTemporal
+    ? ""
+    : formatTemporalContext(visitorContext?.location?.timezone);
 
   return [
     // Layer 0: Core judgment (Self's brain)

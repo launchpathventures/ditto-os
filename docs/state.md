@@ -1,10 +1,159 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-07 (Documenter — **Brief 253 first-time visitor staged preamble closed out**. Builder + Reviewer + dev-review fix-all all complete: preamble logic, Skip race guard via functional setState, and Escape-to-skip binding shipped on `ditto-conversation.tsx`; type-check passes 0 errors. autoPlay landing wiring is intentionally absent — Brief 246 superseded it to preserve the no-autoplay wedge contract. No brief file (conversational build), no new insight, no archive moves; one stale claim about wedge.tsx still exposing `autoPlay` corrected below.) **Previous:** Brief 246 wedge demo implemented and verified.
+**Last updated:** 2026-05-08 (Builder — **Brief 255 implemented; pending human approval**. `/network` now ships the single-viewport persona-neutral Surface A, `/network/chat?mode=` ships the split Surface B shell with lane-specific Q0, `ChatContext` accepts `expert`/`client`, Instrument Serif is loaded via `next/font/google` and constrained to the hero verb in this sub-brief, and public/workspace deployment routing was verified. Mandatory reviewer found 2 HIGH + 1 MEDIUM issues; all were fixed before closeout. Verification: focused Vitest 16/16 pass, `pnpm run type-check` pass, `pnpm test` 2595/2595 pass with 13 skipped, `pnpm run build` pass, expect-cli browser sweep pass, manual Playwright smoke pass. Full `pnpm test:e2e` remains red on pre-existing workspace/chat/admin e2e instability unrelated to `/network`; initial run also reused another workspace's port 3001 server.) **Previous:** Architect Brief 254 decomposed into 7 implementation sub-briefs (255-261), reviewed + revised (2026-05-08).
 
 ---
 
-## CURRENT — Documenter: Brief 253 first-time visitor staged preamble closeout (2026-05-07)
+## CURRENT — Builder: Brief 255 network landing + chat context implemented (pending human approval, 2026-05-08)
+
+**Direct trigger:** user invoked `/dev-builder 255`.
+
+**What shipped:**
+- Replaced `/network` with the Brief 255 single-viewport, persona-neutral landing. Surface A defaults to EXPERTS, switches headline/preview for CLIENTS, has no marketing-section stack, and contains no Alex/Mira/Greeter names.
+- Added `NetworkLanding` and `NetworkCardPreview` with inline static fixtures, 5s preview rotation, and reduced-motion opt-out.
+- Added `/network/chat?mode=expert|client` Surface B shell with split layout: left chat on `#f4f3ef`, right white preview placeholder pane, header mode toggle, browser confirm on lane switch, and exact expert/client Q0 openers.
+- Extended `ChatContext` and network chat API validation for `expert` and `client`, with TODO-pass-through prompt seams for Briefs 256/257.
+- Added a lane-session init route that seeds canned Q0 without LLM/tool calls; later LLM chat turns still require Turnstile unless the session came from an already verified front-door path.
+- Reused existing people/user `personaAssignment` rotation for Surface B where a known row exists; anonymous fallback now uses the same people-table rotation source rather than chat-session counts.
+- Loaded Instrument Serif Italic through `next/font/google`; current Brief 255 use is constrained to the Surface A hero verb.
+- Added tests for lane context normalization/Q0, known-user persona assignment, anonymous rotation fallback, prompt pass-through, landing source constraints, Turnstile trust guard, and preview pane branches.
+- Updated `/network` public-mode middleware allowance while preserving workspace-mode auth/redirect behavior.
+
+**Mandatory review:** separate reviewer initially found:
+- HIGH: lane-created sessions could bypass Turnstile on later chat routes.
+- HIGH: Surface B used chat-session counts rather than existing `personaAssignment`.
+- MEDIUM: Instrument Serif appeared on placeholder/card lines outside the locked use rule.
+
+All three were fixed and re-verified.
+
+**Verification:**
+- `pnpm vitest run src/engine/network-chat-prompt.test.ts src/engine/network-chat-lane.test.ts packages/web/components/marketing/network-landing.test.ts packages/web/app/network/chat/preview-pane.test.tsx` — 16/16 pass.
+- `pnpm run type-check` — pass.
+- `pnpm test` — 2595/2595 pass, 13 skipped.
+- `pnpm run build` — pass; `/network` and `/network/chat` emitted successfully.
+- `pnpm test:e2e:auto` — pass twice. First public-surface-oriented sweep: all 19 generated browser-check steps passed, including Network page render/visual and console sweep. Second post-review-fix sweep: pass under a workspace/private deployment assumption where `/network` returning 404 was the expected step; explicit public `/network` coverage is from the manual smoke below.
+- Manual Playwright smoke in public mode: `/network` desktop 1280x800 and mobile 390x844 have no horizontal overflow; desktop Surface A fits exactly in viewport; client/expert chat modes show Q0 and route correctly; `/welcome` still renders after Skip; no console errors.
+- Deployment guard: public `DITTO_DEPLOYMENT=public` returns 200 for `/network`; workspace `DITTO_DEPLOYMENT=workspace WORKSPACE_OWNER_EMAIL=owner@example.com` redirects anonymous `/network` to `/login?redirect=%2Fnetwork`.
+- `pnpm test:e2e` was attempted twice. The first run reused an existing port-3001 server from another workspace and failed against that app's 404 reset endpoint. An isolated run on port 3101 reached this app but failed in pre-existing workspace/chat/admin e2e specs unrelated to `/network` (18 passed, 10 failed).
+
+**No brief move yet:** Brief 255 remains in `docs/briefs/` until human approval.
+
+---
+
+## PREVIOUS — Architect: Brief 254 decomposed into 7 sub-briefs (255-261), reviewed + revised (2026-05-08)
+
+**Direct trigger:** user invoked `/dev-architect Brief 254 - decompose into subbriefs` to convert the parent spec into builder-claimable units along the parent's declared dependency seams.
+
+**What was produced:**
+
+| Sub-brief | Title | ACs | Depends on | Unlocks | File |
+|-----------|-------|-----|------------|---------|------|
+| 255 | Network landing + ChatContext + Instrument Serif | 16 | parent 254 | 256, 257, 259 | `docs/briefs/255-network-landing-and-chat-context.md` |
+| 256 | Expert lane + `NetworkProfileCardBlock` + handle + costLabel stub + session-lane tracker | 19 | 255 | 257, 259, 260, 261 | `docs/briefs/256-expert-lane-profile-card-and-handle.md` |
+| 257 | Client lane + `JobRequestCardBlock` + on-network match + intro stub | 17 | 255, 256 | 261 | `docs/briefs/257-client-lane-job-request-and-on-network-match.md` |
+| 258 | KB intake + voice + per-fact visibility + off-network scout | 17 | 255, 256 | 259, 260 | `docs/briefs/258-knowledge-base-intake-and-off-network-scout.md` |
+| 259 | `/people/[handle]` profile-as-chat + REPRESENTATIVE rule + `forward_note_to_user` | 17 | 256, 258 | 260, 261 | `docs/briefs/259-public-profile-as-chat-and-representative-rule.md` |
+| 260 | Share modal + dynamic OG + PNG export | 14 | 256, 258, 259 | 261 (tertiary upsell) | `docs/briefs/260-share-modal-og-renderer-png-export.md` |
+| 261 | `introductions` table + free counter + costLabel population + workspace upsell trigger | 17 | 256, 257, 259, 248 | parent 254 closeout | `docs/briefs/261-introductions-free-counter-and-costlabel.md` |
+
+**Parent brief edit:** `docs/briefs/254-network-two-sided-conversational-front-door.md` — Critical #6 fix added `forward_note_to_user(stepRunId, fromVisitor, factQuestion)` as the 6th `stepRunId`-guarded tool in §Constraints; trailing text now enumerates sub-briefs 258, 259, 260, 261 as the four sub-briefs that MUST assert tool-resolver↔directive parity (Insight-180 silent-failure guard).
+
+**Review pass:** spawned a fresh-context Dev Reviewer (general-purpose model) with comprehensive evaluation criteria across 10 focus areas (parent-brief constraint coverage; engine/product split; sizing per Insight-004; dependency-seam integrity; AC quality + boolean testability; security/trust-gate coverage; provenance + landscape entries; sequencing + parallelism feasibility; hard-rule enforcement in 259; smoke-test totality). Reviewer verdict: **REVISE BEFORE BUILD** — 7 critical + 7 important + 4 nits.
+
+**Fixes applied (all critical + all important):**
+- **Critical #1 (crossover trust-gate AC):** added to 256 (AC #18) + 257 (AC #16) — visibility flip and "Find me clients"/"Get an introduction" never emit a side-effecting tool except via the explicit gate path.
+- **Critical #2 (costLabel ordering hazard):** 256 ships the `costLabel?: string | null` optional stub field on `AuthorizationRequestBlock` (folded into AC #1) so 259's TypeScript build compiles; 261 verifies-not-adds (grep-asserts exactly one declaration) and refines population logic.
+- **Critical #3 (session-lane tracker orphaned):** 256 ships `src/engine/network-upsell-tracker.ts` + test file with `hasFiredUpsell`/`recordUpsellFired` (AC #19 + What Changes entries); 261 consumes the primitive without re-implementing.
+- **Critical #4 (directive↔resolver parity):** Insight-180 silent-failure guard ACs added in 258 (AC #13: KB intake + scout opt-in directives), 259 (AC #8: visitor-lane Greeter `forward_note_to_user`), 260 (AC #1: `generate_share_variants`), 261 (AC #5: `emit_intro_request`).
+- **Critical #5 (parent ACs M, N, O orphaned):** AC M (no marketing surface) → 255 AC #15 DOM-grep assertion; AC N (single-flag invariant) → 258 AC #14 + 4-part scenario test; AC O (ReviewCardBlock untouched) → 256 AC #1 snapshot test.
+- **Critical #6 (parent enumeration):** parent §Constraints enumerates `forward_note_to_user` as the 6th tool; trailing text enumerates the 4 sub-briefs requiring directive-parity ACs.
+- **Critical #7 (refusal-copy paraphrase guard):** 261 AC #14 reframed — refusal `reasonForRequester` MUST come from a fixed enumerated `REFUSAL_COPY` const tuple (4-6 strings) declared in `src/engine/network-emit-intro.ts`. Two-layered tests: (a) strict-set === assertion (deterministic — paraphrase leakage structurally impossible), (b) substring negative assertion across 3 fixture-rule vocabularies (defense-in-depth).
+- **Important #8-13:** 257 typed `IntroRequestStub` handoff contract (AC #17 + What Changes entry); 260 names sub-brief 258's `src/engine/kb/storage.ts:readUserFacts` as the KB read path; 261 marks scouted off-network candidates out-of-v1 in Non-Goals + Constraints + adds on-network handle validation with off-band "no-handle" refusal trigger; 261 AC #15 expanded to explicit 4×2 lane test matrix (4 refusal triggers × 2 lanes + 4 success/counter/upsell rows = 16 cells documented); 261 What Changes clarifies costLabel field-add seam (256 ships stub, 261 verifies).
+
+**Verification:**
+- All 7 sub-brief files exist at expected paths (`docs/briefs/255-261-*.md`).
+- AC counts per sub-brief: 255→16, 256→19, 257→17, 258→17, 259→17, 260→14, 261→17 — all within Insight-004 sizing rule (8-17, with 256 at the upper edge after AC #18 + #19 added; folding-not-stacking strategy preserved boundary).
+- Each sub-brief declares Depends on / Unlocks; the dependency graph forms a DAG with parallelism opportunity (256 ∥ 258 after 255 lands).
+- Parent Brief 254's six-tool §Constraints enumeration matches the four sub-briefs' directive-parity ACs (Critical #6 verified end-to-end).
+
+**Reference doc audit:**
+- `docs/architecture.md` — no change. Parent brief 254 already mapped to existing layers.
+- `docs/dictionary.md` — no change. New terms (`forward_note_to_user`, `REFUSAL_COPY`, `IntroRequestStub`) are sub-brief-internal; they enter the dictionary if they survive into shipped code.
+- `docs/adrs/` — no immediate change. Sub-brief 258 may produce an ADR for per-fact KB visibility after it ships (Insight-226-style maturation path).
+- `docs/landscape.md` — no change. No new external dependency introduced by the decomposition.
+- `docs/personas.md`, `docs/human-layer.md` — no change.
+- `docs/insights/` — no new insight. Insight-004 (sizing), Insight-180 (stepRunId guard), Insight-190 (migration journal), Insight-226 (REPRESENTATIVE-not-IMPERSONATOR) all consumed.
+
+**Retrospective:**
+- **What worked:** Folding-not-stacking strategy on Critical #5-O + Critical #2 + Critical #3 in sub-brief 256 — adding 5 reviewer ACs as 5 new ACs would have pushed 256 from 17 to 22, breaching Insight-004 sizing. Folding two findings into existing AC #1 (costLabel stub + ReviewCardBlock untouched) and one into AC #9 (session-lane tracker description) kept the brief at 19 — within the rule. Sizing pressure forces real prioritization, not cosmetic.
+- **What surprised:** Critical #2's ordering hazard (259 references `costLabel` on `AuthorizationRequestBlock`, but 261 was originally going to add it) was invisible at decomposition time because the dependency graph didn't surface field-level dependencies. Lesson: when a primitive is shared across sub-briefs, the field-add belongs in the EARLIEST sub-brief that ANY downstream sub-brief reads from, not the sub-brief whose population logic owns the value. Worth promoting to a design insight if it recurs.
+- **What to change:** The fresh-context reviewer found 7 critical + 7 important findings — significant. Most of these were composability defects (parent constraints orphaned, primitives invented in two places, fields added in the wrong sub-brief). Future multi-sub-brief decompositions should run a self-review pass against the parent brief's §Constraints and §Acceptance Criteria sections before spawning the external reviewer — many criticals would have been caught for free.
+
+---
+
+## PREVIOUS — Documenter: Brief 254 two-sided front door parent brief revision 2.1 (2026-05-07)
+
+**Direct trigger:** user invoked `/dev-documenter` after the fix-all pass on Brief 254 reviewer findings completed.
+
+**Files modified during this Documenter pass:**
+- Modified: `docs/state.md` (this closeout block; demoted prior Brief 253 closeout to PREVIOUS).
+- Modified: `docs/roadmap.md` (Phase 14 status paragraph extended with Brief 254 spec-landing record; added 8 rows under "Two-Sided Conversational Front Door (Brief 254 parent + Briefs 255-261 sub-briefs)" header — parent spec-complete, 7 sub-briefs each pending with dependency notation).
+- Created: `docs/insights/226-impersonator-inversion-for-mediated-personas.md` (REPRESENTATIVE-not-IMPERSONATOR pattern — Brief 254 Soul Move #5 generalised).
+- Moved: `docs/insights/153-three-layer-persona-architecture.md` → `docs/insights/archived/` (already explicitly marked Superseded by ADR-041; Brief 254 confirms the supersession is settled).
+
+**No brief file move** — Brief 254 is the **parent** spec, not a unit of completed implementation work. It stays at `docs/briefs/254-network-two-sided-conversational-front-door.md` until the implementation sub-briefs (255-261) ship and the parent itself can be retired.
+
+**What landed (Brief 254 revision 2.1, 707 lines):**
+- Persona-neutral Ethos-pattern landing at `ditto.partners/network` (single-viewport hero, expert and client lanes side-by-side, no Alex/Mira mention until lane chosen).
+- Public profile-as-chat at `/people/[handle]` — six-clause Greeter system prompt (identity, no fabrication, no AI self-disclosure, forwarded-note capture, silent anti-persona, gated intro emission). REPRESENTATIVE-not-IMPERSONATOR: the Greeter speaks **about** the host, never **as** the host. Inverts process-os Ask Charlie's "you ARE Charlie" rule — original to Ditto, captured as Insight-226.
+- Iconic profile card primitive (`NetworkProfileCardBlock`) — composable, dense.
+- KB intake (voice + structured upload + per-fact `public | on-request | off` visibility, filesystem-legible markdown). Per-fact visibility marked original to Ditto in Brief 254 §Provenance (Soul Move #6).
+- Share modal with 3 social voices (formal / candid / playful) generating `generate_share_variants` outputs.
+- Intro authorization via `JobRequestCardBlock` and existing `AuthorizationRequestBlock.costLabel` (Brief 248 primitive extension).
+- 7 surfaces declared (A-G); 7 sub-briefs (255-261) declared with engine boundary anchors and dependency notation.
+- 5 new side-effecting self-tools enumerated with stepRunId requirement per Insight-180: `generate_share_variants`, `scout_off_network`, `emit_intro_request`, `extract_kb_facts`, `record_voice_intake`.
+- Crossover trust-gate invariant added: every crossover path (expert→client, client→expert, public→private) has explicit trust-tier semantics.
+- 4 schema tables planned (sub-brief 258): `network_user_kb_documents`, `network_user_kb_facts`, `network_user_anti_persona`, `network_user_voice_intake`.
+- `networkUsers.handle` field (sub-brief 256), `introductions` table (sub-brief 261).
+
+**Reviewer findings (revision 2 → fix-all → revision 2.1):**
+- BLOCKER #1: hard-rule count mismatch (system prompt had 6 bullets, AC said 4). Fixed by renumbering prompt to six parallel testable clauses; AC-10 and Design Rule #8 updated to "six".
+- MAJOR #2: Brief 248 path pointed to `complete/` but the brief is still in-flight. Fixed to `docs/briefs/248-greeter-beat-2-authorization.md`.
+- MAJOR #3: stepRunId requirement was asserted but tools weren't enumerated. Fixed by listing all 5 tools with explicit signatures.
+- MAJOR #4: crossover trust-gate semantics missing. Added per-crossover-path invariant block.
+- MAJOR #5: sub-brief 257 path lacked an engine boundary anchor. Fixed by adding `packages/core/src/content-blocks.ts` to provenance row.
+- MINOR #6: Reference docs line missing per Insight-043. Added Reference Docs section with 15 sources verified at 2026-05-07.
+- MINOR #7: Mira scoreboard tracker not deferred-tracked. Added to new Deferred Items table (with payments, vector search, public directory).
+- MINOR #8: per-fact visibility provenance row missing. Added explicit "original to Ditto" row composing filesystem-legibility memory.
+- MINOR #9: AC-J refusal triggers vague. Fixed by enumerating 4 explicit triggers (anti-persona match, low-fit signal, user block list, abuse rate-limit).
+
+**Verification:**
+- Spec-only work — no code changes, no tests to run.
+- Grep verification: `four hard-rule|judgment says so|complete/248` returns 0 matches in Brief 254; `six clauses|Reference Docs|Deferred Items|original to Ditto|crossover path is permitted` all present.
+- Brief 254 revision 2.1 header reflects all 9 fixes with date 2026-05-07.
+
+**Reference doc audit:**
+- `docs/architecture.md` — no change. The two-sided front door is a Network Service surface; the architecture doc already covers Network Service in Layer 6 / cross-cutting. ADRs (041, 046) carry the load.
+- `docs/dictionary.md` — no change. New terms ("Greeter", "host", "iconic card") were already added in prior sessions; "REPRESENTATIVE-not-IMPERSONATOR" is captured in Insight-226 not in the dictionary (it's a principle, not vocabulary).
+- `docs/adrs/` — no immediate change. ADR-041 (Brand/Greeter/Self three-layer ontology) and ADR-046 (Network Service) remain accurate; Brief 254 composes them. Sub-briefs 256-258 may produce ADRs after they ship; Insight-226 may itself become an ADR after Greeter implementation lands.
+- `docs/landscape.md` — no change. No new external dependency; the share-variants generator uses existing LLM infrastructure.
+- `docs/personas.md` — no change. Brief 254 maps to Rob (expert lane) + Lisa (client lane) without redefining personas.
+- `docs/human-layer.md` — no change. The 7 surfaces compose existing Layer 6 primitives.
+- `docs/insights/` — created 226 (REPRESENTATIVE-not-IMPERSONATOR); archived 153 (Superseded by ADR-041). No other insight archival triggered.
+
+**Insight audit:**
+- **NEW:** `docs/insights/226-impersonator-inversion-for-mediated-personas.md` — REPRESENTATIVE-not-IMPERSONATOR pattern. Generalises Brief 254 Soul Move #5: when an AI speaks for an absent human in a context where the human's reputation is at stake, the AI must speak **about** them in third person, never **as** them in first person. Inverts process-os Ask Charlie's "you ARE Charlie" rule. Active until absorbed into ADR after Greeter implementation lands.
+- **ARCHIVED:** `docs/insights/153-three-layer-persona-architecture.md` → `docs/insights/archived/`. Already explicitly marked "Superseded by ADR-041 (2026-05-01)" in its header. Brief 254 confirms the supersession is settled — ADR-041's Brand/Greeter/Self ontology is the live model.
+- Insights 195 (parallel-audit) and 218 (Builder-grep-sibling-peers) remain active and applicable.
+
+**Retrospective:**
+- **What worked:** The reviewer pass found a real BLOCKER (hard-rule count mismatch) that would have produced an unbuildable spec — the system prompt and AC would have disagreed at implementation time. Fresh-context Sonnet reviewer was the right choice (Insight-038 / maker-checker). Fix-all pass at the spec layer is cheap relative to fix-all at the code layer.
+- **What surprised:** Per-fact KB visibility (`public | on-request | off`) had no external precedent in 50+ refero results — LinkedIn/Contra carry only profile-level flags. This composes the user's filesystem-legibility preference (`feedback_user_facing_legibility.md`) with `on-request` semantics the Greeter can act on. Likely an ADR candidate after sub-brief 258 ships.
+- **What to change:** Multi-surface parent briefs need an explicit "engine boundary anchor" column in the sub-brief tree from the start, not added on reviewer feedback. Revision 2.1 added it for sub-brief 257 only — sub-briefs 255, 256, 258, 259, 260, 261 should be cross-checked when they're drafted.
+
+---
+
+## PREVIOUS — Documenter: Brief 253 first-time visitor staged preamble closeout (2026-05-07)
 
 **Direct trigger:** user invoked `/dev-documenter and mark complete` after the Builder finished the dev-review fix-all pass on Brief 253.
 
@@ -2399,6 +2548,14 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 | 207 — Vision Analysis Tool (`content.analyze_image`) | Cross-cutting tool surface | **Draft (2026-04-20).** 12 ACs, one build session. Extends ADR-026 purpose routing. Closes the vision gap from Hermes coverage-check. Builder-claimable — no upstream deps. |
 | 208 — Slack Adapter + Agent Channel Tool Surface | Cross-cutting channel expansion | **Draft (2026-04-20).** 13 ACs, one build session. Extends existing `ChannelAdapter` interface. New Slack adapter + `messaging.*` tool-surface for existing Unipile channels (WhatsApp/Telegram/Instagram). Closes Slack gap; deferred Discord/Signal with named trigger. Builder-claimable — no upstream deps. Parallelizable with Brief 207. |
 | 211 — Workspace ChatPanel Message-Stomp Fix | Cross-cutting bugfix (PR #35 regression) | **Built + reviewed, awaiting merge (2026-04-21).** 13 ACs. Surgical React fix applied to `workspace.tsx` (added `appliedActiveIdRef` guard + comment citing Insight-204). 10 e2e specs un-skipped across `blocks.spec.ts`, `pipeline.spec.ts`, `planning.spec.ts` — all pass. type-check clean, 1873 unit tests pass, 17/19 e2e pass. The 2 e2e failures are in `onboarding.spec.ts` (`/chat` surface, not workspace): line 26 is 5-worker flake (passes alone), line 43 is **pre-existing** (fails on baseline without the fix, confirmed by stash-and-rerun) — tracked as follow-up debt, orthogonal to Brief 211. ACs 1, 2, 10, 11, 12 require manual smoke verification before final close-out. Next: human approval → PR → move brief to `docs/briefs/complete/`. |
+| 254 — Network as Two-Sided Conversational Front Door (parent) | 14 — Network Agent | **Spec-complete, decomposed into 7 sub-briefs (2026-05-08).** Parent stays at `docs/briefs/254-...md` until sub-briefs ship. Sub-briefs 255-261 are the implementation units. |
+| 255 — Network Landing + ChatContext + Instrument Serif | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 16 ACs. **Builder-claimable — first in build order.** No upstream sub-brief deps. Foundation: `/network` Ethos-pattern landing (single-viewport, persona-neutral), expert/client lane preview-pane stubs, ChatContext extension (3→6+ values), Instrument Serif font registration. Marketing-surface DOM-grep negative test (parent AC M). |
+| 256 — Expert Lane + `NetworkProfileCardBlock` + handle + costLabel stub + session-lane tracker | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 19 ACs. Depends on 255. Parallelizable with 258 after 255. Ships: expert-lane Greeter directive, `NetworkProfileCardBlock` schema + canonical in-chat renderer (load-bearing for 260 OG/PNG parity), `networkUsers.handle` field + reserved-list + claim flow, `costLabel?: string \| null` optional stub (so 259 builds), session-lane upsell tracker primitive (consumed by 261), crossover trust-gate AC, ReviewCardBlock untouched assertion. |
+| 257 — Client Lane + `JobRequestCardBlock` + on-network match + intro stub | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 17 ACs. Depends on 255 + 256. Ships: client-lane Greeter directive (six-question intake), `JobRequestCardBlock` schema, `matchOnNetwork`/`SuggestedCandidate` (single-prompt LLM match against listed Selfs — no vector search v1), budget-privacy enforcement, "Get an introduction" stub returning typed `IntroRequestStub` (seam consumed by 261), crossover trust-gate AC. |
+| 258 — KB Intake + Voice + Per-Fact Visibility + Off-Network Scout | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 17 ACs. Depends on 255 + 256. Parallelizable with 256 after 255 (since 258 reads from 256's user record but doesn't extend its types). Ships: KB intake (voice + structured upload), 4 schema tables (`network_user_kb_documents`, `network_user_kb_facts`, `network_user_anti_persona`, `network_user_voice_intake`), per-fact `public \| on-request \| off` visibility (filesystem-legible markdown — composes user's legibility preference), `extract_kb_facts` + `record_voice_intake` + `scout_off_network` self-tools (Insight-180 guarded), single-flag invariant integration test (parent AC N). |
+| 259 — `/people/[handle]` Profile-as-Chat + REPRESENTATIVE Rule | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 17 ACs. Depends on 256 + 258. Ships: visitor-lane public profile chat surface, six-clause Greeter system prompt enforcing REPRESENTATIVE-not-IMPERSONATOR (Insight-226), `forward_note_to_user(stepRunId, fromVisitor, factQuestion)` self-tool (Insight-180 guarded — parent's 6th tool), third-person response wording test (no first-person leakage), gated intro emission Hard Rule #6. |
+| 260 — Share Modal + Dynamic OG + PNG Export | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 14 ACs. Depends on 256 + 258 + 259. Ships: 3-voice share modal (`generate_share_variants` self-tool, Insight-180 guarded), `/people/[handle]/opengraph-image.tsx` Next.js OG route, PNG export at print contrast, iconic-card silhouette parity across 4 contexts (in-chat / OG / PNG / LinkedIn — primitives extracted from 256's renderer). |
+| 261 — Introductions Table + Free Counter + costLabel Population + Workspace Upsell Trigger | 14 — Network Agent | **Ready (2026-05-08, reviewed + revised).** 17 ACs. Depends on 256 + 257 + 259 + 248 (`AuthorizationRequestBlock` primitive). **Closes the parent loop.** Ships: `introductions` + `networkUserBlockList` tables, `emit_intro_request` self-tool (Insight-180 guarded), free-counter logic (2 free + review-gated 3rd, no payments — `priceCents` deliberately absent), 4 refusal triggers + on-network handle validation (5th off-band trigger), enumerated `REFUSAL_COPY` const tuple making paraphrase leakage structurally impossible, workspace upsell verbatim copy fires once-per-session-lane (consumes 256's tracker), 4×2 lane test matrix (16 documented cells), crossover trust-gate (3 cases). |
 
 **Completed briefs moved to `docs/briefs/complete/`:** 037 (superseded), 038 (parent complete), 059, 062, 063, 066, 067 (superseded), 069, 070, 075, 079 (both), 086, 087, 088, 089, 098, 101, 105, 106, 111, 112, 135, 137, 138, 139, 140, 141, 049, 132, 133, 142, 144, 145, 146, 147, 148, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 180. Legacy prototype briefs also archived.
 
@@ -2407,6 +2564,7 @@ Tracked in `docs/debts/`. Run `pnpm cli debt` to list. Test-utils `createTables`
 **Meta-process robustness: ALL COMPLETE (2026-04-16).** 10 meta processes, 44 work items, 11 briefs (145, 146, 147, 148, 155-165). See `docs/meta-process-roadmap.md`.
 
 **Operational (P0):**
+0. **Build Brief 254 sub-brief 255 (Network Landing + ChatContext + Instrument Serif)** — **Ready (2026-05-08, reviewed + revised).** First sub-brief in Brief 254's 7-piece decomposition. Builder-claimable — no upstream sub-brief deps. Build order: 255 → 256 ∥ 258 → 257 → 259 → 260 → 261 (parent 254 closes when 261 lands). Each sub-brief has its own ACs, smoke test, and review process — claim one at a time per Insight-004 sizing. Invoke `/dev-builder 255` to start.
 1. **Build Brief 211 (Workspace ChatPanel Message-Stomp Fix)** — **Ready (2026-04-21, reviewed).** User-visible regression: workspace chat wipes streamed assistant messages on stream completion. Blocks 10 e2e specs (currently `.skip`-marked across `blocks.spec.ts`, `pipeline.spec.ts`, `planning.spec.ts`). Surgical React fix — one session. **This is the highest-priority build because every conversational interaction in the workspace surface is broken, and the e2e regression net is silenced until it lands.** Builder-claimable.
 2. **Activate first GTM pipeline cycle** — all tooling is wired. Set `DITTO_TEST_MODE=false` and activate. Pipeline is ready.
 3. **Invoke `/dev-designer` for Hire-a-Specialist UX** — produces `docs/research/hire-a-specialist-ux.md` covering Agent Card (#10), Agent Detail page, and three-voice conversation surface. Required before Brief 204 build begins. Mobile rendering of three-voice surface (Rob's thumb-swipe context) is the load-bearing open question.

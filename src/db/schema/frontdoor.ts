@@ -25,7 +25,7 @@ export const chatSessions = sqliteTable("chat_sessions", {
   id: text("id").primaryKey().$defaultFn(() => randomUUID()),
   sessionId: text("session_id").notNull().unique(),
   messages: text("messages", { mode: "json" }).notNull().$type<Array<{ role: string; content: string }>>(),
-  context: text("context").notNull(), // "front-door" | "referred" | "escalated"
+  context: text("context").notNull(), // "front-door" | "referred" | "review" | "expert" | "client"
   ipHash: text("ip_hash").notNull(),
   requestEmailFlagged: integer("request_email_flagged", { mode: "boolean" }).notNull().default(false),
   messageCount: integer("message_count").notNull().default(0),
@@ -120,7 +120,7 @@ export const funnelEvents = sqliteTable("funnel_events", {
   id: text("id").primaryKey().$defaultFn(() => randomUUID()),
   sessionId: text("session_id").notNull(),
   event: text("event").notNull(),
-  surface: text("surface").notNull(), // "front-door" | "verify" | "referred"
+  surface: text("surface").notNull(), // "front-door" | "verify" | "referred" | "expert" | "client"
   metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
