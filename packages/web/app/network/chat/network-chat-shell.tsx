@@ -5,7 +5,15 @@ import Link from "next/link";
 import { ArrowLeft, ArrowUp, Check } from "lucide-react";
 
 import { Conversation } from "@/components/ai-elements/conversation";
-import type { NetworkProfileCardBlock } from "@/lib/engine";
+import {
+  EXPERT_LANE_QUESTIONS,
+  NETWORK_ANTI_PERSONA_OPTIONS,
+  buildNetworkProfileCard,
+  isVagueNetworkAntiPersona,
+  simpleNetworkHandle,
+  wantsNetworkVisibility,
+  type ExpertIntakeAnswers,
+} from "@/lib/network-expert-intake";
 
 import { ExpertCardActions } from "./expert-card-actions";
 import { ModeToggle } from "./mode-toggle";
@@ -13,32 +21,10 @@ import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 import { PreviewPane, type NetworkChatMode } from "./preview-pane";
 
 const SESSION_KEY = "ditto-network-lane-session";
-const FRONT_DOOR_SESSION_KEY = "ditto-network-chat-session";
-
-const EXPERT_QUESTIONS = [
-  "When somebody hires you, what's the actual thing they're paying you for?",
-  "Who's the worst fit for you? I'd rather know that first.",
-  "Tell me about a client you'd want more of. What were they like before they hired you?",
-  "Three things you're better at than most people in your field. Just three.",
-  "What's the line about you that would make somebody say 'oh, I should talk to them'?",
-  "Are you actually open for new work right now? It's fine to say no — I won't promote you if you're not.",
-] as const;
+const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
 
 const UPSELL_COPY =
   "Card's ready. I'll save this and you can chat with me at `ditto.partners/people/{handle}` — share that link with anyone curious about you. One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**";
-
-const ANTI_PERSONA_OPTIONS = [
-  "people who want a slide deck, not a pipeline",
-  "teams shopping for free advice",
-  "leaders who want strategy without implementation",
-];
-
-const SIGNAL_COLORS: NetworkProfileCardBlock["signalDots"][number]["color"][] = [
-  "petal",
-  "mint",
-  "canary",
-  "lavender",
-];
 
 interface LaneMessage {
   role: "user" | "assistant";
@@ -55,108 +41,6 @@ interface LaneResponse {
   messages: LaneMessage[];
 }
 
-interface ExpertAnswers {
-  uvp?: string;
-  antiPersona?: string | null;
-  idealClient?: string;
-  skills?: string;
-  hook?: string;
-  visibility?: string;
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || "you";
-}
-
-function simpleHandle(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 32) || "expert"
-  );
-}
-
-function isVagueAntiPersona(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  return (
-    normalized.length < 16 ||
-    /^(not sure|idk|i don't know|dont know|anyone|everyone|no idea|skip|none|no one)$/i.test(normalized)
-  );
-}
-
-function wantsVisibility(value: string): boolean {
-  return /\b(yes|yeah|yep|open|available|sure|new work|taking)\b/i.test(value);
-}
-
-function skillsFrom(answer?: string): string[] {
-  if (!answer) return ["positioning", "introductions", "follow-through"];
-
-  const parts = answer
-    .split(/[,;\n]|\b\d[.)]\s*/g)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return (parts.length > 0 ? parts : [answer]).slice(0, 3);
-}
-
-function buildCard({
-  answers,
-  displayName,
-  greeterName,
-  handle,
-  visible,
-}: {
-  answers: ExpertAnswers;
-  displayName: string;
-  greeterName: string;
-  handle: string;
-  visible: boolean;
-}): NetworkProfileCardBlock {
-  const name = displayName.trim() || "Expert";
-  const handleSlug = simpleHandle(handle || name);
-  const signals = [
-    { id: "uvp", label: "Value", filled: Boolean(answers.uvp) },
-    { id: "fit", label: "Fit", filled: typeof answers.antiPersona !== "undefined" },
-    { id: "client", label: "Client", filled: Boolean(answers.idealClient) },
-    { id: "edge", label: "Edge", filled: Boolean(answers.skills) },
-    { id: "hook", label: "Hook", filled: Boolean(answers.hook) },
-    { id: "open", label: "Open", filled: Boolean(answers.visibility) },
-  ];
-  const skillBadges = skillsFrom(answers.skills).map((label, index) => ({
-    label,
-    color: SIGNAL_COLORS[index % SIGNAL_COLORS.length],
-  }));
-  const oneLineRole =
-    answers.hook?.trim() ||
-    answers.uvp?.trim() ||
-    "I help good work find the right people.";
-
-  return {
-    type: "network-profile-card",
-    handle: handleSlug,
-    name,
-    portraitUrl: null,
-    cityLabel: null,
-    oneLineRole,
-    signalDots: signals.map((signal, index) => ({
-      ...signal,
-      color: SIGNAL_COLORS[index % SIGNAL_COLORS.length],
-    })),
-    badges: skillBadges,
-    narrativeMd: answers.uvp?.trim() || null,
-    antiPersonaMd: answers.antiPersona === undefined ? null : answers.antiPersona,
-    greeterCuratedBy: greeterName.toLowerCase() === "mira" ? "mira" : "alex",
-    lastUpdatedAt: new Date().toISOString(),
-    visibility: visible ? "public" : "on-request",
-    shareUrl: `/people/${handleSlug}`,
-    ogImageUrl: `/api/v1/network/og/${handleSlug}`,
-  };
-}
-
 export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode }) {
   const [currentMode, setCurrentMode] = useState<NetworkChatMode>(initialMode);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -165,10 +49,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [expertStep, setExpertStep] = useState(0);
-  const [expertAnswers, setExpertAnswers] = useState<ExpertAnswers>({});
+  const [expertAnswers, setExpertAnswers] = useState<ExpertIntakeAnswers>({});
   const [antiFallbackOpen, setAntiFallbackOpen] = useState(false);
   const [displayName, setDisplayName] = useState("You");
   const [handleInput, setHandleInput] = useState("you");
+  const [greeterName, setGreeterName] = useState("Alex");
   const [claimedHandle, setClaimedHandle] = useState<string | null>(null);
   const [handleAlternatives, setHandleAlternatives] = useState<string[]>([]);
   const [wantsVisible, setWantsVisible] = useState(false);
@@ -186,6 +71,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     setExpertStep(0);
     setExpertAnswers({});
     setAntiFallbackOpen(false);
+    setGreeterName(nextMode === "client" ? "Mira" : "Alex");
     setClaimedHandle(null);
     setHandleAlternatives([]);
     setUpsellShown(false);
@@ -217,16 +103,17 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
 
         window.localStorage.setItem(`${SESSION_KEY}:${nextMode}`, data.sessionId);
         setSessionId(data.sessionId);
+        setGreeterName(data.greeterName || (data.personaId === "mira" ? "Mira" : "Alex"));
         if (data.userName) {
           setDisplayName(data.userName);
-          setHandleInput(simpleHandle(data.userName));
+          setHandleInput(simpleNetworkHandle(data.userName));
         }
 
         const laneMessages =
           data.messages.length > 0 ? data.messages : [{ role: "assistant" as const, content: data.opener }];
         setMessages(
-          nextMode === "expert" && !laneMessages.some((message) => message.content === EXPERT_QUESTIONS[0])
-            ? [...laneMessages, { role: "assistant", content: EXPERT_QUESTIONS[0] }]
+          nextMode === "expert" && !laneMessages.some((message) => message.content === EXPERT_LANE_QUESTIONS[0])
+            ? [...laneMessages, { role: "assistant", content: EXPERT_LANE_QUESTIONS[0] }]
             : laneMessages,
         );
       } catch {
@@ -245,7 +132,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                   content:
                     "Good. I'm Alex. I'll ask the awkward-but-useful questions and turn the answers into a card people can actually use.",
                 },
-                { role: "assistant", content: EXPERT_QUESTIONS[0] },
+                { role: "assistant", content: EXPERT_LANE_QUESTIONS[0] },
               ]
             : [
                 {
@@ -267,19 +154,19 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     };
   }, [initialMode]);
 
-  const intakeComplete = expertStep >= EXPERT_QUESTIONS.length;
+  const intakeComplete = expertStep >= EXPERT_LANE_QUESTIONS.length;
   const previewCard = useMemo(
     () =>
       currentMode === "expert"
-        ? buildCard({
+        ? buildNetworkProfileCard({
             answers: expertAnswers,
             displayName,
-            greeterName: "Alex",
+            greeterName,
             handle: claimedHandle || handleInput,
             visible: wantsVisible,
           })
         : null,
-    [claimedHandle, currentMode, displayName, expertAnswers, handleInput, wantsVisible],
+    [claimedHandle, currentMode, displayName, expertAnswers, greeterName, handleInput, wantsVisible],
   );
 
   function appendMessage(message: LaneMessage) {
@@ -287,7 +174,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
   }
 
   function nextQuestion(step: number) {
-    const question = EXPERT_QUESTIONS[step];
+    const question = EXPERT_LANE_QUESTIONS[step];
     if (question) {
       appendMessage({ role: "assistant", content: question });
     }
@@ -329,6 +216,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       });
       const result = (await response.json()) as {
         ok: boolean;
+        error?: string;
         handle?: string;
         upsell?: boolean;
         alternatives?: string[];
@@ -336,13 +224,20 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       };
 
       if (!response.ok || !result.ok || !result.handle) {
-        setHandleAlternatives(result.alternatives ?? []);
+        setHandleAlternatives(response.status === 409 ? result.alternatives ?? [] : []);
+        const failureCopy =
+          response.status === 409
+            ? result.reason === "reserved"
+              ? "That handle is reserved. Pick one of these or try another."
+              : "That handle is already taken. Pick one of these or try another."
+            : response.status === 503 || result.error === "network_db_unavailable"
+              ? "I couldn't reach the network database. Try saving again in a moment."
+              : response.status === 403
+                ? "I need the live lane connected before I can save this card. Refresh and try again."
+                : "I couldn't save that card. Try again in a moment.";
         appendMessage({
           role: "assistant",
-          content:
-            result.reason === "reserved"
-              ? "That handle is reserved. Pick one of these or try another."
-              : "That handle is already taken. Pick one of these or try another.",
+          content: failureCopy,
         });
         return { ok: false };
       }
@@ -384,7 +279,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     }
 
     if (antiFallbackOpen) {
-      const antiPersona = isVagueAntiPersona(answer) ? null : answer;
+      const antiPersona = isVagueNetworkAntiPersona(answer) ? null : answer;
       setExpertAnswers((current) => ({ ...current, antiPersona }));
       setAntiFallbackOpen(false);
       setExpertStep(2);
@@ -392,11 +287,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       return;
     }
 
-    if (expertStep === 1 && isVagueAntiPersona(answer)) {
+    if (expertStep === 1 && isVagueNetworkAntiPersona(answer)) {
       setAntiFallbackOpen(true);
       appendMessage({
         role: "assistant",
-        content: `Don't worry, I'll keep this soft. Pick one or rewrite it: ${ANTI_PERSONA_OPTIONS.join(
+        content: `Don't worry, I'll keep this soft. Pick one or rewrite it: ${NETWORK_ANTI_PERSONA_OPTIONS.join(
           " / ",
         )}.`,
       });
@@ -405,11 +300,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
 
     const answerKey = ["uvp", "antiPersona", "idealClient", "skills", "hook", "visibility"][
       expertStep
-    ] as keyof ExpertAnswers;
+    ] as keyof ExpertIntakeAnswers;
     setExpertAnswers((current) => ({ ...current, [answerKey]: answer }));
 
     if (expertStep === 5) {
-      const visible = wantsVisibility(answer);
+      const visible = wantsNetworkVisibility(answer);
       setWantsVisible(visible);
       setExpertStep(6);
       appendMessage({
@@ -462,6 +357,73 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     }, 350);
   }
 
+  function renderCardControls() {
+    return (
+      <>
+        <ExpertCardActions
+          className="w-full max-w-full"
+          wantsVisibility={wantsVisible}
+          onTweak={() => {
+            setTweakMode(true);
+            appendMessage({
+              role: "assistant",
+              content: "Send me the line you want this card to orbit around.",
+            });
+          }}
+          onOpenForOpportunities={() => void handleOpenForOpportunities()}
+          onFindClients={() => void handleFindClients()}
+        />
+        <div className="grid w-full max-w-full gap-3 rounded-[24px] border border-[#201a17]/10 bg-white/85 p-4 shadow-[0_12px_30px_rgba(32,26,23,0.06)] sm:grid-cols-[1fr_1fr_auto]">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+            Name
+            <input
+              value={displayName}
+              onChange={(event) => {
+                setDisplayName(event.target.value);
+                if (!claimedHandle) setHandleInput(simpleNetworkHandle(event.target.value));
+              }}
+              className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+            Handle
+            <input
+              value={handleInput}
+              onChange={(event) => {
+                setHandleInput(simpleNetworkHandle(event.target.value));
+                setClaimedHandle(null);
+              }}
+              className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={persisting}
+            onClick={() => void claimCard()}
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-2xl bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            <Check className="h-4 w-4" />
+            {claimedHandle ? "Saved" : "Claim"}
+          </button>
+          {handleAlternatives.length > 0 ? (
+            <div className="flex flex-wrap gap-2 sm:col-span-3">
+              {handleAlternatives.map((alternative) => (
+                <button
+                  key={alternative}
+                  type="button"
+                  onClick={() => setHandleInput(alternative)}
+                  className="rounded-full border border-[#201a17]/10 bg-[#f8efe4] px-3 py-1.5 text-xs font-semibold text-[#4a3f39] transition hover:border-[#201a17]/25"
+                >
+                  {alternative}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#fffaf4] text-[#201a17]">
       <div className="flex min-h-screen flex-col lg:flex-row">
@@ -474,7 +436,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
               <ArrowLeft className="h-4 w-4" />
               Network
             </Link>
-            <ModeToggle currentMode={currentMode} />
+            <ModeToggle mode={currentMode} />
           </header>
 
           <Conversation className="flex-1 px-4 py-5 sm:px-6">
@@ -503,69 +465,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
               ))}
 
               {currentMode === "expert" && intakeComplete && previewCard ? (
-                <div className="grid gap-3">
-                  <div className="max-w-[520px]">
+                <div className="grid max-w-full gap-3 overflow-hidden">
+                  <div className="w-full max-w-[520px]">
                     <NetworkProfileCardRenderer card={previewCard} />
                   </div>
-                  <ExpertCardActions
-                    wantsVisibility={wantsVisible}
-                    onTweak={() => {
-                      setTweakMode(true);
-                      appendMessage({
-                        role: "assistant",
-                        content: "Send me the line you want this card to orbit around.",
-                      });
-                    }}
-                    onOpenForOpportunities={() => void handleOpenForOpportunities()}
-                    onFindClients={() => void handleFindClients()}
-                  />
-                  <div className="grid gap-3 rounded-[24px] border border-[#201a17]/10 bg-white/85 p-4 shadow-[0_12px_30px_rgba(32,26,23,0.06)] sm:grid-cols-[1fr_1fr_auto]">
-                    <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
-                      Name
-                      <input
-                        value={displayName}
-                        onChange={(event) => {
-                          setDisplayName(event.target.value);
-                          if (!claimedHandle) setHandleInput(simpleHandle(event.target.value));
-                        }}
-                        className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
-                      Handle
-                      <input
-                        value={handleInput}
-                        onChange={(event) => {
-                          setHandleInput(simpleHandle(event.target.value));
-                          setClaimedHandle(null);
-                        }}
-                        className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={persisting}
-                      onClick={() => void claimCard()}
-                      className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-2xl bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <Check className="h-4 w-4" />
-                      {claimedHandle ? "Saved" : "Claim"}
-                    </button>
-                    {handleAlternatives.length > 0 ? (
-                      <div className="flex flex-wrap gap-2 sm:col-span-3">
-                        {handleAlternatives.map((alternative) => (
-                          <button
-                            key={alternative}
-                            type="button"
-                            onClick={() => setHandleInput(alternative)}
-                            className="rounded-full border border-[#201a17]/10 bg-[#f8efe4] px-3 py-1.5 text-xs font-semibold text-[#4a3f39] transition hover:border-[#201a17]/25"
-                          >
-                            {alternative}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  {renderCardControls()}
                 </div>
               ) : null}
             </div>
@@ -582,7 +486,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
                   currentMode === "expert"
-                    ? "Answer Alex here..."
+                    ? `Answer ${greeterName} here...`
                     : "The client lane transcript is next in the queue."
                 }
                 rows={1}
@@ -603,7 +507,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         <PreviewPane
           mode={currentMode}
           profileCard={previewCard}
-          profileProgress={currentMode === "expert" ? Math.min(expertStep + 1, EXPERT_QUESTIONS.length) : 1}
+          profileProgress={currentMode === "expert" ? Math.min(expertStep + 1, EXPERT_LANE_QUESTIONS.length) : 1}
+          mobileControls={currentMode === "expert" && intakeComplete && previewCard ? renderCardControls() : null}
         />
       </div>
     </main>

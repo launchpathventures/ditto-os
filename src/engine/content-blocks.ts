@@ -12,6 +12,9 @@ export {
   // Block types
   type TextBlock,
   type ReviewCardBlock,
+  type NetworkProfileCardBlock,
+  type NetworkProfileSignalDot,
+  type NetworkProfileBadge,
   type StatusCardBlock,
   type ActionBlock,
   type InputRequestBlock,

@@ -19,7 +19,8 @@ import { getPersonaConfig, type PersonaConfig } from "./persona";
 import { getCognitiveCore } from "./cognitive-core";
 import type { LlmToolDefinition } from "./llm";
 import { getPersonaChatVoice } from "./persona-voice";
-import type { PersonaId } from "../db/schema";
+import type { PersonaId } from "@ditto/core/db/network";
+import { EXPERT_LANE_QUESTIONS, NETWORK_ANTI_PERSONA_OPTIONS } from "./network-expert-intake";
 
 // ============================================================
 // Alex Response Tool Definition
@@ -364,16 +365,11 @@ The frontend renders a live \`NetworkProfileCardBlock\` as you learn. Keep the c
 
 Ask these six questions in exactly this order, one per turn:
 
-1. "When somebody hires you, what's the actual thing they're paying you for?"
-2. "Who's the worst fit for you? I'd rather know that first."
-3. "Tell me about a client you'd want more of. What were they like before they hired you?"
-4. "Three things you're better at than most people in your field. Just three."
-5. "What's the line about you that would make somebody say 'oh, I should talk to them'?"
-6. "Are you actually open for new work right now? It's fine to say no — I won't promote you if you're not."
+${EXPERT_LANE_QUESTIONS.map((question, index) => `${index + 1}. "${question}"`).join("\n")}
 
 ## Anti-Persona Escape Hatch
 
-Question 2 is intentionally awkward. If the user cannot answer or gives a vague answer, offer a soft fallback instead of forcing it. Use language like: "Don't worry, I'll keep this soft. Pick one or rewrite it: people who want a slide deck, not a pipeline / teams shopping for free advice / leaders who want strategy without implementation." If they still do not know, leave \`antiPersonaMd\` null. The card will show a "still asking" placeholder.
+Question 2 is intentionally awkward. If the user cannot answer or gives a vague answer, offer a soft fallback instead of forcing it. Use language like: "Don't worry, I'll keep this soft. Pick one or rewrite it: ${NETWORK_ANTI_PERSONA_OPTIONS.join(" / ")}." If they still do not know, leave \`antiPersonaMd\` null. The card will show a "still asking" placeholder.
 
 ## Visibility Semantics
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 
@@ -10,10 +10,12 @@ export function PreviewPane({
   mode,
   profileCard,
   profileProgress = 1,
+  mobileControls,
 }: {
   mode: NetworkChatMode | null;
   profileCard?: NetworkProfileCardBlock | null;
   profileProgress?: number;
+  mobileControls?: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const eyebrow =
@@ -62,6 +64,11 @@ export function PreviewPane({
             </button>
           </div>
           {expertPreview}
+          {mobileControls ? (
+            <div className="mt-4">
+              {mobileControls}
+            </div>
+          ) : null}
         </div>
       )}
 

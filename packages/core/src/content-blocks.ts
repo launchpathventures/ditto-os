@@ -53,6 +53,37 @@ export interface ReviewCardBlock {
   knowledgeUsed?: string[];
 }
 
+export interface NetworkProfileSignalDot {
+  id: string;
+  label: string;
+  filled: boolean;
+  color: "petal" | "mint" | "canary" | "lavender";
+}
+
+export interface NetworkProfileBadge {
+  label: string;
+  color?: "petal" | "mint" | "canary" | "lavender";
+}
+
+/** NetworkProfileCardBlock — public projection of an expert in the Ditto network. */
+export interface NetworkProfileCardBlock {
+  type: "network-profile-card";
+  handle: string;
+  name: string;
+  portraitUrl: string | null;
+  cityLabel: string | null;
+  oneLineRole: string;
+  signalDots: NetworkProfileSignalDot[];
+  badges: NetworkProfileBadge[];
+  narrativeMd: string;
+  antiPersonaMd: string | null;
+  greeterCuratedBy: "alex" | "mira";
+  lastUpdatedAt: string;
+  visibility: "public" | "on-request" | "off";
+  shareUrl: string;
+  ogImageUrl: string;
+}
+
 /** StatusCardBlock — Process or work item status.
  *  Optional `metadata` (Brief 221) carries typed subtype-specific data — e.g.,
  *  runner-dispatch state via `metadata.cardKind = "runnerDispatch"` plus runner
@@ -221,6 +252,8 @@ export interface AuthorizationRequestBlock {
   actionClass: AuthorizationActionClass;
   executionResult: AuthorizationResult | null;
   expiresAt: string | null;
+  /** Optional pricing/free-counter hint populated by later intro flows. */
+  costLabel?: string | null;
   /** Optional server/client correlation id for affordance events. */
   authorizationId?: string;
   /**
@@ -696,6 +729,7 @@ export interface ConfidenceAssessment {
 export type ContentBlock =
   | TextBlock
   | ReviewCardBlock
+  | NetworkProfileCardBlock
   | StatusCardBlock
   | ActionBlock
   | InputRequestBlock
@@ -747,6 +781,19 @@ export function renderBlockToText(block: ContentBlock): string {
         block.confidence ? `Confidence: ${block.confidence}` : "",
         block.outputText,
         block.actions.map((a) => `[${a.label}]`).join(" "),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+    case "network-profile-card":
+      return [
+        `${block.name} — ${block.oneLineRole}`,
+        block.cityLabel ? `Location: ${block.cityLabel}` : "",
+        `Handle: ${block.shareUrl}`,
+        block.badges.length > 0 ? `Badges: ${block.badges.map((badge) => badge.label).join(", ")}` : "",
+        block.narrativeMd,
+        block.antiPersonaMd ? `Allergic to: ${block.antiPersonaMd}` : `Allergic to: still asking ${block.name.split(/\s+/)[0] ?? block.name}`,
+        `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
       ]
         .filter(Boolean)
         .join("\n");

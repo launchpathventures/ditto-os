@@ -1,0 +1,41 @@
+{
+  "reserved": [
+    "admin",
+    "api",
+    "app",
+    "alex",
+    "billing",
+    "client",
+    "clients",
+    "ditto",
+    "ethos",
+    "help",
+    "legal",
+    "login",
+    "mira",
+    "network",
+    "people",
+    "pricing",
+    "root",
+    "share",
+    "support",
+    "team",
+    "www"
+  ],
+  "profanity": [
+    "asshole",
+    "bastard",
+    "cunt",
+    "fuck",
+    "shit"
+  ],
+  "impersonation": [
+    "openai",
+    "anthropic",
+    "google",
+    "microsoft",
+    "apple",
+    "linkedin",
+    "stripe"
+  ]
+}
