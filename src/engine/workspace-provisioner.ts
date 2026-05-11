@@ -46,7 +46,7 @@ export interface RailwayDeployment {
  * Abstract Railway API client. Injected for testability.
  */
 export interface RailwayClient {
-  createService(projectId: string, name: string): Promise<RailwayService>;
+  createService(projectId: string, name: string, image?: string): Promise<RailwayService>;
   deleteService(serviceId: string): Promise<void>;
   createVolume(serviceId: string, mountPath: string): Promise<RailwayVolume>;
   deleteVolume(volumeId: string): Promise<void>;
@@ -93,12 +93,17 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
   }
 
   return {
-    async createService(_projectId, name) {
+    async createService(_projectId, name, image) {
+      // Pass `source.image` so Railway creates a serviceInstance bound to
+      // the Docker image — without this, the service has no instance and
+      // serviceInstanceDeploy is a no-op (no deployments ever surface).
+      const input: Record<string, unknown> = { projectId, name };
+      if (image) input.source = { image };
       const data = await gql<{ serviceCreate: RailwayService }>(
         `mutation($input: ServiceCreateInput!) {
           serviceCreate(input: $input) { id name }
         }`,
-        { input: { projectId, name } },
+        { input },
       );
       return data.serviceCreate;
     },
@@ -347,10 +352,15 @@ export async function provisionWorkspace(
     const environmentId = await config.railwayClient.getEnvironmentId(config.projectId);
     progress("Getting environment... done");
 
-    // Step 3: Create Railway Service
+    // Step 3: Create Railway Service (with image source so a serviceInstance
+    // is bound — without it, serviceInstanceDeploy is a no-op).
     progress("Creating service...");
     const serviceName = `ditto-ws-${userId.replace(/[^a-z0-9-]/gi, "-").slice(0, 30)}`;
-    const service = await config.railwayClient.createService(config.projectId, serviceName);
+    const service = await config.railwayClient.createService(
+      config.projectId,
+      serviceName,
+      config.imageRef,
+    );
     created.serviceId = service.id;
     progress("Creating service... done");
 
