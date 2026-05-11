@@ -14,21 +14,32 @@ import {
   wantsNetworkVisibility,
   type ExpertIntakeAnswers,
 } from "@/lib/network-expert-intake";
+import {
+  CLIENT_LANE_QUESTIONS,
+  buildJobRequestCard,
+  type ClientIntakeAnswers,
+} from "@/lib/network-client-intake";
+import type { JobRequestCardBlock, SuggestedCandidate } from "@/lib/engine";
 
+import { ClientCardActions } from "./client-card-actions";
 import { ExpertCardActions } from "./expert-card-actions";
+import {
+  JobRequestCardRenderer,
+  type JobRequestEditableField,
+} from "./job-request-card-renderer";
 import { ModeToggle } from "./mode-toggle";
 import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 import { PreviewPane, type NetworkChatMode } from "./preview-pane";
+import { SuggestedCandidatesPanel } from "./suggested-candidates-panel";
+import { emitWorkspaceUpsell } from "./workspace-upsell";
 
 const SESSION_KEY = "ditto-network-lane-session";
 const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
 
-const UPSELL_COPY =
-  "Card's ready. I'll save this and you can chat with me at `ditto.partners/people/{handle}` — share that link with anyone curious about you. One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**";
-
 interface LaneMessage {
   role: "user" | "assistant";
   content: string;
+  block?: JobRequestCardBlock;
 }
 
 interface LaneResponse {
@@ -41,6 +52,24 @@ interface LaneResponse {
   messages: LaneMessage[];
 }
 
+export function clientPreviewProgress(clientStep: number, matchReturned = false): number {
+  if (matchReturned) return CLIENT_LANE_QUESTIONS.length + 1;
+  return Math.min(clientStep + 1, CLIENT_LANE_QUESTIONS.length);
+}
+
+const CLIENT_EDIT_FIELD_KEYS: Record<JobRequestEditableField, keyof ClientIntakeAnswers> = {
+  outcome: "jtbd",
+  reference: "referenceShape",
+  "bad fit": "antiPersonaMd",
+  "success criteria": "successCriteria",
+  budget: "budgetShape",
+  "scout preference": "scoutOptIn",
+};
+
+export function clientEditAnswerKey(field: JobRequestEditableField): keyof ClientIntakeAnswers {
+  return CLIENT_EDIT_FIELD_KEYS[field];
+}
+
 export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode }) {
   const [currentMode, setCurrentMode] = useState<NetworkChatMode>(initialMode);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -50,6 +79,15 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
   const [input, setInput] = useState("");
   const [expertStep, setExpertStep] = useState(0);
   const [expertAnswers, setExpertAnswers] = useState<ExpertIntakeAnswers>({});
+  const [clientStep, setClientStep] = useState(0);
+  const [clientAnswers, setClientAnswers] = useState<ClientIntakeAnswers>({});
+  const [pendingClientEditField, setPendingClientEditField] = useState<JobRequestEditableField | null>(null);
+  const [clientMatchCard, setClientMatchCard] = useState<JobRequestCardBlock | null>(null);
+  const [clientCandidates, setClientCandidates] = useState<SuggestedCandidate[]>([]);
+  const [selectedCandidateHandle, setSelectedCandidateHandle] = useState<string | null>(null);
+  const [clientMatchPending, setClientMatchPending] = useState(false);
+  const [clientMatchError, setClientMatchError] = useState<string | null>(null);
+  const [clientRefreshInFlight, setClientRefreshInFlight] = useState(false);
   const [antiFallbackOpen, setAntiFallbackOpen] = useState(false);
   const [displayName, setDisplayName] = useState("You");
   const [handleInput, setHandleInput] = useState("you");
@@ -70,6 +108,15 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     setInput("");
     setExpertStep(0);
     setExpertAnswers({});
+    setClientStep(0);
+    setClientAnswers({});
+    setPendingClientEditField(null);
+    setClientMatchCard(null);
+    setClientCandidates([]);
+    setSelectedCandidateHandle(null);
+    setClientMatchPending(false);
+    setClientMatchError(null);
+    setClientRefreshInFlight(false);
     setAntiFallbackOpen(false);
     setGreeterName(nextMode === "client" ? "Mira" : "Alex");
     setClaimedHandle(null);
@@ -114,6 +161,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         setMessages(
           nextMode === "expert" && !laneMessages.some((message) => message.content === EXPERT_LANE_QUESTIONS[0])
             ? [...laneMessages, { role: "assistant", content: EXPERT_LANE_QUESTIONS[0] }]
+            : nextMode === "client" && !laneMessages.some((message) => message.content === CLIENT_LANE_QUESTIONS[0])
+              ? [...laneMessages, { role: "assistant", content: CLIENT_LANE_QUESTIONS[0] }]
             : laneMessages,
         );
       } catch {
@@ -140,6 +189,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                   content:
                     "Good. I'm Mira. I'll help you turn the person you're looking for into a shape I can go hunt for.",
                 },
+                { role: "assistant", content: CLIENT_LANE_QUESTIONS[0] },
               ],
         );
       } finally {
@@ -168,9 +218,41 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         : null,
     [claimedHandle, currentMode, displayName, expertAnswers, greeterName, handleInput, wantsVisible],
   );
+  const clientPreviewCard = useMemo(
+    () =>
+      currentMode === "client"
+        ? buildJobRequestCard({
+            answers: clientAnswers,
+            greeter: greeterName.toLowerCase() === "mira" ? "mira" : "alex",
+          })
+        : null,
+    [clientAnswers, currentMode, greeterName],
+  );
+  const selectedCandidate = useMemo(
+    () => clientCandidates.find((candidate) => candidate.handle === selectedCandidateHandle) ?? null,
+    [clientCandidates, selectedCandidateHandle],
+  );
 
   function appendMessage(message: LaneMessage) {
     setMessages((current) => [...current, message]);
+  }
+
+  function replaceLatestJobRequestCard(card: JobRequestCardBlock) {
+    setMessages((current) => {
+      let index = -1;
+      for (let cursor = current.length - 1; cursor >= 0; cursor -= 1) {
+        if (current[cursor].block?.type === "job-request-card") {
+          index = cursor;
+          break;
+        }
+      }
+      if (index === -1) {
+        return [...current, { role: "assistant", content: "I updated the opportunity brief.", block: card }];
+      }
+      const next = current.slice();
+      next[index] = { ...next[index], block: card };
+      return next;
+    });
   }
 
   function nextQuestion(step: number) {
@@ -185,7 +267,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     setUpsellShown(true);
     appendMessage({
       role: "assistant",
-      content: UPSELL_COPY.replace("{handle}", handle),
+      content: emitWorkspaceUpsell("expert", { sessionId, handle }),
     });
   }
 
@@ -321,10 +403,123 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     nextQuestion(nextStep);
   }
 
+  function nextClientQuestion(step: number) {
+    const question = CLIENT_LANE_QUESTIONS[step];
+    if (question) {
+      appendMessage({ role: "assistant", content: question });
+    }
+  }
+
+  async function requestClientMatches(card: JobRequestCardBlock) {
+    setClientMatchPending(true);
+    setClientMatchError(null);
+    setClientCandidates([]);
+    setSelectedCandidateHandle(null);
+    appendMessage({
+      role: "assistant",
+      content: "thinking about who'd be a fit...",
+    });
+
+    try {
+      const response = await fetch("/api/v1/network/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          jobRequestCard: card,
+          sessionId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Match failed: ${response.status}`);
+      }
+      const candidates = (await response.json()) as SuggestedCandidate[];
+      const cardWithCandidates = { ...card, suggestedCandidates: candidates };
+      setClientMatchCard(cardWithCandidates);
+      setClientCandidates(candidates);
+      appendMessage({
+        role: "assistant",
+        content:
+          candidates.length > 0
+            ? "Three I'd put forward — they each map back to the shape you described."
+            : "Nobody on-network matches your shape yet. Want me to scan further?",
+      });
+    } catch {
+      setClientMatchError("I tripped looking for matches. Give me a sec — try again, or ask me to widen the net.");
+      appendMessage({
+        role: "assistant",
+        content: "I tripped looking for matches. Give me a sec — try again, or ask me to widen the net.",
+      });
+    } finally {
+      setClientMatchPending(false);
+    }
+  }
+
+  function handleClientSubmit(value: string) {
+    const answer = value.trim();
+    if (!answer) return;
+
+    appendMessage({ role: "user", content: answer });
+    setInput("");
+
+    if (pendingClientEditField) {
+      const answerKey = clientEditAnswerKey(pendingClientEditField);
+      const nextAnswers = { ...clientAnswers, [answerKey]: answer };
+      const card = buildJobRequestCard({
+        answers: nextAnswers,
+        greeter: greeterName.toLowerCase() === "mira" ? "mira" : "alex",
+      });
+      setPendingClientEditField(null);
+      setClientAnswers(nextAnswers);
+      replaceLatestJobRequestCard(card);
+      setClientMatchCard(card);
+      appendMessage({
+        role: "assistant",
+        content: `Good. I updated the ${pendingClientEditField}. I'll refresh the match list around that.`,
+      });
+      void requestClientMatches(card);
+      return;
+    }
+
+    const answerKey = [
+      "jtbd",
+      "referenceShape",
+      "antiPersonaMd",
+      "successCriteria",
+      "budgetShape",
+      "scoutOptIn",
+    ][clientStep] as keyof ClientIntakeAnswers;
+    const nextAnswers = { ...clientAnswers, [answerKey]: answer };
+    setClientAnswers(nextAnswers);
+
+    if (clientStep >= CLIENT_LANE_QUESTIONS.length - 1) {
+      setClientStep(CLIENT_LANE_QUESTIONS.length);
+      const card = buildJobRequestCard({
+        answers: nextAnswers,
+        greeter: greeterName.toLowerCase() === "mira" ? "mira" : "alex",
+      });
+      appendMessage({
+        role: "assistant",
+        content: "I wrote that into an opportunity brief.",
+        block: card,
+      });
+      setClientMatchCard(card);
+      void requestClientMatches(card);
+      return;
+    }
+
+    const nextStep = clientStep + 1;
+    setClientStep(nextStep);
+    nextClientQuestion(nextStep);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (currentMode !== "expert") return;
-    handleExpertSubmit(input);
+    if (currentMode === "expert") {
+      handleExpertSubmit(input);
+      return;
+    }
+    handleClientSubmit(input);
   }
 
   async function handleOpenForOpportunities() {
@@ -461,8 +656,81 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                   }
                 >
                   {message.content}
+                  {message.block?.type === "job-request-card" ? (
+                    <div className="mt-4 max-w-full">
+                      <JobRequestCardRenderer card={message.block} />
+                    </div>
+                  ) : null}
                 </div>
               ))}
+
+              {currentMode === "client" && clientMatchCard ? (
+                <div className="grid w-full max-w-full gap-3">
+                  {clientMatchPending ? (
+                    <div
+                      aria-label="Loading suggested candidates"
+                      className="grid gap-3 md:grid-cols-2"
+                    >
+                      {[0, 1, 2].map((index) => (
+                        <div
+                          key={index}
+                          className="min-h-[148px] rounded-2xl bg-surface-raised p-3 shadow-subtle"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-white/70" />
+                          <div className="mt-4 h-3 w-2/3 rounded-full bg-white/70" />
+                          <div className="mt-2 h-3 w-4/5 rounded-full bg-white/70" />
+                          <div className="mt-6 h-9 rounded-md bg-white/70" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : clientCandidates.length > 0 ? (
+                    <SuggestedCandidatesPanel
+                      candidates={clientCandidates}
+                      jobRequestCard={clientMatchCard}
+                      selectedCandidateHandle={selectedCandidateHandle}
+                      setSelectedCandidateHandle={setSelectedCandidateHandle}
+                      sessionId={sessionId}
+                      onRefreshInFlightChange={setClientRefreshInFlight}
+                      onCandidatesRefresh={(nextCandidates) => {
+                        setClientCandidates(nextCandidates);
+                        setClientMatchCard({
+                          ...clientMatchCard,
+                          suggestedCandidates: nextCandidates,
+                        });
+                        if (
+                          selectedCandidateHandle &&
+                          !nextCandidates.some(
+                            (candidate) => candidate.handle === selectedCandidateHandle,
+                          )
+                        ) {
+                          setSelectedCandidateHandle(null);
+                        }
+                      }}
+                    />
+                  ) : null}
+
+                  {clientMatchError ? (
+                    <div className="rounded-2xl bg-surface-raised px-4 py-3 text-sm text-text-secondary">
+                      {clientMatchError}{" "}
+                      <button
+                        type="button"
+                        onClick={() => void requestClientMatches(clientMatchCard)}
+                        className="font-semibold text-text-primary underline-offset-4 hover:underline"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {!clientMatchPending ? (
+                    <ClientCardActions
+                      selectedCandidate={selectedCandidate}
+                      isRefreshInFlight={clientRefreshInFlight}
+                      sessionId={sessionId}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
 
               {currentMode === "expert" && intakeComplete && previewCard ? (
                 <div className="grid max-w-full gap-3 overflow-hidden">
@@ -482,19 +750,19 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
             <div className="mx-auto flex max-w-3xl items-end gap-3 rounded-[26px] border border-[#201a17]/10 bg-white px-3 py-2 shadow-[0_18px_45px_rgba(32,26,23,0.08)]">
               <textarea
                 value={input}
-                disabled={currentMode !== "expert"}
+                disabled={currentMode !== "expert" && currentMode !== "client"}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
                   currentMode === "expert"
                     ? `Answer ${greeterName} here...`
-                    : "The client lane transcript is next in the queue."
+                    : `Answer ${greeterName} here...`
                 }
                 rows={1}
                 className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-[15px] leading-5 text-[#201a17] outline-none placeholder:text-[#a4958d] disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={currentMode !== "expert" || input.trim().length === 0}
+                disabled={(currentMode !== "expert" && currentMode !== "client") || input.trim().length === 0}
                 aria-label="Send"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#201a17] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35"
               >
@@ -507,8 +775,20 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         <PreviewPane
           mode={currentMode}
           profileCard={previewCard}
-          profileProgress={currentMode === "expert" ? Math.min(expertStep + 1, EXPERT_LANE_QUESTIONS.length) : 1}
+          jobRequestCard={clientPreviewCard}
+          profileProgress={
+            currentMode === "expert"
+              ? Math.min(expertStep + 1, EXPERT_LANE_QUESTIONS.length)
+              : clientPreviewProgress(
+                  clientStep,
+                  Boolean(clientMatchCard && !clientMatchPending && !clientMatchError),
+                )
+          }
           mobileControls={currentMode === "expert" && intakeComplete && previewCard ? renderCardControls() : null}
+          onMobileEditRequest={(message, field) => {
+            setPendingClientEditField(field);
+            appendMessage({ role: "assistant", content: message });
+          }}
         />
       </div>
     </main>

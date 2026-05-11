@@ -65,6 +65,7 @@ button:disabled, [type="submit"]:disabled {
   --color-surface-raised: #f4f3ef;    /* Whisper Gray — ghost panels, hover */
   --color-surface-subtle: #ecebea;    /* Light Taupe — tertiary surface */
   --color-border: #e5e3df;            /* Hairline border — muted */
+  --color-border-muted: #b8b4ad;      /* Muted ring — low-confidence markers */
   --color-border-strong: #111111;     /* Midnight Ink — inverted UI */
 
   /* Text */
@@ -224,6 +225,7 @@ button:disabled, [type="submit"]:disabled {
     --color-surface-raised: #1a1918;
     --color-surface-subtle: #272625;
     --color-border: #2a2826;
+    --color-border-muted: #5c5750;
     --color-border-strong: #ffffff;
 
     --color-text-primary: #ffffff;
