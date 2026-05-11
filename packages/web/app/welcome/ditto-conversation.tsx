@@ -675,6 +675,21 @@ export function DittoConversation() {
             }
 
 
+            if (event.type === "assistant-turn") {
+              setStatusMessage(null);
+              streamedText = "";
+              alexMsgAdded = false;
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "alex",
+                  text: event.text,
+                  blocks: Array.isArray(event.blocks) ? event.blocks : undefined,
+                },
+              ]);
+              setLoading(false);
+            }
+
             if (event.type === "text-replace") {
               // Enrichment produced a refined response — replace the message
               setStatusMessage(null);

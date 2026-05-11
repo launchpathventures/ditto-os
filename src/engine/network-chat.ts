@@ -11,6 +11,7 @@
  */
 
 import { db, schema } from "../db";
+import { networkDb } from "../db/network-db";
 import { eq, and, sql, desc, inArray, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
@@ -25,9 +26,16 @@ import { webSearch } from "./web-search";
 import { fetchUrlContent, type FetchResult } from "./web-fetch";
 import { geolocateIp } from "./geo";
 import type { LlmMessage } from "./llm";
-import type { AuthorizationRequestBlock, ContentBlock } from "./content-blocks";
+import type { AuthorizationRequestBlock, ContentBlock, JobRequestCardBlock } from "./content-blocks";
 import { buildFrontDoorBlocks } from "./network-chat-blocks";
-import type { PersonaId } from "../db/schema";
+import {
+  buildClientLaneResolutionTurns,
+  buildJobRequestCard,
+  CLIENT_LANE_QUESTIONS,
+  type ClientIntakeAnswers,
+} from "./network-client-intake";
+import { matchOnNetwork } from "./network-match";
+import type { PersonaId } from "@ditto/core/db/network";
 import type { ChatSessionStage } from "../db/schema/frontdoor";
 import { buildReferredConversationOpener } from "./referred-context";
 import {
@@ -38,6 +46,7 @@ import {
 } from "@ditto/core";
 import { gmailAuthorizedSend } from "./tools/gmail-authorized-send";
 import { writeMemory } from "./legibility/write-memory";
+import * as networkSchema from "@ditto/core/db/network";
 
 // ============================================================
 // Tool Call Extraction
@@ -217,6 +226,19 @@ function buildStateDirective(session: ChatSession): string {
   // does not apply until the visitor commits to a persona.
   if (session.stage === "interview") {
     return buildInterviewDirective(session);
+  }
+
+  if (session.context === "client") {
+    const answered = clientLaneUserAnswers(session).length;
+    const nextQuestion = CLIENT_LANE_QUESTIONS[answered];
+    const lines = ["\n\n## THIS TURN — client lane state"];
+    lines.push("Stay in the client-lane opportunity brief intake. Do not ask for name, business, location, email, or a broader front-door plan.");
+    if (nextQuestion) {
+      lines.push(`Ask the next unanswered client-lane question exactly as written: "${nextQuestion}"`);
+    } else {
+      lines.push("All six client-lane answers are present. Do not ask another intake question; the handler will emit the card and match framing.");
+    }
+    return lines.join("\n");
   }
 
   const learned = session.learned;
@@ -515,6 +537,7 @@ const AUTHENTICATED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (authe
 const MAX_MESSAGES_PER_SESSION = 20;
 const MAX_MESSAGES_PER_IP_PER_HOUR = 60;
 const MAX_NETWORK_LANE_OPENS_PER_IP_PER_HOUR = 30;
+const MAX_NETWORK_MATCHES_PER_IP_PER_HOUR = 20;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_EXTRACT_REGEX = /[^\s@,]+@[^\s@,]+\.[^\s@,]+/;
 
@@ -584,6 +607,14 @@ export async function checkNetworkLaneOpenRateLimit(ipHash: string): Promise<boo
   );
 }
 
+export async function checkNetworkMatchRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "network_match",
+    MAX_NETWORK_MATCHES_PER_IP_PER_HOUR,
+  );
+}
+
 async function checkIpEventRateLimit(
   ipHash: string,
   event: string,
@@ -637,10 +668,12 @@ export async function recordFrontendFunnelEvent(
 // Session Management
 // ============================================================
 
+type ChatSessionMessage = { role: string; content: string; block?: ContentBlock };
+
 interface ChatSession {
   id: string;
   sessionId: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: ChatSessionMessage[];
   context: string;
   ipHash: string;
   requestEmailFlagged: boolean;
@@ -710,7 +743,7 @@ export async function loadOrCreateSession(
       return {
         id: existing.id,
         sessionId: existing.sessionId,
-        messages: existing.messages as Array<{ role: string; content: string }>,
+        messages: existing.messages as ChatSessionMessage[],
         context: existing.context,
         ipHash: existing.ipHash,
         requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -803,15 +836,15 @@ function isNetworkLaneOpener(content: string | undefined): boolean {
 }
 
 async function assignAnonymousNetworkLanePersona(): Promise<PersonaId> {
-  const [alexResult] = await db
+  const [alexResult] = await networkDb
     .select({ count: count() })
-    .from(schema.people)
-    .where(eq(schema.people.personaAssignment, "alex"));
+    .from(networkSchema.people)
+    .where(eq(networkSchema.people.personaAssignment, "alex"));
 
-  const [miraResult] = await db
+  const [miraResult] = await networkDb
     .select({ count: count() })
-    .from(schema.people)
-    .where(eq(schema.people.personaAssignment, "mira"));
+    .from(networkSchema.people)
+    .where(eq(networkSchema.people.personaAssignment, "mira"));
 
   const alexCount = alexResult?.count ?? 0;
   const miraCount = miraResult?.count ?? 0;
@@ -819,14 +852,14 @@ async function assignAnonymousNetworkLanePersona(): Promise<PersonaId> {
 }
 
 async function resolveNetworkLanePersonaForEmail(email: string): Promise<PersonaId | null> {
-  const [networkUser] = await db
+  const [networkUser] = await networkDb
     .select({
-      id: schema.networkUsers.id,
-      personId: schema.networkUsers.personId,
-      personaAssignment: schema.networkUsers.personaAssignment,
+      id: networkSchema.networkUsers.id,
+      personId: networkSchema.networkUsers.personId,
+      personaAssignment: networkSchema.networkUsers.personaAssignment,
     })
-    .from(schema.networkUsers)
-    .where(eq(schema.networkUsers.email, email));
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email));
 
   if (networkUser?.personaAssignment) {
     return networkUser.personaAssignment;
@@ -834,10 +867,10 @@ async function resolveNetworkLanePersonaForEmail(email: string): Promise<Persona
 
   if (networkUser?.personId) {
     const assignment = await assignPersona(networkUser.personId);
-    await db
-      .update(schema.networkUsers)
+    await networkDb
+      .update(networkSchema.networkUsers)
       .set({ personaAssignment: assignment, updatedAt: new Date() })
-      .where(eq(schema.networkUsers.id, networkUser.id));
+      .where(eq(networkSchema.networkUsers.id, networkUser.id));
     return assignment;
   }
 
@@ -852,10 +885,10 @@ async function resolveNetworkLanePersonaForEmail(email: string): Promise<Persona
 async function resolveNetworkLaneUserName(email: string | null): Promise<string | null> {
   if (!email) return null;
 
-  const [networkUser] = await db
-    .select({ name: schema.networkUsers.name })
-    .from(schema.networkUsers)
-    .where(eq(schema.networkUsers.email, email));
+  const [networkUser] = await networkDb
+    .select({ name: networkSchema.networkUsers.name })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email));
 
   if (networkUser?.name?.trim()) {
     return networkUser.name.trim();
@@ -1007,7 +1040,7 @@ async function evaluateVoiceCore(
   const session: ChatSession = {
     id: existing.id,
     sessionId: existing.sessionId,
-    messages: existing.messages as Array<{ role: string; content: string }>,
+    messages: existing.messages as ChatSessionMessage[],
     context: existing.context,
     ipHash: existing.ipHash,
     requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -1231,7 +1264,7 @@ async function enrichSessionWithUrl(sessionId: string, url: string): Promise<voi
     .where(eq(schema.chatSessions.sessionId, sessionId));
   if (!existing) return;
 
-  const messages = existing.messages as Array<{ role: string; content: string }>;
+  const messages = existing.messages as ChatSessionMessage[];
   messages.push({
     role: "assistant",
     content: `I've looked at ${url} — here's what I found:\n\n${result.content.slice(0, 2000)}`,
@@ -1267,7 +1300,7 @@ export async function loadSessionForVoice(
   return {
     id: existing.id,
     sessionId: existing.sessionId,
-    messages: existing.messages as Array<{ role: string; content: string }>,
+    messages: existing.messages as ChatSessionMessage[],
     context: existing.context,
     ipHash: existing.ipHash,
     requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -1351,11 +1384,11 @@ async function assembleVisitorContext(email: string): Promise<VisitorContext> {
   }
 
   // Load recent interactions
-  const interactions = await db
+  const interactions = await networkDb
     .select()
-    .from(schema.interactions)
-    .where(eq(schema.interactions.personId, person.id))
-    .orderBy(desc(schema.interactions.createdAt))
+    .from(networkSchema.interactions)
+    .where(eq(networkSchema.interactions.personId, person.id))
+    .orderBy(desc(networkSchema.interactions.createdAt))
     .limit(5);
 
   // Load person memories
@@ -1394,7 +1427,7 @@ async function assembleVisitorContext(email: string): Promise<VisitorContext> {
 // Name/Need Extraction from Conversation
 // ============================================================
 
-function extractNameFromConversation(messages: Array<{ role: string; content: string }>): string | undefined {
+function extractNameFromConversation(messages: ChatSessionMessage[]): string | undefined {
   for (const msg of messages) {
     if (msg.role === "user") {
       const nameMatch = msg.content.match(/(?:I'm|I am|my name is|this is)\s+([A-Z][a-z]+)/);
@@ -1417,7 +1450,7 @@ const PILL_MESSAGES = new Set([
   "what can you do for me?",
 ]);
 
-function extractNeedFromConversation(messages: Array<{ role: string; content: string }>): string | undefined {
+function extractNeedFromConversation(messages: ChatSessionMessage[]): string | undefined {
   // Find the most substantive user message (skip pills, emails, short answers)
   const userMessages = messages
     .filter((m) => m.role === "user")
@@ -1429,6 +1462,122 @@ function extractNeedFromConversation(messages: Array<{ role: string; content: st
   if (userMessages.length === 0) return undefined;
   const best = userMessages.reduce((a, b) => a.content.length > b.content.length ? a : b);
   return best.content.trim().slice(0, 500);
+}
+
+// ============================================================
+// Client Lane Completion (Brief 264)
+// ============================================================
+
+const CLIENT_LANE_REQUIRED_ANSWERS = 6;
+
+function isJobRequestCardBlock(value: unknown): value is JobRequestCardBlock {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as { type?: unknown }).type === "job-request-card",
+  );
+}
+
+function clientLaneAlreadyCompleted(session: ChatSession): boolean {
+  return session.messages.some((message) => isJobRequestCardBlock(message.block));
+}
+
+function clientLaneUserAnswers(session: ChatSession): string[] {
+  return session.messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.trim())
+    .filter((content) => content.length > 0 && !content.startsWith("["));
+}
+
+function clientLaneHasEnoughAnswers(session: ChatSession): boolean {
+  return session.context === "client" &&
+    !clientLaneAlreadyCompleted(session) &&
+    clientLaneUserAnswers(session).length >= CLIENT_LANE_REQUIRED_ANSWERS;
+}
+
+function clientLaneAnswersFromSession(session: ChatSession): ClientIntakeAnswers {
+  const answers = clientLaneUserAnswers(session).slice(0, CLIENT_LANE_REQUIRED_ANSWERS);
+  return {
+    jtbd: answers[0],
+    referenceShape: answers[1],
+    antiPersonaMd: answers[2],
+    successCriteria: answers[3],
+    budgetShape: answers[4],
+    scoutOptIn: answers[5],
+  };
+}
+
+function clientLaneFramingSentence(card: JobRequestCardBlock): string {
+  const count = card.suggestedCandidates.length;
+  if (count === 0) {
+    return card.scoutOptIn
+      ? "Nobody on-network matches that cleanly yet, so the next step is the broader scout."
+      : "Nobody on-network matches that shape cleanly yet.";
+  }
+  const noun = count === 1 ? "One" : `${count}`;
+  return `${noun} I'd put forward — all have the shape you described.`;
+}
+
+async function findOrCreateNetworkJobUser(session: ChatSession): Promise<string | null> {
+  const email = session.authenticatedEmail?.trim().toLowerCase();
+  if (!email) return null;
+
+  const [existing] = await networkDb
+    .select({ id: networkSchema.networkUsers.id })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email))
+    .limit(1);
+  if (existing?.id) return existing.id;
+
+  const [created] = await networkDb
+    .insert(networkSchema.networkUsers)
+    .values({
+      email,
+      name: session.learned?.name ?? extractNameFromConversation(session.messages) ?? null,
+      personaAssignment: session.personaId ?? "alex",
+    })
+    .returning({ id: networkSchema.networkUsers.id });
+  return created?.id ?? null;
+}
+
+async function persistClientJobRequest(
+  session: ChatSession,
+  card: JobRequestCardBlock,
+): Promise<string | null> {
+  const userId = await findOrCreateNetworkJobUser(session);
+  if (!userId) return null;
+
+  const [created] = await networkDb
+    .insert(networkSchema.networkJobRequests)
+    .values({
+      userId,
+      jobRequestCard: card,
+      status: "open",
+    })
+    .returning({ id: networkSchema.networkJobRequests.id });
+  return created?.id ?? null;
+}
+
+async function completeClientLane(session: ChatSession): Promise<{
+  card: JobRequestCardBlock;
+  turns: Array<{ role: "assistant"; content: string; block?: JobRequestCardBlock }>;
+  jobRequestId: string | null;
+}> {
+  const persona = session.personaId ?? "alex";
+  const draftCard = buildJobRequestCard({
+    answers: clientLaneAnswersFromSession(session),
+    greeter: persona,
+    now: new Date(),
+  });
+  const suggestedCandidates = await matchOnNetwork(draftCard, { sampleLimit: 200 });
+  const card: JobRequestCardBlock = {
+    ...draftCard,
+    suggestedCandidates,
+  };
+  const framingSentence = clientLaneFramingSentence(card);
+  const turns = buildClientLaneResolutionTurns({ card, framingSentence });
+  const jobRequestId = await persistClientJobRequest(session, card);
+  return { card, turns, jobRequestId };
 }
 
 // ============================================================
@@ -1449,6 +1598,8 @@ export interface ChatTurnResult {
   learned?: LearnedContext | null;
   extraQuestions?: string[];
   testMode?: boolean;
+  contentBlocks?: ContentBlock[];
+  jobRequestId?: string | null;
 }
 
 function getStringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
@@ -1604,6 +1755,34 @@ export async function handleChatTurn(
   }
 
   session.messageCount += 1;
+
+  if (clientLaneHasEnoughAnswers(session)) {
+    const completion = await completeClientLane(session);
+    session.messages.push(...completion.turns);
+    await saveSession(session);
+    await recordFunnelEvent(session.sessionId, "client_lane_completed", context, {
+      ipHash,
+      jobRequestId: completion.jobRequestId,
+      suggestedCandidateCount: completion.card.suggestedCandidates.length,
+    });
+    const framingTurn = completion.turns[1];
+    return {
+      reply: framingTurn?.content ?? "",
+      sessionId: session.sessionId,
+      requestName: false,
+      requestLocation: false,
+      requestEmail: false,
+      emailCaptured,
+      done: false,
+      suggestions: [],
+      detectedMode: null,
+      learned: session.learned,
+      extraQuestions: [],
+      contentBlocks: [completion.card],
+      jobRequestId: completion.jobRequestId,
+      ...(isTestMode() ? { testMode: true } : {}),
+    };
+  }
 
   // Look up what Ditto knows about this person + their location
   // In test mode, skip person lookup — Alex treats everyone as brand new
@@ -1940,6 +2119,7 @@ export async function handleChatTurn(
  */
 export type ChatStreamEvent =
   | { type: "session"; sessionId: string; testMode?: boolean }
+  | { type: "assistant-turn"; text: string; blocks?: ContentBlock[] }
   | { type: "text-delta"; text: string }
   | { type: "text-replace"; text: string }
   | { type: "status"; message: string }
@@ -2392,6 +2572,45 @@ export async function* handleChatTurnStreaming(
   }
 
   session.messageCount += 1;
+
+  if (clientLaneHasEnoughAnswers(session)) {
+    yield { type: "status", message: "Matching…" };
+    const completion = await completeClientLane(session);
+    session.messages.push(...completion.turns);
+    await saveSession(session);
+    await recordFunnelEvent(session.sessionId, "client_lane_completed", context, {
+      ipHash,
+      jobRequestId: completion.jobRequestId,
+      suggestedCandidateCount: completion.card.suggestedCandidates.length,
+    });
+    const firstTurn = completion.turns[0];
+    const secondTurn = completion.turns[1];
+    if (firstTurn) {
+      yield {
+        type: "assistant-turn",
+        text: firstTurn.content,
+        blocks: firstTurn.block ? [firstTurn.block] : [],
+      };
+    }
+    if (secondTurn) {
+      yield { type: "assistant-turn", text: secondTurn.content };
+    }
+    yield {
+      type: "metadata",
+      requestName: false,
+      requestLocation: false,
+      requestEmail: false,
+      done: false,
+      suggestions: [],
+      detectedMode: null,
+      emailCaptured,
+      plan: null,
+      learned: session.learned as LearnedContext | null,
+      extraQuestions: [],
+    };
+    yield { type: "done" };
+    return;
+  }
 
   // Visitor context + geolocation — run in parallel, skip person lookup in test mode
   let visitorContext: VisitorContext | undefined;

@@ -21,6 +21,7 @@ import type { LlmToolDefinition } from "./llm";
 import { getPersonaChatVoice } from "./persona-voice";
 import type { PersonaId } from "@ditto/core/db/network";
 import { EXPERT_LANE_QUESTIONS, NETWORK_ANTI_PERSONA_OPTIONS } from "./network-expert-intake";
+import { CLIENT_LANE_QUESTIONS } from "./network-client-intake";
 
 // ============================================================
 // Alex Response Tool Definition
@@ -395,6 +396,45 @@ Do not emit an AuthorizationRequestBlock here. Do not mention costLabel. Pricing
 Only after the card is complete and the user chooses "Open for opportunities" or "Find me clients", use this upsell once per user/session:
 
 "Card's ready. I'll save this and you can chat with me at \`ditto.partners/people/{handle}\` — share that link with anyone curious about you. One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**"
+
+## How to Respond
+
+Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool. Keep question, suggestions, and learned aligned with the single current intake question. Do not ask for email, do not request location, do not set done, and do not start web search from this lane.
+`.trim();
+
+const CLIENT_LANE_PROCESS = `
+## Your Task: Client Lane Opportunity Brief Intake
+
+You are helping a client describe the person they need. Your job is not to collect a job title. Your job is to turn six short answers into a structured \`JobRequestCardBlock\` and then run the on-network match step.
+
+The frontend renders a live \`JobRequestCardBlock\` as you learn. Keep the conversation short, direct, and card-shaped. Do not switch into the broader front-door sales process.
+
+## Fixed Intake Order
+
+Ask these six questions in exactly this order, one per turn:
+
+${CLIENT_LANE_QUESTIONS.map((question, index) => `${index + 1}. "${question}"`).join("\n")}
+
+## Field Capture
+
+Build toward a \`JobRequestCardBlock\`:
+- jtbd: answer to question 1.
+- referenceShape: answer to question 2.
+- antiPersonaMd: answer to question 3. Use this silently as a match filter; do not quote it to candidates.
+- successCriteria: answer to question 4.
+- budgetShape: answer to question 5, captured conversationally as { ballpark, cadence }. This is internal-only. NEVER put the budget value on shareable or candidate-visible surfaces.
+- scoutOptIn: answer to question 6. true only when they want off-network scanning.
+- greeterCuratedBy: the assigned Greeter.
+- matchCuratedBy: same Greeter in v1.
+- lastUpdatedAt: set when the card is emitted and bump when any Q1-Q6 answer changes.
+
+## Match Return
+
+After question 6 is answered, the handler runs \`matchOnNetwork\` against listed Selfs only. The Greeter response must land as two distinct turns:
+1. A turn carrying the \`JobRequestCardBlock\`.
+2. A separate framing sentence for the suggested-candidates panel, e.g. "Three I'd put forward — all have the CRM-touch shape you described."
+
+Do not concatenate the card and the framing sentence. Do not emit an AuthorizationRequestBlock here. Do not mention costLabel. Intro emission and off-network scout execution are deferred.
 
 ## How to Respond
 
@@ -831,10 +871,7 @@ export function buildFrontDoorPrompt(
   } else if (context === "expert") {
     processInstructions = EXPERT_LANE_PROCESS;
   } else if (context === "client") {
-    // TODO(Brief 257): replace this pass-through with client-lane directives.
-    processInstructions = conversationStage
-      ? getStageGatedInstructions(conversationStage)
-      : FRONT_DOOR_PROCESS;
+    processInstructions = CLIENT_LANE_PROCESS;
   } else if (conversationStage) {
     processInstructions = getStageGatedInstructions(conversationStage);
   } else {

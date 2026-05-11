@@ -84,6 +84,40 @@ export interface NetworkProfileCardBlock {
   ogImageUrl: string;
 }
 
+export interface JobRequestBudgetShape {
+  /** Internal-only: do not render verbatim on candidate/shareable surfaces. */
+  ballpark: string;
+  cadence: "hourly" | "monthly" | "project";
+}
+
+export interface SuggestedCandidate {
+  handle: string;
+  name: string;
+  oneLineRole: string;
+  rationaleMd: string;
+  fitConfidence: "high" | "medium" | "low";
+  source: "on-network" | "scouted";
+  /** Match computation time. Distinct from JobRequestCardBlock.lastUpdatedAt. */
+  computedAt: string;
+}
+
+/** JobRequestCardBlock — structured client-lane intake for a specific hunt. */
+export interface JobRequestCardBlock {
+  type: "job-request-card";
+  jtbd: string;
+  referenceShape: string;
+  antiPersonaMd: string;
+  successCriteria: string;
+  /** Internal-only budget shape. Candidate/shareable renderers must strip it. */
+  budgetShape: JobRequestBudgetShape;
+  scoutOptIn: boolean;
+  suggestedCandidates: SuggestedCandidate[];
+  greeterCuratedBy: "alex" | "mira";
+  matchCuratedBy: "alex" | "mira";
+  /** Card edit time. Distinct from SuggestedCandidate.computedAt. */
+  lastUpdatedAt: string;
+}
+
 /** StatusCardBlock — Process or work item status.
  *  Optional `metadata` (Brief 221) carries typed subtype-specific data — e.g.,
  *  runner-dispatch state via `metadata.cardKind = "runnerDispatch"` plus runner
@@ -730,6 +764,7 @@ export type ContentBlock =
   | TextBlock
   | ReviewCardBlock
   | NetworkProfileCardBlock
+  | JobRequestCardBlock
   | StatusCardBlock
   | ActionBlock
   | InputRequestBlock
@@ -794,6 +829,24 @@ export function renderBlockToText(block: ContentBlock): string {
         block.narrativeMd,
         block.antiPersonaMd ? `Allergic to: ${block.antiPersonaMd}` : `Allergic to: still asking ${block.name.split(/\s+/)[0] ?? block.name}`,
         `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+    case "job-request-card":
+      return [
+        "Opportunity brief",
+        `Hunting: ${block.jtbd}`,
+        `Last time this looked like: ${block.referenceShape}`,
+        `Allergic to: ${block.antiPersonaMd}`,
+        `Success: ${block.successCriteria}`,
+        "Budget: internal-only",
+        block.scoutOptIn ? "Scout: on-network + off-network" : "Scout: on-network only",
+        `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
+        `Matched by ${block.matchCuratedBy === "mira" ? "Mira" : "Alex"}`,
+        block.suggestedCandidates.length > 0
+          ? `Suggestions: ${block.suggestedCandidates.map((candidate) => `${candidate.name} (@${candidate.handle})`).join(", ")}`
+          : "Suggestions: none yet",
       ]
         .filter(Boolean)
         .join("\n");

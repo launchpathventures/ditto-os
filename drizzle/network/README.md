@@ -57,5 +57,6 @@ splitting them is the simpler invariant.
 ## Files
 
 - `0000_ordinary_tomas.sql` — initial 8-table network schema (people, interactions, networkUsers, adminFeedback, networkTokens, managedWorkspaces, upgradeHistory, upgradeWorkspaceResults).
+- `0001_colorful_molten_man.sql` — Brief 264 client-lane `network_job_requests` table.
 - `meta/_journal.json` — Drizzle's serial registry of applied migrations for this tree.
 - `meta/0NNN_snapshot.json` — Drizzle's snapshot of the schema state as of each migration.

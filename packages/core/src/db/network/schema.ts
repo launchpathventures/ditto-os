@@ -16,7 +16,7 @@
  * to a workspace-tier table here. The no-engine-import test in
  * `src/db/network-db.test.ts` enforces this.
  *
- * Surface (post-Brief 262 reclassification): 8 pgTable declarations.
+ * Surface (post-Brief 264 client lane): 9 pgTable declarations.
  * Provenance: Brief 263 (this brief; converted from sqliteTable per ADR-048).
  */
 
@@ -30,7 +30,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";
-import type { NetworkProfileCardBlock } from "../../content-blocks.js";
+import type { JobRequestCardBlock, NetworkProfileCardBlock } from "../../content-blocks.js";
 
 // ============================================================
 // Type unions — Network-specific
@@ -75,6 +75,9 @@ export type InteractionOutcome = (typeof interactionOutcomeValues)[number];
 
 export const networkUserStatusValues = ["active", "workspace", "churned"] as const;
 export type NetworkUserStatus = (typeof networkUserStatusValues)[number];
+
+export const networkJobRequestStatusValues = ["open", "closed"] as const;
+export type NetworkJobRequestStatus = (typeof networkJobRequestStatusValues)[number];
 
 export const workspaceStatusValues = [
   "provisioning",
@@ -228,6 +231,31 @@ export const networkUsers = pgTable("network_users", {
 }, (table) => [
   index("network_users_email").on(table.email),
   index("network_users_handle").on(table.handle),
+]);
+
+// ============================================================
+// Network Job Requests — client-lane opportunity briefs (Brief 264)
+// ============================================================
+
+export const networkJobRequests = pgTable("network_job_requests", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  jobRequestCard: json("job_request_card").$type<JobRequestCardBlock>().notNull(),
+  status: text("status").notNull().$type<NetworkJobRequestStatus>().default("open"),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_job_requests_user_id").on(table.userId),
+  index("network_job_requests_status").on(table.status),
+  index("network_job_requests_updated_at").on(table.updatedAt),
 ]);
 
 // ============================================================

@@ -10,7 +10,7 @@
 
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { randomUUID } from "crypto";
-import type { PersonaId } from "./network";
+import type { PersonaId } from "@ditto/core/db/network";
 
 /** Front-door conversation stage. `picker` = persona not chosen yet.
  *  `interview` = user is getting a feel for one persona. `main` = committed. */
@@ -24,7 +24,7 @@ export type ChatSessionStage = (typeof chatSessionStageValues)[number];
 export const chatSessions = sqliteTable("chat_sessions", {
   id: text("id").primaryKey().$defaultFn(() => randomUUID()),
   sessionId: text("session_id").notNull().unique(),
-  messages: text("messages", { mode: "json" }).notNull().$type<Array<{ role: string; content: string }>>(),
+  messages: text("messages", { mode: "json" }).notNull().$type<Array<{ role: string; content: string; block?: unknown }>>(),
   context: text("context").notNull(), // "front-door" | "referred" | "review" | "expert" | "client"
   ipHash: text("ip_hash").notNull(),
   requestEmailFlagged: integer("request_email_flagged", { mode: "boolean" }).notNull().default(false),
