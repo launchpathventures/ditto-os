@@ -14,7 +14,7 @@ import { db, schema } from "../db";
 import type { MemoryType, InteractionType, InteractionMode, InteractionOutcome } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { writeMemory } from "./legibility/write-memory";
+import { writeMemory, type MemoryDb } from "./legibility/write-memory";
 
 // ============================================================
 // Seed Schema (stable contract — Brief 087)
@@ -259,10 +259,43 @@ export async function isFirstBoot(targetDb?: typeof db): Promise<boolean> {
 }
 
 /**
+ * Write a sentinel self-scoped memory marking that first-boot seed processing
+ * has completed for this user, even if the network had no prior data to import.
+ *
+ * Without this, a workspace provisioned for a brand-new user (no prior network
+ * interactions) remains stuck in first-boot state forever: isFirstBoot keeps
+ * returning true and the deep health check (`/healthz?deep=true`) reports
+ * `seed: not_imported` and 503s, which fails provisioner waitForDeepHealth.
+ */
+export async function writeFirstBootSentinel(
+  userId: string,
+  targetDb?: MemoryDb,
+): Promise<void> {
+  const database: MemoryDb = targetDb ?? db;
+  await writeMemory(database, {
+    scopeType: "self",
+    scopeId: userId,
+    type: "context",
+    content: `Workspace provisioned on ${new Date().toISOString().split("T")[0]}. No prior network history — this is a fresh start.`,
+    confidence: 1.0,
+    shared: false,
+    source: "system",
+    sourceId: "network-seed-sentinel",
+    active: true,
+  });
+}
+
+/**
  * Fetch and import seed from the Network Service.
  * Called on first boot when DITTO_NETWORK_URL is configured.
+ *
+ * If the network returns an empty seed (e.g., admin-provisioned user with no
+ * prior interactions), writes a sentinel self-memory so the workspace exits
+ * the first-boot state and passes the deep health check.
  */
-export async function fetchAndImportSeed(): Promise<ImportResult | null> {
+export async function fetchAndImportSeed(
+  targetDb?: typeof db,
+): Promise<ImportResult | null> {
   const networkUrl = process.env.DITTO_NETWORK_URL;
   const networkToken = process.env.DITTO_NETWORK_TOKEN;
 
@@ -281,5 +314,12 @@ export async function fetchAndImportSeed(): Promise<ImportResult | null> {
   }
 
   const seed: WorkspaceSeed = await response.json();
-  return importSeed(seed);
+  const result = await importSeed(seed, targetDb);
+
+  if (result.memoriesImported === 0) {
+    await writeFirstBootSentinel(seed.userId, targetDb);
+    result.memoriesImported = 1;
+  }
+
+  return result;
 }
