@@ -1,5 +1,85 @@
 # Ditto — Current State
 
+**Last updated:** 2026-05-11 (Builder — **Brief 266 implemented and reviewed; pending human approval.** Client lane now renders the full post-Q6 action layer: `SuggestedCandidatesPanel` in `packages/web/app/network/chat/suggested-candidates-panel.tsx` displays 1-5 matched candidates below the separate Greeter framing turn, consumes `FitConfidenceDot`, keeps anti-persona/budget private, supports stale `computedAt` refresh via `/api/v1/network/match`, and disables the parent intro CTA while refresh is in flight. `ClientCardActions` adds the parent `Get an introduction` + `Scan on + off network and report back` row, side-effect-free 261/258 stub notices, distinct parent/per-card scout copy, and debug `[ Pretend it sent/scanned ]` buttons. `workspace-upsell.ts` locks the parent-254 client-lane upsell copy and emits the OQ1 `console.warn` once per client session; expert mode does not warn. `network-chat-shell.tsx` now drives local client Q1-Q6 → JobRequestCard → match → panel/actions, and advances preview opacity to the match-return step after matching. Reviewer returned PASS with 1 medium + 1 low finding; both were fixed (match-return preview progress and Escape-to-deselect candidate). Verification: Brief 266 Vitest PASS (4 files / 16 tests); client-lane render regression PASS (7 files / 30 tests); `pnpm run type-check` PASS; manual Playwright smoke on `http://localhost:3006/network/chat?mode=client` PASS for local Q1-Q6/card/error fallback, with expected 500 lane-init fallback + 503 match due local `SUPABASE_DB_URL` unset. Next step: human approve/revise; after approval, real intro emission remains Brief 261 and real off-network scout remains Brief 258.) **Previous:** 2026-05-11 Builder — Brief 265 implemented and reviewed; pending human approval.
+
+---
+
+## CURRENT — Builder: Brief 263 (Network Tier Postgres Migration — Supabase) implemented + reviewed (2026-05-09)
+
+**Direct trigger:** human invoked `/dev-builder 263` after Brief 262 landed (Brief 263's prerequisite). Brief 263 is foundation step 2 of parent Brief 254 — it executes ADR-036 §3 (file split) + the dialect swap superseded into ADR-048 (Supabase Postgres host).
+
+**What was implemented:**
+- **NEW `packages/core/src/db/network/`** — schema split: `schema.ts` (8 `pgTable` declarations), `index.ts` (barrel). Network types (`PersonaId`, `PersonVisibility`, `JourneyLayer`, `PersonTrustLevel`, `PersonSource`, `InteractionType`, `InteractionChannel`, `InteractionMode`, `InteractionOutcome`) co-located. No imports from `src/db/schema/*` (no-engine-import invariant).
+- **NEW `src/db/network-db.ts` (~250 lines)** — `networkDb` (drizzle-orm/postgres-js with `networkSchema`); `ensureNetworkSchema()` (boot-time `migrate({migrationsFolder: "drizzle/network"})`); `instrumentClient()` (Proxy via `get` trap wrapping `unsafe()` + `begin()` for slow-query >100ms WARN log); `logSlowQuery()`; `isNetworkDbConnectionError()` (classifies SUPABASE_DB_URL missing, ECONN*, EHOSTUNREACH, ETIMEDOUT, SQLSTATE 08xxx, CONNECTION_*); `withNetworkDbAvailability()` (handler wrapper returning 503 on connection error).
+- **NEW `src/db/network-db-test-helpers.ts`** — `withNetworkDbTransaction(fn)` per-test rollback helper.
+- **NEW `src/db/network-db.test.ts` (19/19 tests)** — graceful 503 + no-engine-import + slow-query log + connection-error classifier + availability wrapper.
+- **NEW `packages/web/lib/network-availability.ts`** — NextResponse-flavored `withNetworkAvailability` + `networkUnavailableResponse()`; re-exports `isNetworkDbConnectionError`.
+- **NEW `drizzle.network.config.ts` + `drizzle/network/`** — independent Drizzle journal for the network tier (Postgres dialect); `0000_ordinary_tomas.sql` with 8 CREATE TABLE statements.
+- **MODIFIED `src/db/index.ts`** — removed network schema spread; SQLite `db` connection block byte-identical pre/post.
+- **MODIFIED `src/db/schema/index.ts`** — removed `export * from "@ditto/core/db/network"` re-export (B2 fix: workspace barrel must type-error on network tables).
+- **MODIFIED ~250 test files + production importers** — switched `db` → `networkDb` for network table writes; switched `import { X } from "../db/schema"` → `from "@ditto/core/db/network"` for ~10 type-import sites cascade (cleanup after B2 surgery).
+- **MODIFIED 4 API routes** (`api/v1/network/register`, `api/v1/network/handle`, `api/v1/network/admin/teammate`, `api/v1/voice/call-end`) — added 503 detection in catch blocks via `isNetworkDbConnectionError`. `api/v1/chat/request-link` intentionally NOT modified (uses enumeration-prevention pattern returning generic 200 on all errors — surfacing 503 would let callers probe DB availability).
+- **MODIFIED ADR-036, ADR-048, architecture.md, CLAUDE.md, .env.example, landscape.md** per brief.
+
+**Reviewer-found bugs (all fixed this session):**
+- **B1 (Critical)** — 503 unsurfaced. Production routes catching `networkDb` connection errors swallowed them as 500s. Fixed: 4 routes now catch + classify + return 503; chat/request-link intentionally exempt (enumeration-prevention).
+- **B2 (Critical)** — Workspace barrel re-exported network tables, defeating AC #7's type-error guardrail. Fixed: removed re-export; cascading fixes to ~10 type-import sites + multi-line block in `people.ts`.
+- **B3 (Important)** — `instrumentClient()` used Proxy `apply` trap which only fires when the callable itself is invoked (not when method properties are read off it). Dead code. Fixed: replaced with `get` trap wrapping `unsafe()` + `begin()` methods.
+- **B4 (Important)** — Slow-query test was a false-positive (asserted timing without invoking the instrumented path). Fixed: replaced with 4 real tests using stub client (`makeStubClient({delayMs})`); added 6 tests for `isNetworkDbConnectionError` + 3 tests for `withNetworkDbAvailability`.
+
+**Acceptance criteria (14 ACs):**
+- AC #1 (8 pgTable in core/network/schema.ts): PASS — grep returns exactly 8.
+- AC #2 (file split: network schema in `packages/core/src/db/network/`): PASS.
+- AC #3 (`networkDb` exported from `src/db/network-db.ts` using postgres-js + drizzle): PASS.
+- AC #4 (workspace `db` connection unchanged: better-sqlite3): PASS — diff against `src/db/index.ts` removes only the network schema spread.
+- AC #5 (`ensureNetworkSchema()` boot-time `migrate()`): PASS — `drizzle/network/0000_ordinary_tomas.sql` exists with 8 CREATE TABLEs.
+- AC #6 (per-symbol cutover grep returns zero `db.X.from(networkTable)`): PASS — all 8 = 0.
+- AC #7 (workspace barrel type-errors on network table use): PASS — B2 fix restored guardrail.
+- AC #8 (no-engine-import invariant — `packages/core/src/db/network/` does not import `src/db/schema/{engine,frontdoor,product}`): PASS — zero matches.
+- AC #9 (graceful 503 on connection failure for network routes): PASS — 4 routes wired; chat/request-link exempt by design.
+- AC #10 (test fixture `withNetworkDbTransaction` per-test rollback): PASS — every test file uses helper; zero raw `networkDb` writes in test files.
+- AC #11 (slow-query >100ms WARN log instrumentation): PASS — `instrumentClient()` Proxy wraps `unsafe()` + `begin()`.
+- AC #12 (ADR-036 §1+§3 accepted, §2 superseded by ADR-048; ADR-048 accepted): PASS.
+- AC #13 (architecture.md, CLAUDE.md, landscape.md updated): PASS.
+- AC #14 (Insight-180: no new harness side-effecting functions): PASS — none introduced.
+
+**Verification commands run:**
+- `pnpm run type-check` (root) → zero errors.
+- `cd packages/core && npx tsc --noEmit` → zero errors.
+- `pnpm test` → 192 passed | 3 skipped (195 files); 2641 passed | 13 skipped tests. Duration 49s.
+- `pnpm exec rg "^export const \w+ = pgTable" packages/core/src/db/network/schema.ts | wc -l` → 8.
+- Per-symbol cutover grep loop (8 network tables) → all 0.
+- `pnpm exec rg "\bnetworkDb\." src packages | wc -l` → 19 occurrences.
+- `pnpm exec rg "from .*src/db/schema/(engine|frontdoor|product)" packages/core/src/db/network/` → zero matches.
+- Test-helper coverage grep filtered to `*.test.ts` → zero raw network writes in test files.
+- `pnpm exec rg "^CREATE TABLE" drizzle/network/0000_ordinary_tomas.sql | wc -l` → 8.
+
+**Pending:** human approval of the implementation. Brief 263 unblocks Brief 255 + downstream sub-briefs (256 ∥ 258 → 257 → 259 → 260 → 261). **Documenter complete (2026-05-09):** state.md + roadmap.md updated; Insight-227 (Proxy `get`-trap for SDK method wrapping) + Insight-228 (enumeration-prevention carve-outs in system-wide error rules) captured; Insight-152 + Insight-179 absorbed → moved to `docs/insights/archived/`; Insight-190 status updated to note dual-journal extension; briefs 262 + 263 moved to `docs/briefs/complete/`.
+
+### Documenter retrospective — Brief 263
+
+**What worked**
+
+- **Two-pass review with two-pass fix.** The Reviewer ran in fresh context, found 4 bugs ranging from Critical (B1 503-swallowing, B2 type-guardrail-defeated) to Important (B3 dead Proxy code, B4 false-positive test), and the Builder fixed all four in the same session before handoff. Maker-checker held: B3 in particular (apply-trap doesn't fire on method calls) was a class of bug the Builder had no way to self-detect, because the test the Builder wrote against the apply-trap also passed for the wrong reason. The fresh-context Reviewer reading the SDK semantics caught it.
+- **Hardening as first-class follow-up.** Three of the surfaced design choices got *regression guardrails* on the same session, not just docs: (1) chat/request-link 503 exemption got 4 new tests injecting ECONNREFUSED, (2) workspace barrel guard got 2 new tests asserting the re-export pattern is forbidden, (3) dual-tree migration got named scripts + a README + drizzle.network.config.ts header warning. None of these require remembering — a future agent who tries to undo them gets a red test, not a "you should have known."
+- **Per-tier serialization on the migration journal.** Insight-190 told us journal contention is real. Brief 263's two-tree split sidesteps it for cross-tier work (workspace + network changes don't conflict) but preserves it intra-tree. The insight's status now reflects the extended scope, not just "absorbed."
+
+**What surprised**
+
+- **The B3 Proxy bug is a category, not a one-off.** Insight-227 captures it: any SDK wrapper for a postgres-js / OpenAI / Stripe / googleapis client that uses `apply` instead of `get` is silently dead. The test the Builder wrote *passed* against a synthetic warn that the test itself emitted — both Builder and Reviewer would have shipped it if the Reviewer hadn't read the call sites. We will see this again when wrapping the next SDK client.
+- **A "uniform infra rule" can collide with a route's *contract*.** B1 surfaced that "every networkDb-touching route returns 503 on connection error" is a clean rule that breaks at enumeration-prevention seams (chat/request-link). Insight-228 captures the carve-out pattern (inline comment + regression test + rule-doc note, redundantly). The grep-based application of cross-cutting rules will keep producing this miss until the Reviewer prompt explicitly asks "which routes' response contract is enumeration-resistant?"
+- **B2 cascade was bigger than expected.** Restoring the "workspace barrel must type-error on network tables" guardrail required rerouting ~10 type-import sites + one inline import in tool-resolver.ts:254. Mechanical but load-bearing, and the cascade was only visible *after* removing the re-export and watching tsc complain. Worth knowing for future "restore a guardrail by removing a convenience export" surgeries.
+
+**What to change**
+
+- **Reviewer prompt addendum for cross-cutting infra rules.** When a brief introduces a uniform rule across a route surface (5xx surfacing, retry headers, validation envelope, rate-limit responses), the Reviewer prompt should include: "List every route in the affected set whose response contract is enumeration-resistant. For each, decide whether the rule is compatible or whether an exemption is needed. Surfacing infra status through a code the route is contractually obligated to keep constant is a side-channel." This question doesn't surface from grep-based application of the rule.
+- **Builder smoke-test grep should be tier-filtered.** During Brief 263 the test-helper-coverage grep for "raw `networkDb.insert`" hit 6 production files (workspace-upgrader, network/handle/route) and threw a false alarm. The fix was to refilter to `*.test.ts` only. The smoke test in the brief should specify the file scope, not just the pattern, so the grep doesn't have to be re-narrowed at execution time.
+- **SDK-wrapping skill in CLAUDE.md.** Insight-227's `get`-trap-with-`Reflect.get`-and-`bind(target)` pattern is going to recur (next likely candidates: the OpenAI client for tool-call instrumentation, the Stripe client for retry, the AgentMail client for header injection). Worth a one-paragraph principle in CLAUDE.md "Conventions" section once the second instance lands, with a back-reference to Insight-227. Until then, the insight stays active so the lesson doesn't decay.
+
+---
+
+## PREVIOUS — Builder: Brief 262 (Network/Workspace Tier Reclassification) implemented and reviewed (2026-05-09)
+
 **Last updated:** 2026-05-09 (Builder — **Brief 262 (Network/Workspace Tier Reclassification) implemented and reviewed.** Created `src/db/schema/harness.ts` (housing `reviewPages` — chose `harness.ts` over `engine.ts` via the brief's documented escape hatch, since `engine.ts` is a thin re-export from `@ditto/core`) and `src/db/schema/knowledge.ts` (housing `documents` + `documentContent`); stripped 3 tables from `network.ts` (now exactly 8 sqliteTable declarations); updated schema barrel `index.ts` with new re-exports. **Evidence:** type-check zero errors; full pnpm test 191/194 files passed (3 skipped, 2622 tests passing); `drizzle-kit generate` reports "No schema changes, nothing to migrate" (AC #5 zero column drift confirmed); workspace + public boot modes both clean ("Ready in 6.4s" / "Ready in 6.1s"); zero importers reach into network.ts for the moved symbols. Reviewer (fresh context) verdict: APPROVE WITH FIXES — 2 doc-drift items (state.md + Brief 254 sub-brief table both said `reviewPages → engine.ts`); both corrected. Pending human approval; Brief 263 unblocked.) **Previous:** Architect — ADR-048 + Brief 262 + Brief 263 drafted, reviewed + revised (2026-05-09). Builder Brief 256 implemented; pending human approval. Builder Brief 255 implemented; pending human approval.
 
 ---
