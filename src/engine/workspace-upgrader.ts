@@ -152,14 +152,14 @@ export interface HealthCheckResult {
 
 /**
  * Deep health check abstraction. Tests mock this.
- * Real implementation fetches /healthz?deep=true from the workspace URL.
+ * Real implementation fetches /api/healthz?deep=true from the workspace URL.
  */
 export interface HealthChecker {
   checkHealth(workspaceUrl: string, timeoutMs: number, pollIntervalMs: number): Promise<HealthCheckResult>;
 }
 
 /**
- * Create a real health checker that polls the workspace's /healthz?deep=true endpoint.
+ * Create a real health checker that polls the workspace's /api/healthz?deep=true endpoint.
  */
 export function createHealthChecker(): HealthChecker {
   return {
@@ -167,7 +167,7 @@ export function createHealthChecker(): HealthChecker {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         try {
-          const res = await fetch(`${workspaceUrl}/healthz?deep=true`, {
+          const res = await fetch(`${workspaceUrl}/api/healthz?deep=true`, {
             signal: AbortSignal.timeout(pollIntervalMs),
           });
           if (res.ok) {

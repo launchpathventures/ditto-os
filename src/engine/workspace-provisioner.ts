@@ -678,7 +678,7 @@ async function waitForDeployment(
 
 /**
  * Wait for deep health check to pass.
- * Polls GET /healthz?deep=true every intervalMs until timeout.
+ * Polls GET /api/healthz?deep=true every intervalMs until timeout.
  */
 async function waitForDeepHealth(
   workspaceUrl: string,
@@ -689,7 +689,7 @@ async function waitForDeepHealth(
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${workspaceUrl}/healthz?deep=true`, {
+      const res = await fetch(`${workspaceUrl}/api/healthz?deep=true`, {
         signal: AbortSignal.timeout(15_000),
       });
 

@@ -97,7 +97,7 @@ export async function GET(request: Request) {
 
       // Check Network Service reachable
       try {
-        const networkRes = await fetch(`${networkUrl}/healthz`, {
+        const networkRes = await fetch(`${networkUrl}/api/healthz`, {
           signal: AbortSignal.timeout(5_000),
         });
 
