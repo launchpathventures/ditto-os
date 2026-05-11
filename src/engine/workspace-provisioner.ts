@@ -39,7 +39,14 @@ export interface RailwayDomain {
 
 export interface RailwayDeployment {
   id: string;
-  status: "BUILDING" | "DEPLOYING" | "ACTIVE" | "FAILED" | "CRASHED" | string;
+  status:
+    | "BUILDING"
+    | "DEPLOYING"
+    | "SUCCESS"
+    | "FAILED"
+    | "CRASHED"
+    | "REMOVED"
+    | string;
 }
 
 /**
@@ -406,7 +413,7 @@ export async function provisionWorkspace(
     const workspaceUrl = `https://${domain.domain}`;
     progress("Creating domain... done");
 
-    // Step 10: Poll deployment status until ACTIVE
+    // Step 10: Poll deployment status until SUCCESS
     progress("Waiting for deployment...");
     const deployed = await waitForDeployment(
       config.railwayClient,
@@ -418,7 +425,7 @@ export async function provisionWorkspace(
       const timeoutSec = Math.round((config.healthCheckTimeoutMs ?? 120_000) / 1000);
       throw new Error(`Deployment failed or timed out after ${timeoutSec}s for workspace ${userId}`);
     }
-    progress("Waiting for deployment... active");
+    progress("Waiting for deployment... success");
 
     // Step 11: Deep health check — verify application-level health
     progress("Waiting for health check...");
@@ -633,8 +640,12 @@ export async function getWorkspaceStatus(
 // ============================================================
 
 /**
- * Wait for Railway deployment to reach ACTIVE status.
+ * Wait for Railway deployment to reach SUCCESS status.
  * Polls getDeploymentStatus every intervalMs until timeout.
+ *
+ * Railway's terminal good state is SUCCESS (not ACTIVE). REMOVED is treated
+ * as terminal failure — it indicates the deployment was superseded or torn
+ * down before reaching SUCCESS.
  */
 async function waitForDeployment(
   client: RailwayClient,
@@ -647,8 +658,14 @@ async function waitForDeployment(
   while (Date.now() < deadline) {
     try {
       const deployment = await client.getDeploymentStatus(deploymentId);
-      if (deployment.status === "ACTIVE") return true;
-      if (deployment.status === "FAILED" || deployment.status === "CRASHED") return false;
+      if (deployment.status === "SUCCESS") return true;
+      if (
+        deployment.status === "FAILED" ||
+        deployment.status === "CRASHED" ||
+        deployment.status === "REMOVED"
+      ) {
+        return false;
+      }
     } catch {
       // Expected during early deploy — API may not have the deployment yet
     }

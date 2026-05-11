@@ -82,7 +82,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async deployService(serviceId, environmentId) {
       calls.push("deployService");
-      return { id: `deploy_1`, status: "ACTIVE" } as RailwayDeployment;
+      return { id: `deploy_1`, status: "SUCCESS" } as RailwayDeployment;
     },
 
     async createDomain(serviceId, environmentId) {
@@ -93,7 +93,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async getDeploymentStatus(deploymentId) {
       calls.push("getDeploymentStatus");
-      return { id: deploymentId, status: "ACTIVE" } as RailwayDeployment;
+      return { id: deploymentId, status: "SUCCESS" } as RailwayDeployment;
     },
 
     ...overrides,
