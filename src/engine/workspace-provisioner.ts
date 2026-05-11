@@ -191,12 +191,12 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
 
     async createDomain(serviceId, environmentId) {
       const data = await gql<{ serviceDomainCreate: { domain: string; id: string } }>(
-        `mutation($serviceId: String!, $environmentId: String!) {
-          serviceDomainCreate(serviceId: $serviceId, environmentId: $environmentId) {
+        `mutation($input: ServiceDomainCreateInput!) {
+          serviceDomainCreate(input: $input) {
             id domain
           }
         }`,
-        { serviceId, environmentId },
+        { input: { serviceId, environmentId } },
       );
       return data.serviceDomainCreate;
     },
