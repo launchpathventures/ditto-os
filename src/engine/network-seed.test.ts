@@ -13,7 +13,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { writeFirstBootSentinel } from "./network-seed";
 
 // We test the core logic directly against a test DB rather than
 // going through the module's db import (which uses the production DB).
@@ -315,6 +316,53 @@ describe("network-seed", () => {
         .limit(1);
 
       expect(selfMemories).toHaveLength(1); // Not first boot
+    });
+  });
+
+  // ============================================================
+  // First-boot sentinel (empty-seed recovery)
+  // ============================================================
+
+  describe("writeFirstBootSentinel", () => {
+    it("writes a self-scoped sentinel memory for the given user", async () => {
+      await writeFirstBootSentinel("user-empty-seed", db);
+
+      const sentinels = await db
+        .select()
+        .from(schema.memories)
+        .where(
+          and(
+            eq(schema.memories.scopeType, "self"),
+            eq(schema.memories.scopeId, "user-empty-seed"),
+          ),
+        );
+
+      expect(sentinels).toHaveLength(1);
+      const [s] = sentinels;
+      expect(s.source).toBe("system");
+      expect(s.sourceId).toBe("network-seed-sentinel");
+      expect(s.type).toBe("context");
+      expect(s.active).toBe(true);
+    });
+
+    it("exits the first-boot state — isFirstBoot detects the sentinel", async () => {
+      // Before: no self-memories → would be first boot
+      const before = await db
+        .select({ id: schema.memories.id })
+        .from(schema.memories)
+        .where(eq(schema.memories.scopeType, "self"))
+        .limit(1);
+      expect(before).toHaveLength(0);
+
+      await writeFirstBootSentinel("user-empty-seed", db);
+
+      // After: at least one self-memory → not first boot
+      const after = await db
+        .select({ id: schema.memories.id })
+        .from(schema.memories)
+        .where(eq(schema.memories.scopeType, "self"))
+        .limit(1);
+      expect(after).toHaveLength(1);
     });
   });
 
