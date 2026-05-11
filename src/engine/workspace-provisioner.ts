@@ -159,9 +159,11 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
       );
 
       // The just-fired deployment may take a moment to appear in the
-      // deployments list; brief retry loop. ~10s budget is generous for
-      // Railway's normal indexing latency (~1-3s).
-      for (let attempt = 0; attempt < 10; attempt++) {
+      // deployments list. Observed Railway indexing latency exceeds 10s in
+      // practice for fresh services, so budget 60s (30 attempts × 2s).
+      const maxAttempts = 30;
+      const intervalMs = 2000;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const data = await gql<{
           deployments: { edges: Array<{ node: RailwayDeployment }> };
         }>(
@@ -174,10 +176,11 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
         );
         const node = data.deployments.edges[0]?.node;
         if (node) return node;
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, intervalMs));
       }
+      const budgetSec = Math.round((maxAttempts * intervalMs) / 1000);
       throw new Error(
-        `Railway: serviceInstanceDeploy fired but no deployment surfaced in list within 10s for service ${serviceId}`,
+        `Railway: serviceInstanceDeploy fired but no deployment surfaced in list within ${budgetSec}s for service ${serviceId}`,
       );
     },
 
