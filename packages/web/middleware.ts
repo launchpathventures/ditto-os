@@ -53,6 +53,7 @@ const BASE_PUBLIC_PREFIXES = [
   "/chat",
   "/login",
   "/setup",
+  "/api/healthz",
   "/api/v1/network",
   "/api/v1/chat",
   "/api/v1/voice",

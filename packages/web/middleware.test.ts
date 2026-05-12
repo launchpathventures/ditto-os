@@ -72,4 +72,15 @@ describe("workspace auth middleware", () => {
     const res = await middleware(req("/", signedCookie("owner@example.com", "workspace-secret")));
     expect(res.status).toBe(200);
   });
+
+  it("allows /api/healthz on a fully-configured managed workspace without auth", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
+    vi.stubEnv("WORKSPACE_OWNER_EMAIL", "owner@example.com");
+    vi.stubEnv("SESSION_SECRET", "workspace-secret");
+    const { middleware } = await loadMiddleware();
+
+    const res = await middleware(req("/api/healthz?deep=true&mode=provisioning"));
+    expect(res.status).toBe(200);
+  });
 });
