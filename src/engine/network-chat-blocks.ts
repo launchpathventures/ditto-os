@@ -10,7 +10,8 @@
  * Provenance: Brief 137, Insight-177, self-stream.ts pattern.
  */
 
-import type { ContentBlock, ProcessProposalBlock, RecordBlock } from "./content-blocks";
+import { randomUUID } from "crypto";
+import type { AuthorizationRequestBlock, ContentBlock, ProcessProposalBlock, RecordBlock } from "./content-blocks";
 import type { DetectedMode, ConversationStage } from "./network-chat-prompt";
 
 // ============================================================
@@ -31,6 +32,7 @@ interface LearnedFields {
 
 export interface FrontDoorBlockArgs {
   plan: string | null;
+  beat2Action?: Record<string, unknown> | null;
   detectedMode: DetectedMode;
   learned: LearnedFields | null;
   stage: ConversationStage;
@@ -114,6 +116,55 @@ function buildRecordFromContext(
   };
 }
 
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asRecipients(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  }
+  const single = asString(value);
+  return single ? [single] : [];
+}
+
+function buildAuthorizationRequest(action: Record<string, unknown>): AuthorizationRequestBlock | null {
+  const recipients = asRecipients(action.to);
+  const subject = asString(action.subject);
+  const body = asString(action.body);
+  if (recipients.length === 0 || !subject || !body) return null;
+
+  const recipientLabel = asString(action.recipientLabel) ?? recipients.join(", ");
+  const header = asString(action.header) ?? (
+    recipients.length > 1
+      ? `Send to ${recipients.length} people?`
+      : `Want me to send this to ${recipientLabel}?`
+  );
+
+  return {
+    type: "authorization-request",
+    state: "pending",
+    header,
+    preview: [
+      {
+        type: "text",
+        text: [`Subject: ${subject}`, "", body].join("\n"),
+      },
+    ],
+    recipientLabel,
+    actionClass: recipients.length > 1 ? "multi-recipient-send" : "email-send",
+    executionResult: null,
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    authorizationId: `beat2-${randomUUID()}`,
+    toolName: "gmail-authorized-send",
+    toolInput: {
+      to: recipients,
+      subject,
+      body,
+    },
+  };
+}
+
 // ============================================================
 // Main: buildFrontDoorBlocks
 // ============================================================
@@ -124,7 +175,7 @@ function buildRecordFromContext(
  */
 export function buildFrontDoorBlocks(args: FrontDoorBlockArgs): ContentBlock[] {
   try {
-    const { plan, detectedMode, learned, stage, enrichmentText } = args;
+    const { plan, beat2Action, detectedMode, learned, stage, enrichmentText } = args;
 
     // GATHER stage: no blocks
     if (stage === "gather") return [];
@@ -134,6 +185,13 @@ export function buildFrontDoorBlocks(args: FrontDoorBlockArgs): ContentBlock[] {
     // REFLECT: plan → ProcessProposalBlock
     if (plan) {
       blocks.push(buildProcessProposalFromPlan(plan));
+    }
+
+    if (beat2Action) {
+      const authorizationBlock = buildAuthorizationRequest(beat2Action);
+      if (authorizationBlock) {
+        blocks.push(authorizationBlock);
+      }
     }
 
     // ACTIVATE: enrichment + connector/sales → RecordBlock

@@ -22,7 +22,25 @@ export async function authenticateRequest(request: Request): Promise<AuthResult>
   const authHeader = request.headers.get("authorization");
 
   const { validateToken } = await import("../../../src/engine/network-api-auth");
-  const result = await validateToken(authHeader);
+  let result;
+  try {
+    result = await validateToken(authHeader);
+  } catch (error) {
+    const { isNetworkDbConnectionError } = await import("../../../src/db/network-db");
+    if (isNetworkDbConnectionError(error)) {
+      return {
+        authenticated: false,
+        response: NextResponse.json(
+          {
+            error: "network_db_unavailable",
+            message: "The network tier is temporarily unavailable. Please retry in a moment.",
+          },
+          { status: 503 },
+        ),
+      };
+    }
+    throw error;
+  }
 
   if (!result) {
     return {
@@ -45,7 +63,25 @@ export async function authenticateAdminRequest(request: Request): Promise<AuthRe
   const authHeader = request.headers.get("authorization");
 
   const { validateToken } = await import("../../../src/engine/network-api-auth");
-  const result = await validateToken(authHeader);
+  let result;
+  try {
+    result = await validateToken(authHeader);
+  } catch (error) {
+    const { isNetworkDbConnectionError } = await import("../../../src/db/network-db");
+    if (isNetworkDbConnectionError(error)) {
+      return {
+        authenticated: false,
+        response: NextResponse.json(
+          {
+            error: "network_db_unavailable",
+            message: "The network tier is temporarily unavailable. Please retry in a moment.",
+          },
+          { status: 503 },
+        ),
+      };
+    }
+    throw error;
+  }
 
   if (!result) {
     return {

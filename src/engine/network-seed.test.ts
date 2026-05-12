@@ -10,7 +10,7 @@
  * See `src/engine/legibility/README.md` for the full exemption rationale.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -25,12 +25,16 @@ describe("network-seed", () => {
   let cleanup: () => void;
 
   beforeEach(() => {
+    delete process.env.DITTO_NETWORK_URL;
+    delete process.env.DITTO_NETWORK_TOKEN;
+    delete process.env.DITTO_WORKSPACE_USER_ID;
     const testDb = createTestDb();
     db = testDb.db;
     cleanup = testDb.cleanup;
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     cleanup();
   });
 
@@ -40,15 +44,6 @@ describe("network-seed", () => {
 
   describe("exportSeed", () => {
     it("exports seed with correct schema version", async () => {
-      // Create a network user
-      await db.insert(schema.networkUsers).values({
-        id: "user-1",
-        email: "founder@test.com",
-        name: "Founder",
-        personaAssignment: "alex",
-        status: "active",
-      });
-
       // Create a self-scoped memory
       await db.insert(schema.memories).values({
         scopeType: "self" as const,
@@ -316,6 +311,94 @@ describe("network-seed", () => {
         .limit(1);
 
       expect(selfMemories).toHaveLength(1); // Not first boot
+    });
+
+    it("path A: successful seed import with memories ends first boot", async () => {
+      const { importSeed, getSeedAttemptState, isFirstBoot } = await import("./network-seed");
+      process.env.DITTO_NETWORK_URL = "https://network.example.com";
+
+      await importSeed({
+        version: "1",
+        userId: "user-1",
+        personaAssignment: "alex",
+        memories: [
+          {
+            scopeType: "self",
+            type: "context",
+            content: "Seeded context",
+            confidence: 0.9,
+            shared: false,
+          },
+        ],
+        people: [],
+        interactionSummaries: [],
+        plans: [],
+        trustSettings: {
+          sellingOutreach: "supervised",
+          connectingIntroduction: "critical",
+        },
+      }, db as unknown as typeof import("../db").db);
+
+      expect(await getSeedAttemptState(db as unknown as typeof import("../db").db)).toBe("imported");
+      expect(await isFirstBoot(db as unknown as typeof import("../db").db)).toBe(false);
+    });
+
+    it("path B: successful empty seed writes sentinel and ends first boot", async () => {
+      const {
+        fetchAndImportSeed,
+        getSeedAttemptState,
+        NETWORK_SEED_ATTEMPT_SOURCE_ID,
+      } = await import("./network-seed");
+      process.env.DITTO_NETWORK_URL = "https://network.example.com";
+      process.env.DITTO_NETWORK_TOKEN = "dnt_test";
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          version: "1",
+          userId: "user-1",
+          personaAssignment: "alex",
+          memories: [],
+          people: [],
+          interactionSummaries: [],
+          plans: [],
+          trustSettings: {
+            sellingOutreach: "supervised",
+            connectingIntroduction: "critical",
+          },
+        }),
+      })));
+
+      const result = await fetchAndImportSeed(db as unknown as typeof import("../db").db);
+      expect(result?.memoriesImported).toBe(0);
+      expect(await getSeedAttemptState(db as unknown as typeof import("../db").db)).toBe("attempted");
+
+      const sentinel = await db
+        .select()
+        .from(schema.memories)
+        .where(eq(schema.memories.sourceId, NETWORK_SEED_ATTEMPT_SOURCE_ID));
+      expect(sentinel).toHaveLength(1);
+      expect(sentinel[0].scopeId).toBe("user-1");
+    });
+
+    it("path C: failed seed fetch can write sentinel from DITTO_WORKSPACE_USER_ID", async () => {
+      const {
+        writeSeedFetchFailureSentinelFromEnv,
+        getSeedAttemptState,
+        NETWORK_SEED_ATTEMPT_SOURCE_ID,
+      } = await import("./network-seed");
+      process.env.DITTO_WORKSPACE_USER_ID = "user-env-1";
+
+      await expect(
+        writeSeedFetchFailureSentinelFromEnv(db as unknown as typeof import("../db").db),
+      ).resolves.toBe(true);
+      expect(await getSeedAttemptState(db as unknown as typeof import("../db").db)).toBe("attempted");
+
+      const sentinel = await db
+        .select()
+        .from(schema.memories)
+        .where(eq(schema.memories.sourceId, NETWORK_SEED_ATTEMPT_SOURCE_ID));
+      expect(sentinel).toHaveLength(1);
+      expect(sentinel[0].scopeId).toBe("user-env-1");
     });
   });
 

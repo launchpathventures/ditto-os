@@ -23,7 +23,8 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const { db, schema } = await import("../../../../../../../../../src/db");
+    const { networkDb } = await import("../../../../../../../../../src/db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker } = await import(
       "../../../../../../../../../src/engine/workspace-upgrader"
     );
@@ -37,8 +38,8 @@ export async function GET(
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),

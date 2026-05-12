@@ -53,6 +53,78 @@ export interface ReviewCardBlock {
   knowledgeUsed?: string[];
 }
 
+export interface NetworkProfileSignalDot {
+  id: string;
+  label: string;
+  filled: boolean;
+  color: "petal" | "mint" | "canary" | "lavender";
+}
+
+export interface NetworkProfileBadge {
+  label: string;
+  color?: "petal" | "mint" | "canary" | "lavender";
+}
+
+/** NetworkProfileCardBlock — public projection of an expert in the Ditto network. */
+export interface NetworkProfileCardBlock {
+  type: "network-profile-card";
+  handle: string;
+  name: string;
+  portraitUrl: string | null;
+  cityLabel: string | null;
+  oneLineRole: string;
+  signalDots: NetworkProfileSignalDot[];
+  badges: NetworkProfileBadge[];
+  narrativeMd: string;
+  antiPersonaMd: string | null;
+  greeterCuratedBy: "alex" | "mira";
+  lastUpdatedAt: string;
+  visibility: "public" | "on-request" | "off";
+  shareUrl: string;
+  ogImageUrl: string;
+}
+
+export interface JobRequestBudgetShape {
+  /** Internal-only: do not render verbatim on candidate/shareable surfaces. */
+  ballpark: string;
+  cadence: "hourly" | "monthly" | "project";
+}
+
+export interface SuggestedCandidate {
+  /**
+   * On-network candidates use a real Ditto handle. Scouted candidates must use
+   * a stable non-impersonating identifier such as `scouted:<hash>`.
+   */
+  handle: string;
+  name: string;
+  oneLineRole: string;
+  rationaleMd: string;
+  fitConfidence: "high" | "medium" | "low";
+  source: "on-network" | "scouted";
+  sourceUrl?: string;
+  sourceLabel?: string;
+  sourceSnippet?: string;
+  /** Match computation time. Distinct from JobRequestCardBlock.lastUpdatedAt. */
+  computedAt: string;
+}
+
+/** JobRequestCardBlock — structured client-lane intake for a specific hunt. */
+export interface JobRequestCardBlock {
+  type: "job-request-card";
+  jtbd: string;
+  referenceShape: string;
+  antiPersonaMd: string;
+  successCriteria: string;
+  /** Internal-only budget shape. Candidate/shareable renderers must strip it. */
+  budgetShape: JobRequestBudgetShape;
+  scoutOptIn: boolean;
+  suggestedCandidates: SuggestedCandidate[];
+  greeterCuratedBy: "alex" | "mira";
+  matchCuratedBy: "alex" | "mira";
+  /** Card edit time. Distinct from SuggestedCandidate.computedAt. */
+  lastUpdatedAt: string;
+}
+
 /** StatusCardBlock — Process or work item status.
  *  Optional `metadata` (Brief 221) carries typed subtype-specific data — e.g.,
  *  runner-dispatch state via `metadata.cardKind = "runnerDispatch"` plus runner
@@ -172,6 +244,65 @@ export interface DataBlock {
   headers?: string[];
   /** Per-field annotations keyed by field name or column key */
   annotations?: Record<string, FieldAnnotation>;
+}
+
+// ============================================================
+// AuthorizationRequestBlock — Greeter Beat 2 side-effect gate
+// ============================================================
+
+export type AuthorizationRequestState =
+  | "pending"
+  | "accepted"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "rejected"
+  | "edit-requested"
+  | "partial"
+  | "expired";
+
+export type AuthorizationActionClass =
+  | "email-send"
+  | "sms-send"
+  | "calendar-invite"
+  | "list-share"
+  | "multi-recipient-send";
+
+export interface AuthorizationResult {
+  status: "sent" | "failed" | "partial";
+  messageId?: string;
+  sentAt?: string;
+  recipients?: string[];
+  reasonForVisitor?: string;
+  reasonForLog?: string;
+  partial?: Array<{
+    id: string;
+    recipient: string;
+    status: "sent" | "failed";
+    reasonForVisitor?: string;
+  }>;
+}
+
+/** AuthorizationRequestBlock — one explicit user decision before a side effect. */
+export interface AuthorizationRequestBlock {
+  type: "authorization-request";
+  state: AuthorizationRequestState;
+  header: string;
+  preview: ContentBlock[] | null;
+  recipientLabel: string | null;
+  actionClass: AuthorizationActionClass;
+  executionResult: AuthorizationResult | null;
+  expiresAt: string | null;
+  /** Optional pricing/free-counter hint populated by later intro flows. */
+  costLabel?: string | null;
+  /** Optional server/client correlation id for affordance events. */
+  authorizationId?: string;
+  /**
+   * Optional one-shot tool reference for server-side wiring. Product renderers
+   * should strip these fields before sending the block to an untrusted client.
+   */
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
 }
 
 /** ImageBlock — Visual content */
@@ -639,12 +770,15 @@ export interface ConfidenceAssessment {
 export type ContentBlock =
   | TextBlock
   | ReviewCardBlock
+  | NetworkProfileCardBlock
+  | JobRequestCardBlock
   | StatusCardBlock
   | ActionBlock
   | InputRequestBlock
   | KnowledgeCitationBlock
   | ProgressBlock
   | DataBlock
+  | AuthorizationRequestBlock
   | ImageBlock
   | CodeBlock
   | ReasoningTraceBlock
@@ -689,6 +823,37 @@ export function renderBlockToText(block: ContentBlock): string {
         block.confidence ? `Confidence: ${block.confidence}` : "",
         block.outputText,
         block.actions.map((a) => `[${a.label}]`).join(" "),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+    case "network-profile-card":
+      return [
+        `${block.name} — ${block.oneLineRole}`,
+        block.cityLabel ? `Location: ${block.cityLabel}` : "",
+        `Handle: ${block.shareUrl}`,
+        block.badges.length > 0 ? `Badges: ${block.badges.map((badge) => badge.label).join(", ")}` : "",
+        block.narrativeMd,
+        block.antiPersonaMd ? `Allergic to: ${block.antiPersonaMd}` : `Allergic to: still asking ${block.name.split(/\s+/)[0] ?? block.name}`,
+        `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+    case "job-request-card":
+      return [
+        "Opportunity brief",
+        `Hunting: ${block.jtbd}`,
+        `Last time this looked like: ${block.referenceShape}`,
+        `Allergic to: ${block.antiPersonaMd}`,
+        `Success: ${block.successCriteria}`,
+        "Budget: internal-only",
+        block.scoutOptIn ? "Scout: on-network + off-network" : "Scout: on-network only",
+        `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
+        `Matched by ${block.matchCuratedBy === "mira" ? "Mira" : "Alex"}`,
+        block.suggestedCandidates.length > 0
+          ? `Suggestions: ${block.suggestedCandidates.map((candidate) => `${candidate.name} (@${candidate.handle})`).join(", ")}`
+          : "Suggestions: none yet",
       ]
         .filter(Boolean)
         .join("\n");
@@ -769,6 +934,24 @@ export function renderBlockToText(block: ContentBlock): string {
       ]
         .filter(Boolean)
         .join("\n");
+    }
+
+    case "authorization-request": {
+      const lines = [
+        block.header,
+        block.recipientLabel ? `Recipient: ${block.recipientLabel}` : "",
+        `State: ${block.state}`,
+        block.executionResult?.status === "sent"
+          ? `Sent: ${(block.executionResult.recipients ?? []).join(", ")}`
+          : "",
+        block.executionResult?.status === "failed"
+          ? `Could not send: ${block.executionResult.reasonForVisitor ?? "Try again."}`
+          : "",
+        block.preview
+          ? block.preview.map((child) => renderBlockToText(child)).join("\n")
+          : "",
+      ];
+      return lines.filter(Boolean).join("\n");
     }
 
     case "image":

@@ -11,6 +11,7 @@
     "./trust": "./src/trust/index.ts",
     "./llm": "./src/llm/index.ts",
     "./db": "./src/db/index.ts",
+    "./db/network": "./src/db/network/index.ts",
     "./cognitive": "./src/cognitive/index.ts"
   },
   "scripts": {

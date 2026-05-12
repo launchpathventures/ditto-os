@@ -18,7 +18,8 @@ export async function POST(request: Request) {
   if (!auth.authenticated) return auth.response;
 
   try {
-    const { db, schema } = await import("../../../../../../../../src/db");
+    const { networkDb } = await import("../../../../../../../../src/db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker, UpgradeConflictError } = await import(
       "../../../../../../../../src/engine/workspace-upgrader"
     );
@@ -32,8 +33,8 @@ export async function POST(request: Request) {
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),

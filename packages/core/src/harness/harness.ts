@@ -11,6 +11,13 @@
 import type { TrustTier, TrustAction, ReviewResult } from "../db/schema.js";
 import type { StepExecutionResult } from "../interfaces.js";
 import type { LlmToolDefinition, ModelPurpose } from "../llm/index.js";
+import type {
+  AuthorizationActionClass,
+  AuthorizationRequestBlock,
+  AuthorizationRequestState,
+  AuthorizationResult,
+  ContentBlock,
+} from "../content-blocks.js";
 
 // ============================================================
 // Process types (minimal — enough for harness context)
@@ -162,7 +169,7 @@ export interface ProcessDefinition {
   status: string;
   description: string;
   system?: boolean;
-  /** Process operator — who runs this process (e.g. "alex-or-mira", "user-agent", "ditto") */
+  /** Process operator — who runs this process (e.g. "greeter", "ditto", "system") */
   operator?: string;
   // Sub-processes (callable_as: sub-process) have no independent trigger —
   // they're invoked by their parent process.
@@ -266,6 +273,54 @@ export interface OutboundActionRecord {
 }
 
 // ============================================================
+// Authorization Gate (Brief 248)
+// ============================================================
+
+export type AuthorizationAffordanceEvent =
+  | "pending"
+  | "send-it"
+  | "edit-first"
+  | "not-yet"
+  | "expired"
+  | "retry"
+  | "explain"
+  | "retry-item";
+
+export interface AuthorizationToolCall {
+  toolName: string;
+  input: Record<string, unknown>;
+  execute: (input: Record<string, unknown>, stepRunId: string) => Promise<AuthorizationResult>;
+}
+
+export interface AuthorizationGateRequest {
+  authorizationId?: string;
+  event: AuthorizationAffordanceEvent;
+  header: string;
+  preview: ContentBlock[] | null;
+  recipientLabel: string | null;
+  actionClass: AuthorizationActionClass;
+  toolCall: AuthorizationToolCall;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+  idleTimeoutMs?: number;
+}
+
+export interface AuthorizationOutcomeRecord {
+  processRunId: string;
+  stepRunId: string;
+  state: Extract<AuthorizationRequestState, "rejected" | "edit-requested" | "expired">;
+  actionClass: AuthorizationActionClass;
+  recipientLabel: string | null;
+  idleMsBeforeExpire?: number;
+  payload: {
+    state: Extract<AuthorizationRequestState, "rejected" | "edit-requested" | "expired">;
+    actionClass: AuthorizationActionClass;
+    recipientLabel: string | null;
+    idleMsBeforeExpire?: number;
+  };
+}
+
+// ============================================================
 // Routing Decision
 // ============================================================
 
@@ -359,6 +414,10 @@ export interface HarnessContext {
   voiceModelLoader: ((processId: string, userId: string) => Promise<string | null>) | null;
   /** Outbound action recorder callback — injected by product layer */
   recordOutboundAction: ((action: OutboundActionRecord) => Promise<void>) | null;
+  /** Feedback-memory bridge for terminal authorization outcomes. */
+  recordAuthorizationOutcome: ((record: AuthorizationOutcomeRecord) => Promise<void>) | null;
+  /** Pending Beat 2 side-effect gate, when a step/chat turn is awaiting explicit user assent. */
+  authorizationRequest: AuthorizationGateRequest | null;
   /**
    * Pre-dispatch budget guard callback — injected by product layer (Brief 172).
    * Called per approved staged action before `dispatchStagedAction` fires. If
@@ -458,6 +517,8 @@ export function createHarnessContext(params: {
     audienceClassificationRules: null,
     voiceModelLoader: null,
     recordOutboundAction: null,
+    recordAuthorizationOutcome: null,
+    authorizationRequest: null,
     checkBudgetBeforeDispatch: null,
 
     shortCircuit: false,

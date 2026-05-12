@@ -8,7 +8,7 @@ import { Menu, X } from "lucide-react";
 const navLinks = [
   { href: "/about", label: "About" },
   { href: "/how-it-works", label: "How It Works" },
-  { href: "/chief-of-staff", label: "Chief of Staff" },
+  { href: "/your-ditto", label: "Your Ditto" },
   { href: "/network", label: "Network" },
   { href: "/pricing", label: "Pricing" },
 ];
@@ -46,7 +46,7 @@ export function SiteNav() {
             href="/#get-started"
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
           >
-            Get Started
+            Get your Ditto
           </Link>
         </div>
 
@@ -83,7 +83,7 @@ export function SiteNav() {
               onClick={() => setMobileOpen(false)}
               className="rounded-lg bg-accent px-4 py-2 text-center text-sm font-medium text-accent-foreground"
             >
-              Get Started
+              Get your Ditto
             </Link>
           </div>
         </div>

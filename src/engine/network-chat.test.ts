@@ -11,8 +11,16 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
+import {
+  withNetworkDbTransaction,
+  type NetworkDbTransaction,
+} from "../db/network-db-test-helpers";
 import * as schema from "../db/schema";
 import { eq, and } from "drizzle-orm";
+import { readFileSync } from "fs";
+import { join } from "path";
+import * as networkSchema from "@ditto/core/db/network";
+import type { NetworkProfileCardBlock } from "./content-blocks";
 
 // ============================================================
 // Prompt Tests (no DB or LLM needed)
@@ -205,7 +213,51 @@ describe("network-chat-prompt", () => {
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("requestName");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("fetchUrl");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("plan");
+      expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("beat2Action");
       expect(ALEX_RESPONSE_TOOL.input_schema.properties).toHaveProperty("learned");
+    });
+
+    it("adds Beat 1 recap and Beat 2 directive without forbidden card copy", async () => {
+      const { buildFrontDoorPrompt } = await import("./network-chat-prompt");
+      const prompt = buildFrontDoorPrompt("front-door", undefined, "activate").toLowerCase();
+      expect(prompt).toContain("beat 1 recap");
+      expect(prompt).toContain("beat 2 do");
+      for (const forbidden of [
+        "authorize",
+        "execute",
+        "trigger",
+        "confirm action",
+        "this will",
+        "ok to proceed",
+      ]) {
+        expect(prompt).not.toContain(forbidden);
+      }
+    });
+  });
+
+  describe("authorization block safety", () => {
+    it("strips internal reasonForLog before returning public authorization blocks", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain("function publicAuthorizationResult");
+      expect(source).toContain("reasonForLog: _reasonForLog");
+      expect(source).toContain("executionResult: publicAuthorizationResult");
+    });
+
+    it("validates public authorization events before executing the gate", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain("const AUTHORIZATION_EVENTS");
+      expect(source).toContain("function readAuthorizationEvent");
+      expect(source).toContain("const effectiveEvent");
+      expect(source).toContain("!event || pending.expiresAtMs <= Date.now()");
+      expect(source).not.toContain(': "send-it";');
+    });
+
+    it("persists pending authorization state beyond the in-process map", () => {
+      const source = readFileSync(join(__dirname, "network-chat.ts"), "utf8");
+      expect(source).toContain('const AUTHORIZATION_PENDING_EVENT = "chat_authorization_pending"');
+      expect(source).toContain("async function rememberPendingChatAuthorization");
+      expect(source).toContain("async function loadPendingChatAuthorization");
+      expect(source).toContain("async function closePendingChatAuthorization");
     });
   });
 });
@@ -216,6 +268,7 @@ describe("network-chat-prompt", () => {
 
 let testDb: TestDb;
 let cleanup: () => void;
+let currentTx: NetworkDbTransaction | null = null;
 
 vi.mock("../db", async () => {
   const realSchema = await vi.importActual<typeof import("../db/schema")>("../db/schema");
@@ -224,6 +277,19 @@ vi.mock("../db", async () => {
     schema: realSchema,
   };
 });
+
+vi.mock("../db/network-db", () => ({
+  get networkDb() {
+    if (!currentTx) {
+      throw new Error(
+        "[network-chat.test] networkDb accessed outside withNetworkDbTransaction. " +
+          "Wrap the test body in net(async (tx) => { ... }).",
+      );
+    }
+    return currentTx;
+  },
+  ensureNetworkSchema: vi.fn(async () => {}),
+}));
 
 const mockStartIntake = vi.fn().mockResolvedValue({
   success: true,
@@ -272,6 +338,49 @@ function mockAlexResponse(
   };
 }
 
+function mockNetworkMatchResponse(handles: string[]) {
+  return {
+    content: [
+      {
+        type: "tool_use",
+        id: `mock-match-${Date.now()}`,
+        name: "network_match_result",
+        input: {
+          candidates: handles.map((handle) => ({
+            handle,
+            rationaleMd: `${handle} has the outcome shape.`,
+            fitConfidence: "high",
+          })),
+        },
+      },
+    ],
+    tokensUsed: 50,
+    costCents: 0,
+    stopReason: "tool_use",
+    model: "mock",
+  };
+}
+
+function networkProfile(handle: string): NetworkProfileCardBlock {
+  return {
+    type: "network-profile-card",
+    handle,
+    name: "Candidate One",
+    portraitUrl: null,
+    cityLabel: null,
+    oneLineRole: "CRM-touch outbound operator",
+    signalDots: [],
+    badges: [{ label: "Outbound", color: "mint" }],
+    narrativeMd: "Builds outbound systems and fixes CRM execution loops.",
+    antiPersonaMd: null,
+    greeterCuratedBy: "mira",
+    lastUpdatedAt: "2026-05-10T00:00:00.000Z",
+    visibility: "public",
+    shareUrl: `https://ditto.partners/people/${handle}`,
+    ogImageUrl: `https://ditto.partners/people/${handle}/opengraph-image`,
+  };
+}
+
 const mockCreateCompletion = vi.fn().mockResolvedValue(
   mockAlexResponse("Good to meet you. What are you working on?"),
 );
@@ -302,7 +411,21 @@ describe("network-chat integration", () => {
 
   afterEach(() => {
     cleanup();
+    currentTx = null;
   });
+
+  /** Wrap a test body in a network-db transaction so writes roll back. */
+  function net(fn: (tx: NetworkDbTransaction) => Promise<void>): () => Promise<void> {
+    return () =>
+      withNetworkDbTransaction(async (tx) => {
+        currentTx = tx;
+        try {
+          await fn(tx);
+        } finally {
+          currentTx = null;
+        }
+      });
+  }
 
   // ============================================================
   // Existing tests (backward compatibility)
@@ -329,6 +452,108 @@ describe("network-chat integration", () => {
     expect(session.messageCount).toBe(1);
   });
 
+  it("keeps client lane turns on the Q1-Q6 intake instead of the front-door name gate", async () => {
+    mockCreateCompletion.mockClear();
+    mockCreateCompletion.mockResolvedValueOnce(
+      mockAlexResponse("Who did this for you well before?"),
+    );
+
+    await handleChatTurn(null, "Ramp outbound with someone who can touch HubSpot", "client", "127.0.0.1");
+
+    const llmRequest = mockCreateCompletion.mock.calls.at(-1)?.[0] as { system?: string } | undefined;
+    expect(llmRequest?.system).toContain("Client Lane Opportunity Brief Intake");
+    expect(llmRequest?.system).toContain(
+      'Ask the next unanswered client-lane question exactly as written: "Who *did* this for you well before, even if it was a side-of-desk thing?"',
+    );
+    expect(llmRequest?.system).not.toContain("You do NOT know this visitor's name yet");
+  });
+
+  it("completes client lane intake with two assistant turns, a card block, match results, and persistence", net(async (tx) => {
+    await tx.insert(networkSchema.networkUsers).values({
+      email: "candidate@example.com",
+      name: "Candidate One",
+      handle: "candidate-one",
+      wantsVisibility: true,
+      card: networkProfile("candidate-one"),
+    });
+    await testDb.insert(schema.chatSessions).values({
+      sessionId: "client-lane-session",
+      messages: [{ role: "assistant", content: "Hi — I'm Mira. Walk me through what you need." }],
+      context: "client",
+      ipHash: "testhash",
+      authenticatedEmail: "client@example.com",
+      personaId: "mira",
+      stage: "main",
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+    mockCreateCompletion.mockImplementation((request: { tools?: Array<{ name: string }> }) => {
+      if (request.tools?.some((tool) => tool.name === "network_match_result")) {
+        return Promise.resolve(mockNetworkMatchResponse(["candidate-one"]));
+      }
+      return Promise.resolve(mockAlexResponse("Next client-lane question?"));
+    });
+
+    const answers = [
+      "Ramp outbound with someone who can touch HubSpot",
+      "Jake built sequences and fixed CRM handoffs",
+      "Pure copywriters",
+      "5 booked discovery calls per week by day 30",
+      "$8-12k/month",
+      "not just on-network, scan outside too",
+    ];
+    let result: Awaited<ReturnType<typeof handleChatTurn>> | null = null;
+    for (const answer of answers) {
+      result = await handleChatTurn(
+        "client-lane-session",
+        answer,
+        "client",
+        "127.0.0.1",
+      );
+    }
+
+    expect(result?.contentBlocks?.[0]).toMatchObject({
+      type: "job-request-card",
+      scoutOptIn: true,
+      greeterCuratedBy: "mira",
+      matchCuratedBy: "mira",
+      suggestedCandidates: [
+        expect.objectContaining({
+          handle: "candidate-one",
+          source: "on-network",
+          fitConfidence: "high",
+        }),
+      ],
+    });
+    expect(result?.jobRequestId).toEqual(expect.any(String));
+
+    const [stored] = await testDb
+      .select({ messages: schema.chatSessions.messages })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.sessionId, "client-lane-session"));
+    const messages = stored?.messages ?? [];
+    expect(messages.at(-2)).toMatchObject({
+      role: "assistant",
+      content: "I wrote that into an opportunity brief.",
+      block: { type: "job-request-card" },
+    });
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "One I'd put forward — all have the shape you described.",
+    });
+
+    const [jobRequest] = await tx
+      .select({
+        id: networkSchema.networkJobRequests.id,
+        jobRequestCard: networkSchema.networkJobRequests.jobRequestCard,
+      })
+      .from(networkSchema.networkJobRequests)
+      .where(eq(networkSchema.networkJobRequests.id, result?.jobRequestId ?? ""));
+    expect(jobRequest?.jobRequestCard).toMatchObject({
+      type: "job-request-card",
+      suggestedCandidates: [expect.objectContaining({ handle: "candidate-one" })],
+    });
+  }));
+
   it("records conversation_started funnel event", async () => {
     const result = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
 
@@ -342,15 +567,15 @@ describe("network-chat integration", () => {
     expect(startEvent!.surface).toBe("front-door");
   });
 
-  it("detects email, triggers intake, and sets emailCaptured", async () => {
+  it("detects email, triggers intake, and sets emailCaptured", net(async () => {
     const turn1 = await handleChatTurn(null, "I need help with sales", "front-door", "127.0.0.1");
     const turn2 = await handleChatTurn(turn1.sessionId, "tim@example.com", "front-door", "127.0.0.1");
 
     expect(turn2.emailCaptured).toBe(true);
     expect(turn2.reply).toBeTruthy();
-  });
+  }));
 
-  it("records email_captured funnel event", async () => {
+  it("records email_captured funnel event", net(async () => {
     const turn1 = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
     await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
@@ -361,7 +586,7 @@ describe("network-chat integration", () => {
 
     const captureEvent = events.find((e) => e.event === "email_captured");
     expect(captureEvent).toBeTruthy();
-  });
+  }));
 
   it("hashes IP addresses", async () => {
     await handleChatTurn(null, "Hello", "front-door", "192.168.1.1");
@@ -424,16 +649,16 @@ describe("network-chat integration", () => {
     expect(result.reply).toContain("chatting a lot");
   });
 
-  it("extracts name from conversation for intake", async () => {
+  it("extracts name from conversation for intake", net(async () => {
     mockStartIntake.mockClear();
     const turn1 = await handleChatTurn(null, "I'm Tim and I need sales help", "front-door", "127.0.0.1");
     const turn2 = await handleChatTurn(turn1.sessionId, "tim@example.com", "front-door", "127.0.0.1");
 
     expect(turn2.emailCaptured).toBe(true);
     expect(mockStartIntake).toHaveBeenCalledWith("tim@example.com", "Tim", expect.any(String), undefined, "alex", undefined, expect.any(String));
-  });
+  }));
 
-  it("calls startIntake with email, extracted name, and need", async () => {
+  it("calls startIntake with email, extracted name, and need", net(async () => {
     mockStartIntake.mockClear();
     const turn1 = await handleChatTurn(null, "I need help finding logistics partners", "front-door", "127.0.0.1");
     await handleChatTurn(turn1.sessionId, "test@company.com", "front-door", "127.0.0.1");
@@ -447,7 +672,7 @@ describe("network-chat integration", () => {
       undefined,
       expect.any(String), // sessionId (Brief 126 AC4)
     );
-  });
+  }));
 
   it("intercepts bracket-tagged funnel events without calling LLM", async () => {
     const turn1 = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
@@ -465,7 +690,51 @@ describe("network-chat integration", () => {
     expect(verifyEvent).toBeTruthy();
   });
 
-  it("sets emailCaptured when startIntake detects existing user", async () => {
+  it("persists referred session context when the landing event is bracket-tagged", async () => {
+    const result = await handleChatTurn(
+      null,
+      "[referred_landed]",
+      "referred",
+      "127.0.0.1",
+      null,
+      {
+        introducerFirstName: "Sarah",
+        learned: {
+          name: "Priya Shah",
+          business: "Shah Studio",
+        },
+      },
+      undefined,
+      { personaId: "mira", promptMode: "main" },
+    );
+
+    expect(result.reply).toBe("");
+    expect(result.learned).toEqual({
+      name: "Priya Shah",
+      business: "Shah Studio",
+    });
+
+    const [session] = await testDb
+      .select()
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.sessionId, result.sessionId));
+
+    expect(session.personaId).toBe("mira");
+    expect(session.stage).toBe("main");
+    expect(session.learned).toEqual({
+      name: "Priya Shah",
+      business: "Shah Studio",
+    });
+    expect(session.messageCount).toBe(0);
+    expect(session.messages).toEqual([
+      {
+        role: "assistant",
+        content: "Good to hear from you. Sarah thought you might be worth a chat. So tell me — what are you working on that's giving you grief?",
+      },
+    ]);
+  });
+
+  it("sets emailCaptured when startIntake detects existing user", net(async () => {
     mockStartIntake.mockResolvedValueOnce({
       success: true,
       recognised: true,
@@ -479,7 +748,7 @@ describe("network-chat integration", () => {
 
     expect(turn2.emailCaptured).toBe(true);
     expect(turn2.reply).toBeTruthy();
-  });
+  }));
 
   it("does not record conversation_started on subsequent messages", async () => {
     const turn1 = await handleChatTurn(null, "Hello", "front-door", "127.0.0.1");
@@ -571,7 +840,7 @@ describe("network-chat integration", () => {
   // ============================================================
 
   describe("ACTIVATE branching", () => {
-    it("calls sendActionEmail for connector mode on ACTIVATE", async () => {
+    it("calls sendActionEmail for connector mode on ACTIVATE", net(async () => {
       const turn1 = await handleChatTurn(null, "I need clients", "front-door", "127.0.0.1");
       await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
@@ -584,9 +853,9 @@ describe("network-chat integration", () => {
 
       expect(mockSendActionEmail).toHaveBeenCalled();
       expect(mockSendCosActionEmail).not.toHaveBeenCalled();
-    });
+    }));
 
-    it("calls sendCosActionEmail for cos mode on ACTIVATE", async () => {
+    it("calls sendCosActionEmail for cos mode on ACTIVATE", net(async () => {
       // Turn 1: detect cos mode
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("I can help organize that.", { detectedMode: "cos" }),
@@ -601,9 +870,9 @@ describe("network-chat integration", () => {
 
       expect(mockSendCosActionEmail).toHaveBeenCalled();
       expect(mockSendActionEmail).not.toHaveBeenCalled();
-    });
+    }));
 
-    it("calls only sendActionEmail for both mode on ACTIVATE (Brief 126: CoS chains later)", async () => {
+    it("calls only sendActionEmail for both mode on ACTIVATE (Brief 126: CoS chains later)", net(async () => {
       const turn1 = await handleChatTurn(null, "I need clients and help organizing", "front-door", "127.0.0.1");
       await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
@@ -617,9 +886,9 @@ describe("network-chat integration", () => {
       // CoS intake chains from front-door-intake report-back, not in parallel.
       expect(mockSendActionEmail).toHaveBeenCalled();
       expect(mockSendCosActionEmail).not.toHaveBeenCalled();
-    });
+    }));
 
-    it("defaults to connector on ACTIVATE with null mode", async () => {
+    it("defaults to connector on ACTIVATE with null mode", net(async () => {
       const turn1 = await handleChatTurn(null, "I need help", "front-door", "127.0.0.1");
       await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
 
@@ -632,7 +901,7 @@ describe("network-chat integration", () => {
       // Defaults to connector (backward compat)
       expect(mockSendActionEmail).toHaveBeenCalled();
       expect(mockSendCosActionEmail).not.toHaveBeenCalled();
-    });
+    }));
   });
 
   // ============================================================
@@ -656,7 +925,7 @@ describe("network-chat integration", () => {
       expect(turn2.detectedMode).toBe("cos");
     });
 
-    it("uses final mode for ACTIVATE after pivot", async () => {
+    it("uses final mode for ACTIVATE after pivot", net(async () => {
       // Turn 1: connector
       mockCreateCompletion.mockResolvedValueOnce(
         mockAlexResponse("Clients.", { detectedMode: "connector" }),
@@ -677,7 +946,7 @@ describe("network-chat integration", () => {
 
       expect(mockSendCosActionEmail).toHaveBeenCalled();
       expect(mockSendActionEmail).not.toHaveBeenCalled();
-    });
+    }));
   });
 
   // ============================================================
@@ -685,7 +954,7 @@ describe("network-chat integration", () => {
   // ============================================================
 
   describe("edge cases", () => {
-    it("new pill messages are excluded from need extraction", async () => {
+    it("new pill messages are excluded from need extraction", net(async () => {
       mockStartIntake.mockClear();
       const turn1 = await handleChatTurn(null, "I need help organizing my work", "front-door", "127.0.0.1");
       await handleChatTurn(turn1.sessionId, "test@example.com", "front-door", "127.0.0.1");
@@ -693,7 +962,7 @@ describe("network-chat integration", () => {
       // The pill message should NOT be passed as the "need" to startIntake
       const call = mockStartIntake.mock.calls[0];
       expect(call[2]).not.toBe("I need help organizing my work");
-    });
+    }));
   });
 
   // ============================================================
@@ -701,11 +970,11 @@ describe("network-chat integration", () => {
   // ============================================================
 
   describe("persistLearnedContext", () => {
-    it("creates person-scoped memories from learned context (one per field)", async () => {
+    it("creates person-scoped memories from learned context (one per field)", net(async (tx) => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      // Create a person record
-      const [person] = await testDb.insert(schema.people).values({
+      // Create a person record in the network tier
+      const [person] = await tx.insert(networkSchema.people).values({
         name: "Sarah",
         email: "sarah@example.com",
         userId: "test-user",
@@ -713,7 +982,7 @@ describe("network-chat integration", () => {
         visibility: "internal",
       }).returning();
 
-      // Create a chat session with learned context
+      // Create a chat session with learned context (workspace tier)
       const sessionId = `test-session-${Date.now()}`;
       await testDb.insert(schema.chatSessions).values({
         sessionId,
@@ -733,7 +1002,7 @@ describe("network-chat integration", () => {
 
       await persistLearnedContext(sessionId);
 
-      // Check memories were created
+      // Check memories were created (workspace tier)
       const memories = await testDb
         .select()
         .from(schema.memories)
@@ -759,12 +1028,12 @@ describe("network-chat integration", () => {
         expect(mem.active).toBeTruthy();
         expect(mem.confidence).toBe(0.7);
       }
-    });
+    }));
 
-    it("called twice with same data → no duplicate memories", async () => {
+    it("called twice with same data → no duplicate memories", net(async (tx) => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      const [person] = await testDb.insert(schema.people).values({
+      const [person] = await tx.insert(networkSchema.people).values({
         name: "Bob",
         email: "bob@example.com",
         userId: "test-user",
@@ -798,12 +1067,12 @@ describe("network-chat integration", () => {
         );
 
       expect(memories.length).toBe(2); // Not 4
-    });
+    }));
 
-    it("called with updated data → memory content updated, not duplicated", async () => {
+    it("called with updated data → memory content updated, not duplicated", net(async (tx) => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      const [person] = await testDb.insert(schema.people).values({
+      const [person] = await tx.insert(networkSchema.people).values({
         name: "Eve",
         email: "eve@example.com",
         userId: "test-user",
@@ -824,7 +1093,7 @@ describe("network-chat integration", () => {
 
       await persistLearnedContext(sessionId);
 
-      // Update the session learned data
+      // Update the session learned data (workspace tier)
       await testDb
         .update(schema.chatSessions)
         .set({ learned: { business: "Eve's Flower Emporium" } })
@@ -845,9 +1114,9 @@ describe("network-chat integration", () => {
 
       expect(memories.length).toBe(1); // Updated, not duplicated
       expect(memories[0].content).toBe("Business: Eve's Flower Emporium");
-    });
+    }));
 
-    it("returns gracefully when no person record exists", async () => {
+    it("returns gracefully when no person record exists", net(async () => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
       const sessionId = `test-session-noperson-${Date.now()}`;
@@ -863,7 +1132,7 @@ describe("network-chat integration", () => {
 
       // Should not throw
       await expect(persistLearnedContext(sessionId)).resolves.toBeUndefined();
-    });
+    }));
   });
 
   // ============================================================
@@ -919,7 +1188,7 @@ describe("network-chat integration", () => {
       expect(mockSendCosActionEmail).not.toHaveBeenCalled();
     });
 
-    it("main mode with persona=mira uses Mira's voice and uses Mira for intake", async () => {
+    it("main mode with persona=mira uses Mira's voice and uses Mira for intake", net(async () => {
       const sessionId = `test-session-main-mira-${Date.now()}`;
       await testDb.insert(schema.chatSessions).values({
         sessionId,
@@ -951,6 +1220,6 @@ describe("network-chat integration", () => {
       const firstCall = mockStartIntake.mock.calls[0] as unknown[];
       // signature: (email, name, need, _, persona, _, sessionId)
       expect(firstCall[4]).toBe("mira");
-    });
+    }));
   });
 });

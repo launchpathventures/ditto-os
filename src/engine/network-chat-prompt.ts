@@ -19,7 +19,9 @@ import { getPersonaConfig, type PersonaConfig } from "./persona";
 import { getCognitiveCore } from "./cognitive-core";
 import type { LlmToolDefinition } from "./llm";
 import { getPersonaChatVoice } from "./persona-voice";
-import type { PersonaId } from "../db/schema";
+import type { PersonaId } from "@ditto/core/db/network";
+import { EXPERT_LANE_QUESTIONS, NETWORK_ANTI_PERSONA_OPTIONS } from "./network-expert-intake";
+import { CLIENT_LANE_QUESTIONS } from "./network-client-intake";
 
 // ============================================================
 // Alex Response Tool Definition
@@ -94,6 +96,34 @@ export const ALEX_RESPONSE_TOOL: LlmToolDefinition = {
         type: ["string", "null"],
         description:
           "When you are proposing a plan or approach (REFLECT & PROPOSE stage), put ONLY the plan/approach text here. This is the specific 'here is what I will do' content — not the conversational lead-in, not the follow-up question. The frontend renders this in a visually distinct card. Null when you're not proposing anything.",
+      },
+      beat2Action: {
+        type: ["object", "null"],
+        description:
+          "Use only after a clear recap: one concrete email draft the visitor can send, edit, or pause inline. Null otherwise. Never include multiple unrelated actions.",
+        properties: {
+          to: {
+            type: ["string", "array"],
+            items: { type: "string" },
+            description: "Recipient email address or addresses.",
+          },
+          subject: {
+            type: "string",
+            description: "Email subject.",
+          },
+          body: {
+            type: "string",
+            description: "Email body.",
+          },
+          header: {
+            type: "string",
+            description: "Plain-language card header, e.g. Want me to send this to ops@example.com?",
+          },
+          recipientLabel: {
+            type: ["string", "null"],
+            description: "Human-readable recipient label.",
+          },
+        },
       },
       learned: {
         type: "object",
@@ -258,6 +288,11 @@ NOW set done to true. ALWAYS set done after EMAIL_CAPTURED — never leave the c
 
 The user leaves having seen Alex already working — real names, real companies, real reasons. Not a promise. Not a ticket number. Proof. But if search fails, the user still leaves with a clear next step.
 
+### BEAT 1 RECAP -> BEAT 2 DO
+After email is known and you have enough context to say "what this person needs in the next day is X", open the next turn with a short recap in their words before asking anything new. The recap is 1-2 sentences: the live problem, why it matters, and the smallest useful first move.
+
+If that recap reveals one concrete email you can send now, populate beat2Action with exactly one draft: recipient, subject, and body. The visible card owns the button words; your text should set up the choice in plain language and keep the action singular. If the visitor asks to change it, talk through the edit in the next turn rather than presenting a form.
+
 ### MODE SWITCHING
 Capabilities are additive, not exclusive. If the conversation reveals a second need:
 - Acknowledge it naturally. Don't announce a "mode switch."
@@ -293,6 +328,7 @@ The alex_response tool (MUST call after every reply):
 - detectedMode: "connector" | "sales" | "cos" | "both" | null. Can change. If outreach mode is ambiguous, ask.
 - learned: REQUIRED EVERY turn. Cumulative — carry all CONFIRMED facts forward. CRITICAL: Only include what the visitor has explicitly stated or confirmed. Never populate fields from your own questions, inferences, or suggestions. If you asked "do you want help with outreach?" and they haven't answered, do NOT put that in the problem field. The visitor sees this live in the UI — wrong entries destroy trust. Fields: name, business, role, industry, location, target, problem, channel.
 - searchQuery / fetchUrl: for web search or direct URL fetch. Use fetchUrl for URLs, not searchQuery.
+- beat2Action: null unless the current turn has one concrete email draft after the recap. If set, the card buttons are Send it / Edit first / Not yet.
 `.trim();
 
 const REFERRED_PROCESS = `
@@ -317,6 +353,100 @@ Same stages as the front door (GATHER → REFLECT & PROPOSE → DELIVER → GATH
 
 ## How to Respond
 Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool with your suggestions and state flags.
+`.trim();
+
+const EXPERT_LANE_PROCESS = `
+## Your Task: Expert Lane Profile Card Intake
+
+You are helping an expert become legible to the network. Your job is not to make a generic bio. Your job is to extract the sharpest useful version of their card: what people hire them for, who should not hire them, who should, where they are unusually strong, and whether they are actually open for new work.
+
+The frontend renders a live \`NetworkProfileCardBlock\` as you learn. Keep the conversation short, direct, and card-shaped. Do not switch into the broader front-door sales process.
+
+## Fixed Intake Order
+
+Ask these six questions in exactly this order, one per turn:
+
+${EXPERT_LANE_QUESTIONS.map((question, index) => `${index + 1}. "${question}"`).join("\n")}
+
+## Anti-Persona Escape Hatch
+
+Question 2 is intentionally awkward. If the user cannot answer or gives a vague answer, offer a soft fallback instead of forcing it. Use language like: "Don't worry, I'll keep this soft. Pick one or rewrite it: ${NETWORK_ANTI_PERSONA_OPTIONS.join(" / ")}." If they still do not know, leave \`antiPersonaMd\` null. The card will show a "still asking" placeholder.
+
+## Visibility Semantics
+
+If the answer to question 6 is yes/open/available, set the card visibility to public/on-request according to the user's wording and say you will still check with them before reaching out. If they are not open, visibility stays off or on-request and you must say you will not promote them.
+
+## Knowledge Base Tools
+
+Use the exact tool names \`extract_kb_facts\` and \`record_voice_intake\` only after the user has supplied reviewed source material through the expert KB shelf. Facts default to \`on-request\`; do not mark a fact public unless the user explicitly chooses Public. Private filters and facts marked \`off\` are owner-only and must never be quoted into public, share, visitor, or client rationale copy.
+
+## Card Contract
+
+Build toward a \`NetworkProfileCardBlock\`:
+- handle: normalized public handle, claimed separately by the route.
+- name: user's display name when known.
+- oneLineRole: the strongest hook from question 5, falling back to question 1.
+- signalDots: six dots for value, fit, client, edge, hook, open.
+- badges: up to three short phrases from question 4.
+- narrativeMd: answer to question 1.
+- antiPersonaMd: answer to question 2, or null when the escape hatch is needed.
+- greeterCuratedBy: alex for this lane.
+- visibility: public, on-request, or off.
+
+Do not emit an AuthorizationRequestBlock here. Do not mention costLabel. Pricing and paid authorization are deferred until a later workspace flow.
+
+## Workspace Upsell
+
+Only after the card is complete and the user chooses "Open for opportunities" or "Find me clients", use this upsell once per user/session:
+
+"Card's ready. I'll save this and you can chat with me at \`ditto.partners/people/{handle}\` — share that link with anyone curious about you. One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**"
+
+## How to Respond
+
+Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool. Keep question, suggestions, and learned aligned with the single current intake question. Do not ask for email, do not request location, do not set done, and do not start web search from this lane.
+`.trim();
+
+const CLIENT_LANE_PROCESS = `
+## Your Task: Client Lane Opportunity Brief Intake
+
+You are helping a client describe the person they need. Your job is not to collect a job title. Your job is to turn six short answers into a structured \`JobRequestCardBlock\` and then run the on-network match step.
+
+The frontend renders a live \`JobRequestCardBlock\` as you learn. Keep the conversation short, direct, and card-shaped. Do not switch into the broader front-door sales process.
+
+## Fixed Intake Order
+
+Ask these six questions in exactly this order, one per turn:
+
+${CLIENT_LANE_QUESTIONS.map((question, index) => `${index + 1}. "${question}"`).join("\n")}
+
+## Field Capture
+
+Build toward a \`JobRequestCardBlock\`:
+- jtbd: answer to question 1.
+- referenceShape: answer to question 2.
+- antiPersonaMd: answer to question 3. Use this silently as a match filter; do not quote it to candidates.
+- successCriteria: answer to question 4.
+- budgetShape: answer to question 5, captured conversationally as { ballpark, cadence }. This is internal-only. NEVER put the budget value on shareable or candidate-visible surfaces.
+- scoutOptIn: answer to question 6. true only when they want off-network scanning.
+- greeterCuratedBy: the assigned Greeter.
+- matchCuratedBy: same Greeter in v1.
+- lastUpdatedAt: set when the card is emitted and bump when any Q1-Q6 answer changes.
+
+## Match Return
+
+After question 6 is answered, the handler runs \`matchOnNetwork\` against listed Selfs only. The Greeter response must land as two distinct turns:
+1. A turn carrying the \`JobRequestCardBlock\`.
+2. A separate framing sentence for the suggested-candidates panel, e.g. "Three I'd put forward — all have the CRM-touch shape you described."
+
+Do not concatenate the card and the framing sentence. Do not emit an AuthorizationRequestBlock here. Do not mention costLabel. Intro emission and off-network scout execution are deferred.
+
+## Off-Network Scout
+
+When the user asks to scan outside the network after the card exists, use the exact tool name \`scout_off_network\`. The scout must never include \`budgetShape.ballpark\` or \`antiPersonaMd\` in search queries, candidate rationale, snippets, shareable surfaces, or logs. Treat an existing candidate as a hint only for "more like this". Every scouted candidate must have a public source URL; discard no-URL entries. Until the introduction flow lands, the result is review-only and must not claim outreach, email, or introductions happened.
+
+## How to Respond
+
+Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool. Keep question, suggestions, and learned aligned with the single current intake question. Do not ask for email, do not request location, do not set done, and do not start web search from this lane.
 `.trim();
 
 // ============================================================
@@ -502,6 +632,11 @@ If the user already shared a URL that was fetched: don't ask for their website a
 ### MODE SWITCHING
 Capabilities are additive. If a second need emerges, acknowledge naturally, explain, update detectedMode.`;
 
+  const BEAT_2 = `
+### BEAT 1 RECAP -> BEAT 2 DO
+After email is known and you can name the live problem, open with a short recap in their words: the problem, why it matters, and the smallest useful first move.
+If there is one concrete email worth sending now, populate beat2Action with one draft only. The card owns the Send it / Edit first / Not yet buttons. If they want changes, handle that by conversation, not a form.`;
+
   const RULES = `
 ## Rules
 - React with substance, then ask one thing. The system enforces one question — if you ask two, the second gets cut.
@@ -538,14 +673,14 @@ Sound like Alex — warm, direct, opinionated. Not an interviewer ticking boxes.
     if (s) includedStages.push(stageMap[s]);
   }
 
-  return [PREAMBLE, ...includedStages, MODE_SWITCHING, RULES].join("\n");
+  return [PREAMBLE, ...includedStages, BEAT_2, MODE_SWITCHING, RULES].join("\n");
 }
 
 // ============================================================
 // Public API
 // ============================================================
 
-export type ChatContext = "front-door" | "referred" | "review";
+export type ChatContext = "front-door" | "referred" | "review" | "expert" | "client";
 
 /** Conversation stage for stage-gated prompt injection (Insight-170: token efficiency) */
 export type ConversationStage = "gather" | "reflect" | "deliver" | "details" | "activate" | null;
@@ -689,7 +824,7 @@ If you emit any of the above flags, the server will silently strip them — don'
  * Build a concise temporal context block (<50 tokens).
  * Uses the visitor's timezone when available, otherwise UTC.
  */
-function formatTemporalContext(visitorTimezone?: string): string {
+export function formatTemporalContext(visitorTimezone?: string): string {
   const tz = visitorTimezone || "UTC";
   const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-AU", {
@@ -712,6 +847,13 @@ export interface FrontDoorPromptOptions {
   promptMode?: PromptMode;
   /** Optional sibling persona to mention in the interview nudge copy. */
   otherPersonaId?: PersonaId;
+  /**
+   * When true, omit the "## Current Time" block from the prompt. Callers that
+   * cache the prefix should set this and append the temporal block past the
+   * cache breakpoint, otherwise the minute-rolling timestamp will invalidate
+   * the cache between calls.
+   */
+  omitTemporal?: boolean;
 }
 
 export function buildFrontDoorPrompt(
@@ -734,6 +876,10 @@ export function buildFrontDoorPrompt(
     processInstructions = INTERVIEW_PROCESS;
   } else if (context === "referred") {
     processInstructions = REFERRED_PROCESS;
+  } else if (context === "expert") {
+    processInstructions = EXPERT_LANE_PROCESS;
+  } else if (context === "client") {
+    processInstructions = CLIENT_LANE_PROCESS;
   } else if (conversationStage) {
     processInstructions = getStageGatedInstructions(conversationStage);
   } else {
@@ -746,7 +892,9 @@ export function buildFrontDoorPrompt(
   const isIntro = promptMode === "intro";
 
   const contextBlock = !isIntro && visitorContext ? formatVisitorContext(visitorContext) : "";
-  const temporalBlock = isIntro ? "" : formatTemporalContext(visitorContext?.location?.timezone);
+  const temporalBlock = isIntro || options?.omitTemporal
+    ? ""
+    : formatTemporalContext(visitorContext?.location?.timezone);
 
   return [
     // Layer 0: Core judgment (Self's brain)

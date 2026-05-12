@@ -21,7 +21,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limit = parseInt(url.searchParams.get("limit") || "20", 10);
 
-    const { db, schema } = await import("../../../../../../../../src/db");
+    const { networkDb } = await import("../../../../../../../../src/db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const { createWorkspaceUpgrader, createRailwayServiceClient, createHealthChecker } = await import(
       "../../../../../../../../src/engine/workspace-upgrader"
     );
@@ -36,8 +37,8 @@ export async function GET(request: Request) {
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),

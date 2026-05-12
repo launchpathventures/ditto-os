@@ -19,7 +19,7 @@ import { Message } from "@/components/ai-elements/message";
 import { ArrowRight } from "lucide-react";
 import { useHarnessEvents, type HarnessEventData } from "@/hooks/use-harness-events";
 import { ProgressBlockComponent } from "@/components/blocks/progress-block";
-import type { ProgressBlock } from "@/lib/engine";
+import type { ContentBlock, ProgressBlock } from "@/lib/engine";
 
 interface ChatConversationProps {
   initialMessages: Array<{ role: string; content: string }>;
@@ -43,14 +43,61 @@ function makeUIMessage(id: string, role: "user" | "assistant", text: string): UI
   return { id, role, parts: [{ type: "text", text }] };
 }
 
+function makeBlockPart(block: ContentBlock) {
+  return { type: "data-content-block" as const, data: block };
+}
+
+function mergeTextPart(parts: UIMessage["parts"], text: string): UIMessage["parts"] {
+  const nonTextParts = parts.filter((part) => part.type !== "text");
+  if (nonTextParts.length > 0) {
+    return [...nonTextParts, { type: "text", text }] as UIMessage["parts"];
+  }
+  return [{ type: "text", text }];
+}
+
+function authorizationBlockId(block: ContentBlock): string | null {
+  return block.type === "authorization-request" && typeof block.authorizationId === "string"
+    ? block.authorizationId
+    : null;
+}
+
+function partContentBlock(part: UIMessage["parts"][number]): ContentBlock | null {
+  if (part.type !== "data-content-block") return null;
+  const data = (part as { data?: unknown }).data;
+  return data && typeof data === "object" ? data as ContentBlock : null;
+}
+
+function containsAuthorizationBlock(messages: UIMessage[], block: ContentBlock): boolean {
+  const nextId = authorizationBlockId(block);
+  if (!nextId) return false;
+  return messages.some((message) =>
+    message.parts.some((part) => {
+      const existingBlock = partContentBlock(part);
+      return existingBlock ? authorizationBlockId(existingBlock) === nextId : false;
+    }),
+  );
+}
+
+function replaceAuthorizationBlock(messages: UIMessage[], block: ContentBlock): UIMessage[] {
+  const nextId = authorizationBlockId(block);
+  if (!nextId) return messages;
+  return messages.map((message) => ({
+    ...message,
+    parts: message.parts.map((part) => {
+      const existingBlock = partContentBlock(part);
+      return existingBlock && authorizationBlockId(existingBlock) === nextId
+        ? makeBlockPart(block)
+        : part;
+    }) as UIMessage["parts"],
+  }));
+}
+
 export function ChatConversation({
   initialMessages,
   sessionId,
   authenticatedEmail,
 }: ChatConversationProps) {
-  const [messages, setMessages] = useState<UIMessage[]>(
-    toUIMessages(initialMessages),
-  );
+  const [messages, setMessages] = useState<UIMessage[]>(() => toUIMessages(initialMessages));
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -62,6 +109,15 @@ export function ChatConversation({
   const inputRef = useRef<HTMLInputElement>(null);
   const sendingRef = useRef(false);
   const msgIdCounter = useRef(initialMessages.length);
+  const messagesRef = useRef<UIMessage[]>(messages);
+
+  const updateMessages = useCallback((updater: (prev: UIMessage[]) => UIMessage[]) => {
+    setMessages((prev) => {
+      const next = updater(prev);
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
 
   // Brief 157 MP-2.4: Subscribe to SSE harness events for real-time progress
   const onHarnessEvent = useCallback((event: HarnessEventData) => {
@@ -219,12 +275,15 @@ export function ChatConversation({
     inputRef.current?.focus();
   }, []);
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, actionPayload?: Record<string, unknown>) {
     if (sendingRef.current || !text.trim()) return;
     sendingRef.current = true;
 
-    const userId = `msg-${msgIdCounter.current++}`;
-    setMessages((prev) => [...prev, makeUIMessage(userId, "user", text)]);
+    const isStructuredAction = Boolean(actionPayload?.authorizationAction);
+    if (!isStructuredAction) {
+      const userId = `msg-${msgIdCounter.current++}`;
+      updateMessages((prev) => [...prev, makeUIMessage(userId, "user", text)]);
+    }
     setInput("");
     setIsStreaming(true);
     setSuggestions([]);
@@ -239,6 +298,7 @@ export function ChatConversation({
           sessionId,
           context: "front-door",
           returningEmail: authenticatedEmail,
+          ...(actionPayload ? { actionPayload } : {}),
           ...(token ? { turnstileToken: token } : {}),
         }),
       });
@@ -247,7 +307,7 @@ export function ChatConversation({
         const errorText = res.status === 429
           ? "I'm getting a lot of messages right now. Give me a moment."
           : "Something went wrong. Please try again.";
-        setMessages((prev) => [...prev, makeUIMessage(`msg-${msgIdCounter.current++}`, "assistant", errorText)]);
+        updateMessages((prev) => [...prev, makeUIMessage(`msg-${msgIdCounter.current++}`, "assistant", errorText)]);
         setIsStreaming(false);
         sendingRef.current = false;
         return;
@@ -260,6 +320,7 @@ export function ChatConversation({
       let buffer = "";
       let streamedText = "";
       let alexMsgAdded = false;
+      let assistantParts: UIMessage["parts"] = [];
 
       while (true) {
         const { done: readerDone, value } = await reader.read();
@@ -279,23 +340,45 @@ export function ChatConversation({
 
             if (event.type === "text-replace") {
               streamedText = event.text;
-              const msg = makeUIMessage(`msg-stream`, "assistant", streamedText);
+              assistantParts = mergeTextPart(assistantParts, streamedText);
+              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
               if (alexMsgAdded) {
-                setMessages((prev) => [...prev.slice(0, -1), msg]);
+                updateMessages((prev) => [...prev.slice(0, -1), msg]);
               } else {
                 alexMsgAdded = true;
-                setMessages((prev) => [...prev, msg]);
+                updateMessages((prev) => [...prev, msg]);
               }
             }
 
             if (event.type === "text-delta") {
               streamedText += event.text;
-              const msg = makeUIMessage(`msg-stream`, "assistant", streamedText);
+              assistantParts = mergeTextPart(assistantParts, streamedText);
+              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
               if (!alexMsgAdded) {
                 alexMsgAdded = true;
-                setMessages((prev) => [...prev, msg]);
+                updateMessages((prev) => [...prev, msg]);
               } else {
-                setMessages((prev) => [...prev.slice(0, -1), msg]);
+                updateMessages((prev) => [...prev.slice(0, -1), msg]);
+              }
+            }
+
+            if (event.type === "content-block" && event.block) {
+              const block = event.block as ContentBlock;
+              if (containsAuthorizationBlock(messagesRef.current, block)) {
+                updateMessages((prev) => replaceAuthorizationBlock(prev, block));
+                continue;
+              }
+              assistantParts = [
+                ...(streamedText ? [{ type: "text" as const, text: streamedText }] : []),
+                ...assistantParts.filter((part) => part.type !== "text"),
+                makeBlockPart(block),
+              ] as UIMessage["parts"];
+              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
+              if (!alexMsgAdded) {
+                alexMsgAdded = true;
+                updateMessages((prev) => [...prev, msg]);
+              } else {
+                updateMessages((prev) => [...prev.slice(0, -1), msg]);
               }
             }
 
@@ -310,7 +393,7 @@ export function ChatConversation({
         }
       }
     } catch {
-      setMessages((prev) => [
+      updateMessages((prev) => [
         ...prev,
         makeUIMessage(`msg-${msgIdCounter.current++}`, "assistant", "Something went wrong. Please try again."),
       ]);
@@ -330,7 +413,7 @@ export function ChatConversation({
     const text = payload?.message
       ? String(payload.message)
       : actionId;
-    sendMessage(text);
+    sendMessage(text, payload);
   }
 
   return (

@@ -42,7 +42,7 @@ dbModulePromise.catch(() => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken, personaId, promptMode } = body as {
+    const { message, sessionId, context, returningEmail, funnelMetadata, visitorName, turnstileToken, personaId, promptMode, actionPayload } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       turnstileToken?: string;
       personaId?: string;
       promptMode?: string;
+      actionPayload?: Record<string, unknown>;
     };
 
     // Brief 152: intro mode sends an empty string (the card just wants the LLM
@@ -77,25 +78,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const validContexts = ["front-door", "referred"];
+    const validContexts = ["front-door", "referred", "expert", "client"];
     const chatContext = validContexts.includes(context ?? "")
-      ? (context as "front-door" | "referred")
+      ? (context as "front-door" | "referred" | "expert" | "client")
       : "front-door";
 
     const forwarded = request.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
 
-    // Bot/abuse gates only run when no sessionId is presented. If the caller
-    // is already on a valid session, that session was created through a
-    // verified path (/persona interview-start) so re-verifying here is
-    // wasted Cloudflare + Redis RTT on every chat turn. Validate that the
-    // sessionId actually exists and is unexpired before trusting it.
+    // Bot/abuse gates only skip when the session came from an already
+    // verified front-door path. Brief 255 lane sessions are seeded without
+    // Turnstile because they render a canned Q0 only; they must not become a
+    // free pass into LLM turns.
     let trustedSession = false;
     if (sessionId) {
       const { db, schema } = await dbModulePromise;
       const { eq, sql, and } = await import("drizzle-orm");
       const [existing] = await db
-        .select({ sessionId: schema.chatSessions.sessionId })
+        .select({
+          sessionId: schema.chatSessions.sessionId,
+          context: schema.chatSessions.context,
+        })
         .from(schema.chatSessions)
         .where(
           and(
@@ -103,12 +106,12 @@ export async function POST(request: Request) {
             sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
           ),
         );
-      trustedSession = !!existing;
+      trustedSession = !!existing && existing.context !== "expert" && existing.context !== "client";
     }
 
     if (!trustedSession) {
-      // No (or invalid) session — apply the full bot/abuse gates that the
-      // /persona route would have applied at session-creation time.
+      // No verified session — apply the full bot/abuse gates that the
+      // verified session-creation path would have applied.
       const { verifyTurnstileToken } = await turnstileModulePromise;
       const turnstile = await verifyTurnstileToken(turnstileToken, ip);
       if (!turnstile.ok) {
@@ -175,6 +178,7 @@ export async function POST(request: Request) {
           {
             personaId: safePersonaId,
             promptMode: safePromptMode,
+            actionPayload,
           },
         )) {
           await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));

@@ -23,6 +23,10 @@ export {
   type OutboundQualityRule,
   type OutboundActionRecord,
   type StagedOutboundAction,
+  type AuthorizationAffordanceEvent,
+  type AuthorizationToolCall,
+  type AuthorizationGateRequest,
+  type AuthorizationOutcomeRecord,
 } from "./harness.js";
 
 export {
@@ -48,3 +52,4 @@ export { identityRouterHandler } from "./handlers/identity-router.js";
 export { voiceCalibrationHandler } from "./handlers/voice-calibration.js";
 export { broadcastDirectClassifierHandler } from "./handlers/broadcast-direct-classifier.js";
 export { outboundQualityGateHandler } from "./handlers/outbound-quality-gate.js";
+export { authorizationGateHandler, buildAuthorizationRequestBlock } from "./handlers/authorization-gate.js";

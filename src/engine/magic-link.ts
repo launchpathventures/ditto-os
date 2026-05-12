@@ -8,12 +8,16 @@
  * Provenance: Slack magic link pattern (pattern level), custom implementation.
  */
 
-import { randomBytes } from "crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { db, schema } from "../db";
 import { eq, and, gt, sql } from "drizzle-orm";
 
 const MAGIC_LINK_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAX_LINKS_PER_EMAIL_PER_HOUR = 5;
+const WORKSPACE_BOOTSTRAP_PREFIX = "wbt_";
+const WORKSPACE_BOOTSTRAP_VERSION = 1;
+const WORKSPACE_BOOTSTRAP_TYPE = "workspace-bootstrap";
+const WORKSPACE_BOOTSTRAP_SESSION_PREFIX = "workspace-bootstrap:";
 
 /**
  * Generate a cryptographically random 32-character token.
@@ -26,6 +30,124 @@ function generateToken(): string {
 export interface MagicLinkResult {
   token: string;
   url: string;
+}
+
+export interface WorkspaceBootstrapLoginInput {
+  workspaceUrl: string;
+  userId: string;
+  email: string;
+  secret: string;
+  expiresInMs?: number;
+  jti?: string;
+  now?: Date;
+}
+
+export interface WorkspaceBootstrapLoginResult extends MagicLinkResult {
+  expiresAt: Date;
+  jti: string;
+}
+
+interface WorkspaceBootstrapPayload {
+  typ: typeof WORKSPACE_BOOTSTRAP_TYPE;
+  v: typeof WORKSPACE_BOOTSTRAP_VERSION;
+  sub: string;
+  email: string;
+  aud: string;
+  exp: number;
+  iat: number;
+  jti: string;
+}
+
+function encodeBase64Url(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+function decodeBase64Url(value: string): string {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function normalizeAudience(url: string): string {
+  return new URL(url).origin.toLowerCase();
+}
+
+function signPayload(payloadB64: string, secret: string): string {
+  return createHmac("sha256", secret).update(payloadB64).digest("base64url");
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  return aBuf.length === bBuf.length && timingSafeEqual(aBuf, bBuf);
+}
+
+function getWorkspaceSessionSecret(): string | null {
+  return process.env.SESSION_SECRET || process.env.NETWORK_AUTH_SECRET || null;
+}
+
+export function createWorkspaceBootstrapLoginLink(
+  input: WorkspaceBootstrapLoginInput,
+): WorkspaceBootstrapLoginResult {
+  if (!input.secret) {
+    throw new Error("SESSION_SECRET is required to create a workspace bootstrap login token");
+  }
+
+  const now = input.now ?? new Date();
+  const expiresInMs = input.expiresInMs ?? MAGIC_LINK_EXPIRY_MS;
+  if (expiresInMs > MAGIC_LINK_EXPIRY_MS) {
+    throw new Error("Workspace bootstrap login tokens cannot expire later than 24h");
+  }
+
+  const expiresAt = new Date(now.getTime() + expiresInMs);
+  const jti = input.jti ?? randomBytes(16).toString("hex");
+  const payload: WorkspaceBootstrapPayload = {
+    typ: WORKSPACE_BOOTSTRAP_TYPE,
+    v: WORKSPACE_BOOTSTRAP_VERSION,
+    sub: input.userId,
+    email: input.email.toLowerCase(),
+    aud: normalizeAudience(input.workspaceUrl),
+    exp: expiresAt.getTime(),
+    iat: now.getTime(),
+    jti,
+  };
+  const payloadB64 = encodeBase64Url(JSON.stringify(payload));
+  const sig = signPayload(payloadB64, input.secret);
+  const token = `${WORKSPACE_BOOTSTRAP_PREFIX}${payloadB64}.${sig}`;
+
+  return {
+    token,
+    url: `${normalizeAudience(input.workspaceUrl)}/login/auth?token=${encodeURIComponent(token)}`,
+    expiresAt,
+    jti,
+  };
+}
+
+function parseWorkspaceBootstrapToken(token: string, secret: string): WorkspaceBootstrapPayload | null {
+  if (!token.startsWith(WORKSPACE_BOOTSTRAP_PREFIX)) return null;
+  const raw = token.slice(WORKSPACE_BOOTSTRAP_PREFIX.length);
+  const [payloadB64, sig] = raw.split(".");
+  if (!payloadB64 || !sig) return null;
+
+  const expectedSig = signPayload(payloadB64, secret);
+  if (!safeEqual(sig, expectedSig)) return null;
+
+  try {
+    const payload = JSON.parse(decodeBase64Url(payloadB64)) as Partial<WorkspaceBootstrapPayload>;
+    if (
+      payload.typ !== WORKSPACE_BOOTSTRAP_TYPE ||
+      payload.v !== WORKSPACE_BOOTSTRAP_VERSION ||
+      typeof payload.sub !== "string" ||
+      typeof payload.email !== "string" ||
+      typeof payload.aud !== "string" ||
+      typeof payload.exp !== "number" ||
+      typeof payload.iat !== "number" ||
+      typeof payload.jti !== "string"
+    ) {
+      return null;
+    }
+    return payload as WorkspaceBootstrapPayload;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -120,6 +242,56 @@ export async function consumeMagicLink(
   if (result.length === 0) return null;
 
   return { email: result[0].email, sessionId: result[0].sessionId };
+}
+
+/**
+ * Consume a workspace bootstrap login token. These tokens are not pre-seeded
+ * in the workspace DB; the first successful POST inserts a local nonce marker
+ * into `magic_links`. The table's unique token index provides replay
+ * protection without adding a new schema table.
+ */
+export async function consumeWorkspaceBootstrapLoginToken(
+  token: string,
+  requestUrl: string,
+  targetDb: typeof db = db,
+): Promise<ValidMagicLink | null> {
+  const secret = getWorkspaceSessionSecret();
+  if (!secret) return null;
+
+  const payload = parseWorkspaceBootstrapToken(token, secret);
+  if (!payload) return null;
+  if (payload.exp < Date.now()) return null;
+
+  const expectedAudience = normalizeAudience(requestUrl);
+  if (payload.aud !== expectedAudience) return null;
+
+  const expectedEmail = process.env.WORKSPACE_OWNER_EMAIL?.toLowerCase();
+  const expectedUserId = process.env.DITTO_WORKSPACE_USER_ID;
+  if (!expectedEmail || !expectedUserId) return null;
+  if (payload.email.toLowerCase() !== expectedEmail) return null;
+  if (payload.sub !== expectedUserId) return null;
+
+  const markerToken = `${WORKSPACE_BOOTSTRAP_SESSION_PREFIX}${payload.jti}`;
+  try {
+    await targetDb.insert(schema.magicLinks).values({
+      email: payload.email.toLowerCase(),
+      token: markerToken,
+      sessionId: `${WORKSPACE_BOOTSTRAP_SESSION_PREFIX}${payload.sub}`,
+      expiresAt: new Date(payload.exp),
+      usedAt: new Date(),
+    });
+  } catch {
+    return null;
+  }
+
+  return {
+    email: payload.email.toLowerCase(),
+    sessionId: `${WORKSPACE_BOOTSTRAP_SESSION_PREFIX}${payload.sub}`,
+  };
+}
+
+export function isWorkspaceBootstrapLoginToken(token: string): boolean {
+  return token.startsWith(WORKSPACE_BOOTSTRAP_PREFIX);
 }
 
 /**

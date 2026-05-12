@@ -6,11 +6,20 @@
  *
  * Deployment: lives on the centralized Ditto Network service,
  * NOT in individual workspace DBs.
+ *
+ * Post-Brief 262 surface: 8 sqliteTable declarations (people,
+ * interactions, networkUsers, adminFeedback, networkTokens,
+ * managedWorkspaces, upgradeHistory, upgradeWorkspaceResults).
+ * Three workspace-tier tables (reviewPages → harness.ts;
+ * documents + documentContent → knowledge.ts) were relocated to
+ * preserve the network/workspace tier boundary that ADR-036 §1
+ * names load-bearing.
  */
 
-import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { randomUUID } from "crypto";
 import { processRuns } from "./engine.js";
+import type { NetworkProfileCardBlock } from "@ditto/core";
 
 // ============================================================
 // Type unions — Network-specific
@@ -103,9 +112,6 @@ export const upgradeHealthCheckResultValues = [
 ] as const;
 export type UpgradeHealthCheckResult = (typeof upgradeHealthCheckResultValues)[number];
 
-export const documentSourceValues = ["llamaparse", "local"] as const;
-export type DocumentSource = (typeof documentSourceValues)[number];
-
 // ============================================================
 // People — shared relationship graph (ADR-025 §2)
 // ============================================================
@@ -183,6 +189,7 @@ export const networkUsers = sqliteTable("network_users", {
     .$defaultFn(() => randomUUID()),
   email: text("email").notNull().unique(),
   name: text("name"),
+  handle: text("handle").unique(),
   businessContext: text("business_context"),
   personaAssignment: text("persona_assignment").$type<PersonaId>(),
   status: text("status").notNull().$type<NetworkUserStatus>().default("active"),
@@ -194,6 +201,7 @@ export const networkUsers = sqliteTable("network_users", {
   /** When the user accepted the workspace suggestion (Brief 153) */
   workspaceAcceptedAt: integer("workspace_accepted_at", { mode: "timestamp_ms" }),
   wantsVisibility: integer("wants_visibility", { mode: "boolean" }).notNull().default(false),
+  card: text("card", { mode: "json" }).$type<NetworkProfileCardBlock | null>(),
   pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
   /** When Alex last sent a notification email to this user (status, pulse, completion).
    *  Updated by notifyUser() on successful send. Used for recency gating. */
@@ -206,6 +214,7 @@ export const networkUsers = sqliteTable("network_users", {
     .$defaultFn(() => new Date()),
 }, (table) => [
   index("network_users_email").on(table.email),
+  index("network_users_handle").on(table.handle),
 ]);
 
 // ============================================================
@@ -322,72 +331,6 @@ export const upgradeWorkspaceResults = sqliteTable("upgrade_workspace_results", 
   healthCheckResult: text("health_check_result").$type<UpgradeHealthCheckResult>(),
   errorLog: text("error_log"),
   durationMs: integer("duration_ms"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-// ============================================================
-// Review Pages (Brief 106)
-// ============================================================
-
-export const reviewPageStatusValues = [
-  "active",
-  "completed",
-  "archived",
-  "expired",
-] as const;
-export type ReviewPageStatus = (typeof reviewPageStatusValues)[number];
-
-export const reviewPages = sqliteTable("review_pages", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => randomUUID()),
-  userId: text("user_id").notNull(),
-  personId: text("person_id").notNull(),
-  token: text("token").notNull().unique(),
-  title: text("title").notNull(),
-  contentBlocks: text("content_blocks", { mode: "json" }).notNull().$type<unknown[]>(),
-  chatMessages: text("chat_messages", { mode: "json" }).$type<unknown[]>(),
-  status: text("status").notNull().$type<ReviewPageStatus>().default("active"),
-  userName: text("user_name"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
-  firstAccessedAt: integer("first_accessed_at", { mode: "timestamp_ms" }),
-});
-
-// ============================================================
-// Knowledge Base — Document tracking (Brief 079)
-// ============================================================
-
-export const documents = sqliteTable("documents", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => randomUUID()),
-  filePath: text("file_path").notNull(),
-  fileName: text("file_name").notNull(),
-  format: text("format").notNull(),
-  contentHash: text("content_hash").notNull(),
-  chunkCount: integer("chunk_count").notNull().default(0),
-  source: text("source").notNull().$type<DocumentSource>().default("local"),
-  lastIndexed: integer("last_indexed", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const documentContent = sqliteTable("document_content", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => randomUUID()),
-  documentHash: text("document_hash").notNull().unique(),
-  parsedMarkdown: text("parsed_markdown").notNull(),
-  pageCount: integer("page_count").notNull().default(1),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

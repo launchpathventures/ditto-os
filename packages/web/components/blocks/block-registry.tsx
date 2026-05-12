@@ -12,12 +12,14 @@
 import type { ContentBlock } from "@/lib/engine";
 import { TextBlockComponent } from "./text-block";
 import { ReviewCardBlockComponent } from "./review-card-block";
+import { NetworkProfileCardBlockComponent } from "./network-profile-card-block";
 import { StatusCardBlockComponent } from "./status-card-block";
 import { ActionBlockComponent } from "./action-block";
 import { InputRequestBlockComponent } from "./input-request-block";
 import { KnowledgeCitationBlockComponent } from "./knowledge-citation-block";
 import { ProgressBlockComponent } from "./progress-block";
 import { DataBlockComponent } from "./data-block";
+import { AuthorizationRequestBlockComponent } from "./authorization-request-block";
 import { ImageBlockComponent } from "./image-block";
 import { CodeBlockComponent } from "./code-block";
 import { ReasoningTraceBlockComponent } from "./reasoning-trace-block";
@@ -50,6 +52,15 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <TextBlockComponent block={block} />;
     case "review_card":
       return <ReviewCardBlockComponent block={block} onAction={onAction} />;
+    case "network-profile-card":
+      return <NetworkProfileCardBlockComponent block={block} />;
+    case "job-request-card":
+      return (
+        <div className="rounded-lg border border-border bg-surface-primary p-3 text-sm text-text-primary">
+          <div className="font-medium">{block.jtbd}</div>
+          <div className="mt-1 text-text-secondary">{block.referenceShape}</div>
+        </div>
+      );
     case "status_card":
       return <StatusCardBlockComponent block={block} />;
     case "actions":
@@ -62,6 +73,8 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <ProgressBlockComponent block={block} />;
     case "data":
       return <DataBlockComponent block={block} />;
+    case "authorization-request":
+      return <AuthorizationRequestBlockComponent block={block} onAction={onAction} />;
     case "image":
       return <ImageBlockComponent block={block} />;
     case "code":

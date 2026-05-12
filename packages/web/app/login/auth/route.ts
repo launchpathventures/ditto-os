@@ -21,7 +21,10 @@ const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
 /** Sign the email with HMAC-SHA256 so the cookie can't be forged by guessing the email. */
 function signSessionValue(email: string): string {
-  const secret = process.env.SESSION_SECRET || process.env.WORKSPACE_OWNER_EMAIL || "ditto-workspace";
+  const secret = process.env.SESSION_SECRET || process.env.NETWORK_AUTH_SECRET;
+  if (!secret) {
+    throw new Error("SESSION_SECRET is required for workspace auth");
+  }
   const sig = createHmac("sha256", secret).update(email.toLowerCase()).digest("hex");
   return `${email.toLowerCase()}|${sig}`;
 }
@@ -71,16 +74,22 @@ export async function POST(request: Request) {
       return NextResponse.redirect(new URL("/login?error=missing_token", request.url));
     }
 
-    const { consumeMagicLink } = await import("../../../../../src/engine/magic-link");
+    const {
+      consumeMagicLink,
+      consumeWorkspaceBootstrapLoginToken,
+      isWorkspaceBootstrapLoginToken,
+    } = await import("../../../../../src/engine/magic-link");
 
-    const result = await consumeMagicLink(token);
+    const result = isWorkspaceBootstrapLoginToken(token)
+      ? await consumeWorkspaceBootstrapLoginToken(token, request.url)
+      : await consumeMagicLink(token);
 
     if (!result) {
       return NextResponse.redirect(new URL("/login?error=invalid_or_expired", request.url));
     }
 
     // Verify this is a workspace magic link (sessionId starts with "workspace:")
-    if (!result.sessionId.startsWith("workspace:")) {
+    if (!result.sessionId.startsWith("workspace:") && !result.sessionId.startsWith("workspace-bootstrap:")) {
       return NextResponse.redirect(new URL("/login?error=invalid_token_type", request.url));
     }
 

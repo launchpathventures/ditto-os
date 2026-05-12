@@ -16,6 +16,8 @@ import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { writeMemory, type MemoryDb } from "./legibility/write-memory";
 
+export const NETWORK_SEED_ATTEMPT_SOURCE_ID = "network-seed-attempt";
+
 // ============================================================
 // Seed Schema (stable contract — Brief 087)
 // ============================================================
@@ -161,6 +163,8 @@ export interface ImportResult {
   interactionsImported: number;
 }
 
+export type SeedAttemptState = "not_attempted" | "attempted" | "imported";
+
 /**
  * Import seed data into a workspace database.
  * Creates self-scoped memories, people records, and interaction summaries.
@@ -249,13 +253,77 @@ export async function isFirstBoot(targetDb?: typeof db): Promise<boolean> {
 
   const database = targetDb ?? db;
 
+  return (await getSeedAttemptState(database)) === "not_attempted";
+}
+
+export async function getSeedAttemptState(targetDb?: typeof db): Promise<SeedAttemptState> {
+  const database = targetDb ?? db;
+
   const selfMemories = await database
+    .select({
+      id: schema.memories.id,
+      sourceId: schema.memories.sourceId,
+    })
+    .from(schema.memories)
+    .where(
+      and(
+        eq(schema.memories.scopeType, "self"),
+        eq(schema.memories.active, true),
+      ),
+    );
+
+  if (selfMemories.length === 0) return "not_attempted";
+  const onlySentinels = selfMemories.every(
+    (memory) => memory.sourceId === NETWORK_SEED_ATTEMPT_SOURCE_ID,
+  );
+  return onlySentinels ? "attempted" : "imported";
+}
+
+export async function writeSeedAttemptSentinel(
+  userId: string,
+  reason: "empty_seed" | "fetch_failed",
+  targetDb?: typeof db,
+): Promise<void> {
+  const database = targetDb ?? db;
+
+  const existing = await database
     .select({ id: schema.memories.id })
     .from(schema.memories)
-    .where(eq(schema.memories.scopeType, "self"))
+    .where(
+      and(
+        eq(schema.memories.scopeType, "self"),
+        eq(schema.memories.scopeId, userId),
+        eq(schema.memories.sourceId, NETWORK_SEED_ATTEMPT_SOURCE_ID),
+        eq(schema.memories.active, true),
+      ),
+    )
     .limit(1);
 
-  return selfMemories.length === 0;
+  if (existing.length > 0) return;
+
+  await writeMemory(database, {
+    scopeType: "self",
+    scopeId: userId,
+    type: "context",
+    content:
+      reason === "fetch_failed"
+        ? "Network seed fetch was attempted during workspace first boot but the Network Service was unavailable."
+        : "Network seed import was attempted during workspace first boot and no self memories were returned.",
+    confidence: 1,
+    shared: false,
+    source: "system",
+    sourceId: NETWORK_SEED_ATTEMPT_SOURCE_ID,
+    active: true,
+  });
+}
+
+export async function writeSeedFetchFailureSentinelFromEnv(
+  targetDb?: typeof db,
+): Promise<boolean> {
+  const userId = process.env.DITTO_WORKSPACE_USER_ID;
+  if (!userId) return false;
+  await writeSeedAttemptSentinel(userId, "fetch_failed", targetDb);
+  return true;
 }
 
 /**
@@ -315,11 +383,8 @@ export async function fetchAndImportSeed(
 
   const seed: WorkspaceSeed = await response.json();
   const result = await importSeed(seed, targetDb);
-
   if (result.memoriesImported === 0) {
-    await writeFirstBootSentinel(seed.userId, targetDb);
-    result.memoriesImported = 1;
+    await writeSeedAttemptSentinel(seed.userId, "empty_seed", targetDb);
   }
-
   return result;
 }

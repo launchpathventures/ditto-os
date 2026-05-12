@@ -20,13 +20,28 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, context, returningEmail, funnelMetadata, turnstileToken } = body as {
+    const {
+      message,
+      sessionId,
+      context,
+      returningEmail,
+      funnelMetadata,
+      turnstileToken,
+      ref,
+      prospectId,
+      introducerId,
+      personaId,
+    } = body as {
       message?: string;
       sessionId?: string | null;
       context?: string;
       returningEmail?: string;
       funnelMetadata?: Record<string, unknown>;
       turnstileToken?: string;
+      ref?: string;
+      prospectId?: string;
+      introducerId?: string;
+      personaId?: string;
     };
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -43,23 +58,47 @@ export async function POST(request: Request) {
       );
     }
 
-    const validContexts = ["front-door", "referred"];
+    const validContexts = ["front-door", "referred", "expert", "client"];
     const chatContext = validContexts.includes(context ?? "")
-      ? (context as "front-door" | "referred")
+      ? (context as "front-door" | "referred" | "expert" | "client")
       : "front-door";
 
     // Extract IP for rate limiting
     const forwarded = request.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
 
-    // Turnstile bot verification
-    const { verifyTurnstileToken } = await import("../../../../../../../src/engine/turnstile");
-    const turnstile = await verifyTurnstileToken(turnstileToken, ip);
-    if (!turnstile.ok) {
-      return NextResponse.json(
-        { error: "Bot verification failed. Please refresh and try again." },
-        { status: 403 },
-      );
+    // Bot/abuse gates only skip when the session came from an already
+    // verified front-door path. Brief 255 lane sessions are seeded without
+    // Turnstile because they render a canned Q0 only; they must not become a
+    // free pass into LLM turns.
+    let trustedSession = false;
+    if (sessionId) {
+      const { db, schema } = await import("../../../../../../../src/db");
+      const { eq, sql, and } = await import("drizzle-orm");
+      const [existing] = await db
+        .select({
+          sessionId: schema.chatSessions.sessionId,
+          context: schema.chatSessions.context,
+        })
+        .from(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.sessionId, sessionId),
+            sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
+          ),
+        );
+      trustedSession = !!existing && existing.context !== "expert" && existing.context !== "client";
+    }
+
+    if (!trustedSession) {
+      const { verifyTurnstileToken } = await import("../../../../../../../src/engine/turnstile");
+      const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+      if (!turnstile.ok) {
+        return NextResponse.json(
+          { error: "Bot verification failed. Please refresh and try again." },
+          { status: 403 },
+        );
+      }
     }
 
     // Load env vars from root .env (Next.js may not have them in API routes)
@@ -71,8 +110,9 @@ export async function POST(request: Request) {
       } catch { /* env vars may be set via platform */ }
     }
 
-    const [{ handleChatTurn }, llm] = await Promise.all([
+    const [{ handleChatTurn }, { normalizePersonaId, resolveReferredLandingContext }, llm] = await Promise.all([
       import("../../../../../../../src/engine/network-chat"),
+      import("../../../../../../../src/engine/referred-context"),
       import("../../../../../../../src/engine/llm"),
     ]);
 
@@ -82,20 +122,47 @@ export async function POST(request: Request) {
       try { llm.initLlm(); } catch { /* already initialized */ }
     }
 
+    const safePersonaId = normalizePersonaId(personaId);
+    const referredProspectId = prospectId ?? ref ?? null;
+    const referredContext = chatContext === "referred"
+      ? await resolveReferredLandingContext({
+          prospectId: referredProspectId,
+          introducerId: introducerId ?? null,
+          personaId: safePersonaId,
+        })
+      : null;
+    const referredMetadata = referredContext && referredContext.status !== "fallback"
+      ? {
+          prospectId: referredContext.prospectId,
+          introducerId: referredContext.introducerId,
+          personaId: referredContext.personaId,
+          introducerFirstName: referredContext.introducerFirstName,
+          learned: referredContext.learned,
+        }
+      : {
+          ...(referredProspectId ? { prospectId: referredProspectId } : {}),
+          ...(introducerId ? { introducerId } : {}),
+          ...(safePersonaId ? { personaId: safePersonaId } : {}),
+        };
+
     const result = await handleChatTurn(
       sessionId ?? null,
       message.trim(),
       chatContext,
       ip,
       returningEmail ?? null,
-      funnelMetadata,
+      { ...funnelMetadata, ...referredMetadata },
+      undefined,
+      safePersonaId ? { personaId: safePersonaId, promptMode: "main" } : undefined,
     );
 
     if (result.rateLimited) {
       return NextResponse.json(result, { status: 429 });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json(
+      referredContext ? { ...result, referredContext } : result,
+    );
   } catch (error) {
     console.error("[/api/v1/network/chat] Error:", error);
     return NextResponse.json(

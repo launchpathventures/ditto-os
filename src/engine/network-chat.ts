@@ -11,23 +11,42 @@
  */
 
 import { db, schema } from "../db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { networkDb } from "../db/network-db";
+import { eq, and, sql, desc, inArray, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { createCompletion, extractText, extractToolUse, getConfiguredModel, type LlmToolDefinition } from "./llm";
 import { createStreamingCompletion, type StreamEvent } from "./llm-stream";
 import { isSpendCeilingReached, recordFrontDoorSpend } from "./spend-ceiling";
-import { buildFrontDoorPrompt, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage, type PromptMode } from "./network-chat-prompt";
+import { buildFrontDoorPrompt, formatTemporalContext, ALEX_RESPONSE_TOOL, type ChatContext, type VisitorContext, type DetectedMode, type ConversationStage, type PromptMode } from "./network-chat-prompt";
 import { startIntake, sendActionEmail, sendCosActionEmail } from "./self-tools/network-tools";
 import { getPersonByEmail, findPersonByEmailGlobal, getPersonMemories } from "./people";
+import { assignPersona } from "./persona";
 import { webSearch } from "./web-search";
 import { fetchUrlContent, type FetchResult } from "./web-fetch";
 import { geolocateIp } from "./geo";
 import type { LlmMessage } from "./llm";
-import type { ContentBlock } from "./content-blocks";
+import type { AuthorizationRequestBlock, ContentBlock, JobRequestCardBlock } from "./content-blocks";
 import { buildFrontDoorBlocks } from "./network-chat-blocks";
-import type { PersonaId } from "../db/schema";
+import {
+  buildClientLaneResolutionTurns,
+  buildJobRequestCard,
+  CLIENT_LANE_QUESTIONS,
+  type ClientIntakeAnswers,
+} from "./network-client-intake";
+import { matchOnNetwork } from "./network-match";
+import type { PersonaId } from "@ditto/core/db/network";
 import type { ChatSessionStage } from "../db/schema/frontdoor";
+import { buildReferredConversationOpener } from "./referred-context";
+import {
+  authorizationGateHandler,
+  createHarnessContext,
+  type AuthorizationGateRequest,
+  type AuthorizationResult,
+} from "@ditto/core";
+import { gmailAuthorizedSend } from "./tools/gmail-authorized-send";
+import { writeMemory } from "./legibility/write-memory";
+import * as networkSchema from "@ditto/core/db/network";
 
 // ============================================================
 // Tool Call Extraction
@@ -60,6 +79,7 @@ interface AlexToolArgs {
   searchQuery: string | null;
   fetchUrl: string | null;
   plan: string | null;
+  beat2Action: Record<string, unknown> | null;
   learned: LearnedContext | null;
   extraQuestions: string[];
 }
@@ -88,6 +108,7 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
       searchQuery: null,
       fetchUrl: null,
       plan: null,
+      beat2Action: null,
       learned: null,
       extraQuestions: [],
     };
@@ -123,6 +144,10 @@ function extractAlexResponse(content: import("./llm").LlmContentBlock[]): AlexTo
     plan:
       typeof args.plan === "string" && args.plan.trim()
         ? args.plan.trim()
+        : null,
+    beat2Action:
+      args.beat2Action && typeof args.beat2Action === "object"
+        ? args.beat2Action as Record<string, unknown>
         : null,
     learned:
       args.learned && typeof args.learned === "object"
@@ -203,6 +228,19 @@ function buildStateDirective(session: ChatSession): string {
     return buildInterviewDirective(session);
   }
 
+  if (session.context === "client") {
+    const answered = clientLaneUserAnswers(session).length;
+    const nextQuestion = CLIENT_LANE_QUESTIONS[answered];
+    const lines = ["\n\n## THIS TURN — client lane state"];
+    lines.push("Stay in the client-lane opportunity brief intake. Do not ask for name, business, location, email, or a broader front-door plan.");
+    if (nextQuestion) {
+      lines.push(`Ask the next unanswered client-lane question exactly as written: "${nextQuestion}"`);
+    } else {
+      lines.push("All six client-lane answers are present. Do not ask another intake question; the handler will emit the card and match framing.");
+    }
+    return lines.join("\n");
+  }
+
   const learned = session.learned;
   // Use != null to avoid false negatives from empty strings
   const hasName = learned?.name != null && learned.name !== "";
@@ -241,18 +279,23 @@ function buildStateDirective(session: ChatSession): string {
 
 /**
  * Interview cadence: this is a FIRST MEETING, not the main work. Three turns
- * max. Every reply after turn 1 MUST make a concrete statement about how
- * {persona} would help — not just collect more facts. By turn 3 the commit
- * ask is the ONLY question on the table. Real problem-solving, plans,
- * email-capture, and detailed fact-gathering belong in the post-commit
- * front door — not here.
+ * max. TURN 1 (OPEN) is the canned greeter opener that already rendered on
+ * screen and was seeded into session history when the visitor picked the
+ * persona — the LLM never produces it. So the LLM's first response is
+ * TURN 2 (SHOW VALUE / NUDGE), and the second is TURN 3 (COMMIT ASK). Every
+ * reply MUST make a concrete statement about how {persona} would help — not
+ * just collect more facts. By turn 3 the commit ask is the ONLY question on
+ * the table. Real problem-solving, plans, email-capture, and detailed
+ * fact-gathering belong in the post-commit front door — not here.
  */
 function buildInterviewDirective(session: ChatSession): string {
   const personaId = (session.personaId ?? "alex") as "alex" | "mira";
   const selfName = personaId === "alex" ? "Alex" : "Mira";
   const otherName = personaId === "alex" ? "Mira" : "Alex";
   // Count genuine user turns — exclude synthetic system prompts like
-  // "[INTERVIEW_START]" / "[PERSONA_COMMITTED]" which are engine artifacts.
+  // "[PERSONA_COMMITTED]" which are engine artifacts. The canned greeter
+  // opener (assistant role) is already in session.messages but doesn't affect
+  // this count since we filter on role === "user".
   const userTurns = (session.messages ?? []).filter(
     (m) => m.role === "user" && !m.content.startsWith("["),
   ).length;
@@ -260,13 +303,10 @@ function buildInterviewDirective(session: ChatSession): string {
   const lines: string[] = ["\n\n## THIS TURN — first-meeting cadence (this OVERRIDES the reaction-then-question pattern in your voice spec)"];
   lines.push(
     `You are in INTERVIEW mode. This is a first meeting, not the main work. The UI shows "Continue with ${selfName}" and "Try ${otherName}" buttons above the chat. The actual front-door work (understanding their business, proposing a plan, asking for email) starts ONLY after they click "Continue with ${selfName}". Do NOT start that work here.`,
+    `TURN 1 (your canned opener — already on screen and in conversation history): the visitor has just been greeted with your locked opener line and an invitation to share what they're working on. Do NOT repeat the opener. Do NOT re-introduce yourself. Your first reply IS TURN 2.`,
   );
 
   if (userTurns <= 1) {
-    lines.push(
-      `TURN 1 — OPEN. Reply shape: one warm reaction sentence + ONE light opening question. Don't interrogate. Don't sketch pathways yet. Don't propose.`,
-    );
-  } else if (userTurns === 2) {
     lines.push(
       `TURN 2 — SHOW YOUR VALUE, THEN NUDGE. Your reply MUST follow this shape and order:`,
       `  1. One sentence reacting to what they said.`,
@@ -279,9 +319,11 @@ function buildInterviewDirective(session: ChatSession): string {
       `  • "I'd take 'I want more of X' and go make X happen, rather than talking you through how to do it yourself."`,
     );
   } else {
-    // Turn 3+ — commit ask is mandatory
+    // userTurns >= 2 — commit ask is mandatory. Display turn = userTurns + 1
+    // because the canned opener is TURN 1 (not in userTurns) and the LLM's
+    // first reply was TURN 2.
     lines.push(
-      `TURN ${userTurns} — COMMIT ASK (mandatory). The first meeting has run its course. Reply shape:`,
+      `TURN ${userTurns + 1} — COMMIT ASK (mandatory). The first meeting has run its course. Reply shape:`,
       `  1. One short sentence reflecting what you've picked up about them.`,
       `  2. Your commit question — e.g. "Keen to keep going with me, or want to try ${otherName} first?" in your voice. This is your ONE AND ONLY question.`,
       `Your "question" field MUST be that commit question. Your "suggestions" field MUST be: ["Continue with ${selfName}", "Try ${otherName}", "Need a moment"]. Under NO circumstances ask another fact-finding or exploratory question — if they hedge, be warmer but firmer. A short advisor earns trust by asking for the decision, not by piling on more questions.`,
@@ -494,6 +536,8 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (anonymous /welcome)
 const AUTHENTICATED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (authenticated /chat)
 const MAX_MESSAGES_PER_SESSION = 20;
 const MAX_MESSAGES_PER_IP_PER_HOUR = 60;
+const MAX_NETWORK_LANE_OPENS_PER_IP_PER_HOUR = 30;
+const MAX_NETWORK_MATCHES_PER_IP_PER_HOUR = 20;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_EXTRACT_REGEX = /[^\s@,]+@[^\s@,]+\.[^\s@,]+/;
 
@@ -548,6 +592,34 @@ export function hashIp(ip: string): string {
 // ============================================================
 
 export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "chat_message",
+    MAX_MESSAGES_PER_IP_PER_HOUR,
+  );
+}
+
+export async function checkNetworkLaneOpenRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "network_lane_opened",
+    MAX_NETWORK_LANE_OPENS_PER_IP_PER_HOUR,
+  );
+}
+
+export async function checkNetworkMatchRateLimit(ipHash: string): Promise<boolean> {
+  return checkIpEventRateLimit(
+    ipHash,
+    "network_match",
+    MAX_NETWORK_MATCHES_PER_IP_PER_HOUR,
+  );
+}
+
+async function checkIpEventRateLimit(
+  ipHash: string,
+  event: string,
+  maxPerHour: number,
+): Promise<boolean> {
   const oneHourAgoMs = Date.now() - 60 * 60 * 1000;
   const result = await db
     .select({ count: sql<number>`count(*)` })
@@ -556,10 +628,10 @@ export async function checkIpRateLimit(ipHash: string): Promise<boolean> {
       and(
         sql`json_extract(${schema.funnelEvents.metadata}, '$.ipHash') = ${ipHash}`,
         sql`${schema.funnelEvents.createdAt} > ${oneHourAgoMs}`,
-        sql`${schema.funnelEvents.event} = 'chat_message'`,
+        eq(schema.funnelEvents.event, event),
       ),
     );
-  return (result[0]?.count ?? 0) < MAX_MESSAGES_PER_IP_PER_HOUR;
+  return (result[0]?.count ?? 0) < maxPerHour;
 }
 
 // ============================================================
@@ -596,10 +668,12 @@ export async function recordFrontendFunnelEvent(
 // Session Management
 // ============================================================
 
+type ChatSessionMessage = { role: string; content: string; block?: ContentBlock };
+
 interface ChatSession {
   id: string;
   sessionId: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: ChatSessionMessage[];
   context: string;
   ipHash: string;
   requestEmailFlagged: boolean;
@@ -645,6 +719,8 @@ export interface ChatPipelineOptions {
    *  pre-commit mini-chat, `main` for the committed front door. When omitted,
    *  derived from session.stage. */
   promptMode?: PromptMode;
+  /** Structured action payload from an inline content block affordance. */
+  actionPayload?: Record<string, unknown>;
 }
 
 export async function loadOrCreateSession(
@@ -667,7 +743,7 @@ export async function loadOrCreateSession(
       return {
         id: existing.id,
         sessionId: existing.sessionId,
-        messages: existing.messages as Array<{ role: string; content: string }>,
+        messages: existing.messages as ChatSessionMessage[],
         context: existing.context,
         ipHash: existing.ipHash,
         requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -738,6 +814,187 @@ async function saveSession(session: ChatSession): Promise<void> {
     .where(eq(schema.chatSessions.sessionId, session.sessionId));
 }
 
+export type NetworkLaneContext = Extract<ChatContext, "expert" | "client">;
+
+export function normalizeNetworkLaneContext(value: string | null | undefined): NetworkLaneContext {
+  return value === "client" ? "client" : "expert";
+}
+
+export function buildNetworkLaneOpener(
+  personaId: PersonaId,
+  context: NetworkLaneContext,
+): string {
+  const name = personaId === "mira" ? "Mira" : "Alex";
+  const object = context === "client" ? "what you need" : "what you're hunting";
+  return `Hi — I'm ${name}. Walk me through ${object}.`;
+}
+
+function isNetworkLaneOpener(content: string | undefined): boolean {
+  return /^Hi — I'm (Alex|Mira)\. Walk me through (what you're hunting|what you need)\.$/.test(
+    content ?? "",
+  );
+}
+
+async function assignAnonymousNetworkLanePersona(): Promise<PersonaId> {
+  const [alexResult] = await networkDb
+    .select({ count: count() })
+    .from(networkSchema.people)
+    .where(eq(networkSchema.people.personaAssignment, "alex"));
+
+  const [miraResult] = await networkDb
+    .select({ count: count() })
+    .from(networkSchema.people)
+    .where(eq(networkSchema.people.personaAssignment, "mira"));
+
+  const alexCount = alexResult?.count ?? 0;
+  const miraCount = miraResult?.count ?? 0;
+  return alexCount <= miraCount ? "alex" : "mira";
+}
+
+async function resolveNetworkLanePersonaForEmail(email: string): Promise<PersonaId | null> {
+  const [networkUser] = await networkDb
+    .select({
+      id: networkSchema.networkUsers.id,
+      personId: networkSchema.networkUsers.personId,
+      personaAssignment: networkSchema.networkUsers.personaAssignment,
+    })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email));
+
+  if (networkUser?.personaAssignment) {
+    return networkUser.personaAssignment;
+  }
+
+  if (networkUser?.personId) {
+    const assignment = await assignPersona(networkUser.personId);
+    await networkDb
+      .update(networkSchema.networkUsers)
+      .set({ personaAssignment: assignment, updatedAt: new Date() })
+      .where(eq(networkSchema.networkUsers.id, networkUser.id));
+    return assignment;
+  }
+
+  const person = await findPersonByEmailGlobal(email);
+  if (person) {
+    return assignPersona(person.id);
+  }
+
+  return null;
+}
+
+async function resolveNetworkLaneUserName(email: string | null): Promise<string | null> {
+  if (!email) return null;
+
+  const [networkUser] = await networkDb
+    .select({ name: networkSchema.networkUsers.name })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email));
+
+  if (networkUser?.name?.trim()) {
+    return networkUser.name.trim();
+  }
+
+  const person = await findPersonByEmailGlobal(email);
+  return person?.name?.trim() || null;
+}
+
+async function resolveNetworkLanePersona(
+  session: ChatSession,
+  preferAuthenticatedEmail = false,
+): Promise<PersonaId> {
+  const email = session.authenticatedEmail?.trim().toLowerCase();
+  if (email && preferAuthenticatedEmail) {
+    const assignedPersona = await resolveNetworkLanePersonaForEmail(email);
+    if (assignedPersona) return assignedPersona;
+  }
+
+  if (session.personaId) return session.personaId;
+
+  if (email) {
+    const assignedPersona = await resolveNetworkLanePersonaForEmail(email);
+    if (assignedPersona) return assignedPersona;
+  }
+
+  return assignAnonymousNetworkLanePersona();
+}
+
+export interface NetworkLaneSession {
+  sessionId: string;
+  context: NetworkLaneContext;
+  personaId: PersonaId;
+  greeterName: string;
+  userName: string | null;
+  opener: string;
+  messages: Array<{ role: "assistant" | "user"; content: string }>;
+}
+
+export interface InitializeNetworkLaneSessionOptions {
+  authenticatedEmail?: string | null;
+}
+
+export async function initializeNetworkLaneSession(
+  sessionId: string | null,
+  context: NetworkLaneContext,
+  ip: string,
+  options?: InitializeNetworkLaneSessionOptions,
+): Promise<NetworkLaneSession> {
+  const ipHash = hashIp(ip);
+  const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const providedEmail = options?.authenticatedEmail?.trim().toLowerCase() || null;
+  const sessionEmail = session.authenticatedEmail?.trim().toLowerCase() || null;
+  const authenticatedEmail = providedEmail || sessionEmail;
+  const userName = await resolveNetworkLaneUserName(authenticatedEmail);
+  const personaId = await resolveNetworkLanePersona(
+    {
+      ...session,
+      authenticatedEmail,
+    },
+    Boolean(providedEmail),
+  );
+  const opener = buildNetworkLaneOpener(personaId, context);
+  const first = session.messages[0];
+  const messages =
+    session.messages.length === 0 || isNetworkLaneOpener(first?.content)
+      ? [{ role: "assistant" as const, content: opener }]
+      : session.messages.map((message) => ({
+          role: message.role === "user" ? "user" as const : "assistant" as const,
+          content: message.content,
+        }));
+
+  await db
+    .update(schema.chatSessions)
+    .set({
+      context,
+      personaId,
+      stage: "main",
+      messages,
+      updatedAt: new Date(),
+      ...(authenticatedEmail
+        ? {
+            authenticatedEmail,
+            expiresAt: new Date(Date.now() + AUTHENTICATED_SESSION_TTL_MS),
+          }
+        : {}),
+    })
+    .where(eq(schema.chatSessions.sessionId, session.sessionId));
+
+  await recordFunnelEvent(session.sessionId, "network_lane_opened", context, {
+    ipHash,
+    mode: context,
+    personaId,
+  });
+
+  return {
+    sessionId: session.sessionId,
+    context,
+    personaId,
+    greeterName: personaId === "mira" ? "Mira" : "Alex",
+    userName,
+    opener,
+    messages,
+  };
+}
+
 /**
  * Voice conversation evaluator — runs the ACTUAL harness pipeline in shadow mode.
  *
@@ -783,7 +1040,7 @@ async function evaluateVoiceCore(
   const session: ChatSession = {
     id: existing.id,
     sessionId: existing.sessionId,
-    messages: existing.messages as Array<{ role: string; content: string }>,
+    messages: existing.messages as ChatSessionMessage[],
     context: existing.context,
     ipHash: existing.ipHash,
     requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -1007,7 +1264,7 @@ async function enrichSessionWithUrl(sessionId: string, url: string): Promise<voi
     .where(eq(schema.chatSessions.sessionId, sessionId));
   if (!existing) return;
 
-  const messages = existing.messages as Array<{ role: string; content: string }>;
+  const messages = existing.messages as ChatSessionMessage[];
   messages.push({
     role: "assistant",
     content: `I've looked at ${url} — here's what I found:\n\n${result.content.slice(0, 2000)}`,
@@ -1043,7 +1300,7 @@ export async function loadSessionForVoice(
   return {
     id: existing.id,
     sessionId: existing.sessionId,
-    messages: existing.messages as Array<{ role: string; content: string }>,
+    messages: existing.messages as ChatSessionMessage[],
     context: existing.context,
     ipHash: existing.ipHash,
     requestEmailFlagged: existing.requestEmailFlagged ?? false,
@@ -1127,11 +1384,11 @@ async function assembleVisitorContext(email: string): Promise<VisitorContext> {
   }
 
   // Load recent interactions
-  const interactions = await db
+  const interactions = await networkDb
     .select()
-    .from(schema.interactions)
-    .where(eq(schema.interactions.personId, person.id))
-    .orderBy(desc(schema.interactions.createdAt))
+    .from(networkSchema.interactions)
+    .where(eq(networkSchema.interactions.personId, person.id))
+    .orderBy(desc(networkSchema.interactions.createdAt))
     .limit(5);
 
   // Load person memories
@@ -1170,7 +1427,7 @@ async function assembleVisitorContext(email: string): Promise<VisitorContext> {
 // Name/Need Extraction from Conversation
 // ============================================================
 
-function extractNameFromConversation(messages: Array<{ role: string; content: string }>): string | undefined {
+function extractNameFromConversation(messages: ChatSessionMessage[]): string | undefined {
   for (const msg of messages) {
     if (msg.role === "user") {
       const nameMatch = msg.content.match(/(?:I'm|I am|my name is|this is)\s+([A-Z][a-z]+)/);
@@ -1193,7 +1450,7 @@ const PILL_MESSAGES = new Set([
   "what can you do for me?",
 ]);
 
-function extractNeedFromConversation(messages: Array<{ role: string; content: string }>): string | undefined {
+function extractNeedFromConversation(messages: ChatSessionMessage[]): string | undefined {
   // Find the most substantive user message (skip pills, emails, short answers)
   const userMessages = messages
     .filter((m) => m.role === "user")
@@ -1205,6 +1462,122 @@ function extractNeedFromConversation(messages: Array<{ role: string; content: st
   if (userMessages.length === 0) return undefined;
   const best = userMessages.reduce((a, b) => a.content.length > b.content.length ? a : b);
   return best.content.trim().slice(0, 500);
+}
+
+// ============================================================
+// Client Lane Completion (Brief 264)
+// ============================================================
+
+const CLIENT_LANE_REQUIRED_ANSWERS = 6;
+
+function isJobRequestCardBlock(value: unknown): value is JobRequestCardBlock {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as { type?: unknown }).type === "job-request-card",
+  );
+}
+
+function clientLaneAlreadyCompleted(session: ChatSession): boolean {
+  return session.messages.some((message) => isJobRequestCardBlock(message.block));
+}
+
+function clientLaneUserAnswers(session: ChatSession): string[] {
+  return session.messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.trim())
+    .filter((content) => content.length > 0 && !content.startsWith("["));
+}
+
+function clientLaneHasEnoughAnswers(session: ChatSession): boolean {
+  return session.context === "client" &&
+    !clientLaneAlreadyCompleted(session) &&
+    clientLaneUserAnswers(session).length >= CLIENT_LANE_REQUIRED_ANSWERS;
+}
+
+function clientLaneAnswersFromSession(session: ChatSession): ClientIntakeAnswers {
+  const answers = clientLaneUserAnswers(session).slice(0, CLIENT_LANE_REQUIRED_ANSWERS);
+  return {
+    jtbd: answers[0],
+    referenceShape: answers[1],
+    antiPersonaMd: answers[2],
+    successCriteria: answers[3],
+    budgetShape: answers[4],
+    scoutOptIn: answers[5],
+  };
+}
+
+function clientLaneFramingSentence(card: JobRequestCardBlock): string {
+  const count = card.suggestedCandidates.length;
+  if (count === 0) {
+    return card.scoutOptIn
+      ? "Nobody on-network matches that cleanly yet, so the next step is the broader scout."
+      : "Nobody on-network matches that shape cleanly yet.";
+  }
+  const noun = count === 1 ? "One" : `${count}`;
+  return `${noun} I'd put forward — all have the shape you described.`;
+}
+
+async function findOrCreateNetworkJobUser(session: ChatSession): Promise<string | null> {
+  const email = session.authenticatedEmail?.trim().toLowerCase();
+  if (!email) return null;
+
+  const [existing] = await networkDb
+    .select({ id: networkSchema.networkUsers.id })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.email, email))
+    .limit(1);
+  if (existing?.id) return existing.id;
+
+  const [created] = await networkDb
+    .insert(networkSchema.networkUsers)
+    .values({
+      email,
+      name: session.learned?.name ?? extractNameFromConversation(session.messages) ?? null,
+      personaAssignment: session.personaId ?? "alex",
+    })
+    .returning({ id: networkSchema.networkUsers.id });
+  return created?.id ?? null;
+}
+
+async function persistClientJobRequest(
+  session: ChatSession,
+  card: JobRequestCardBlock,
+): Promise<string | null> {
+  const userId = await findOrCreateNetworkJobUser(session);
+  if (!userId) return null;
+
+  const [created] = await networkDb
+    .insert(networkSchema.networkJobRequests)
+    .values({
+      userId,
+      jobRequestCard: card,
+      status: "open",
+    })
+    .returning({ id: networkSchema.networkJobRequests.id });
+  return created?.id ?? null;
+}
+
+async function completeClientLane(session: ChatSession): Promise<{
+  card: JobRequestCardBlock;
+  turns: Array<{ role: "assistant"; content: string; block?: JobRequestCardBlock }>;
+  jobRequestId: string | null;
+}> {
+  const persona = session.personaId ?? "alex";
+  const draftCard = buildJobRequestCard({
+    answers: clientLaneAnswersFromSession(session),
+    greeter: persona,
+    now: new Date(),
+  });
+  const suggestedCandidates = await matchOnNetwork(draftCard, { sampleLimit: 200 });
+  const card: JobRequestCardBlock = {
+    ...draftCard,
+    suggestedCandidates,
+  };
+  const framingSentence = clientLaneFramingSentence(card);
+  const turns = buildClientLaneResolutionTurns({ card, framingSentence });
+  const jobRequestId = await persistClientJobRequest(session, card);
+  return { card, turns, jobRequestId };
 }
 
 // ============================================================
@@ -1222,8 +1595,65 @@ export interface ChatTurnResult {
   rateLimited?: boolean;
   suggestions?: string[];
   detectedMode?: DetectedMode;
+  learned?: LearnedContext | null;
   extraQuestions?: string[];
   testMode?: boolean;
+  contentBlocks?: ContentBlock[];
+  jobRequestId?: string | null;
+}
+
+function getStringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getLearnedMetadata(metadata: Record<string, unknown> | undefined): LearnedContext | null {
+  const value = metadata?.learned;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const learned: LearnedContext = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      learned[key as keyof LearnedContext] = raw.trim();
+    }
+  }
+  return Object.keys(learned).length > 0 ? learned : null;
+}
+
+function seedReferredSession(
+  session: ChatSession,
+  context: ChatContext,
+  funnelMetadata: Record<string, unknown> | undefined,
+  options?: Pick<ChatPipelineOptions, "personaId" | "promptMode">,
+): boolean {
+  if (context !== "referred" || !options?.personaId) return false;
+
+  let changed = false;
+  if (session.personaId !== options.personaId) {
+    session.personaId = options.personaId;
+    changed = true;
+  }
+  if (session.stage !== "main") {
+    session.stage = "main";
+    changed = true;
+  }
+
+  const seedLearned = getLearnedMetadata(funnelMetadata);
+  if (seedLearned) {
+    const before = JSON.stringify(session.learned ?? {});
+    session.learned = mergeLearned(session.learned, seedLearned);
+    if (JSON.stringify(session.learned ?? {}) !== before) changed = true;
+  }
+
+  const introducerFirstName = getStringMetadata(funnelMetadata, "introducerFirstName");
+  if (session.messages.length === 0 && introducerFirstName) {
+    session.messages.push({
+      role: "assistant",
+      content: buildReferredConversationOpener(introducerFirstName),
+    });
+    changed = true;
+  }
+
+  return changed;
 }
 
 export async function handleChatTurn(
@@ -1251,9 +1681,13 @@ export async function handleChatTurn(
 
   // Load or create session
   const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const referredSessionSeeded = seedReferredSession(session, context, funnelMetadata, options);
 
   // Rate limit: per-session
   if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     return {
       reply: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us.",
       sessionId: session.sessionId,
@@ -1271,7 +1705,10 @@ export async function handleChatTurn(
   if (funnelEventMatch) {
     const eventName = funnelEventMatch[1];
     await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
-    return { reply: "", sessionId: session.sessionId };
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
+    return { reply: "", sessionId: session.sessionId, learned: session.learned };
   }
 
   // Record chat message event
@@ -1318,6 +1755,34 @@ export async function handleChatTurn(
   }
 
   session.messageCount += 1;
+
+  if (clientLaneHasEnoughAnswers(session)) {
+    const completion = await completeClientLane(session);
+    session.messages.push(...completion.turns);
+    await saveSession(session);
+    await recordFunnelEvent(session.sessionId, "client_lane_completed", context, {
+      ipHash,
+      jobRequestId: completion.jobRequestId,
+      suggestedCandidateCount: completion.card.suggestedCandidates.length,
+    });
+    const framingTurn = completion.turns[1];
+    return {
+      reply: framingTurn?.content ?? "",
+      sessionId: session.sessionId,
+      requestName: false,
+      requestLocation: false,
+      requestEmail: false,
+      emailCaptured,
+      done: false,
+      suggestions: [],
+      detectedMode: null,
+      learned: session.learned,
+      extraQuestions: [],
+      contentBlocks: [completion.card],
+      jobRequestId: completion.jobRequestId,
+      ...(isTestMode() ? { testMode: true } : {}),
+    };
+  }
 
   // Look up what Ditto knows about this person + their location
   // In test mode, skip person lookup — Alex treats everyone as brand new
@@ -1366,16 +1831,25 @@ export async function handleChatTurn(
   // Infer conversation stage for stage-gated prompting (Insight-170: token efficiency)
   const conversationStage = inferConversationStage(session);
   const nonStreamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
+  // Split prompt into a static prefix (cacheable) and a dynamic tail.
+  // Cache hit requires byte-identical prefix across calls — so the temporal
+  // block (minute-rolling) and the state directive (per-turn userTurns /
+  // learned-context) live PAST the breakpoint. Everything cacheable —
+  // cognitive core, persona voice, process, visitor location — sits before.
+  const nonStreamStaticPrefix = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
     personaId: nonStreamPersonaId,
     promptMode: nonStreamPromptMode,
-  }) + buildStateDirective(session);
+    omitTemporal: true,
+  });
+  const nonStreamTemporal = formatTemporalContext(visitorContext?.location?.timezone);
+  const systemPrompt = nonStreamStaticPrefix + nonStreamTemporal + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
     maxTokens: 400,
+    cacheBreakpoints: [nonStreamStaticPrefix.length],
     ...(model ? { model } : {}),
   };
   const response = await createCompletion(llmRequest);
@@ -1389,7 +1863,7 @@ export async function handleChatTurn(
     session.learned = mergeLearned(session.learned, rawExtracted.learned);
   }
   const extracted = enforceStageGates(rawExtracted, session);
-  let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, extraQuestions } = extracted;
+  let { reply, question: declaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, beat2Action, extraQuestions } = extracted;
 
   // Brief 152: strip all funnel flags in interview/intro mode.
   if (nonStreamIsInterview) {
@@ -1401,6 +1875,7 @@ export async function handleChatTurn(
     detectedMode = null;
     searchQuery = null;
     fetchUrl = null;
+    beat2Action = null;
     extraQuestions = [];
   }
 
@@ -1625,6 +2100,7 @@ export async function handleChatTurn(
     done,
     suggestions,
     detectedMode,
+    learned: session.learned,
     extraQuestions,
     ...(isTestMode() ? { testMode: true } : {}),
   };
@@ -1643,6 +2119,7 @@ export async function handleChatTurn(
  */
 export type ChatStreamEvent =
   | { type: "session"; sessionId: string; testMode?: boolean }
+  | { type: "assistant-turn"; text: string; blocks?: ContentBlock[] }
   | { type: "text-delta"; text: string }
   | { type: "text-replace"; text: string }
   | { type: "status"; message: string }
@@ -1650,6 +2127,318 @@ export type ChatStreamEvent =
   | { type: "metadata"; requestName: boolean; requestLocation: boolean; requestEmail: boolean; done: boolean; suggestions: string[]; detectedMode: DetectedMode; emailCaptured: boolean; plan: string | null; learned: LearnedContext | null; extraQuestions: string[]; voiceReady?: boolean; voiceToken?: string }
   | { type: "done" }
   | { type: "error"; message: string };
+
+function readAuthActionPayload(payload: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  const action = payload?.authorizationAction;
+  return action && typeof action === "object" ? action as Record<string, unknown> : null;
+}
+
+type PendingChatAuthorization = {
+  block: AuthorizationRequestBlock;
+  toolName: "gmail-authorized-send";
+  toolInput: Record<string, unknown>;
+  expiresAtMs: number;
+};
+
+const AUTHORIZATION_PENDING_EVENT = "chat_authorization_pending";
+const AUTHORIZATION_CLOSED_EVENT = "chat_authorization_closed";
+const AUTHORIZATION_EVENTS = new Set<AuthorizationGateRequest["event"]>([
+  "pending",
+  "send-it",
+  "edit-first",
+  "not-yet",
+  "expired",
+  "retry",
+  "explain",
+  "retry-item",
+]);
+
+const pendingChatAuthorizations = new Map<string, PendingChatAuthorization>();
+
+function authorizationPreviewFromPayload(action: Record<string, unknown>): ContentBlock[] | null {
+  const preview = action.preview;
+  return Array.isArray(preview) ? preview as ContentBlock[] : null;
+}
+
+function readAuthorizationEvent(value: unknown): AuthorizationGateRequest["event"] | null {
+  return typeof value === "string" && AUTHORIZATION_EVENTS.has(value as AuthorizationGateRequest["event"])
+    ? value as AuthorizationGateRequest["event"]
+    : null;
+}
+
+function authorizationKey(sessionId: string, authorizationId: string): string {
+  return `${sessionId}:${authorizationId}`;
+}
+
+function isAuthorizationRequestBlock(block: ContentBlock): block is AuthorizationRequestBlock {
+  return block.type === "authorization-request";
+}
+
+function publicAuthorizationResult(result: AuthorizationRequestBlock["executionResult"]): AuthorizationRequestBlock["executionResult"] {
+  if (!result) return null;
+  const { reasonForLog: _reasonForLog, ...publicResult } = result;
+  return publicResult;
+}
+
+function sanitizeAuthorizationBlock(block: AuthorizationRequestBlock): AuthorizationRequestBlock {
+  const { toolName: _toolName, toolInput: _toolInput, ...publicBlock } = block;
+  return {
+    ...publicBlock,
+    executionResult: publicAuthorizationResult(publicBlock.executionResult),
+  };
+}
+
+function cleanupExpiredAuthorizations(now = Date.now()): void {
+  for (const [key, pending] of pendingChatAuthorizations) {
+    if (pending.expiresAtMs <= now) {
+      pendingChatAuthorizations.delete(key);
+    }
+  }
+}
+
+function pendingAuthorizationFromMetadata(metadata: unknown): PendingChatAuthorization | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+  const block = record.block as ContentBlock | undefined;
+  const toolInput = record.toolInput;
+  const expiresAtMs = record.expiresAtMs;
+  if (
+    !block ||
+    !isAuthorizationRequestBlock(block) ||
+    record.toolName !== "gmail-authorized-send" ||
+    !toolInput ||
+    typeof toolInput !== "object" ||
+    typeof expiresAtMs !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    block,
+    toolName: "gmail-authorized-send",
+    toolInput: toolInput as Record<string, unknown>,
+    expiresAtMs,
+  };
+}
+
+async function rememberPendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+  pending: PendingChatAuthorization,
+): Promise<void> {
+  pendingChatAuthorizations.set(authorizationKey(sessionId, authorizationId), pending);
+  await db.insert(schema.funnelEvents).values({
+    sessionId,
+    event: AUTHORIZATION_PENDING_EVENT,
+    surface: "front-door",
+    metadata: {
+      authorizationId,
+      block: pending.block,
+      toolName: pending.toolName,
+      toolInput: pending.toolInput,
+      expiresAtMs: pending.expiresAtMs,
+    },
+  });
+}
+
+async function closePendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+  state: AuthorizationRequestBlock["state"],
+): Promise<void> {
+  pendingChatAuthorizations.delete(authorizationKey(sessionId, authorizationId));
+  await db.insert(schema.funnelEvents).values({
+    sessionId,
+    event: AUTHORIZATION_CLOSED_EVENT,
+    surface: "front-door",
+    metadata: {
+      authorizationId,
+      state,
+    },
+  });
+}
+
+async function loadPendingChatAuthorization(
+  sessionId: string,
+  authorizationId: string,
+): Promise<PendingChatAuthorization | null> {
+  const cached = pendingChatAuthorizations.get(authorizationKey(sessionId, authorizationId));
+  if (cached) return cached;
+
+  const [row] = await db
+    .select({
+      event: schema.funnelEvents.event,
+      metadata: schema.funnelEvents.metadata,
+    })
+    .from(schema.funnelEvents)
+    .where(
+      and(
+        eq(schema.funnelEvents.sessionId, sessionId),
+        inArray(schema.funnelEvents.event, [AUTHORIZATION_PENDING_EVENT, AUTHORIZATION_CLOSED_EVENT]),
+        sql`json_extract(${schema.funnelEvents.metadata}, '$.authorizationId') = ${authorizationId}`,
+      ),
+    )
+    .orderBy(desc(schema.funnelEvents.createdAt))
+    .limit(1);
+
+  if (!row || row.event !== AUTHORIZATION_PENDING_EVENT) return null;
+  const pending = pendingAuthorizationFromMetadata(row.metadata);
+  if (!pending) return null;
+  pendingChatAuthorizations.set(authorizationKey(sessionId, authorizationId), pending);
+  return pending;
+}
+
+async function registerPendingChatAuthorization(sessionId: string, block: ContentBlock): Promise<ContentBlock> {
+  if (!isAuthorizationRequestBlock(block)) return block;
+
+  const authorizationId = block.authorizationId;
+  const toolName = block.toolName;
+  const toolInput = block.toolInput;
+  if (
+    block.state !== "pending" ||
+    !authorizationId ||
+    toolName !== "gmail-authorized-send" ||
+    !toolInput ||
+    typeof toolInput !== "object"
+  ) {
+    return sanitizeAuthorizationBlock(block);
+  }
+
+  const expiresAtMs = block.expiresAt ? Date.parse(block.expiresAt) : NaN;
+  await rememberPendingChatAuthorization(sessionId, authorizationId, {
+    block: sanitizeAuthorizationBlock(block),
+    toolName,
+    toolInput,
+    expiresAtMs: Number.isFinite(expiresAtMs) ? expiresAtMs : Date.now() + 30 * 60 * 1000,
+  });
+  cleanupExpiredAuthorizations();
+  return sanitizeAuthorizationBlock(block);
+}
+
+function expiredAuthorizationBlock(actionPayload: Record<string, unknown>): AuthorizationRequestBlock {
+  return {
+    type: "authorization-request",
+    state: "expired",
+    header: typeof actionPayload.header === "string" ? actionPayload.header : "This request expired.",
+    preview: authorizationPreviewFromPayload(actionPayload),
+    recipientLabel: typeof actionPayload.recipientLabel === "string" ? actionPayload.recipientLabel : null,
+    actionClass: actionPayload.actionClass === "multi-recipient-send" ? "multi-recipient-send" : "email-send",
+    executionResult: null,
+    expiresAt: null,
+    authorizationId: typeof actionPayload.authorizationId === "string" ? actionPayload.authorizationId : undefined,
+  };
+}
+
+function shouldForgetAuthorization(state: AuthorizationRequestBlock["state"]): boolean {
+  return state === "succeeded" || state === "rejected" || state === "edit-requested" || state === "expired";
+}
+
+async function executeChatAuthorizationAction(
+  session: ChatSession,
+  actionPayload: Record<string, unknown>,
+): Promise<ContentBlock> {
+  const event = readAuthorizationEvent(actionPayload.event);
+  const authorizationId = typeof actionPayload.authorizationId === "string"
+    ? actionPayload.authorizationId
+    : null;
+
+  if (!authorizationId) {
+    return expiredAuthorizationBlock(actionPayload);
+  }
+
+  cleanupExpiredAuthorizations();
+  const pending = await loadPendingChatAuthorization(session.sessionId, authorizationId);
+  if (!pending) {
+    return expiredAuthorizationBlock(actionPayload);
+  }
+  const effectiveEvent: AuthorizationGateRequest["event"] = !event || pending.expiresAtMs <= Date.now()
+    ? "expired"
+    : event;
+
+  const request: AuthorizationGateRequest = {
+    authorizationId,
+    event: effectiveEvent,
+    header: pending.block.header,
+    preview: pending.block.preview,
+    recipientLabel: pending.block.recipientLabel,
+    actionClass: pending.block.actionClass,
+    expiresAt: pending.block.expiresAt,
+    createdAt: typeof actionPayload.createdAt === "string" ? actionPayload.createdAt : undefined,
+    toolCall: {
+      toolName: pending.toolName,
+      input: pending.toolInput,
+      execute: async (input, stepRunId): Promise<AuthorizationResult> => {
+        return gmailAuthorizedSend({
+          stepRunId,
+          to: input.to as string | string[],
+          subject: input.subject as string,
+          body: input.body as string,
+          draftId: input.draftId as string | undefined,
+        });
+      },
+    },
+  };
+
+  const ctx = createHarnessContext({
+    processRun: {
+      id: `chat-session:${session.sessionId}`,
+      processId: "greeter-beat-2",
+      inputs: {},
+    },
+    stepDefinition: {
+      id: "greeter-beat-2-authorization",
+      name: "Greeter Beat 2 authorization",
+      executor: "chat",
+    },
+    processDefinition: {
+      name: "Greeter Beat 2 authorization",
+      id: "greeter-beat-2",
+      version: 1,
+      status: "active",
+      description: "One-shot authorized Greeter side effect",
+      inputs: [],
+      steps: [],
+      outputs: [],
+      quality_criteria: [],
+      feedback: { metrics: [], capture: [] },
+      trust: { initial_tier: "supervised", upgrade_path: [], downgrade_triggers: [] },
+    },
+    trustTier: "supervised",
+    stepRunId: `chat-auth-${randomUUID()}`,
+  });
+  ctx.recordAuthorizationOutcome = async (record) => {
+    await writeMemory(db, {
+      scopeType: "process",
+      scopeId: "greeter-beat-2",
+      type: "context",
+      source: "feedback",
+      sourceId: authorizationId,
+      content: `Greeter Beat 2 authorization outcome: ${record.state}${record.recipientLabel ? ` for ${record.recipientLabel}` : ""}.`,
+      metadata: {
+        sessionId: session.sessionId,
+        processRunId: record.processRunId,
+        stepRunId: record.stepRunId,
+        state: record.state,
+        actionClass: record.actionClass,
+        recipientLabel: record.recipientLabel,
+        idleMsBeforeExpire: record.idleMsBeforeExpire ?? null,
+      },
+      confidence: 0.4,
+    });
+  };
+  ctx.authorizationRequest = request;
+
+  await authorizationGateHandler.execute(ctx);
+  const blocks = ctx.stepResult?.outputs.contentBlocks;
+  const block = Array.isArray(blocks) ? blocks[0] : null;
+  if (!block || typeof block !== "object") {
+    throw new Error("authorization-gate returned no content block");
+  }
+  if (isAuthorizationRequestBlock(block) && shouldForgetAuthorization(block.state)) {
+    await closePendingChatAuthorization(session.sessionId, authorizationId, block.state);
+  }
+  return isAuthorizationRequestBlock(block) ? sanitizeAuthorizationBlock(block) : block as ContentBlock;
+}
 
 /**
  * Streaming version of handleChatTurn.
@@ -1682,16 +2471,52 @@ export async function* handleChatTurnStreaming(
 
   // Load or create session
   const session = await loadOrCreateSession(sessionId, context, ipHash);
+  const referredSessionSeeded = seedReferredSession(session, context, funnelMetadata, options);
 
   // Emit session ID immediately so the frontend can store it
   yield { type: "session", sessionId: session.sessionId, ...(isTestMode() ? { testMode: true } : {}) };
 
   // Rate limit: per-session
   if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     yield { type: "text-delta", text: "We've been chatting a lot — drop me your email and I'll continue there. Better for both of us." };
     yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: true, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: null, extraQuestions: [] };
     yield { type: "done" };
     return;
+  }
+
+  const authorizationAction = readAuthActionPayload(options?.actionPayload);
+  if (authorizationAction) {
+    try {
+      const block = await executeChatAuthorizationAction(session, authorizationAction);
+      yield { type: "content-block", block };
+      const state = block.type === "authorization-request" ? block.state : "pending";
+      const followUp = state === "succeeded"
+        ? "Sent. I'll watch for the reply from here."
+        : state === "edit-requested"
+          ? "What should I change?"
+          : state === "rejected"
+            ? "No problem. I won't send it."
+            : state === "failed"
+              ? "That didn't send. We can retry or adjust it."
+              : "";
+      if (followUp) {
+        session.messages.push({ role: "assistant", content: followUp });
+        await saveSession(session);
+        yield { type: "text-delta", text: followUp };
+      }
+      yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: false, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: session.learned as LearnedContext | null, extraQuestions: [] };
+      yield { type: "done" };
+      return;
+    } catch (error) {
+      console.warn("[network-chat] Authorization action failed:", (error as Error).message);
+      yield { type: "text-delta", text: "I couldn't do that just now. Try again in a minute." };
+      yield { type: "metadata", requestName: false, requestLocation: false, requestEmail: false, done: false, suggestions: [], detectedMode: null, emailCaptured: false, plan: null, learned: session.learned as LearnedContext | null, extraQuestions: [] };
+      yield { type: "done" };
+      return;
+    }
   }
 
   // Resolve model
@@ -1703,6 +2528,9 @@ export async function* handleChatTurnStreaming(
   if (funnelEventMatch) {
     const eventName = funnelEventMatch[1];
     await recordFunnelEvent(session.sessionId, eventName, context, { ipHash, ...funnelMetadata });
+    if (referredSessionSeeded) {
+      await saveSession(session);
+    }
     yield { type: "done" };
     return;
   }
@@ -1745,6 +2573,45 @@ export async function* handleChatTurnStreaming(
 
   session.messageCount += 1;
 
+  if (clientLaneHasEnoughAnswers(session)) {
+    yield { type: "status", message: "Matching…" };
+    const completion = await completeClientLane(session);
+    session.messages.push(...completion.turns);
+    await saveSession(session);
+    await recordFunnelEvent(session.sessionId, "client_lane_completed", context, {
+      ipHash,
+      jobRequestId: completion.jobRequestId,
+      suggestedCandidateCount: completion.card.suggestedCandidates.length,
+    });
+    const firstTurn = completion.turns[0];
+    const secondTurn = completion.turns[1];
+    if (firstTurn) {
+      yield {
+        type: "assistant-turn",
+        text: firstTurn.content,
+        blocks: firstTurn.block ? [firstTurn.block] : [],
+      };
+    }
+    if (secondTurn) {
+      yield { type: "assistant-turn", text: secondTurn.content };
+    }
+    yield {
+      type: "metadata",
+      requestName: false,
+      requestLocation: false,
+      requestEmail: false,
+      done: false,
+      suggestions: [],
+      detectedMode: null,
+      emailCaptured,
+      plan: null,
+      learned: session.learned as LearnedContext | null,
+      extraQuestions: [],
+    };
+    yield { type: "done" };
+    return;
+  }
+
   // Visitor context + geolocation — run in parallel, skip person lookup in test mode
   let visitorContext: VisitorContext | undefined;
   const geoPromise = geolocateIp(ip, ipHash);
@@ -1781,16 +2648,23 @@ export async function* handleChatTurnStreaming(
   const streamPersonaId: PersonaId = options?.personaId ?? session.personaId ?? "alex";
   const streamPromptMode: PromptMode = earlyPromptMode;
   const isInterviewTurn = isPreCommitTurn;
-  const systemPrompt = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel, {
+  // Split prompt: static prefix gets cached. Temporal (minute-rolling) and
+  // state directive (userTurns / learned) live past the breakpoint so the
+  // cache stays valid across the prime-cache → first-reply window.
+  const streamStaticPrefix = buildFrontDoorPrompt(context, visitorContext, streamConversationStage, options?.channel, {
     personaId: streamPersonaId,
     promptMode: streamPromptMode,
-  }) + buildStateDirective(session);
+    omitTemporal: true,
+  });
+  const streamTemporal = formatTemporalContext(visitorContext?.location?.timezone);
+  const systemPrompt = streamStaticPrefix + streamTemporal + buildStateDirective(session);
 
   const llmRequest = {
     system: systemPrompt,
     messages: llmMessages,
     tools: [ALEX_RESPONSE_TOOL],
     maxTokens: options?.maxTokens || 400,
+    cacheBreakpoints: [streamStaticPrefix.length],
     ...(model ? { model } : {}),
   };
 
@@ -1823,7 +2697,7 @@ export async function* handleChatTurnStreaming(
     session.learned = mergeLearned(session.learned, streamRawExtracted.learned);
   }
   const streamExtracted = enforceStageGates(streamRawExtracted, session);
-  let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, learned, extraQuestions } = streamExtracted;
+  let { reply, question: streamDeclaredQuestion, requestName, requestLocation, requestEmail, done, resendEmail, suggestions, detectedMode, searchQuery, fetchUrl, plan, beat2Action, learned, extraQuestions } = streamExtracted;
 
   // Brief 152: interview/intro mode strips all funnel-advancement flags.
   // The user hasn't picked a persona yet — we must not ask for email, mark
@@ -1839,6 +2713,7 @@ export async function* handleChatTurnStreaming(
     searchQuery = null;
     fetchUrl = null;
     plan = null;
+    beat2Action = null;
     extraQuestions = [];
   }
 
@@ -1970,13 +2845,14 @@ export async function* handleChatTurnStreaming(
   // Brief 137: Emit content blocks after text, before metadata (Insight-110 boundary)
   const frontDoorBlocks = buildFrontDoorBlocks({
     plan,
+    beat2Action,
     detectedMode,
     learned,
     stage: streamConversationStage,
     enrichmentText: lastEnrichmentText,
   });
   for (const block of frontDoorBlocks) {
-    yield { type: "content-block", block };
+    yield { type: "content-block", block: await registerPendingChatAuthorization(session.sessionId, block) };
   }
 
   // Brief 126: Safety net — if email was captured but enrichment didn't set done.
@@ -2103,6 +2979,83 @@ export async function* handleChatTurnStreaming(
   // Send metadata and done
   yield { type: "metadata", requestName, requestLocation, requestEmail, done, suggestions, detectedMode, emailCaptured, plan, learned, extraQuestions, voiceReady, voiceToken: voiceTokenOut };
   yield { type: "done" };
+}
+
+// ============================================================
+// Anthropic prompt-cache priming
+// ============================================================
+
+/**
+ * Pre-warm Anthropic's prompt cache for an interview session before the
+ * visitor sends their first reply.
+ *
+ * Builds the EXACT same static prefix that handleChatTurnStreaming will
+ * build on the real first-reply call (same persona, promptMode=interview,
+ * same visitorContext, same conversationStage, omitTemporal=true) and
+ * fires a throwaway maxTokens:1 completion with cacheBreakpoints set at
+ * the prefix boundary. The next real call from this session reuses the
+ * cached prefix and skips the prefill cost (~1.5–2s on Claude Sonnet).
+ *
+ * Fire-and-forget. Errors are swallowed — priming is purely an optimisation.
+ * Returns immediately if the session isn't in interview stage or has no
+ * persona, since there's nothing meaningful to prime.
+ */
+export async function primeInterviewCache(
+  sessionId: string,
+  ip: string,
+  context: ChatContext = "front-door",
+): Promise<void> {
+  try {
+    const ipHash = hashIp(ip);
+    const session = await loadOrCreateSession(sessionId, context, ipHash);
+    if (!session.personaId || session.stage !== "interview") {
+      return;
+    }
+
+    const geo = await geolocateIp(ip, ipHash);
+    const visitorContext: VisitorContext | undefined = geo ? { location: geo } : undefined;
+
+    const conversationStage = inferConversationStage(session);
+    const personaId: PersonaId = session.personaId;
+    const promptMode: PromptMode = "interview";
+
+    const staticPrefix = buildFrontDoorPrompt(context, visitorContext, conversationStage, undefined, {
+      personaId,
+      promptMode,
+      omitTemporal: true,
+    });
+    const temporal = formatTemporalContext(visitorContext?.location?.timezone);
+    const systemPrompt = staticPrefix + temporal + buildStateDirective(session);
+
+    // Append a bracket-tagged probe user turn so the call is a valid
+    // Anthropic shape (last message must be user). Bracketed content is
+    // engine-noise convention (matches [INTERVIEW_BEGIN], [EMAIL_CAPTURED]).
+    const llmMessages: LlmMessage[] = [
+      ...session.messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: "[PRIME_CACHE]" },
+    ];
+
+    let model: string | undefined;
+    try {
+      model = getConfiguredModel();
+    } catch {
+      return; // mock mode — nothing to prime
+    }
+
+    await createCompletion({
+      system: systemPrompt,
+      messages: llmMessages,
+      tools: [ALEX_RESPONSE_TOOL],
+      maxTokens: 1,
+      cacheBreakpoints: [staticPrefix.length],
+      ...(model ? { model } : {}),
+    });
+  } catch (err) {
+    console.warn("[primeInterviewCache] non-fatal:", err);
+  }
 }
 
 // Brief 148: Re-export from dedicated module (avoids circular dep with magic-link.ts)

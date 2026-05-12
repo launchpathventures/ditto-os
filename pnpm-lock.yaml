@@ -58,7 +58,7 @@ importers:
         version: 17.3.1
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8)
+        version: 0.45.1(@electric-sql/pglite@0.4.5)(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8)
       googleapis:
         specifier: ^171.4.0
         version: 171.4.0
@@ -86,6 +86,9 @@ importers:
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
+      postgres:
+        specifier: ^3.4.8
+        version: 3.4.8
       stripe:
         specifier: ^22.0.0
         version: 22.0.0(@types/node@25.5.0)
@@ -111,6 +114,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.4.5
+        version: 0.4.5
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
@@ -192,7 +198,7 @@ importers:
         version: 8.0.3
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8)
+        version: 0.45.1(@electric-sql/pglite@0.4.5)(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -733,6 +739,9 @@ packages:
     peerDependencies:
       effect: ^4.0.0-beta.35
       ioredis: ^5.7.0
+
+  '@electric-sql/pglite@0.4.5':
+    resolution: {integrity: sha512-aGG2zGEyZzGWKy8P+9ZoNUV0jxt1+hgbeTf+bVAYyxVZZLXg3/9aFlfLxb08AYZVAfAkQlQIysmWjhc5hwDG8g==}
 
   '@elevenlabs/client@1.2.0':
     resolution: {integrity: sha512-eZJUylgI5oUMPvjMdmYbaC/Nn70Mu7yuxN0YG1L0x5MDBRw+2YD+yRDNNTDg6Axz3RYz2ayKrTqd8HlHytHDcQ==}
@@ -7234,6 +7243,8 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@electric-sql/pglite@0.4.5': {}
+
   '@elevenlabs/client@1.2.0(@types/dom-mediacapture-record@1.0.22)':
     dependencies:
       '@elevenlabs/types': 0.9.1
@@ -9800,8 +9811,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.21.0
 
-  drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8):
+  drizzle-orm@0.45.1(@electric-sql/pglite@0.4.5)(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.8):
     optionalDependencies:
+      '@electric-sql/pglite': 0.4.5
       '@opentelemetry/api': 1.9.0
       '@types/better-sqlite3': 7.6.13
       better-sqlite3: 11.10.0
@@ -11925,8 +11937,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postgres@3.4.8:
-    optional: true
+  postgres@3.4.8: {}
 
   powershell-utils@0.1.0: {}
 

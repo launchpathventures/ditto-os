@@ -80,6 +80,44 @@ describe("buildFrontDoorBlocks", () => {
     expect(blocks).toEqual([]);
   });
 
+  it("returns AuthorizationRequestBlock when Beat 2 action draft is present", () => {
+    const blocks = buildFrontDoorBlocks(makeArgs({
+      stage: "reflect",
+      beat2Action: {
+        to: "ops@example.com",
+        subject: "Pricing sweep",
+        body: "Three SKUs need attention.",
+        recipientLabel: "ops@example.com",
+      },
+    }));
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      type: "authorization-request",
+      state: "pending",
+      header: "Want me to send this to ops@example.com?",
+      recipientLabel: "ops@example.com",
+      actionClass: "email-send",
+      toolName: "gmail-authorized-send",
+      toolInput: {
+        to: ["ops@example.com"],
+        subject: "Pricing sweep",
+        body: "Three SKUs need attention.",
+      },
+    });
+    expect((blocks[0] as any).authorizationId).toMatch(/^beat2-[0-9a-f-]{36}$/);
+  });
+
+  it("drops malformed Beat 2 action drafts instead of emitting an unsafe block", () => {
+    const blocks = buildFrontDoorBlocks(makeArgs({
+      stage: "reflect",
+      beat2Action: {
+        subject: "Missing recipient",
+        body: "No recipient.",
+      },
+    }));
+    expect(blocks).toEqual([]);
+  });
+
   // ── ACTIVATE stage ──
 
   it("returns RecordBlock when enrichment + connector mode", () => {

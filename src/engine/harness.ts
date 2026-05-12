@@ -20,4 +20,8 @@ export {
   type OutboundQualityRule,
   type OutboundActionRecord,
   type StagedOutboundAction,
+  type AuthorizationAffordanceEvent,
+  type AuthorizationToolCall,
+  type AuthorizationGateRequest,
+  type AuthorizationOutcomeRecord,
 } from "@ditto/core";

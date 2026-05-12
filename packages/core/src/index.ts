@@ -22,6 +22,7 @@ export * from "./db/schema-process-models.js";
 // Engine interfaces (the contract between core and consumers)
 // ============================================================
 export * from "./interfaces.js";
+export { MissingStepRunIdError } from "./errors.js";
 
 // ============================================================
 // Harness pipeline
@@ -44,6 +45,10 @@ export {
   type OutboundQualityRule,
   type OutboundActionRecord,
   type StagedOutboundAction,
+  type AuthorizationAffordanceEvent,
+  type AuthorizationToolCall,
+  type AuthorizationGateRequest,
+  type AuthorizationOutcomeRecord,
 } from "./harness/index.js";
 
 export {
@@ -71,6 +76,8 @@ export {
   voiceCalibrationHandler,
   broadcastDirectClassifierHandler,
   outboundQualityGateHandler,
+  authorizationGateHandler,
+  buildAuthorizationRequestBlock,
   // Brief 228 / Insight-217 — shared multi-step pipeline helper
   readPriorStepOutputs,
 } from "./harness/index.js";
