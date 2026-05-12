@@ -64,6 +64,24 @@ export interface ResolvedTools {
   ) => Promise<string>;
 }
 
+export function resolveNetworkToolUserId(
+  inputUserId: unknown,
+  execContext: ToolExecutionContext | undefined,
+  operation: string,
+): string {
+  const requestedUserId = typeof inputUserId === "string" ? inputUserId.trim() : "";
+  const scopedUserId = execContext?.userId?.trim() ?? "";
+  if (scopedUserId) {
+    if (requestedUserId && requestedUserId !== scopedUserId) {
+      throw new Error(`${operation} userId does not match execution context`);
+    }
+    return scopedUserId;
+  }
+  if (requestedUserId) return requestedUserId;
+  if (process.env.DITTO_TEST_MODE === "true") return "founder";
+  throw new Error(`${operation} requires execution userId`);
+}
+
 // ============================================================
 // Built-in engine tools (Brief 079)
 // Resolved via `knowledge.search` etc in process YAML.
@@ -332,6 +350,128 @@ const builtInTools: Record<string, BuiltInTool> = {
       const query = input.query as string;
       const result = await webSearch(query);
       return result ?? "No results — PERPLEXITY_API_KEY may not be configured.";
+    },
+  },
+
+  "extract_kb_facts": {
+    definition: {
+      name: "extract_kb_facts",
+      description:
+        "Extract source-traced expert knowledge facts from a reviewed network KB document. Requires stepRunId at execution time and defaults fact visibility to on-request.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          documentId: {
+            type: "string",
+            description: "Network KB document id to extract from.",
+          },
+          userId: {
+            type: "string",
+            description: "Network user id that owns the source document.",
+          },
+        },
+        required: ["documentId", "userId"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { extractKbFacts } = await import("./network-kb-extract");
+      const userId = resolveNetworkToolUserId(
+        input.userId,
+        execContext,
+        "extract_kb_facts",
+      );
+      const result = await extractKbFacts({
+        documentId: input.documentId as string,
+        userId,
+        stepRunId: executionStepRunId,
+        actorId: execContext?.userId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "record_voice_intake": {
+    definition: {
+      name: "record_voice_intake",
+      description:
+        "Persist a reviewed voice or pasted transcript as network KB source material and extract source-traced facts. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          userId: {
+            type: "string",
+            description: "Network user id that owns the transcript.",
+          },
+          transcriptMd: {
+            type: "string",
+            description: "Reviewed transcript markdown supplied by the user.",
+          },
+          inputMode: {
+            type: "string",
+            enum: ["speech", "paste", "manual"],
+            description: "How the reviewed transcript was captured.",
+          },
+        },
+        required: ["userId", "transcriptMd"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { recordVoiceIntake } = await import("./network-voice-intake");
+      const userId = resolveNetworkToolUserId(
+        input.userId,
+        execContext,
+        "record_voice_intake",
+      );
+      const result = await recordVoiceIntake({
+        userId,
+        transcriptMd: input.transcriptMd as string,
+        inputMode: input.inputMode as "speech" | "paste" | "manual" | undefined,
+        stepRunId: executionStepRunId,
+        actorId: execContext?.userId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "scout_off_network": {
+    definition: {
+      name: "scout_off_network",
+      description:
+        "Run a source-grounded off-network scout for a completed job request card. Never includes budget or private filters in queries or results. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          jobRequestCard: {
+            type: "object",
+            description: "Completed JobRequestCardBlock.",
+          },
+          seedCandidate: {
+            type: ["object", "null"],
+            description: "Optional existing candidate used only as a loose 'more like this' hint.",
+          },
+        },
+        required: ["jobRequestCard"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+    ): Promise<string> => {
+      const { scoutOffNetwork } = await import("./network-scout");
+      const result = await scoutOffNetwork({
+        jobRequestCard: input.jobRequestCard as import("./content-blocks").JobRequestCardBlock,
+        seedCandidate: input.seedCandidate as import("./content-blocks").SuggestedCandidate | null | undefined,
+        stepRunId: executionStepRunId,
+      });
+      return JSON.stringify(result, null, 2);
     },
   },
 

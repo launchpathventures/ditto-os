@@ -54,6 +54,13 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <ReviewCardBlockComponent block={block} onAction={onAction} />;
     case "network-profile-card":
       return <NetworkProfileCardBlockComponent block={block} />;
+    case "job-request-card":
+      return (
+        <div className="rounded-lg border border-border bg-surface-primary p-3 text-sm text-text-primary">
+          <div className="font-medium">{block.jtbd}</div>
+          <div className="mt-1 text-text-secondary">{block.referenceShape}</div>
+        </div>
+      );
     case "status_card":
       return <StatusCardBlockComponent block={block} />;
     case "actions":

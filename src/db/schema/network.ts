@@ -335,4 +335,3 @@ export const upgradeWorkspaceResults = sqliteTable("upgrade_workspace_results", 
     .notNull()
     .$defaultFn(() => new Date()),
 });
-

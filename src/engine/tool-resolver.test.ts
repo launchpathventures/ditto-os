@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { resolveTools } from "./tool-resolver";
+import { resolveNetworkToolUserId, resolveTools } from "./tool-resolver";
 import { clearRegistryCache } from "./integration-registry";
 
 let tmpDir: string;
@@ -116,6 +116,52 @@ describe("tool-resolver", () => {
       const result = resolveTools(["gmail-authorized-send"]);
       const output = await result.executeIntegrationTool("gmail_authorized_send_typo", {});
       expect(output).toContain("authorisation rejected");
+    });
+  });
+
+  describe("Network KB/scout built-in tools", () => {
+    it("resolves Brief 258 built-ins with exact prompt-facing tool names", () => {
+      const result = resolveTools([
+        "extract_kb_facts",
+        "record_voice_intake",
+        "scout_off_network",
+      ]);
+
+      expect(result.tools.map((tool) => tool.name)).toEqual([
+        "extract_kb_facts",
+        "record_voice_intake",
+        "scout_off_network",
+      ]);
+      expect(result.tools[0].input_schema.required).toEqual(["documentId", "userId"]);
+      expect(result.tools[1].input_schema.required).toEqual(["userId", "transcriptMd"]);
+      expect(result.tools[2].input_schema.required).toEqual(["jobRequestCard"]);
+    });
+
+    it("binds network KB tool writes to the execution-context user", () => {
+      expect(
+        resolveNetworkToolUserId(
+          undefined,
+          { userId: "context-user" },
+          "extract_kb_facts",
+        ),
+      ).toBe("context-user");
+      expect(
+        resolveNetworkToolUserId(
+          "context-user",
+          { userId: "context-user" },
+          "record_voice_intake",
+        ),
+      ).toBe("context-user");
+    });
+
+    it("rejects model-supplied network KB user ids that conflict with execution context", () => {
+      expect(() =>
+        resolveNetworkToolUserId(
+          "other-user",
+          { userId: "context-user" },
+          "extract_kb_facts",
+        ),
+      ).toThrow("extract_kb_facts userId does not match execution context");
     });
   });
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Send, Wrench } from "lucide-react";
-import type { SuggestedCandidate } from "@/lib/engine";
+import { Loader2, Search, Send, Wrench } from "lucide-react";
+import type { JobRequestCardBlock, ReviewCardBlock, SuggestedCandidate } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import {
   CLIENT_LANE_UPSELL_ACCEPT_LABEL,
@@ -13,13 +13,44 @@ import {
 } from "./workspace-upsell";
 
 export type ClientActionNotice = "intro" | "scout";
+export type ScoutStatus = "idle" | "loading" | "success" | "empty" | "error" | "cached";
+
+export interface ScoutResponsePayload {
+  status: "success" | "empty" | "cached";
+  review: ReviewCardBlock;
+  candidates: SuggestedCandidate[];
+}
 
 export function introStubCopy(candidateName: string): string {
   return `Coming in sub-brief 261 — the intro flow drops here. For now, your selection — ${candidateName} — is captured.`;
 }
 
-export function networkScoutStubCopy(): string {
-  return "Coming in sub-brief 258 — the off-network scout drops here. For now, I would scout the network at large.";
+export async function scanOffNetwork({
+  jobRequestCard,
+  sessionId,
+  seedCandidate,
+  fetchImpl = fetch,
+}: {
+  jobRequestCard: JobRequestCardBlock;
+  sessionId?: string | null;
+  seedCandidate?: SuggestedCandidate | null;
+  fetchImpl?: typeof fetch;
+}): Promise<ScoutResponsePayload> {
+  const response = await fetchImpl("/api/v1/network/scout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      jobRequestCard,
+      sessionId,
+      seedCandidate,
+    }),
+  });
+  const payload = (await response.json()) as ScoutResponsePayload & { error?: string };
+  if (!response.ok) {
+    throw new Error(payload.error || `Scout failed: ${response.status}`);
+  }
+  return payload;
 }
 
 export function emitDebugWorkspaceUpsell({
@@ -65,25 +96,22 @@ function WorkspaceUpsellTurn({ copy }: { copy: string }) {
   );
 }
 
-function StubNotice({
-  notice,
+function IntroStubNotice({
   selectedCandidate,
   mode,
   sessionId,
   onUpsell,
 }: {
-  notice: ClientActionNotice;
   selectedCandidate: SuggestedCandidate | null;
   mode: WorkspaceUpsellMode;
   sessionId?: string | null;
   onUpsell: (copy: string) => void;
 }) {
-  const copy =
-    notice === "intro" && selectedCandidate
-      ? introStubCopy(selectedCandidate.name)
-      : networkScoutStubCopy();
-  // TODO: remove when sub-brief 261 [or 258] lands
-  const debugLabel = notice === "intro" ? "[ Pretend it sent ]" : "[ Pretend it scanned ]";
+  const copy = selectedCandidate
+    ? introStubCopy(selectedCandidate.name)
+    : "Pick someone from the suggestions first.";
+  // TODO: remove when sub-brief 261 lands
+  const debugLabel = "[ Pretend it sent ]";
 
   return (
     <div className="mt-3 rounded-2xl bg-surface-raised px-4 py-3 text-sm leading-6 text-text-secondary">
@@ -104,27 +132,92 @@ function StubNotice({
   );
 }
 
+function ScoutNotice({
+  status,
+  payload,
+}: {
+  status: ScoutStatus;
+  payload: ScoutResponsePayload | null;
+}) {
+  if (status === "idle") return null;
+  const copy =
+    status === "loading"
+      ? "Scanning public sources and keeping budget/private filters out of the query..."
+      : status === "error"
+        ? "I couldn't complete the off-network scan. Try again in a moment."
+        : status === "empty"
+          ? payload?.review.outputText || "No source-backed off-network candidates came back."
+          : status === "cached"
+            ? `Cached scout report: ${payload?.review.outputText || "source-backed leads ready to review."}`
+            : payload?.review.outputText || "Source-backed leads ready to review.";
+
+  return (
+    <div className="mt-3 rounded-2xl bg-surface-raised px-4 py-3 text-sm leading-6 text-text-secondary">
+      <div className="flex items-start gap-2">
+        {status === "loading" ? (
+          <Loader2 className="mt-1 h-4 w-4 shrink-0 animate-spin text-text-muted" aria-hidden="true" />
+        ) : (
+          <Search className="mt-1 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+        )}
+        <p>
+          <span className="font-semibold text-text-primary">
+            {status === "cached" ? "Scout cache:" : "Scout:"}
+          </span>{" "}
+          {copy}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function ClientCardActions({
   selectedCandidate,
   isRefreshInFlight,
   mode = "client",
   sessionId,
+  jobRequestCard,
+  onScoutComplete,
   initialNotice = null,
   initialUpsellCopy = null,
+  initialScoutStatus = "idle",
   className,
 }: {
   selectedCandidate: SuggestedCandidate | null;
   isRefreshInFlight: boolean;
   mode?: WorkspaceUpsellMode;
   sessionId?: string | null;
+  jobRequestCard?: JobRequestCardBlock | null;
+  onScoutComplete?: (payload: ScoutResponsePayload) => void;
   initialNotice?: ClientActionNotice | null;
   initialUpsellCopy?: string | null;
+  initialScoutStatus?: ScoutStatus;
   className?: string;
 }) {
   const [notice, setNotice] = useState<ClientActionNotice | null>(initialNotice);
   const [upsellCopy, setUpsellCopy] = useState<string | null>(initialUpsellCopy);
+  const [scoutStatus, setScoutStatus] = useState<ScoutStatus>(initialScoutStatus);
+  const [scoutPayload, setScoutPayload] = useState<ScoutResponsePayload | null>(null);
   const introDisabled = !selectedCandidate || isRefreshInFlight;
   const introLabel = selectedCandidate ? `Introduce ${firstName(selectedCandidate)}` : "Get an introduction";
+  const scoutDisabled = !jobRequestCard || scoutStatus === "loading";
+
+  async function handleScout() {
+    if (!jobRequestCard || scoutStatus === "loading") return;
+    setNotice("scout");
+    setScoutStatus("loading");
+    setScoutPayload(null);
+    try {
+      const payload = await scanOffNetwork({
+        jobRequestCard,
+        sessionId,
+      });
+      setScoutPayload(payload);
+      setScoutStatus(payload.status);
+      onScoutComplete?.(payload);
+    } catch {
+      setScoutStatus("error");
+    }
+  }
 
   return (
     <div data-testid="client-card-actions" className={cn("w-full max-w-full", className)}>
@@ -144,23 +237,29 @@ export function ClientCardActions({
         </button>
         <button
           type="button"
-          onClick={() => setNotice("scout")}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-semibold text-text-primary transition hover:bg-surface-raised"
+          disabled={scoutDisabled}
+          onClick={() => void handleScout()}
+          title={!jobRequestCard ? "Finish the opportunity brief first." : undefined}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-semibold text-text-primary transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-45"
         >
-          <Search className="h-4 w-4" aria-hidden="true" />
-          Scan on + off network and report back
+          {scoutStatus === "loading" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Search className="h-4 w-4" aria-hidden="true" />
+          )}
+          {scoutStatus === "loading" ? "Scanning..." : "Scan on + off network and report back"}
         </button>
       </div>
 
-      {notice ? (
-        <StubNotice
-          notice={notice}
+      {notice === "intro" ? (
+        <IntroStubNotice
           selectedCandidate={selectedCandidate}
           mode={mode}
           sessionId={sessionId}
           onUpsell={(copy) => setUpsellCopy(copy)}
         />
       ) : null}
+      {notice === "scout" ? <ScoutNotice status={scoutStatus} payload={scoutPayload} /> : null}
 
       {upsellCopy ? <WorkspaceUpsellTurn copy={upsellCopy} /> : null}
     </div>

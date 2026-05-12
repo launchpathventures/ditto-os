@@ -37,3 +37,19 @@ export const PERSONAS: Record<PersonaId, PersonaMeta> = {
 export function otherPersona(personaId: PersonaId): PersonaId {
   return personaId === "alex" ? "mira" : "alex";
 }
+
+export function greeterOpenerMessages(personaId: PersonaId): Array<{ text: string }> {
+  const persona = PERSONAS[personaId];
+  if (personaId === "mira") {
+    return [
+      {
+        text: "I'm Mira. I'll keep this focused: what are you trying to make happen?",
+      },
+    ];
+  }
+  return [
+    {
+      text: `I'm ${persona.name}. Tell me what you're trying to make happen, and I'll help you shape the next move.`,
+    },
+  ];
+}

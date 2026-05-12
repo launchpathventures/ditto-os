@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Search, UserRoundPlus } from "lucide-react";
+import { ExternalLink, RefreshCw, Search, UserRoundPlus } from "lucide-react";
 import type { JobRequestCardBlock, SuggestedCandidate } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import { FitConfidenceDot } from "./fit-confidence-dot";
@@ -88,29 +88,52 @@ function normalizedPrivacyText(value: string): string {
     .trim();
 }
 
+function privateValues(jobRequestCard: JobRequestCardBlock): string[] {
+  return [jobRequestCard.antiPersonaMd, jobRequestCard.budgetShape.ballpark]
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function containsPrivateValue(text: string, jobRequestCard: JobRequestCardBlock): boolean {
+  const normalizedText = normalizedPrivacyText(text);
+  return privateValues(jobRequestCard).some((value) => {
+    const normalized = normalizedPrivacyText(value);
+    return normalized.length > 0 && normalizedText.includes(normalized);
+  });
+}
+
+export function scrubCandidateVisibleText(
+  text: string,
+  jobRequestCard: JobRequestCardBlock,
+): string {
+  let scrubbed = text;
+  for (const value of privateValues(jobRequestCard)) {
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    scrubbed = scrubbed.replace(new RegExp(escaped, "gi"), "[private]");
+  }
+  return scrubbed.replace(/\s+/g, " ").trim();
+}
+
 export function rationaleText(
   candidate: SuggestedCandidate,
   jobRequestCard: JobRequestCardBlock,
 ): string {
   const clean = candidate.rationaleMd.replace(/\s+/g, " ").trim();
-  const normalizedRationale = normalizedPrivacyText(clean);
-  const normalizedAntiPersona = normalizedPrivacyText(jobRequestCard.antiPersonaMd);
-  if (
-    normalizedAntiPersona.length > 0 &&
-    normalizedRationale.includes(normalizedAntiPersona)
-  ) {
+  if (containsPrivateValue(clean, jobRequestCard)) {
     const greeter = jobRequestCard.matchCuratedBy === "mira" ? "Mira" : "Alex";
-    return `"${greeter}: I kept the private filter out of this note; ask me to compare fit before you intro them."`;
+    return `"${greeter}: I kept private filters and budget out of this note; ask me to compare fit before you act."`;
   }
-  return clean.startsWith("\"") ? clean : `"${clean}"`;
+  const scrubbed = scrubCandidateVisibleText(clean, jobRequestCard);
+  return scrubbed.startsWith("\"") ? scrubbed : `"${scrubbed}"`;
 }
 
 function MoreLikeNotice({ candidate }: { candidate: SuggestedCandidate }) {
   return (
     <div className="mt-3 rounded-2xl bg-surface-raised px-4 py-3 text-sm leading-6 text-text-secondary">
-      <span className="font-semibold text-text-primary">Stub:</span>{" "}
-      Coming in sub-brief 258 — the off-network scout drops here. For now, I would scout for people like{" "}
-      <span className="font-semibold text-text-primary">{candidate.name}</span>.
+      <span className="font-semibold text-text-primary">Scout hint:</span>{" "}
+      I'll use{" "}
+      <span className="font-semibold text-text-primary">{candidate.name}</span>{" "}
+      as a loose pattern only.
     </div>
   );
 }
@@ -122,6 +145,7 @@ export function SuggestedCandidatesPanel({
   setSelectedCandidateHandle,
   onCandidatesRefresh,
   onRefreshInFlightChange,
+  onScoutLike,
   sessionId,
   now,
   className,
@@ -132,6 +156,7 @@ export function SuggestedCandidatesPanel({
   setSelectedCandidateHandle: (handle: string | null) => void;
   onCandidatesRefresh?: (candidates: SuggestedCandidate[]) => void;
   onRefreshInFlightChange?: (inFlight: boolean) => void;
+  onScoutLike?: (candidate: SuggestedCandidate) => void;
   sessionId?: string | null;
   now?: number;
   className?: string;
@@ -198,6 +223,10 @@ export function SuggestedCandidatesPanel({
       >
         {visibleCandidates.map((candidate) => {
           const selected = selectedCandidateHandle === candidate.handle;
+          const scouted = candidate.source === "scouted";
+          const sourceSnippet = candidate.sourceSnippet
+            ? scrubCandidateVisibleText(candidate.sourceSnippet, jobRequestCard)
+            : null;
           return (
             <div
               key={candidate.handle}
@@ -228,7 +257,7 @@ export function SuggestedCandidatesPanel({
                         ) : null}
                       </div>
                       <p className="truncate text-[11px] leading-4 text-text-muted">
-                        @{candidate.handle}
+                        {scouted ? (candidate.sourceLabel || "Public source") : `@${candidate.handle}`}
                       </p>
                       <p className="truncate text-xs leading-4 text-text-secondary">
                         {candidate.oneLineRole}
@@ -248,21 +277,52 @@ export function SuggestedCandidatesPanel({
                   {rationaleText(candidate, jobRequestCard)}
                 </p>
 
+                {scouted ? (
+                  <div className="mt-3 rounded-xl bg-surface-raised px-3 py-2 text-xs leading-5 text-text-secondary">
+                    {candidate.sourceUrl ? (
+                      <a
+                        href={candidate.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex max-w-full items-center gap-1 font-semibold text-text-primary underline-offset-4 hover:underline"
+                      >
+                        <span className="truncate">{candidate.sourceLabel || "Public source"}</span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      </a>
+                    ) : null}
+                    {sourceSnippet ? (
+                      <p className="mt-1 line-clamp-2">{sourceSnippet}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="mt-3 border-t border-border pt-3">
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() =>
-                        handleCandidateIntroduce(candidate.handle, setSelectedCandidateHandle)
-                      }
-                      className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md bg-accent px-2.5 text-xs font-semibold text-accent-foreground transition hover:opacity-90 md:min-h-9"
+                      onClick={() => {
+                        if (!scouted) {
+                          handleCandidateIntroduce(candidate.handle, setSelectedCandidateHandle);
+                          return;
+                        }
+                        setMoreLikeCandidate(candidate);
+                      }}
+                      className={cn(
+                        "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition md:min-h-9",
+                        scouted
+                          ? "border border-border bg-white text-text-primary hover:bg-surface-raised"
+                          : "bg-accent text-accent-foreground hover:opacity-90",
+                      )}
                     >
                       <UserRoundPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                      Introduce
+                      {scouted ? "Use as hint" : "Introduce"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setMoreLikeCandidate(candidate)}
+                      onClick={() => {
+                        setMoreLikeCandidate(candidate);
+                        onScoutLike?.(candidate);
+                      }}
                       className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-border bg-white px-2.5 text-xs font-semibold text-text-primary transition hover:bg-surface-raised md:min-h-9"
                     >
                       <Search className="h-3.5 w-3.5" aria-hidden="true" />

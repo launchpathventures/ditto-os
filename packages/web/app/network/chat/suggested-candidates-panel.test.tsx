@@ -10,6 +10,7 @@ import {
   rationaleText,
   refreshSuggestedCandidates,
   staleSuggestionAgeHours,
+  scrubCandidateVisibleText,
 } from "./suggested-candidates-panel";
 
 afterEach(() => {
@@ -84,7 +85,7 @@ describe("SuggestedCandidatesPanel", () => {
   });
 
   it("refreshes candidates with exactly one POST and reports the in-flight state", async () => {
-    let resolveFetch: ((value: unknown) => void) | null = null;
+    let resolveFetch!: (value: unknown) => void;
     const fetchPromise = new Promise((resolve) => {
       resolveFetch = resolve;
     });
@@ -109,7 +110,7 @@ describe("SuggestedCandidatesPanel", () => {
       }),
     );
 
-    resolveFetch?.({
+    resolveFetch({
       ok: true,
       json: async () => refreshed,
     });
@@ -177,6 +178,38 @@ describe("SuggestedCandidatesPanel", () => {
 
     expect(rationale).not.toContain("pure copywriter");
     expect(html).not.toContain("pure copywriter");
-    expect(html).toContain("private filter");
+    expect(html).toContain("private filters");
+  });
+
+  it("suppresses rationale text that repeats the private budget", () => {
+    const card = jobRequest({ budgetShape: { ballpark: "$8-12k/month", cadence: "monthly" } });
+    const leakyCandidate = candidate(1, {
+      rationaleMd: "Mira: available around $8-12k/month and strong CRM operator.",
+    });
+
+    const rationale = rationaleText(leakyCandidate, card);
+
+    expect(rationale).not.toContain("$8-12k/month");
+    expect(rationale).toContain("budget");
+    expect(scrubCandidateVisibleText("Costs $8-12k/month", card)).toBe("Costs [private]");
+  });
+
+  it("renders scouted candidates with public source labels and review-only CTA copy", () => {
+    const html = renderPanel([
+      candidate(1, {
+        handle: "scouted:abc123",
+        name: "Public Lead",
+        source: "scouted",
+        sourceUrl: "https://example.com/public-lead",
+        sourceLabel: "example.com",
+        sourceSnippet: "Runs outbound systems for B2B services.",
+      }),
+    ]);
+
+    expect(html).toContain("example.com");
+    expect(html).toContain("https://example.com/public-lead");
+    expect(html).toContain("Runs outbound systems");
+    expect(html).toContain("Use as hint");
+    expect(html).not.toContain("@scouted:abc123");
   });
 });

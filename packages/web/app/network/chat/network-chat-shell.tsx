@@ -19,15 +19,21 @@ import {
   buildJobRequestCard,
   type ClientIntakeAnswers,
 } from "@/lib/network-client-intake";
-import type { JobRequestCardBlock, SuggestedCandidate } from "@/lib/engine";
+import type { JobRequestCardBlock, ReviewCardBlock, SuggestedCandidate } from "@/lib/engine";
+import { ReviewCardBlockComponent } from "@/components/blocks/review-card-block";
 
-import { ClientCardActions } from "./client-card-actions";
+import {
+  ClientCardActions,
+  scanOffNetwork,
+  type ScoutResponsePayload,
+} from "./client-card-actions";
 import { ExpertCardActions } from "./expert-card-actions";
 import {
   JobRequestCardRenderer,
   type JobRequestEditableField,
 } from "./job-request-card-renderer";
 import { ModeToggle } from "./mode-toggle";
+import { NetworkKbShelf } from "./network-kb-shelf";
 import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 import { PreviewPane, type NetworkChatMode } from "./preview-pane";
 import { SuggestedCandidatesPanel } from "./suggested-candidates-panel";
@@ -39,7 +45,7 @@ const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
 interface LaneMessage {
   role: "user" | "assistant";
   content: string;
-  block?: JobRequestCardBlock;
+  block?: JobRequestCardBlock | ReviewCardBlock;
 }
 
 interface LaneResponse {
@@ -253,6 +259,51 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       next[index] = { ...next[index], block: card };
       return next;
     });
+  }
+
+  function mergeScoutedCandidates(payload: ScoutResponsePayload) {
+    appendMessage({
+      role: "assistant",
+      content: payload.review.outputText,
+      block: payload.review,
+    });
+    if (payload.candidates.length === 0) return;
+
+    const merged = new Map(clientCandidates.map((candidate) => [candidate.handle, candidate]));
+    for (const candidate of payload.candidates) {
+      merged.set(candidate.handle, candidate);
+    }
+    const nextCandidates = Array.from(merged.values()).slice(0, 10);
+    setClientCandidates(nextCandidates);
+    setClientMatchCard((currentCard) =>
+      currentCard
+        ? {
+            ...currentCard,
+            suggestedCandidates: nextCandidates,
+          }
+        : currentCard,
+    );
+  }
+
+  async function scoutMoreLike(candidate: SuggestedCandidate) {
+    if (!clientMatchCard) return;
+    appendMessage({
+      role: "assistant",
+      content: `I'll use ${candidate.name} as a loose pattern only and scan public sources.`,
+    });
+    try {
+      const payload = await scanOffNetwork({
+        jobRequestCard: clientMatchCard,
+        seedCandidate: candidate,
+        sessionId,
+      });
+      mergeScoutedCandidates(payload);
+    } catch {
+      appendMessage({
+        role: "assistant",
+        content: "I couldn't complete that off-network scan. Try again in a moment.",
+      });
+    }
   }
 
   function nextQuestion(step: number) {
@@ -661,6 +712,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                       <JobRequestCardRenderer card={message.block} />
                     </div>
                   ) : null}
+                  {message.block?.type === "review_card" ? (
+                    <div className="mt-4 max-w-full">
+                      <ReviewCardBlockComponent block={message.block} />
+                    </div>
+                  ) : null}
                 </div>
               ))}
 
@@ -690,6 +746,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                       selectedCandidateHandle={selectedCandidateHandle}
                       setSelectedCandidateHandle={setSelectedCandidateHandle}
                       sessionId={sessionId}
+                      onScoutLike={(candidate) => void scoutMoreLike(candidate)}
                       onRefreshInFlightChange={setClientRefreshInFlight}
                       onCandidatesRefresh={(nextCandidates) => {
                         setClientCandidates(nextCandidates);
@@ -727,6 +784,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                       selectedCandidate={selectedCandidate}
                       isRefreshInFlight={clientRefreshInFlight}
                       sessionId={sessionId}
+                      jobRequestCard={clientMatchCard}
+                      onScoutComplete={mergeScoutedCandidates}
                     />
                   ) : null}
                 </div>
@@ -738,6 +797,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                     <NetworkProfileCardRenderer card={previewCard} />
                   </div>
                   {renderCardControls()}
+                  {claimedHandle ? <NetworkKbShelf sessionId={sessionId} /> : null}
                 </div>
               ) : null}
             </div>

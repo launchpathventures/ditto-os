@@ -54,7 +54,7 @@ function ReferredPageInner() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
-  const ref = searchParams.get("ref");
+  const ref = searchParams?.get("ref") ?? null;
 
   // Check for returning visitor
   useEffect(() => {

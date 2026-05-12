@@ -91,12 +91,19 @@ export interface JobRequestBudgetShape {
 }
 
 export interface SuggestedCandidate {
+  /**
+   * On-network candidates use a real Ditto handle. Scouted candidates must use
+   * a stable non-impersonating identifier such as `scouted:<hash>`.
+   */
   handle: string;
   name: string;
   oneLineRole: string;
   rationaleMd: string;
   fitConfidence: "high" | "medium" | "low";
   source: "on-network" | "scouted";
+  sourceUrl?: string;
+  sourceLabel?: string;
+  sourceSnippet?: string;
   /** Match computation time. Distinct from JobRequestCardBlock.lastUpdatedAt. */
   computedAt: string;
 }

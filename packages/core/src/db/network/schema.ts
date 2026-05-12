@@ -16,7 +16,7 @@
  * to a workspace-tier table here. The no-engine-import test in
  * `src/db/network-db.test.ts` enforces this.
  *
- * Surface (post-Brief 264 client lane): 9 pgTable declarations.
+ * Surface (post-Brief 258 KB/scout): 13 pgTable declarations.
  * Provenance: Brief 263 (this brief; converted from sqliteTable per ADR-048).
  */
 
@@ -78,6 +78,21 @@ export type NetworkUserStatus = (typeof networkUserStatusValues)[number];
 
 export const networkJobRequestStatusValues = ["open", "closed"] as const;
 export type NetworkJobRequestStatus = (typeof networkJobRequestStatusValues)[number];
+
+export const networkKbDocumentKindValues = ["upload", "voice", "manual"] as const;
+export type NetworkKbDocumentKind = (typeof networkKbDocumentKindValues)[number];
+
+export const networkKbDocumentStatusValues = ["ready", "processing", "failed", "archived"] as const;
+export type NetworkKbDocumentStatus = (typeof networkKbDocumentStatusValues)[number];
+
+export const networkKbFactVisibilityValues = ["public", "on-request", "off"] as const;
+export type NetworkKbFactVisibility = (typeof networkKbFactVisibilityValues)[number];
+
+export const networkKbFactStatusValues = ["active", "archived"] as const;
+export type NetworkKbFactStatus = (typeof networkKbFactStatusValues)[number];
+
+export const networkVoiceIntakeStatusValues = ["reviewed", "processing", "failed", "complete"] as const;
+export type NetworkVoiceIntakeStatus = (typeof networkVoiceIntakeStatusValues)[number];
 
 export const workspaceStatusValues = [
   "provisioning",
@@ -256,6 +271,122 @@ export const networkJobRequests = pgTable("network_job_requests", {
   index("network_job_requests_user_id").on(table.userId),
   index("network_job_requests_status").on(table.status),
   index("network_job_requests_updated_at").on(table.updatedAt),
+]);
+
+// ============================================================
+// Network User Knowledge Base — source-traced profile facts (Brief 258)
+// ============================================================
+
+export const networkUserKbDocuments = pgTable("network_user_kb_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  kind: text("kind").notNull().$type<NetworkKbDocumentKind>(),
+  title: text("title").notNull(),
+  sourceLabel: text("source_label").notNull(),
+  mimeType: text("mime_type"),
+  originalFilename: text("original_filename"),
+  sanitizedFilename: text("sanitized_filename").notNull(),
+  storagePath: text("storage_path").notNull(),
+  sha256: text("sha256").notNull(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  status: text("status").notNull().$type<NetworkKbDocumentStatus>().default("ready"),
+  visibilityDefault: text("visibility_default")
+    .notNull()
+    .$type<NetworkKbFactVisibility>()
+    .default("on-request"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_user_kb_documents_user_id").on(table.userId),
+  index("network_user_kb_documents_status").on(table.status),
+  index("network_user_kb_documents_updated_at").on(table.updatedAt),
+]);
+
+export const networkUserKbFacts = pgTable("network_user_kb_facts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  documentId: text("document_id").references(() => networkUserKbDocuments.id),
+  sourceLabel: text("source_label").notNull(),
+  sourceLocator: text("source_locator"),
+  factMd: text("fact_md").notNull(),
+  visibility: text("visibility")
+    .notNull()
+    .$type<NetworkKbFactVisibility>()
+    .default("on-request"),
+  status: text("status").notNull().$type<NetworkKbFactStatus>().default("active"),
+  storagePath: text("storage_path").notNull(),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_user_kb_facts_user_id").on(table.userId),
+  index("network_user_kb_facts_user_visibility").on(table.userId, table.visibility),
+  index("network_user_kb_facts_status").on(table.status),
+  index("network_user_kb_facts_updated_at").on(table.updatedAt),
+]);
+
+export const networkUserAntiPersona = pgTable("network_user_anti_persona", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  ruleMd: text("rule_md").notNull(),
+  status: text("status").notNull().$type<NetworkKbFactStatus>().default("active"),
+  storagePath: text("storage_path").notNull(),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_user_anti_persona_user_id").on(table.userId),
+  index("network_user_anti_persona_status").on(table.status),
+  index("network_user_anti_persona_updated_at").on(table.updatedAt),
+]);
+
+export const networkUserVoiceIntake = pgTable("network_user_voice_intake", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  documentId: text("document_id").references(() => networkUserKbDocuments.id),
+  transcriptStoragePath: text("transcript_storage_path").notNull(),
+  status: text("status").notNull().$type<NetworkVoiceIntakeStatus>().default("reviewed"),
+  error: text("error"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_user_voice_intake_user_id").on(table.userId),
+  index("network_user_voice_intake_status").on(table.status),
+  index("network_user_voice_intake_updated_at").on(table.updatedAt),
 ]);
 
 // ============================================================

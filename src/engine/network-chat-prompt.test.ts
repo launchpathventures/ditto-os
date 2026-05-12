@@ -39,6 +39,9 @@ describe("network chat prompt contexts", () => {
     expect(prompt).toContain("NetworkProfileCardBlock");
     expect(prompt).toContain("Do not emit an AuthorizationRequestBlock here.");
     expect(prompt).toContain("Worth it if you do this kind of hunting more than twice a year.");
+    expect(prompt).toContain("extract_kb_facts");
+    expect(prompt).toContain("record_voice_intake");
+    expect(prompt).toContain("Facts default to `on-request`");
 
     let lastIndex = -1;
     for (const question of questions) {
@@ -57,6 +60,8 @@ describe("network chat prompt contexts", () => {
     expect(prompt).toContain("scoutOptIn");
     expect(prompt).toContain("matchOnNetwork");
     expect(prompt).toContain("two distinct turns");
+    expect(prompt).toContain("scout_off_network");
+    expect(prompt).toContain("public source URL");
     expect(prompt).not.toContain("## Your Task: Front Door Advisor");
 
     let lastIndex = -1;
