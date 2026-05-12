@@ -571,7 +571,9 @@ These six questions in exact order are part of the spec — sub-briefs 256/257 m
 
 ### Workspace upsell — the dead-clear moment
 
-After Q6 of either lane, the Greeter says (verbatim copy locked):
+After Q6 of either lane, the Greeter says (verbatim copy locked — copy is lane-specific because the resolved artifact differs: card vs. brief).
+
+**Expert lane** (after card materializes):
 
 > *"Card's ready. I'll save this and you can chat with me at `ditto.partners/people/{handle}` — share that link with anyone curious about you.*
 >
@@ -579,7 +581,15 @@ After Q6 of either lane, the Greeter says (verbatim copy locked):
 >
 > [Yes, set up workspace] [Not now, just my card]
 
-The bold sentence is the dead-clear value articulation. Names: memory, intro-tracking, calendar/email integration, frequency heuristic. **Workspace upsell trigger fires once per user per session-lane.** Sub-briefs 256 + 257 must encode this verbatim.
+**Client lane** (after job-request brief materializes):
+
+> *"Brief's saved. I'll keep it open and let you know if anyone good comes through.*
+>
+> *One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**"*
+>
+> [Yes, set up workspace] [Not now, just my brief]
+
+The bold sentence is the dead-clear value articulation. Names: memory, intro-tracking, calendar/email integration, frequency heuristic. The client variant must NOT reference `ditto.partners/people/{handle}` (that surface belongs to the expert lane). **Workspace upsell trigger fires once per user per session-lane.** Sub-briefs 256 + 257 must encode each variant verbatim.
 
 ### Persuasion layer (objection map)
 
