@@ -16,8 +16,12 @@
  */
 
 import { createHash, randomBytes } from "crypto";
-import { db, schema } from "../db";
+import { networkDb } from "../db/network-db";
+import * as networkSchema from "@ditto/core/db/network";
 import { eq, isNull, and } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+
+type NetworkDbHandle = PostgresJsDatabase<typeof networkSchema>;
 
 /** Hash a token using SHA-256 */
 export function hashToken(token: string): string {
@@ -43,7 +47,10 @@ export interface TokenValidation {
  * O(1) lookup via hash — hashes the token and queries the index directly.
  * No scanning, no timing-safe comparison needed (hash is one-way).
  */
-export async function validateToken(authHeader: string | null): Promise<TokenValidation | null> {
+export async function validateToken(
+  authHeader: string | null,
+  database: NetworkDbHandle = networkDb,
+): Promise<TokenValidation | null> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;
   }
@@ -56,16 +63,16 @@ export async function validateToken(authHeader: string | null): Promise<TokenVal
   const tokenHash = hashToken(token);
 
   // O(1) lookup by hash — no scanning
-  const [row] = await db
+  const [row] = await database
     .select({
-      userId: schema.networkTokens.userId,
-      isAdmin: schema.networkTokens.isAdmin,
+      userId: networkSchema.networkTokens.userId,
+      isAdmin: networkSchema.networkTokens.isAdmin,
     })
-    .from(schema.networkTokens)
+    .from(networkSchema.networkTokens)
     .where(
       and(
-        eq(schema.networkTokens.tokenHash, tokenHash),
-        isNull(schema.networkTokens.revokedAt),
+        eq(networkSchema.networkTokens.tokenHash, tokenHash),
+        isNull(networkSchema.networkTokens.revokedAt),
       ),
     )
     .limit(1);
@@ -95,18 +102,19 @@ export function requireAdmin(auth: TokenValidation | null): TokenValidation | nu
 export async function createToken(
   userId: string,
   options?: { isAdmin?: boolean },
+  database: NetworkDbHandle = networkDb,
 ): Promise<{ token: string; id: string }> {
   const token = generateToken();
   const tokenHash = hashToken(token);
 
-  const [row] = await db
-    .insert(schema.networkTokens)
+  const [row] = await database
+    .insert(networkSchema.networkTokens)
     .values({
       userId,
       tokenHash,
       isAdmin: options?.isAdmin ?? false,
     })
-    .returning({ id: schema.networkTokens.id });
+    .returning({ id: networkSchema.networkTokens.id });
 
   return { token, id: row.id };
 }
@@ -114,15 +122,18 @@ export async function createToken(
 /**
  * Revoke a token by ID. Returns true if a token was actually revoked.
  */
-export async function revokeToken(tokenId: string): Promise<boolean> {
+export async function revokeToken(
+  tokenId: string,
+  database: NetworkDbHandle = networkDb,
+): Promise<boolean> {
   // Check it exists and is not already revoked before updating
-  const [existing] = await db
-    .select({ id: schema.networkTokens.id })
-    .from(schema.networkTokens)
+  const [existing] = await database
+    .select({ id: networkSchema.networkTokens.id })
+    .from(networkSchema.networkTokens)
     .where(
       and(
-        eq(schema.networkTokens.id, tokenId),
-        isNull(schema.networkTokens.revokedAt),
+        eq(networkSchema.networkTokens.id, tokenId),
+        isNull(networkSchema.networkTokens.revokedAt),
       ),
     )
     .limit(1);
@@ -131,10 +142,10 @@ export async function revokeToken(tokenId: string): Promise<boolean> {
     return false;
   }
 
-  await db
-    .update(schema.networkTokens)
+  await database
+    .update(networkSchema.networkTokens)
     .set({ revokedAt: new Date() })
-    .where(eq(schema.networkTokens.id, tokenId));
+    .where(eq(networkSchema.networkTokens.id, tokenId));
 
   return true;
 }
@@ -142,20 +153,22 @@ export async function revokeToken(tokenId: string): Promise<boolean> {
 /**
  * List all tokens for display (without revealing the actual token hash).
  */
-export async function listTokens(): Promise<Array<{
+export async function listTokens(
+  database: NetworkDbHandle = networkDb,
+): Promise<Array<{
   id: string;
   userId: string;
   isAdmin: boolean;
   createdAt: Date;
   revokedAt: Date | null;
 }>> {
-  return db
+  return database
     .select({
-      id: schema.networkTokens.id,
-      userId: schema.networkTokens.userId,
-      isAdmin: schema.networkTokens.isAdmin,
-      createdAt: schema.networkTokens.createdAt,
-      revokedAt: schema.networkTokens.revokedAt,
+      id: networkSchema.networkTokens.id,
+      userId: networkSchema.networkTokens.userId,
+      isAdmin: networkSchema.networkTokens.isAdmin,
+      createdAt: networkSchema.networkTokens.createdAt,
+      revokedAt: networkSchema.networkTokens.revokedAt,
     })
-    .from(schema.networkTokens);
+    .from(networkSchema.networkTokens);
 }

@@ -32,15 +32,13 @@ const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
 /** Verify HMAC-signed session cookie (Edge-compatible via Web Crypto API). */
 async function verifySessionCookie(cookieValue: string, ownerEmail: string): Promise<boolean> {
   const sepIdx = cookieValue.lastIndexOf("|");
-  if (sepIdx === -1) {
-    // Legacy unsigned cookie — treat as email-only (backwards compat for existing sessions)
-    return cookieValue.toLowerCase() === ownerEmail.toLowerCase();
-  }
+  if (sepIdx === -1) return false;
   const email = cookieValue.substring(0, sepIdx);
   const sig = cookieValue.substring(sepIdx + 1);
   if (email.toLowerCase() !== ownerEmail.toLowerCase()) return false;
 
-  const secret = process.env.SESSION_SECRET || process.env.WORKSPACE_OWNER_EMAIL || "ditto-workspace";
+  const secret = process.env.SESSION_SECRET || process.env.NETWORK_AUTH_SECRET;
+  if (!secret) return false;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
@@ -78,18 +76,9 @@ const WORKSPACE_MODE_BLOCKED_PREFIXES = ["/welcome", "/admin"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const mode = getDeploymentMode();
-
-  // AC11: No WORKSPACE_OWNER_EMAIL = local dev, skip auth entirely.
-  // Deployment-mode blocking still applies so local runs match prod shape:
-  // if you're running locally with DITTO_DEPLOYMENT=workspace (the default),
-  // /welcome and /admin will 404 even without WORKSPACE_OWNER_EMAIL set.
-  // To exercise those surfaces locally, set DITTO_DEPLOYMENT=public.
-  if (!process.env.WORKSPACE_OWNER_EMAIL) {
-    if (mode === "workspace" && isBlockedInWorkspaceMode(pathname)) {
-      return new NextResponse("Not Found", { status: 404 });
-    }
-    return NextResponse.next();
-  }
+  const managedWorkspace = mode === "workspace" && (
+    !!process.env.DITTO_NETWORK_URL || !!process.env.DITTO_WORKSPACE_USER_ID
+  );
 
   // Hard-block surfaces that aren't shipped in workspace mode.
   if (mode === "workspace" && isBlockedInWorkspaceMode(pathname)) {
@@ -115,6 +104,18 @@ export async function middleware(request: NextRequest) {
   // Allow static files
   if (pathname.includes(".") && !pathname.startsWith("/api")) {
     return NextResponse.next();
+  }
+
+  // Local/self-hosted dev without a Network link stays open. Managed
+  // workspaces fail closed when auth env is incomplete.
+  if (!process.env.WORKSPACE_OWNER_EMAIL) {
+    if (managedWorkspace) {
+      return new NextResponse("Workspace auth misconfigured", { status: 503 });
+    }
+    return NextResponse.next();
+  }
+  if (managedWorkspace && !process.env.SESSION_SECRET && !process.env.NETWORK_AUTH_SECRET) {
+    return new NextResponse("Workspace auth misconfigured", { status: 503 });
   }
 
   // Check workspace session cookie — HMAC-signed value verified against owner email

@@ -69,9 +69,22 @@ export async function POST(request: Request) {
       ...result,
     });
   } catch (error) {
-    console.error("[/api/v1/network/admin/provision] Error:", error);
+    const { ManagedWorkspacePreflightError, provisioningErrorMessage } = await import(
+      "../../../../../../../../src/engine/workspace-provisioner"
+    );
+    if (error instanceof ManagedWorkspacePreflightError) {
+      return NextResponse.json(
+        {
+          error: error.reason,
+          message: error.message,
+        },
+        { status: 400 },
+      );
+    }
+    const safeMessage = provisioningErrorMessage(error);
+    console.error("[/api/v1/network/admin/provision] Error:", safeMessage);
     return NextResponse.json(
-      { error: `Provisioning failed: ${error instanceof Error ? error.message : "unknown"}` },
+      { error: `Provisioning failed: ${safeMessage}` },
       { status: 500 },
     );
   }

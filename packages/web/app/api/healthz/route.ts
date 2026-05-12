@@ -2,7 +2,8 @@
  * Ditto — Health Check Endpoint
  *
  * GET /healthz — Liveness check: process up + DB connected.
- * GET /healthz?deep=true — Readiness check: liveness + seed imported + Network reachable.
+ * GET /healthz?deep=true — Strict readiness check.
+ * GET /healthz?deep=true&mode=provisioning — Bootstrap readiness for provisioner.
  *
  * Used by container orchestrators, load balancers, provisioner health checks, and monitoring.
  *
@@ -34,9 +35,16 @@ function getVersion(): string {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const deep = url.searchParams.get("deep") === "true";
+  const healthMode = url.searchParams.get("mode") === "provisioning"
+    ? "provisioning"
+    : "strict";
+  const deploymentMode =
+    (process.env.DITTO_DEPLOYMENT ?? "workspace").trim().toLowerCase() === "public"
+      ? "public"
+      : "workspace";
 
   try {
-    const { db } = await import("../../../../../src/db");
+    const { db, getWorkspaceSchemaHealth } = await import("../../../../../src/db");
     const { sql } = await import("drizzle-orm");
 
     // Liveness: verify DB connectivity
@@ -50,43 +58,65 @@ export async function GET(request: Request) {
     }
 
     if (!deep) {
-      return NextResponse.json({ status: "ok", db: "connected", version: getVersion() });
+      return NextResponse.json({
+        status: "ok",
+        db: "connected",
+        mode: healthMode,
+        version: getVersion(),
+      });
     }
+
+    const workspaceSchema = getWorkspaceSchemaHealth();
 
     // Deep/readiness checks
     const response: {
       status: string;
       db: string;
+      mode: "strict" | "provisioning";
       version: string;
+      schema: {
+        workspace: typeof workspaceSchema;
+        network?: {
+          status: "ok" | "behind" | "error";
+          applied: number;
+          expected: number;
+          error?: string;
+        };
+      };
       seed: string;
       network: string;
     } = {
       status: "ok",
       db: "connected",
+      mode: healthMode,
       version: getVersion(),
+      schema: {
+        workspace: workspaceSchema,
+      },
       seed: "skipped",
       network: "skipped",
     };
 
+    if (workspaceSchema.status !== "ok") {
+      response.status = "degraded";
+    }
+
     const networkUrl = process.env.DITTO_NETWORK_URL;
 
-    // Check seed imported: self-scoped memories exist
-    // Only check if DITTO_NETWORK_URL is set (managed workspace)
+    // Check seed imported/attempted. Only check if DITTO_NETWORK_URL is set
+    // (managed workspace); local/self-hosted workspaces stay unaffected.
     if (networkUrl) {
       try {
-        const { schema } = await import("../../../../../src/db");
-        const { eq } = await import("drizzle-orm");
+        const { getSeedAttemptState } = await import("../../../../../src/engine/network-seed");
+        const seedState = await getSeedAttemptState();
+        response.seed =
+          seedState === "imported"
+            ? "imported"
+            : seedState === "attempted"
+              ? "attempted"
+              : "not_imported";
 
-        const selfMemories = db
-          .select({ id: schema.memories.id })
-          .from(schema.memories)
-          .where(eq(schema.memories.scopeType, "self"))
-          .limit(1)
-          .all();
-
-        response.seed = selfMemories.length > 0 ? "imported" : "not_imported";
-
-        if (selfMemories.length === 0) {
+        if (seedState === "not_attempted") {
           response.status = "degraded";
         }
       } catch (error) {
@@ -95,7 +125,9 @@ export async function GET(request: Request) {
         response.status = "degraded";
       }
 
-      // Check Network Service reachable
+      // Check Network Service reachable. Strict workspace health treats an
+      // outage as degraded. Provisioning health accepts a bootstrapped local
+      // workspace whose Network is temporarily unavailable.
       try {
         const networkRes = await fetch(`${networkUrl}/healthz`, {
           signal: AbortSignal.timeout(5_000),
@@ -103,12 +135,35 @@ export async function GET(request: Request) {
 
         response.network = networkRes.ok ? "reachable" : "unreachable";
 
-        if (!networkRes.ok) {
+        if (!networkRes.ok && healthMode === "strict") {
           response.status = "degraded";
         }
       } catch (error) {
         console.error("[/healthz] Network check failed:", error);
         response.network = "unreachable";
+        if (healthMode === "strict") {
+          response.status = "degraded";
+        }
+      }
+    }
+
+    if (deploymentMode === "public") {
+      try {
+        const { getNetworkSchemaHealth } = await import("../../../../../src/db/network-db");
+        const networkSchema = await getNetworkSchemaHealth();
+        response.schema.network = networkSchema;
+        response.network = networkSchema.status === "ok" ? "ready" : "unavailable";
+        if (networkSchema.status !== "ok") {
+          response.status = "degraded";
+        }
+      } catch (error) {
+        response.schema.network = {
+          status: "error",
+          applied: 0,
+          expected: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        response.network = "unavailable";
         response.status = "degraded";
       }
     }

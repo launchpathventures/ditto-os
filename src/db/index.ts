@@ -58,6 +58,44 @@ export const db = drizzle(sqlite, { schema });
 
 export { schema };
 
+export interface SchemaHealth {
+  status: "ok" | "behind" | "error";
+  applied: number;
+  expected: number;
+  error?: string;
+}
+
+function readWorkspaceJournalHead(): number {
+  const metaPath = path.join(PROJECT_ROOT, "drizzle", "meta", "_journal.json");
+  if (!fs.existsSync(metaPath)) return 0;
+  const journal = JSON.parse(fs.readFileSync(metaPath, "utf-8")) as {
+    entries?: unknown[];
+  };
+  return journal.entries?.length ?? 0;
+}
+
+export function getWorkspaceSchemaHealth(): SchemaHealth {
+  const expected = readWorkspaceJournalHead();
+  try {
+    const row = sqlite.prepare(
+      "SELECT count(*) as cnt FROM __drizzle_migrations",
+    ).get() as { cnt: number };
+    const applied = row?.cnt ?? 0;
+    return {
+      status: applied >= expected ? "ok" : "behind",
+      applied,
+      expected,
+    };
+  } catch (error) {
+    return {
+      status: expected === 0 ? "ok" : "behind",
+      applied: 0,
+      expected,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 /**
  * Ensure DB schema is up to date by running Drizzle Kit migrations.
  *

@@ -1,10 +1,155 @@
 # Ditto — Current State
 
-**Last updated:** 2026-05-11 (Builder — **Brief 266 implemented and reviewed; pending human approval.** Client lane now renders the full post-Q6 action layer: `SuggestedCandidatesPanel` in `packages/web/app/network/chat/suggested-candidates-panel.tsx` displays 1-5 matched candidates below the separate Greeter framing turn, consumes `FitConfidenceDot`, keeps anti-persona/budget private, supports stale `computedAt` refresh via `/api/v1/network/match`, and disables the parent intro CTA while refresh is in flight. `ClientCardActions` adds the parent `Get an introduction` + `Scan on + off network and report back` row, side-effect-free 261/258 stub notices, distinct parent/per-card scout copy, and debug `[ Pretend it sent/scanned ]` buttons. `workspace-upsell.ts` locks the parent-254 client-lane upsell copy and emits the OQ1 `console.warn` once per client session; expert mode does not warn. `network-chat-shell.tsx` now drives local client Q1-Q6 → JobRequestCard → match → panel/actions, and advances preview opacity to the match-return step after matching. Reviewer returned PASS with 1 medium + 1 low finding; both were fixed (match-return preview progress and Escape-to-deselect candidate). Verification: Brief 266 Vitest PASS (4 files / 16 tests); client-lane render regression PASS (7 files / 30 tests); `pnpm run type-check` PASS; manual Playwright smoke on `http://localhost:3006/network/chat?mode=client` PASS for local Q1-Q6/card/error fallback, with expected 500 lane-init fallback + 503 match due local `SUPABASE_DB_URL` unset. Next step: human approve/revise; after approval, real intro emission remains Brief 261 and real off-network scout remains Brief 258.) **Previous:** 2026-05-11 Builder — Brief 265 implemented and reviewed; pending human approval.
+**Last updated:** 2026-05-12 (Designer — **Brief 259 UX interaction spec authored** at `docs/research/259-public-profile-as-chat-ux.md`, covering all five open UX items the Architect deferred: (1) quick-start pill micro-typography — outlined pills, sentence case, prefill-not-send-immediately, ordered Orient → Differentiator → Fit → Action; (2) forwarded-note confirm UI — inline two-zone card (not modal) with editable question + optional name/org and explicit *"{first} sees this with your name if you share it"* micro-copy; (3) rate-limit pause-state copy — Greeter pause-turn in first person (NOT system banner), with a flagged open question to Architect re Hard Rule #3 ("no AI self-disclosure") and a documented `⊙ Alex is resting` fallback; (4) intro-request preview — two-zone card with editable draft + collapsed-by-default transcript and *"Sent. If it lands, you'll hear back in a day or two"* after-send copy; (5) representative-posture identity affordance — persistent `⊙ {Greeter} · representing {first}` chat header, persona-color glyph avatar (NOT owner photo), first-turn conversational posture establishment, NO persistent disclaimer banner. Three "Original to Ditto" patterns flagged; Two-Audiences-One-Surface section added for owner async perspective. Fresh-context Reviewer verdict **PASS-WITH-NITS** with 4 nits all marked non-blocking — Architect should absorb 3 into Brief 259 §User Experience: (a) inline `costLabel: null` template-literal seam comment, (b) confirm Hard Rule #3 reading + document chosen pause-state form, (c) consider `originalDraft?: string` field on `networkForwardedNotes` + `AuthorizationRequestBlock` to capture visitor edits as feedback (Insight: edits ARE feedback), and one optional nit (d) tighten first Greeter turn to "I'm Alex, Tim's representative" for explicit canonical-form alignment. Brief 259 is now both architecturally and UX design-ready; pending human approval to invoke `/dev-architect` for absorption or `/dev-builder` referencing the spec as canonical UX companion.)
+
+**Previous update:** 2026-05-12 (Architect — **Brief 259 authored** at `docs/briefs/259-public-profile-as-chat-and-representative-rule.md` (`/people/[handle]` public profile-as-chat surface on `ditto.partners`; six hard-rule REPRESENTATIVE-not-IMPERSONATOR system prompt; visitor rate-limiting; `forward_note_to_user(stepRunId, ...)` self-tool with Insight-180 guard; `networkForwardedNotes` pgTable + `drizzle/network/0003_*.sql` migration with Insight-190 dual-journal entry; cross-deployment auth contract honored per Insight-231 — visitor transcript carried as `AuthorizationRequestBlock.preview` so workspace-side render needs no `networkDb` import; 17 ACs; `costLabel: null` placeholder pending downstream free-counter brief). Fresh-context Reviewer verdict **PASS-WITH-NITS**; both nits absorbed inline: (1) AC 13 clarifies workspace-mode hard-404 needs no `WORKSPACE_MODE_BLOCKED_PREFIXES` entry, (2) Constraints §verbatim-system-prompt notes the deliberate `costLabel: null` substitution from parent's verbatim text. Brief is design-ready, pending human approval before `/dev-builder` invocation.)
+
+**Earlier update:** 2026-05-12 (Documenter — **Brief 258 closed out after human approval.** Brief moved to `docs/briefs/complete/258-knowledge-base-intake-and-off-network-scout.md` and status flipped to complete. Roadmap parent-254 sub-brief row 258 flipped to done; headline updated. Insight-232 captured for the audited HTTP-route → wrapper-step-run idiom that bridges Insight-180's `stepRunId` guard with Insight-211's no-self-HTTP rule. No landscape update needed; Brief 258 reused `webSearch` (Brief 093 / Perplexity Sonar) and added no new external building block. No architecture.md update needed; the network KB / scout surfaces sit cleanly inside the existing L1/L3/L6 boundaries. Builder verification preserved: focused Brief 258 Vitest PASS (14 files / 73 tests); root + web + core type-check PASS; schema smoke PASS (13 network `pgTable`s and all four KB tables/indexes in migration). Full `pnpm test` still has repo-wide drift from pre-existing baseline (unrelated to 258).)
+
+**Earlier:** 2026-05-12 (Documenter — **Brief 267 closed out after human approval.** Brief moved to `docs/briefs/complete/267-provisioner-auto-env-and-hardening.md` and status flipped to complete. Roadmap Phase 15 Brief 267 rows now read done. Insight-230 absorbed into ADR-025 and archived; Insight-229 remains active but partially absorbed; new Insight-231 captured for cross-deployment auth artifacts validating in the consuming deployment. No landscape update needed; Brief 267 added no external building block. Verification from Builder preserved: focused Brief 267 Vitest PASS (9 files / 76 tests); root/web/core type-check PASS; full `pnpm test` still fails repo-wide from existing baseline drift; Playwright e2e hung and was killed.)
+
+**Earlier (Builder):** 2026-05-12 (Builder — Brief 258 implemented and reviewed PASS; pending human approval. Network KB intake now has four Postgres tables + migration `drizzle/network/0002_broad_mac_gargan.sql`, markdown-backed storage, source-traced fact extraction, reviewed voice transcript intake, per-fact visibility/private-filter audit, scoped reload listing, guarded built-in tools (`extract_kb_facts`, `record_voice_intake`, `scout_off_network`), expert KB shelf UI, and a real client off-network scout flow with source-backed scouted candidates. Reviewer first returned PASS WITH FIXES on scout audit/privacy and private-filter path safety; all fixes landed and targeted re-check returned PASS. Real public profile/share/intro work remains Briefs 259/260/261.)
+
+**Prior context:** 2026-05-12 (PM — **Briefs 264, 265, 266 human-approved.** Brief 258 (KB intake + off-network scout) in active Builder build (`docs/briefs/258-knowledge-base-intake-and-off-network-scout.md`, status: approved for build, dated 2026-05-12) with ~30 untracked files in worktree (network-kb-*, network-scout, network-voice-intake, referred-context, drizzle/network/0002, web KB shelf + scout UI). Launchpath workspace live at `https://ditto-ws-launchpath-production.up.railway.app` since 2026-05-12 (provisioner saga 41s). Two new active insights captured: Insight-229 (Drizzle migrate silent partial apply, untracked at `docs/insights/229-*.md`) and Insight-230 (workspace seed sentinel must cover fetch-failure path, untracked at `docs/insights/230-*.md`). Briefs 262 + 263 moved to `docs/briefs/complete/` (PM hygiene — state.md previously claimed move but files were still in active dir). **Previous header:** 2026-05-11 Builder Brief 266 implemented and reviewed: Client lane now renders the full post-Q6 action layer: `SuggestedCandidatesPanel` in `packages/web/app/network/chat/suggested-candidates-panel.tsx` displays 1-5 matched candidates below the separate Greeter framing turn, consumes `FitConfidenceDot`, keeps anti-persona/budget private, supports stale `computedAt` refresh via `/api/v1/network/match`, and disables the parent intro CTA while refresh is in flight. `ClientCardActions` adds the parent `Get an introduction` + `Scan on + off network and report back` row, side-effect-free 261/258 stub notices, distinct parent/per-card scout copy, and debug `[ Pretend it sent/scanned ]` buttons. `workspace-upsell.ts` locks the parent-254 client-lane upsell copy and emits the OQ1 `console.warn` once per client session; expert mode does not warn. `network-chat-shell.tsx` now drives local client Q1-Q6 → JobRequestCard → match → panel/actions, and advances preview opacity to the match-return step after matching. Reviewer returned PASS with 1 medium + 1 low finding; both were fixed (match-return preview progress and Escape-to-deselect candidate). Verification: Brief 266 Vitest PASS (4 files / 16 tests); client-lane render regression PASS (7 files / 30 tests); `pnpm run type-check` PASS; manual Playwright smoke on `http://localhost:3006/network/chat?mode=client` PASS for local Q1-Q6/card/error fallback, with expected 500 lane-init fallback + 503 match due local `SUPABASE_DB_URL` unset. Next step: human approve/revise; after approval, real intro emission remains Brief 261 and real off-network scout remains Brief 258.) **Previous:** 2026-05-11 Builder — Brief 265 implemented and reviewed; pending human approval.
 
 ---
 
-## CURRENT — Builder: Brief 263 (Network Tier Postgres Migration — Supabase) implemented + reviewed (2026-05-09)
+## CURRENT — Documenter: Brief 258 (Knowledge Base Intake and Off-Network Scout) closeout (2026-05-12)
+
+**Direct trigger:** human confirmed "258 and 267 are now complete" after Builder commit `4718c64` ("Implement network KB intake and scout") and final Reviewer PASS.
+
+**Documenter changes:**
+- **Brief moved:** `docs/briefs/258-knowledge-base-intake-and-off-network-scout.md` → `docs/briefs/complete/258-knowledge-base-intake-and-off-network-scout.md`; status header updated to `complete (2026-05-12 …)`.
+- **Roadmap updated:** parent-254 sub-brief row 258 flipped from `pending; depends on 257` to `done (2026-05-12)`; deliverable cell now lists the actual landing paths (`packages/core/src/db/network/schema.ts`, `drizzle/network/0002_broad_mac_gargan.sql`, network KB engine modules, `/api/v1/network/kb/*`, `/api/v1/network/scout`, `network-kb-shelf.tsx`, `network-scout.ts`, `extract_kb_facts | record_voice_intake | scout_off_network` tools). Roadmap headline lifted to mention Brief 258 closeout alongside the Brief 267 closeout already there.
+- **Insight captured:** Insight-232 — "Audited HTTP-route wrapper step run for `stepRunId`-guarded engine tools" (in `docs/insights/`). The Brief 258 scout route had to synthesize a network-lane wrapper step run before invoking `scout_off_network`, because Insight-180 guards the tool against ungated invocation and Insight-211 forbids the route from `fetch()`-ing itself. The wrapper-step-run idiom is the third leg of that triangle and is now expected for every HTTP entry seam into a guarded engine tool.
+- **Reference doc audit:**
+  - `docs/architecture.md` — no change. The four new KB tables, the three new built-in tools, and the new HTTP routes all sit inside existing L1 (schema), L3 (harness + tool resolver + audit), and L6 (chat + shelf UI) boundaries.
+  - `docs/landscape.md` — no change. Brief 258 reused the existing `src/engine/web-search.ts` (Brief 093 / Perplexity Sonar) and added no new search provider, STT vendor, or external SDK.
+  - `docs/dictionary.md` — no change. `KB shelf`, `scout report`, `private filter`, `per-fact visibility` are surface-level UX terms already grounded by Brief 254 §Surface E; no canonical glossary entry needed yet.
+  - `docs/research/network-kb-intake-and-scout-ux.md` — already committed alongside the Builder work (commit `4718c64`); no Documenter edits needed.
+  - Active-insight audit — Insight-180 (`stepRunId` guard), Insight-211 (no-self-HTTP), Insight-215 (internal vs external side-effect guard), Insight-229 (private filters need renderer scrubbers) all reinforced; none ready to absorb yet. Insight-190 (migration journal concurrency) re-validated by the dual-tree extension for `drizzle/network/0002`.
+
+**Builder summary preserved:**
+
+- **Schema:** four new Postgres tables in `packages/core/src/db/network/schema.ts` — `network_user_kb_documents`, `network_user_kb_facts`, `network_user_anti_persona`, `network_user_voice_intake` — with user/status/updated indexes and no workspace-tier FK. Migration `drizzle/network/0002_broad_mac_gargan.sql` plus journal entry. Network schema is now 13 `pgTable` declarations.
+- **Storage:** markdown-backed fact/transcript/private-filter mirrors under a configurable network KB root, with path-traversal guards. Rows are the index; markdown is the legible content (per `feedback_user_facing_legibility.md`).
+- **Engine modules:** `network-kb-extract.ts` (source-traced fact extraction, default visibility `on-request`), `network-kb-storage.ts` (DB + markdown writes), `network-kb-context.ts` (audience-scoped fact filtering for prompts), `network-voice-intake.ts` (reviewed transcript fallback when browser STT unavailable), `network-scout.ts` (source-grounded, URL-required, fail-closed-when-unconfigured), `network-kb-feedback.ts` (audit-event capture), `network-step-run.ts` (audited wrapper step run for HTTP entry seams — see Insight-232).
+- **Built-in tools:** `extract_kb_facts`, `record_voice_intake`, `scout_off_network` registered in `tool-resolver.ts`; all three enforce `stepRunId` (Insight-180) except under `DITTO_TEST_MODE=true`.
+- **HTTP routes:** `/api/v1/network/kb/upload`, `/api/v1/network/kb/visibility`, `/api/v1/network/kb/voice`, `/api/v1/network/scout`. Routes validate session/Turnstile/rate limit, create the audited wrapper step run, reject any caller-supplied `stepRunId`, return structured 503 when network DB is unavailable, and never echo budget / private-filter fields.
+- **UI:** expert `NetworkKbShelf` with upload / voice / manual-add / private-filter rows and per-fact visibility controls; client lane `SuggestedCandidatesPanel` now calls the real scout route and renders source-backed scouted candidates with public source label/link/snippet and non-impersonating CTA.
+- **Prompt directives:** `network-chat-prompt.ts` extended for KB visibility flag awareness and per-fact citation rules.
+
+**Reviewer-found bugs (all fixed before final PASS):**
+- Scout audit captured `stepRunId` but didn't propagate it into the wrapper-step-run for downstream feedback rows → fixed: every scout invocation now writes a feedback row linked to the wrapper step run.
+- Private-filter path safety: an early codepath let private-filter text reach scout query construction → fixed: scout query builder now strips by allowlist, not blocklist; private-filter test covers regression.
+
+**Verification commands run (Builder, preserved):**
+- `pnpm --filter @ditto/core type-check` → zero errors.
+- `pnpm run type-check` → zero errors.
+- `pnpm --filter @ditto/web type-check` → zero errors.
+- Focused Brief 258 Vitest → 14 files / 73 tests PASS.
+- Reviewer targeted regression → 5 files / 19 tests PASS.
+- `pnpm exec rg "^export const \w+ = pgTable" packages/core/src/db/network/schema.ts | wc -l` → 13.
+- Migration grep `network_user_kb_documents|network_user_kb_facts|network_user_anti_persona|network_user_voice_intake` against `drizzle/network/0002_*.sql` → all four tables + their indexes present.
+- Full `pnpm test` → 189 files passed, 19 failed, 130 failing tests due pre-existing repo-wide SQLite/legacy-test drift (unrelated to 258 — flagged for follow-up, not blocking).
+
+**Build order downstream:** Parent Brief 254 sub-brief chain is now `255 ✓ → 256 ✓ → 257 ✓ → 258 ✓ → 259 (design-ready 2026-05-12, pending human approval) → (260 ∥ 261)`. Sub-briefs 260 and 261 still need to be authored (only enumerated in the parent's sub-brief table; no standalone brief files on disk). Next pipeline step after human approval of 259: `/dev-builder` for Brief 259, then `/dev-architect` for sub-briefs 260 and 261.
+
+### Documenter Retrospective — Brief 258
+
+**What worked**
+
+- **Required Checkpoint paid off.** The brief mandated a Builder checkpoint after AC 1-10 (KB + voice + privacy) before scout work. The Builder hit that checkpoint cleanly, which meant Reviewer's PASS WITH FIXES findings were all scout-side (audit propagation, query construction) — they didn't churn the KB layer. The checkpoint kept the review surface small enough for a fresh-context Reviewer to actually re-read everything.
+- **Source-grounded scout as a hard constraint produced a clean failure mode.** "Discard any candidate without a public source URL" + "fail closed when unconfigured" gave the scout deterministic empty/error states instead of a fuzzy "we tried but couldn't" path. The client lane UI's empty/error/cached/success states ended up being exactly what the source-grounding rule already implied.
+- **Markdown-backed storage paid two dividends.** It satisfied the user's filesystem-legibility preference (memory: `feedback_user_facing_legibility.md`), AND it made fact-row audit history trivially diffable — the markdown file is the human-readable changelog of the DB row.
+
+**What surprised**
+
+- **HTTP entry seams need their own audit primitive.** Insight-180 guards the engine tool but assumes a parent harness step. When the entry seam is an HTTP route (`/api/v1/network/scout`) there is no parent step run. The route had to synthesize one — a "network-lane wrapper step run" — before calling the tool. That pattern wasn't documented; it's now captured as Insight-232. Expect every future HTTP route that touches a guarded engine tool to need the same idiom.
+- **The full test suite's pre-existing drift is now load-bearing noise.** 130 unrelated failures in `pnpm test` make it hard for any Builder or Reviewer to spot a regression they actually introduced. Brief 258 worked around this by running focused-file Vitest and trusting the targeted Reviewer regression set. Worth flagging in PM triage: the next time someone has bandwidth for repo hygiene, the legacy SQLite test drift (especially `network_users.handle` missing in legacy tests) needs a sweep.
+
+**What to change**
+
+- **Document the wrapper-step-run idiom in the architecture spec when it appears a second time.** Insight-232 is provisional until a second HTTP route legitimately invokes a guarded tool. The likely next case is a "regenerate fact from this document" route or a "scout for me on demand" expert-side tool. After two clean instances, lift into `architecture.md` L3 §"HTTP entry seams to guarded tools" and reference Insight-232.
+- **Add an AC-level smoke for `pnpm test` repo-wide green when the next legibility/test-hygiene brief lands.** Until then, the "focused Vitest + targeted regression" pattern is acceptable but should be noted in every Builder's verification block so it's transparent (Brief 258 did this correctly).
+
+---
+
+**Direct trigger:** human invoked `/dev-documenter` after Brief 267 Builder implementation and final Reviewer PASS.
+
+**Documenter changes:**
+- **Brief moved:** `docs/briefs/267-provisioner-auto-env-and-hardening.md` -> `docs/briefs/complete/267-provisioner-auto-env-and-hardening.md`; status header now complete.
+- **Roadmap updated:** Phase 15 now records Brief 267 as done for centralized managed env/preflight, workspace-scoped bootstrap login, seed path-C sentinel + health split, and workspace/Network schema health.
+- **Insights updated:** Insight-230 absorbed into ADR-025 and archived; Insight-229 remains active/partially absorbed because table-recreate migration defensiveness and persistent-volume migration rehearsal are still unresolved; new Insight-231 captured for cross-deployment auth artifacts.
+- **Landscape:** no update. Brief 267 reused existing Railway, Drizzle, Postgres, and magic-link patterns; no new library or building-block evaluation emerged.
+
+**Builder summary preserved:**
+
+**What was implemented:**
+- **Provisioner env + DB tier:** `workspace-provisioner.ts` now builds managed env through one pure helper, preflights `networkUsers` via `networkDb` + `@ditto/core/db/network`, requires owner email, asserts Railway `/data` volume with `DATABASE_PATH=/data/ditto.db`, creates the domain before env injection, redacts provisioning errors, and polls `/healthz?deep=true&mode=provisioning` by response body. Admin API, CLI, fleet admin routes, token auth, welcome, and upgrade/rollback paths were moved onto the Network tier where they touch Network tables.
+- **Workspace-valid login:** welcome links now carry signed `wbt_` bootstrap tokens with expiry, workspace/audience binding, user/email binding, and workspace-local replay protection. Managed middleware no longer accepts unsigned owner-email cookies and fails closed when required managed auth env is missing.
+- **Seed + health hardening:** seed path C writes a seed-attempt sentinel from `DITTO_WORKSPACE_USER_ID`; strict health fails on local schema drift, missing seed, or Network outage; provisioning health accepts seed-attempted local boot even if Network is down; central Network Service health checks the Network Postgres migration journal and sync error state.
+- **Docs:** `.env.example`, `docs/deployment/auto-provision.md`, and ADR-025 now document managed env ownership, bootstrap health, workspace login semantics, and seed paths A/B/C.
+
+**Review:** mandatory fresh-context review ran four times. Initial PASS attempts failed on managed auth fail-open, Network-local welcome magic links, incomplete redaction, and one raw inbound fire-and-forget provisioning catch. Builder fixed each blocker. Final narrow reviewer returned **PASS** with no findings and two low residual risks: public-prefix routes still bypass managed-auth misconfiguration checks by design, and secondary rollback/deprovision logs rely on upstream Railway error sanitization.
+
+**Verification:**
+- Focused Brief 267 Vitest PASS: 9 files / 76 tests.
+- `pnpm run type-check` PASS.
+- `pnpm --filter @ditto/web type-check` PASS.
+- `pnpm --filter @ditto/core type-check` PASS.
+- Full `pnpm test` FAILS repo-wide with existing baseline drift: dominant failures are legacy SQLite `network_users.handle` assumptions, Network DB env assumptions, an unrelated workspace-upsell snapshot/copy drift, and a work-item status route timeout.
+- `pnpm test:e2e` hung without output and was killed; no e2e result. `test:e2e:auto` was skipped because it delegates to an external AI generator.
+
+### Documenter retrospective — Brief 267
+
+**What worked**
+
+- The provisioner saga shape held up. Hardening could stay inside the existing Railway saga, with preflight before side effects and rollback semantics preserved.
+- The strict/provisioning health split converted two contradictory requirements into a clear contract: the provisioner can accept a locally booted, seed-attempted workspace during a Network outage, while monitoring still sees strict dependency failure.
+- The repeated reviewer loop paid for itself. Each pass found a different boundary bug: auth fail-open, wrong magic-link storage locality, incomplete redaction, and finally the async fire-and-forget catch path.
+
+**What surprised**
+
+- The login bug was not "token security" in isolation; it was deployment locality. A Network-valid magic link can be perfectly well formed and still be useless to a workspace-local auth route.
+- Secret redaction needed to cover more than the main thrown error. Railway GraphQL error bodies, admin responses, CLI messages, inbound provisioning catches, and fire-and-forget `.catch` handlers all had to route through the same redaction surface.
+- Full-suite signal is currently weak for Brief 267 because unrelated Network SQLite drift dominates the failures. Focused tests and type-checks were the useful acceptance signal this session.
+
+**What to change**
+
+- Future cross-deployment auth briefs should state sender, URL target, signing/storage authority, audience, and replay marker in the acceptance criteria.
+- Future provisioning/security reviews should grep all async `.catch` paths and secondary cleanup logs, not just the primary route/controller error response.
+- Insight-229 still needs a follow-up that handles defensive SQLite table-recreate migrations and persistent-volume migration rehearsal. Brief 267 handled fail-closed health/boot behavior, not the migration authoring pattern itself.
+
+---
+
+## CURRENT — Builder: Brief 258 (Knowledge Base Intake and Off-Network Scout) implemented + reviewed (2026-05-12)
+
+**Direct trigger:** human invoked `/dev-builder docs/briefs/258-knowledge-base-intake-and-off-network-scout.md` after the client-lane base was in place.
+
+**What was implemented:**
+- **Network schema + migration:** `packages/core/src/db/network/schema.ts` now has exactly 13 `pgTable` declarations and four Brief 258 tables: `network_user_kb_documents`, `network_user_kb_facts`, `network_user_anti_persona`, `network_user_voice_intake`. Migration: `drizzle/network/0002_broad_mac_gargan.sql`.
+- **Engine helpers:** markdown-backed KB storage, path traversal guards, source-traced extraction, manual fact edit/archive/visibility audit, voice transcript intake, audience-filtered context assembly, guarded step-run creation, and off-network scout parsing/scrubbing.
+- **Tool/prompt surface:** built-ins registered for exact tool names `extract_kb_facts`, `record_voice_intake`, and `scout_off_network`; expert/client prompts now carry KB/scout privacy directives.
+- **API routes:** upload, voice, visibility/list/private-filter, and scout routes create audited network-lane step runs, return structured 503 for network DB outages, reject caller `stepRunId` bypasses, and avoid budget/private-filter leakage.
+- **UI:** expert chat shows a KB shelf after handle claim with upload, paste/voice transcript, manual fact, private filter, edit/archive, and visibility controls. Client scout CTA calls the real scout route; scouted candidates render with public source labels/links/snippets and review-only CTA copy.
+
+**Review:** fresh-context reviewer returned **PASS WITH FIXES** on five issues: scout cache audit wrapper, query privacy scrubbing, visible-result scrubbing, private-filter ID traversal, and shelf reload persistence. Builder fixed all five. Targeted reviewer re-check returned **PASS**.
+
+**Verification:**
+- Focused Brief 258 Vitest: 14 files / 73 tests PASS.
+- Reviewer targeted regression: 5 files / 19 tests PASS.
+- `pnpm --filter @ditto/core type-check` PASS.
+- `pnpm run type-check` PASS.
+- `pnpm --filter @ditto/web type-check` PASS.
+- Schema smoke: `pgTable` count = 13; `drizzle/network/0002_broad_mac_gargan.sql` contains all four KB tables, FKs, and user/status/updated indexes.
+- Full `pnpm test` FAILS repo-wide with existing baseline drift: 189 files passed, 19 failed, 130 failing tests. Dominant failures are legacy workspace SQLite tests still expecting/using `network_users.handle`, network DB env assumptions, and unrelated route timeouts.
+
+**Pending:** human approve/revise. After approval, invoke `/dev-documenter` for full retrospective/state cleanup. Briefs 259, 260, and 261 still own public profile-as-chat, share artifacts, and actual introduction/outreach emission.
+
+---
+
+## PREVIOUS — Builder: Brief 263 (Network Tier Postgres Migration — Supabase) implemented + reviewed (2026-05-09)
 
 **Direct trigger:** human invoked `/dev-builder 263` after Brief 262 landed (Brief 263's prerequisite). Brief 263 is foundation step 2 of parent Brief 254 — it executes ADR-036 §3 (file split) + the dialect swap superseded into ADR-048 (Supabase Postgres host).
 

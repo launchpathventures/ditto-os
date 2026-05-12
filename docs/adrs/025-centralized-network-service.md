@@ -181,6 +181,16 @@ When a user graduates from Layer 2 (active user, no workspace) to Layer 3 (works
    - Persona assignment → same Alex/Mira in workspace
 4. Workspace imports. Self already knows the user. No cold start.
 
+Seed attempt completion is a workspace-local contract, not only a successful-row-import contract:
+
+| Path | Network response | Workspace behavior |
+|------|------------------|--------------------|
+| A | Seed returns one or more self memories | Import rows; first boot is complete. |
+| B | Seed returns successfully with zero self memories | Write a self-scoped `network-seed-attempt` sentinel for the network user id; first boot is complete. |
+| C | Seed fetch fails or Network is unavailable | Use provisioner-injected `DITTO_WORKSPACE_USER_ID` to write the same sentinel; first boot is complete without pretending data was imported. |
+
+Strict health (`/healthz?deep=true`) reports missing seed attempt and Network outage as degraded. Provisioning health (`/healthz?deep=true&mode=provisioning`) accepts paths A/B/C once local schema is healthy, so a transient Network outage does not roll back a usable workspace.
+
 After seed, ongoing sync via SSE events. Network is authoritative for network data. Workspace is authoritative for workspace data. Conflict resolution: **domain split** — Network owns person records, interactions, person memory. Workspace owns self memory, user notes, plans, processes. No same-field conflicts because the domains are separated.
 
 ### 7. The three entry paths

@@ -627,12 +627,23 @@ async function triggerWorkspaceProvisioning(
 
     // Send welcome email with magic link
     const { sendWorkspaceWelcome } = await import("./workspace-welcome");
-    const welcomeResult = await sendWorkspaceWelcome(userId, result.workspaceUrl);
+    if (!result.bootstrapLoginUrl) {
+      console.warn(
+        `[inbound] Workspace already exists or no bootstrap login URL was generated for ${userEmail}; not sending a Network-local login link.`,
+      );
+      return;
+    }
+    const welcomeResult = await sendWorkspaceWelcome(userId, result.workspaceUrl, {
+      bootstrapLoginUrl: result.bootstrapLoginUrl,
+    });
     if (!welcomeResult.success) {
       console.error(`[inbound] Welcome email failed for ${userEmail}:`, welcomeResult.error);
     }
   } catch (err) {
-    console.error(`[inbound] Workspace provisioning failed for ${userEmail}:`, err);
+    const { provisioningErrorMessage } = await import("./workspace-provisioner");
+    console.error(
+      `[inbound] Workspace provisioning failed for ${userEmail}: ${provisioningErrorMessage(err)}`,
+    );
 
     // Send failure notification — don't let the user wonder
     try {
@@ -856,8 +867,11 @@ async function handleUserEmail(
       });
 
       // Trigger async provisioning — don't await the full saga
-      triggerWorkspaceProvisioning(networkUser.id, senderEmail, personId, subject, message.messageId).catch((err) => {
-        console.error(`[inbound] Workspace provisioning failed for ${senderEmail}:`, err);
+      triggerWorkspaceProvisioning(networkUser.id, senderEmail, personId, subject, message.messageId).catch(async (err) => {
+        const { provisioningErrorMessage } = await import("./workspace-provisioner");
+        console.error(
+          `[inbound] Workspace provisioning failed for ${senderEmail}: ${provisioningErrorMessage(err)}`,
+        );
       });
 
       return {

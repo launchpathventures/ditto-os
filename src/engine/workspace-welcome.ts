@@ -13,9 +13,9 @@
  * Provenance: Brief 153 (workspace provisioning wiring), Brief 123 (magic link).
  */
 
-import { db, schema } from "../db";
+import { networkDb } from "../db/network-db";
+import * as networkSchema from "@ditto/core/db/network";
 import { eq } from "drizzle-orm";
-import { createWorkspaceMagicLink } from "./magic-link";
 import { notifyUser } from "./notify-user";
 
 export interface WorkspaceWelcomeResult {
@@ -33,16 +33,17 @@ export interface WorkspaceWelcomeResult {
 export async function sendWorkspaceWelcome(
   userId: string,
   workspaceUrl: string,
+  options: { bootstrapLoginUrl: string },
 ): Promise<WorkspaceWelcomeResult> {
   // Look up user
-  const [user] = await db
+  const [user] = await networkDb
     .select({
-      email: schema.networkUsers.email,
-      name: schema.networkUsers.name,
-      personId: schema.networkUsers.personId,
+      email: networkSchema.networkUsers.email,
+      name: networkSchema.networkUsers.name,
+      personId: networkSchema.networkUsers.personId,
     })
-    .from(schema.networkUsers)
-    .where(eq(schema.networkUsers.id, userId))
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.id, userId))
     .limit(1);
 
   if (!user) {
@@ -53,10 +54,12 @@ export async function sendWorkspaceWelcome(
     return { success: false, error: `No personId linked for user ${userId}` };
   }
 
-  // Generate a workspace magic link
-  const magicLink = await createWorkspaceMagicLink(user.email);
-  if (!magicLink) {
-    return { success: false, error: "Magic link rate limited" };
+  const loginUrl = options.bootstrapLoginUrl;
+  if (!loginUrl || !loginUrl.startsWith(`${workspaceUrl.replace(/\/+$/, "")}/login/auth?token=wbt_`)) {
+    return {
+      success: false,
+      error: "Workspace bootstrap login URL is required and must target the provisioned workspace",
+    };
   }
 
   // Send the welcome email
@@ -64,7 +67,7 @@ export async function sendWorkspaceWelcome(
     `Your workspace is ready.`,
     ``,
     `Here's your private link:`,
-    magicLink.url,
+    loginUrl,
     ``,
     `Click it to get started — everything you've been working on is already there.`,
   ].join("\n");
@@ -79,7 +82,7 @@ export async function sendWorkspaceWelcome(
       urgent: true, // Workspace welcome should always reach the user
     });
 
-    return { success: true, magicLinkUrl: magicLink.url };
+    return { success: true, magicLinkUrl: loginUrl };
   } catch (err) {
     return {
       success: false,

@@ -12,11 +12,15 @@
  * ADR-025 (centralized Network Service), saga/compensating transaction pattern.
  */
 
-import { db as defaultDb, schema } from "../db";
-import { eq, and, ne } from "drizzle-orm";
+import { networkDb as defaultNetworkDb } from "../db/network-db";
+import * as networkSchema from "@ditto/core/db/network";
+import { eq, ne } from "drizzle-orm";
 import { createToken, revokeToken } from "./network-api-auth";
 import { randomBytes, createHash } from "crypto";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { createWorkspaceBootstrapLoginLink } from "./magic-link";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+
+export type NetworkDbHandle = PostgresJsDatabase<typeof networkSchema>;
 
 // ============================================================
 // Railway GraphQL API Client Interface
@@ -81,12 +85,16 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Railway API error: ${response.status} ${response.statusText} — ${body}`);
+      throw new Error(
+        `Railway API error: ${response.status} ${response.statusText} — ${redactSecretText(body)}`,
+      );
     }
 
     const json = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
     if (json.errors?.length) {
-      throw new Error(`Railway GraphQL error: ${json.errors.map((e) => e.message).join(", ")}`);
+      throw new Error(
+        `Railway GraphQL error: ${json.errors.map((e) => redactSecretText(e.message)).join(", ")}`,
+      );
     }
 
     return json.data as T;
@@ -230,7 +238,7 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
 export interface ProvisionerConfigBase {
   railwayClient: RailwayClient;
   projectId: string;
-  db?: typeof defaultDb;
+  networkDb?: NetworkDbHandle;
   /** Progress callback — called at each step */
   onProgress?: (message: string) => void;
 }
@@ -239,7 +247,7 @@ export interface ProvisionerConfigBase {
 export interface ProvisionerConfig extends ProvisionerConfigBase {
   imageRef: string;
   networkUrl: string;
-  /** Owner email — injected as WORKSPACE_OWNER_EMAIL env var for magic-link auth (Brief 153) */
+  /** @deprecated Owner email is resolved from networkUsers before Railway side effects. */
   ownerEmail?: string;
   /** Health check timeout in ms (default: 120000) */
   healthCheckTimeoutMs?: number;
@@ -247,6 +255,82 @@ export interface ProvisionerConfig extends ProvisionerConfigBase {
   healthCheckIntervalMs?: number;
   /** Deploy status poll interval in ms (default: 5000) */
   deployPollIntervalMs?: number;
+}
+
+export const MANAGED_WORKSPACE_VOLUME_MOUNT_PATH = "/data";
+export const MANAGED_WORKSPACE_DATABASE_PATH = `${MANAGED_WORKSPACE_VOLUME_MOUNT_PATH}/ditto.db`;
+
+export interface ManagedWorkspaceEnvInput {
+  userId: string;
+  ownerEmail: string;
+  networkUrl: string;
+  networkToken: string;
+  workspaceUrl: string;
+  sessionSecret: string;
+  networkAuthSecret?: string;
+}
+
+export function buildManagedWorkspaceEnv(input: ManagedWorkspaceEnvInput): Record<string, string> {
+  assertManagedWorkspaceVolumePath(
+    MANAGED_WORKSPACE_VOLUME_MOUNT_PATH,
+    MANAGED_WORKSPACE_DATABASE_PATH,
+  );
+
+  return {
+    DITTO_DEPLOYMENT: "workspace",
+    DITTO_WORKSPACE_USER_ID: input.userId,
+    WORKSPACE_OWNER_EMAIL: input.ownerEmail.toLowerCase(),
+    SESSION_SECRET: input.sessionSecret,
+    NETWORK_AUTH_SECRET: input.networkAuthSecret ?? input.sessionSecret,
+    DITTO_NETWORK_URL: input.networkUrl,
+    DITTO_NETWORK_TOKEN: input.networkToken,
+    DATABASE_PATH: MANAGED_WORKSPACE_DATABASE_PATH,
+    NEXT_PUBLIC_APP_URL: input.workspaceUrl,
+  };
+}
+
+export function assertManagedWorkspaceVolumePath(mountPath: string, databasePath: string): void {
+  const normalizedMount = mountPath.replace(/\/+$/, "");
+  if (!databasePath.startsWith(`${normalizedMount}/`)) {
+    throw new Error(
+      `Managed workspace DATABASE_PATH (${databasePath}) must live under Railway volume mount (${mountPath})`,
+    );
+  }
+}
+
+export class ManagedWorkspacePreflightError extends Error {
+  constructor(
+    public readonly reason: "missing_user" | "missing_email",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ManagedWorkspacePreflightError";
+  }
+}
+
+const SECRET_TEXT_PATTERNS: RegExp[] = [
+  /\b(?:DITTO_NETWORK_TOKEN|SESSION_SECRET|NETWORK_AUTH_SECRET|bootstrapLoginUrl|bootstrap_login_url|token)\b["'\s:=]+["']?[^"',\s}]+/gi,
+  /\bdnt_[A-Za-z0-9_-]+/g,
+  /\bwbt_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+  /\b[a-f0-9]{64}\b/gi,
+];
+
+export function redactSecretText(input: string): string {
+  let output = input;
+  for (const pattern of SECRET_TEXT_PATTERNS) {
+    output = output.replace(pattern, (match) => {
+      const separator = match.match(/^(.*?["'\s:=]+)(["']?)/);
+      if (separator?.[1]) {
+        return `${separator[1]}${separator[2] ?? ""}[redacted]`;
+      }
+      return "[redacted]";
+    });
+  }
+  return output;
+}
+
+export function provisioningErrorMessage(error: unknown): string {
+  return redactSecretText(error instanceof Error ? error.message : String(error));
 }
 
 // ============================================================
@@ -278,6 +362,7 @@ export function checkRateLimit(tokenId: string): boolean {
 
 export interface ProvisionResult {
   workspaceUrl: string;
+  bootstrapLoginUrl?: string;
   serviceId: string;
   volumeId: string;
   tokenId: string;
@@ -300,13 +385,36 @@ export async function provisionWorkspace(
   userId: string,
   config: ProvisionerConfig,
 ): Promise<ProvisionResult> {
-  const database = config.db ?? defaultDb;
+  const database = config.networkDb ?? defaultNetworkDb;
+
+  const [networkUser] = await database
+    .select({
+      id: networkSchema.networkUsers.id,
+      email: networkSchema.networkUsers.email,
+    })
+    .from(networkSchema.networkUsers)
+    .where(eq(networkSchema.networkUsers.id, userId))
+    .limit(1);
+
+  if (!networkUser) {
+    throw new ManagedWorkspacePreflightError(
+      "missing_user",
+      `Network user ${userId} was not found; refusing to provision a managed workspace.`,
+    );
+  }
+  if (!networkUser.email) {
+    throw new ManagedWorkspacePreflightError(
+      "missing_email",
+      `Network user ${userId} has no email; refusing to provision a managed workspace without auth.`,
+    );
+  }
+  const ownerEmail = networkUser.email.toLowerCase();
 
   // Step 1: Check idempotency
   const [existing] = await database
     .select()
-    .from(schema.managedWorkspaces)
-    .where(eq(schema.managedWorkspaces.userId, userId))
+    .from(networkSchema.managedWorkspaces)
+    .where(eq(networkSchema.managedWorkspaces.userId, userId))
     .limit(1);
 
   if (existing) {
@@ -353,45 +461,55 @@ export async function provisionWorkspace(
 
     // Step 4: Create Volume (mount at /data)
     progress("Creating volume...");
-    const volume = await config.railwayClient.createVolume(service.id, "/data");
+    const volume = await config.railwayClient.createVolume(
+      service.id,
+      MANAGED_WORKSPACE_VOLUME_MOUNT_PATH,
+    );
     created.volumeId = volume.id;
     progress("Creating volume... done");
 
     // Step 5: Generate network token for user
     progress("Creating token...");
-    const { token, id: tokenId } = await createToken(userId, { isAdmin: false });
+    const { token, id: tokenId } = await createToken(userId, { isAdmin: false }, database);
     created.tokenId = tokenId;
     progress("Creating token... done");
 
-    // Step 6: Generate NETWORK_AUTH_SECRET for magic link auth
-    const authSecret = randomBytes(32).toString("hex");
-    const authSecretHash = createHash("sha256").update(authSecret).digest("hex");
+    // Step 6: Generate workspace auth secret for cookie + bootstrap login HMAC.
+    const sessionSecret = randomBytes(32).toString("hex");
+    const authSecretHash = createHash("sha256").update(sessionSecret).digest("hex");
 
-    // Step 7: Upsert env vars (skipDeploys-equivalent: we deploy separately)
-    progress("Setting environment variables...");
-    const envVars: Record<string, string> = {
-      DITTO_NETWORK_URL: config.networkUrl,
-      DITTO_NETWORK_TOKEN: token,
-      DATABASE_PATH: "/app/data/ditto.db",
-      NETWORK_AUTH_SECRET: authSecret,
-    };
-    if (config.ownerEmail) {
-      envVars.WORKSPACE_OWNER_EMAIL = config.ownerEmail;
-    }
-    await config.railwayClient.upsertVariables(service.id, environmentId, envVars);
-    progress("Setting environment variables... done");
-
-    // Step 8: Deploy the service
-    progress("Deploying service...");
-    const deployment = await config.railwayClient.deployService(service.id, environmentId);
-    progress("Deploying service... done");
-
-    // Step 9: Create public domain
+    // Step 7: Create public domain before env injection so the workspace knows
+    // its own canonical audience/base URL on first boot.
     progress("Creating domain...");
     const domain = await config.railwayClient.createDomain(service.id, environmentId);
     created.domainId = domain.id;
     const workspaceUrl = `https://${domain.domain}`;
     progress("Creating domain... done");
+
+    const bootstrapLogin = createWorkspaceBootstrapLoginLink({
+      workspaceUrl,
+      userId,
+      email: ownerEmail,
+      secret: sessionSecret,
+    });
+
+    // Step 8: Upsert env vars (skipDeploys-equivalent: we deploy separately)
+    progress("Setting environment variables...");
+    const envVars = buildManagedWorkspaceEnv({
+      userId,
+      ownerEmail,
+      networkUrl: config.networkUrl,
+      networkToken: token,
+      workspaceUrl,
+      sessionSecret,
+    });
+    await config.railwayClient.upsertVariables(service.id, environmentId, envVars);
+    progress("Setting environment variables... done");
+
+    // Step 9: Deploy the service
+    progress("Deploying service...");
+    const deployment = await config.railwayClient.deployService(service.id, environmentId);
+    progress("Deploying service... done");
 
     // Step 10: Poll deployment status until ACTIVE
     progress("Waiting for deployment...");
@@ -418,11 +536,11 @@ export async function provisionWorkspace(
       const timeoutSec = Math.round((config.healthCheckTimeoutMs ?? 120_000) / 1000);
       throw new Error(`Health check failed after ${timeoutSec}s for workspace ${userId}`);
     }
-    progress("Waiting for health check... ok (seed imported, network reachable)");
+    progress("Waiting for health check... ok (workspace bootstrapped)");
 
     // Step 12: Record in managedWorkspaces table
     const [record] = await database
-      .insert(schema.managedWorkspaces)
+      .insert(networkSchema.managedWorkspaces)
       .values({
         userId,
         machineId: service.id, // backward compat — store serviceId in dead column
@@ -438,21 +556,22 @@ export async function provisionWorkspace(
         tokenId,
         authSecretHash,
       })
-      .returning({ id: schema.managedWorkspaces.id });
+      .returning({ id: networkSchema.managedWorkspaces.id });
     created.dbRecordId = record.id;
 
     // Brief 153: Update networkUsers status to "workspace" and link workspaceId
     await database
-      .update(schema.networkUsers)
+      .update(networkSchema.networkUsers)
       .set({
         status: "workspace",
         workspaceId: record.id,
         workspaceAcceptedAt: new Date(),
       })
-      .where(eq(schema.networkUsers.id, userId));
+      .where(eq(networkSchema.networkUsers.id, userId));
 
     return {
       workspaceUrl,
+      bootstrapLoginUrl: bootstrapLogin.url,
       serviceId: service.id,
       machineId: service.id, // backward compat
       volumeId: volume.id,
@@ -483,12 +602,12 @@ export async function deprovisionWorkspace(
   userId: string,
   config: ProvisionerConfigBase,
 ): Promise<DeprovisionResult> {
-  const database = config.db ?? defaultDb;
+  const database = config.networkDb ?? defaultNetworkDb;
 
   const [workspace] = await database
     .select()
-    .from(schema.managedWorkspaces)
-    .where(eq(schema.managedWorkspaces.userId, userId))
+    .from(networkSchema.managedWorkspaces)
+    .where(eq(networkSchema.managedWorkspaces.userId, userId))
     .limit(1);
 
   if (!workspace) {
@@ -514,7 +633,7 @@ export async function deprovisionWorkspace(
   // Step 3: Revoke network token
   progress("Revoking token...");
   try {
-    await revokeToken(workspace.tokenId);
+    await revokeToken(workspace.tokenId, database);
   } catch (error) {
     console.warn(`[provisioner] Failed to revoke token ${workspace.tokenId}:`, error);
   }
@@ -522,13 +641,13 @@ export async function deprovisionWorkspace(
 
   // Step 4: Update record
   await database
-    .update(schema.managedWorkspaces)
+    .update(networkSchema.managedWorkspaces)
     .set({
       status: "deprovisioned",
       deprovisionedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(schema.managedWorkspaces.id, workspace.id));
+    .where(eq(networkSchema.managedWorkspaces.id, workspace.id));
 
   return { userId, status: "deprovisioned" };
 }
@@ -557,14 +676,14 @@ export interface FleetWorkspace {
  * Get fleet status — all managed workspaces.
  */
 export async function getFleetStatus(
-  database?: typeof defaultDb,
+  database?: NetworkDbHandle,
 ): Promise<FleetWorkspace[]> {
-  const db = database ?? defaultDb;
+  const db = database ?? defaultNetworkDb;
 
   const workspaces = await db
     .select()
-    .from(schema.managedWorkspaces)
-    .where(ne(schema.managedWorkspaces.status, "deprovisioned"));
+    .from(networkSchema.managedWorkspaces)
+    .where(ne(networkSchema.managedWorkspaces.status, "deprovisioned"));
 
   return workspaces.map((w) => ({
     id: w.id,
@@ -587,14 +706,14 @@ export async function getFleetStatus(
  */
 export async function getWorkspaceStatus(
   userId: string,
-  database?: typeof defaultDb,
+  database?: NetworkDbHandle,
 ): Promise<FleetWorkspace | null> {
-  const db = database ?? defaultDb;
+  const db = database ?? defaultNetworkDb;
 
   const [workspace] = await db
     .select()
-    .from(schema.managedWorkspaces)
-    .where(eq(schema.managedWorkspaces.userId, userId))
+    .from(networkSchema.managedWorkspaces)
+    .where(eq(networkSchema.managedWorkspaces.userId, userId))
     .limit(1);
 
   if (!workspace) return null;
@@ -647,8 +766,8 @@ async function waitForDeployment(
 }
 
 /**
- * Wait for deep health check to pass.
- * Polls GET /healthz?deep=true every intervalMs until timeout.
+ * Wait for provisioning-mode deep health check to pass.
+ * Polls GET /healthz?deep=true&mode=provisioning every intervalMs until timeout.
  */
 async function waitForDeepHealth(
   workspaceUrl: string,
@@ -659,13 +778,13 @@ async function waitForDeepHealth(
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${workspaceUrl}/healthz?deep=true`, {
+      const res = await fetch(`${workspaceUrl}/healthz?deep=true&mode=provisioning`, {
         signal: AbortSignal.timeout(15_000),
       });
 
       if (res.ok) {
         const body = await res.json();
-        if (body.status === "ok") {
+        if (body.status === "ok" && body.mode === "provisioning") {
           return true;
         }
       }
@@ -685,7 +804,7 @@ async function waitForDeepHealth(
 async function cleanupResources(
   config: ProvisionerConfigBase,
   workspace: { machineId: string; serviceId: string | null; volumeId: string; tokenId: string; id: string },
-  database: typeof defaultDb,
+  database: NetworkDbHandle,
 ): Promise<void> {
   const serviceId = workspace.serviceId ?? workspace.machineId;
 
@@ -694,12 +813,12 @@ async function cleanupResources(
   } catch { /* may already be deleted */ }
 
   try {
-    await revokeToken(workspace.tokenId);
+    await revokeToken(workspace.tokenId, database);
   } catch { /* may already be revoked */ }
 
   await database
-    .delete(schema.managedWorkspaces)
-    .where(eq(schema.managedWorkspaces.id, workspace.id));
+    .delete(networkSchema.managedWorkspaces)
+    .where(eq(networkSchema.managedWorkspaces.id, workspace.id));
 }
 
 /**
@@ -714,14 +833,14 @@ async function rollback(
     domainId?: string;
     dbRecordId?: string;
   },
-  database: typeof defaultDb,
+  database: NetworkDbHandle,
 ): Promise<void> {
   // Reverse order: DB record → service (cascades volume + domain) → token
   if (created.dbRecordId) {
     try {
       await database
-        .delete(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.id, created.dbRecordId));
+        .delete(networkSchema.managedWorkspaces)
+        .where(eq(networkSchema.managedWorkspaces.id, created.dbRecordId));
     } catch (e) {
       console.error("[provisioner] Rollback: failed to delete DB record:", e);
     }
@@ -738,7 +857,7 @@ async function rollback(
 
   if (created.tokenId) {
     try {
-      await revokeToken(created.tokenId);
+      await revokeToken(created.tokenId, database);
     } catch (e) {
       console.error("[provisioner] Rollback: failed to revoke token:", e);
     }

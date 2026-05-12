@@ -25,7 +25,9 @@
 import postgres from "postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { sql } from "drizzle-orm";
 import path from "path";
+import fs from "fs";
 import * as networkSchema from "@ditto/core/db/network";
 import { PROJECT_ROOT } from "../paths.js";
 
@@ -63,6 +65,7 @@ function resolveConnectionUrl(): string {
  */
 let _client: ReturnType<typeof postgres> | null = null;
 let _db: PostgresJsDatabase<typeof networkSchema> | null = null;
+let lastNetworkSchemaSyncError: string | null = null;
 
 function getClient(): ReturnType<typeof postgres> {
   if (_client) return _client;
@@ -197,14 +200,74 @@ export async function ensureNetworkSchema(): Promise<void> {
   const migrationsFolder = path.join(PROJECT_ROOT, "drizzle", "network");
   try {
     await migrate(getNetworkDb(), { migrationsFolder });
+    lastNetworkSchemaSyncError = null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    lastNetworkSchemaSyncError = message;
     console.error(
       `[network-db] ensureNetworkSchema failed: ${message}. Network-tier API ` +
         "routes will return 503 until connectivity is restored. See ADR-048 " +
         "and .env.example for SUPABASE_DB_URL configuration.",
     );
     throw err;
+  }
+}
+
+export interface NetworkSchemaHealth {
+  status: "ok" | "behind" | "error";
+  applied: number;
+  expected: number;
+  error?: string;
+}
+
+function readNetworkJournalHead(): number {
+  const metaPath = path.join(PROJECT_ROOT, "drizzle", "network", "meta", "_journal.json");
+  if (!fs.existsSync(metaPath)) return 0;
+  const journal = JSON.parse(fs.readFileSync(metaPath, "utf-8")) as {
+    entries?: unknown[];
+  };
+  return journal.entries?.length ?? 0;
+}
+
+export async function getNetworkSchemaHealth(
+  database: PostgresJsDatabase<typeof networkSchema> = networkDb,
+): Promise<NetworkSchemaHealth> {
+  const expected = readNetworkJournalHead();
+  if (lastNetworkSchemaSyncError) {
+    return {
+      status: "error",
+      applied: 0,
+      expected,
+      error: lastNetworkSchemaSyncError,
+    };
+  }
+
+  try {
+    let rows = await database.execute(
+      sql`SELECT count(*)::int AS cnt FROM drizzle.__drizzle_migrations`,
+    ) as unknown;
+    let first = Array.isArray(rows) ? rows[0] : undefined;
+
+    if (!first) {
+      rows = await database.execute(
+        sql`SELECT count(*)::int AS cnt FROM __drizzle_migrations`,
+      ) as unknown;
+      first = Array.isArray(rows) ? rows[0] : undefined;
+    }
+
+    const applied = Number((first as { cnt?: unknown } | undefined)?.cnt ?? 0);
+    return {
+      status: applied >= expected ? "ok" : "behind",
+      applied,
+      expected,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      applied: 0,
+      expected,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -285,6 +348,7 @@ export function __resetNetworkDbForTesting(): void {
   }
   _client = null;
   _db = null;
+  lastNetworkSchemaSyncError = null;
 }
 
 export { networkSchema };

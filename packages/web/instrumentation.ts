@@ -93,7 +93,19 @@ export async function register() {
       console.log("[instrumentation] Schema sync complete.");
     } catch (error) {
       console.error("[instrumentation] Schema sync failed:", error);
-      // Non-fatal — server can still start, schema may already be current
+      throw error;
+    }
+
+    if ((process.env.DITTO_DEPLOYMENT ?? "workspace").trim().toLowerCase() === "public") {
+      try {
+        const { ensureNetworkSchema } = await import("../../src/db/network-db");
+        await ensureNetworkSchema();
+        console.log("[instrumentation] Network schema sync complete.");
+      } catch (error) {
+        console.error("[instrumentation] Network schema sync failed:", error);
+        // Non-fatal for the central Network Service boot path — network routes
+        // surface structured 503s and strict health reports degraded.
+      }
     }
 
     // Initialize LLM provider for front-door chat and other API routes
@@ -295,7 +307,10 @@ export async function register() {
     // fetch and import the workspace seed from the Network Service.
     if (process.env.DITTO_NETWORK_URL) {
       try {
-        const { isFirstBoot, fetchAndImportSeed } = await import(
+        const {
+          isFirstBoot,
+          fetchAndImportSeed,
+        } = await import(
           "../../src/engine/network-seed"
         );
 
@@ -309,6 +324,14 @@ export async function register() {
           }
         }
       } catch (error) {
+        try {
+          const { writeSeedFetchFailureSentinelFromEnv } = await import(
+            "../../src/engine/network-seed"
+          );
+          await writeSeedFetchFailureSentinelFromEnv();
+        } catch (sentinelError) {
+          console.error("[instrumentation] Seed failure sentinel write failed:", sentinelError);
+        }
         console.error("[instrumentation] Seed import failed:", error);
         // Non-fatal — workspace works standalone without seed
       }

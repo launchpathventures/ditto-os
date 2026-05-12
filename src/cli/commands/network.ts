@@ -172,7 +172,7 @@ const provisionCommand = defineCommand({
       process.exit(1);
     }
 
-    const { provisionWorkspace, createRailwayClient } = await import(
+    const { provisionWorkspace, createRailwayClient, provisioningErrorMessage } = await import(
       "../../engine/workspace-provisioner"
     );
 
@@ -193,7 +193,11 @@ const provisionCommand = defineCommand({
         console.log(`Workspace provisioned: ${result.workspaceUrl}`);
       }
     } catch (error) {
-      console.error(`Provisioning failed: ${error instanceof Error ? error.message : "unknown"}`);
+      if (error instanceof Error && error.name === "ManagedWorkspacePreflightError") {
+        console.error(`Provisioning preflight failed: ${error.message}`);
+        process.exit(1);
+      }
+      console.error(`Provisioning failed: ${provisioningErrorMessage(error)}`);
       console.error("All resources have been rolled back.");
       process.exit(1);
     }
@@ -340,7 +344,8 @@ const upgradeCommand = defineCommand({
 
     const maxFailures = parseInt(args["max-failures"] || "2", 10);
 
-    const { db, schema } = await import("../../db");
+    const { networkDb } = await import("../../db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const {
       createWorkspaceUpgrader,
       createRailwayServiceClient,
@@ -362,8 +367,8 @@ const upgradeCommand = defineCommand({
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),
@@ -398,7 +403,8 @@ const rollbackCommand = defineCommand({
   },
   args: {},
   async run() {
-    const { db, schema } = await import("../../db");
+    const { networkDb } = await import("../../db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const {
       createWorkspaceUpgrader,
       createRailwayServiceClient,
@@ -420,8 +426,8 @@ const rollbackCommand = defineCommand({
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(process.env.DITTO_ALERT_WEBHOOK_URL),
@@ -464,7 +470,8 @@ const upgradesCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const { db, schema } = await import("../../db");
+    const { networkDb } = await import("../../db/network-db");
+    const networkSchema = await import("@ditto/core/db/network");
     const {
       createWorkspaceUpgrader,
       createRailwayServiceClient,
@@ -478,8 +485,8 @@ const upgradesCommand = defineCommand({
     });
 
     const upgrader = createWorkspaceUpgrader({
-      db: db as any,
-      schema,
+      db: networkDb as any,
+      schema: networkSchema as any,
       railwayClient,
       healthChecker: createHealthChecker(),
       alertSender: createAlertSender(),

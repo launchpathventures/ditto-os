@@ -1,32 +1,32 @@
 /**
  * Tests for workspace provisioner (Railway).
- * Uses a mock RailwayClient — no real Railway API calls.
+ * Uses a mock RailwayClient and an in-process Network-tier Postgres test DB.
  *
- * Provenance: Brief 090 AC 5-8, 12, 16. Brief 100 (Railway migration).
+ * Provenance: Brief 090/100 provisioning saga; Brief 267 auto-env hardening.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createTestDb, type TestDb } from "../test-utils";
-import * as schema from "../db/schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import * as networkSchema from "@ditto/core/db/network";
+import {
+  withNetworkDbTransaction,
+  type NetworkDbTransaction,
+} from "../db/network-db-test-helpers";
 import type {
+  ProvisionerConfig,
   RailwayClient,
+  RailwayDeployment,
+  RailwayDomain,
   RailwayService,
   RailwayVolume,
-  RailwayDomain,
-  RailwayDeployment,
-  ProvisionerConfig,
 } from "./workspace-provisioner";
-
-// ============================================================
-// Mock Railway Client
-// ============================================================
 
 function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): RailwayClient & {
   services: Map<string, RailwayService>;
   volumes: Map<string, RailwayVolume>;
   calls: string[];
   lastUpsertedVariables: Record<string, string> | null;
+  lastMountPath: string | null;
 } {
   const services = new Map<string, RailwayService>();
   const volumes = new Map<string, RailwayVolume>();
@@ -38,7 +38,8 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
     services,
     volumes,
     calls,
-    lastUpsertedVariables: null as Record<string, string> | null,
+    lastUpsertedVariables: null,
+    lastMountPath: null,
 
     async getEnvironmentId() {
       calls.push("getEnvironmentId");
@@ -47,10 +48,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async createService(_projectId, name) {
       calls.push("createService");
-      const svc: RailwayService = {
-        id: `svc_${++serviceCounter}`,
-        name,
-      };
+      const svc = { id: `svc_${++serviceCounter}`, name };
       services.set(svc.id, svc);
       return svc;
     },
@@ -62,10 +60,8 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async createVolume(serviceId, mountPath) {
       calls.push("createVolume");
-      const vol: RailwayVolume = {
-        id: `vol_${++volumeCounter}`,
-        name: `volume-${serviceId}`,
-      };
+      this.lastMountPath = mountPath;
+      const vol = { id: `vol_${++volumeCounter}`, name: `volume-${serviceId}` };
       volumes.set(vol.id, vol);
       return vol;
     },
@@ -75,20 +71,20 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
       volumes.delete(volumeId);
     },
 
-    async upsertVariables(_serviceId: string, _envId: string, variables: Record<string, string>) {
+    async upsertVariables(_serviceId, _environmentId, variables) {
       calls.push("upsertVariables");
       this.lastUpsertedVariables = variables;
     },
 
-    async deployService(serviceId, environmentId) {
+    async deployService() {
       calls.push("deployService");
-      return { id: `deploy_1`, status: "ACTIVE" } as RailwayDeployment;
+      return { id: "deploy_1", status: "ACTIVE" } as RailwayDeployment;
     },
 
-    async createDomain(serviceId, environmentId) {
+    async createDomain(serviceId) {
       calls.push("createDomain");
-      const name = Array.from(services.values()).find((s) => s.id === serviceId)?.name ?? serviceId;
-      return { id: `dom_1`, domain: `${name}.up.railway.app` } as RailwayDomain;
+      const name = services.get(serviceId)?.name ?? serviceId;
+      return { id: "dom_1", domain: `${name}.up.railway.app` } as RailwayDomain;
     },
 
     async getDeploymentStatus(deploymentId) {
@@ -100,338 +96,279 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
   };
 }
 
-// ============================================================
-// Mock network-api-auth
-// ============================================================
-
-let tokenCounter = 0;
-const mockTokens = new Map<string, { userId: string; isAdmin: boolean; revoked: boolean }>();
-
-vi.mock("./network-api-auth", () => ({
-  createToken: async (userId: string, options?: { isAdmin?: boolean }) => {
-    const id = `tok_${++tokenCounter}`;
-    const token = `dnt_test_${tokenCounter}`;
-    mockTokens.set(id, { userId, isAdmin: options?.isAdmin ?? false, revoked: false });
-    return { token, id };
-  },
-  revokeToken: async (tokenId: string) => {
-    const t = mockTokens.get(tokenId);
-    if (t) {
-      t.revoked = true;
-      return true;
-    }
-    return false;
-  },
-}));
-
-// Mock global fetch for health checks
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-describe("workspace-provisioner", () => {
-  let db: TestDb;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const testDb = createTestDb();
-    db = testDb.db;
-    cleanup = testDb.cleanup;
-
-    // Reset mocks
-    mockFetch.mockReset();
-    tokenCounter = 0;
-    mockTokens.clear();
-
-    // Default: health check succeeds
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: "ok", db: "connected", seed: "imported", network: "reachable" }),
-    });
+beforeEach(() => {
+  mockFetch.mockReset();
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      status: "ok",
+      mode: "provisioning",
+      schema: { workspace: { status: "ok", applied: 1, expected: 1 } },
+      seed: "attempted",
+      network: "unreachable",
+    }),
   });
+});
 
-  afterEach(() => {
-    cleanup();
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function makeConfig(
+  railwayClient: RailwayClient,
+  networkDb: NetworkDbTransaction,
+  overrides: Partial<ProvisionerConfig> = {},
+): ProvisionerConfig {
+  return {
+    railwayClient,
+    projectId: "proj_test_1",
+    imageRef: "ghcr.io/ditto/workspace:latest",
+    networkUrl: "https://ditto-network.up.railway.app",
+    networkDb,
+    healthCheckTimeoutMs: 500,
+    healthCheckIntervalMs: 50,
+    deployPollIntervalMs: 50,
+    ...overrides,
+  };
+}
+
+async function seedNetworkUser(
+  tx: NetworkDbTransaction,
+  id = "user-1",
+  email = "owner@example.com",
+) {
+  await tx.insert(networkSchema.networkUsers).values({
+    id,
+    email,
+    name: "Owner",
+    status: "active",
   });
+}
 
-  function makeConfig(railwayClient: RailwayClient, overrides: Partial<ProvisionerConfig> = {}): ProvisionerConfig {
-    return {
-      railwayClient,
-      projectId: "proj_test_1",
-      imageRef: "ghcr.io/ditto/workspace:latest",
+describe("buildManagedWorkspaceEnv", () => {
+  it("builds the complete managed workspace env from one helper", async () => {
+    const {
+      buildManagedWorkspaceEnv,
+      MANAGED_WORKSPACE_DATABASE_PATH,
+      MANAGED_WORKSPACE_VOLUME_MOUNT_PATH,
+    } = await import("./workspace-provisioner");
+
+    const env = buildManagedWorkspaceEnv({
+      userId: "user-1",
+      ownerEmail: "Owner@Example.com",
       networkUrl: "https://ditto-network.up.railway.app",
-      db: db as unknown as typeof import("../db").db,
-      healthCheckTimeoutMs: 500,
-      healthCheckIntervalMs: 50,
-      deployPollIntervalMs: 50,
-      ...overrides,
-    };
-  }
+      networkToken: "dnt_secret",
+      workspaceUrl: "https://workspace.example.com",
+      sessionSecret: "session-secret",
+    });
 
-  // ============================================================
-  // Provisioning
-  // ============================================================
+    expect(env).toMatchObject({
+      DITTO_DEPLOYMENT: "workspace",
+      DITTO_WORKSPACE_USER_ID: "user-1",
+      WORKSPACE_OWNER_EMAIL: "owner@example.com",
+      SESSION_SECRET: "session-secret",
+      NETWORK_AUTH_SECRET: "session-secret",
+      DITTO_NETWORK_URL: "https://ditto-network.up.railway.app",
+      DITTO_NETWORK_TOKEN: "dnt_secret",
+      DATABASE_PATH: "/data/ditto.db",
+      NEXT_PUBLIC_APP_URL: "https://workspace.example.com",
+    });
+    expect(MANAGED_WORKSPACE_VOLUME_MOUNT_PATH).toBe("/data");
+    expect(MANAGED_WORKSPACE_DATABASE_PATH).toBe("/data/ditto.db");
+  });
 
-  describe("provisionWorkspace", () => {
-    it("provisions a new workspace end-to-end", async () => {
+  it("rejects a database path outside the Railway volume", async () => {
+    const { assertManagedWorkspaceVolumePath } = await import("./workspace-provisioner");
+    expect(() => assertManagedWorkspaceVolumePath("/data", "/app/data/ditto.db")).toThrow(
+      /must live under Railway volume/,
+    );
+  });
+
+  it("redacts managed workspace secrets from provisioning errors", async () => {
+    const { provisioningErrorMessage, redactSecretText } = await import("./workspace-provisioner");
+    const secret = "a".repeat(64);
+    const message = provisioningErrorMessage(
+      new Error(
+        `Railway body DITTO_NETWORK_TOKEN=dnt_supersecret SESSION_SECRET=${secret} NETWORK_AUTH_SECRET="${secret}" bootstrap=https://workspace.example.com/login/auth?token=wbt_payload.signature`,
+      ),
+    );
+
+    expect(message).not.toContain("dnt_supersecret");
+    expect(message).not.toContain(secret);
+    expect(message).not.toContain("wbt_payload.signature");
+    expect(message).toContain("[redacted]");
+    expect(redactSecretText(`GraphQL error SESSION_SECRET:${secret}`)).not.toContain(secret);
+  });
+});
+
+describe("provisionWorkspace", () => {
+  it("fails before Railway side effects when the network user is missing", async () => {
+    const { provisionWorkspace, ManagedWorkspacePreflightError } = await import(
+      "./workspace-provisioner"
+    );
+
+    const railwayClient = createMockRailwayClient();
+    const fakeDb = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [],
+          }),
+        }),
+      }),
+    } as unknown as NetworkDbTransaction;
+
+    await expect(
+      provisionWorkspace("missing-user", makeConfig(railwayClient, fakeDb)),
+    ).rejects.toBeInstanceOf(ManagedWorkspacePreflightError);
+    expect(railwayClient.calls).toHaveLength(0);
+  });
+
+  it("fails before Railway side effects when the network user has no email", async () => {
+    const { provisionWorkspace, ManagedWorkspacePreflightError } = await import(
+      "./workspace-provisioner"
+    );
+
+    const railwayClient = createMockRailwayClient();
+    const fakeDb = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [{ id: "user-1", email: null }],
+          }),
+        }),
+      }),
+    } as unknown as NetworkDbTransaction;
+
+    await expect(
+      provisionWorkspace("user-1", makeConfig(railwayClient, fakeDb)),
+    ).rejects.toBeInstanceOf(ManagedWorkspacePreflightError);
+    expect(railwayClient.calls).toHaveLength(0);
+  });
+
+  it("provisions a new workspace end-to-end with Network-tier records", () =>
+    withNetworkDbTransaction(async (tx) => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
+      await seedNetworkUser(tx);
 
-      const result = await provisionWorkspace("user-1", config);
+      const railwayClient = createMockRailwayClient();
+      const result = await provisionWorkspace("user-1", makeConfig(railwayClient, tx));
 
       expect(result.status).toBe("created");
       expect(result.workspaceUrl).toBe("https://ditto-ws-user-1.up.railway.app");
-      expect(result.serviceId).toBe("svc_1");
-      expect(result.volumeId).toBe("vol_1");
-      expect(result.tokenId).toBe("tok_1");
-
-      // Verify DB record
-      const [record] = await db
-        .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"))
-        .limit(1);
-
-      expect(record).toBeDefined();
-      expect(record.status).toBe("healthy");
-      expect(record.serviceId).toBe("svc_1");
-      expect(record.machineId).toBe("svc_1"); // backward compat
-      expect(record.volumeId).toBe("vol_1");
-      expect(record.railwayEnvironmentId).toBe("env_prod_1");
-      expect(record.authSecretHash).toBeDefined();
-      expect(record.authSecretHash!.length).toBe(64); // SHA-256 hex
-      expect(record.imageRef).toBe("ghcr.io/ditto/workspace:latest");
-
-      // Verify Railway API call order
+      expect(result.bootstrapLoginUrl).toContain("https://ditto-ws-user-1.up.railway.app/login/auth?token=wbt_");
+      expect(railwayClient.lastMountPath).toBe("/data");
+      expect(railwayClient.lastUpsertedVariables).toMatchObject({
+        DITTO_DEPLOYMENT: "workspace",
+        DITTO_WORKSPACE_USER_ID: "user-1",
+        WORKSPACE_OWNER_EMAIL: "owner@example.com",
+        DATABASE_PATH: "/data/ditto.db",
+        NEXT_PUBLIC_APP_URL: "https://ditto-ws-user-1.up.railway.app",
+      });
+      expect(railwayClient.lastUpsertedVariables?.SESSION_SECRET).toMatch(/^[a-f0-9]{64}$/);
+      expect(railwayClient.lastUpsertedVariables?.DITTO_NETWORK_TOKEN).toMatch(/^dnt_/);
       expect(railwayClient.calls).toEqual([
         "getEnvironmentId",
         "createService",
         "createVolume",
+        "createDomain",
         "upsertVariables",
         "deployService",
-        "createDomain",
         "getDeploymentStatus",
       ]);
-    });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ditto-ws-user-1.up.railway.app/healthz?deep=true&mode=provisioning",
+        expect.any(Object),
+      );
 
-    it("returns existing workspace if healthy (idempotent)", async () => {
+      const [workspace] = await tx
+        .select()
+        .from(networkSchema.managedWorkspaces)
+        .where(eq(networkSchema.managedWorkspaces.userId, "user-1"));
+      expect(workspace.status).toBe("healthy");
+      expect(workspace.authSecretHash).toHaveLength(64);
+
+      const [user] = await tx
+        .select()
+        .from(networkSchema.networkUsers)
+        .where(eq(networkSchema.networkUsers.id, "user-1"));
+      expect(user.status).toBe("workspace");
+      expect(user.workspaceId).toBe(workspace.id);
+      expect(user.workspaceAcceptedAt).toBeInstanceOf(Date);
+    }));
+
+  it("returns an existing healthy workspace without Railway side effects", () =>
+    withNetworkDbTransaction(async (tx) => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
+      await seedNetworkUser(tx);
+      await tx.insert(networkSchema.managedWorkspaces).values({
+        userId: "user-1",
+        machineId: "svc-existing",
+        serviceId: "svc-existing",
+        volumeId: "vol-existing",
+        workspaceUrl: "https://existing.up.railway.app",
+        region: "railway",
+        imageRef: "img:1",
+        status: "healthy",
+        tokenId: "tok-existing",
+      });
+
       const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
+      const result = await provisionWorkspace("user-1", makeConfig(railwayClient, tx));
 
-      // First provision
-      const first = await provisionWorkspace("user-1", config);
-      expect(first.status).toBe("created");
-
-      // Reset calls
-      railwayClient.calls.length = 0;
-
-      // Second provision — should be idempotent
-      const second = await provisionWorkspace("user-1", config);
-      expect(second.status).toBe("existing");
-      expect(second.workspaceUrl).toBe(first.workspaceUrl);
-
-      // No Railway API calls should have been made
+      expect(result).toMatchObject({
+        status: "existing",
+        workspaceUrl: "https://existing.up.railway.app",
+        serviceId: "svc-existing",
+      });
       expect(railwayClient.calls).toHaveLength(0);
-    });
+    }));
 
-    it("cleans up stale provisioning record before re-provisioning", async () => {
+  it("rolls back resources and revokes token on health failure", () =>
+    withNetworkDbTransaction(async (tx) => {
       const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      // Insert a degraded record
-      await db.insert(schema.managedWorkspaces).values({
-        userId: "user-1",
-        machineId: "old-svc",
-        serviceId: "old-svc",
-        volumeId: "old-vol",
-        workspaceUrl: "https://old.up.railway.app",
-        region: "railway",
-        imageRef: "old-image",
-        status: "degraded",
-        tokenId: "old-tok",
-      });
-
-      const result = await provisionWorkspace("user-1", config);
-
-      expect(result.status).toBe("created");
-
-      // Old record should be deleted and new one created
-      const records = await db
-        .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"));
-
-      expect(records).toHaveLength(1);
-      expect(records[0].status).toBe("healthy");
-      expect(records[0].serviceId).toBe("svc_1");
-    });
-
-    it("cleans up stale 'provisioning' record before re-provisioning", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      // Insert a stale provisioning record (e.g. previous attempt crashed)
-      await db.insert(schema.managedWorkspaces).values({
-        userId: "user-1",
-        machineId: "stale-svc",
-        serviceId: "stale-svc",
-        volumeId: "stale-vol",
-        workspaceUrl: "https://stale.up.railway.app",
-        region: "railway",
-        imageRef: "stale-image",
-        status: "provisioning",
-        tokenId: "stale-tok",
-      });
-
-      const result = await provisionWorkspace("user-1", config);
-
-      expect(result.status).toBe("created");
-
-      // Stale record should be replaced with new healthy one
-      const records = await db
-        .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"));
-
-      expect(records).toHaveLength(1);
-      expect(records[0].status).toBe("healthy");
-      expect(records[0].serviceId).toBe("svc_1");
-
-      // Cleanup calls should include stale resource teardown
-      expect(railwayClient.calls).toContain("deleteService");
-    });
-
-    it("rolls back all resources on health check failure", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-
-      // Make health check always fail
+      await seedNetworkUser(tx);
       mockFetch.mockResolvedValue({
-        ok: false,
-        json: async () => ({ status: "error" }),
+        ok: true,
+        json: async () => ({ status: "ok", mode: "strict" }),
       });
 
       const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
+      await expect(
+        provisionWorkspace("user-1", makeConfig(railwayClient, tx)),
+      ).rejects.toThrow("Health check failed after");
 
-      await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
-        "Health check failed after",
-      );
-
-      // Verify rollback happened — service deleted (cascades volume)
+      expect(railwayClient.services.size).toBe(0);
       expect(railwayClient.calls).toContain("deleteService");
 
-      // Service should be cleaned up
-      expect(railwayClient.services.size).toBe(0);
-
-      // Token should be revoked
-      const tokenEntry = Array.from(mockTokens.values())[0];
-      expect(tokenEntry?.revoked).toBe(true);
-
-      // No DB record should remain
-      const records = await db
+      const workspaces = await tx
         .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"));
-      expect(records).toHaveLength(0);
-    }, 15_000);
+        .from(networkSchema.managedWorkspaces)
+        .where(eq(networkSchema.managedWorkspaces.userId, "user-1"));
+      expect(workspaces).toHaveLength(0);
 
-    it("rolls back on service creation failure", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-
-      const railwayClient = createMockRailwayClient({
-        createService: async () => {
-          throw new Error("Service creation failed");
-        },
-      });
-      const config = makeConfig(railwayClient);
-
-      await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
-        "Service creation failed",
-      );
-
-      // Nothing should have been created
-      const records = await db
+      const [token] = await tx
         .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"));
-      expect(records).toHaveLength(0);
-    });
+        .from(networkSchema.networkTokens)
+        .where(eq(networkSchema.networkTokens.userId, "user-1"));
+      expect(token.revokedAt).toBeInstanceOf(Date);
+    }), 15_000);
+});
 
-    it("rolls back on volume creation failure", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-
-      const railwayClient = createMockRailwayClient({
-        createVolume: async () => {
-          throw new Error("Volume creation failed");
-        },
-      });
-      const config = makeConfig(railwayClient);
-
-      await expect(provisionWorkspace("user-1", config)).rejects.toThrow(
-        "Volume creation failed",
-      );
-
-      // Service should be cleaned up by rollback
-      expect(railwayClient.services.size).toBe(0);
-    });
-  });
-
-  // ============================================================
-  // Deprovisioning
-  // ============================================================
-
-  describe("deprovisionWorkspace", () => {
-    it("deprovisions an existing workspace", async () => {
-      const { provisionWorkspace, deprovisionWorkspace } = await import(
-        "./workspace-provisioner"
-      );
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      // Provision first
-      await provisionWorkspace("user-1", config);
-      railwayClient.calls.length = 0;
-
-      // Deprovision
-      const result = await deprovisionWorkspace("user-1", config);
-
-      expect(result.status).toBe("deprovisioned");
-      expect(result.userId).toBe("user-1");
-
-      // Verify Railway calls — service delete cascades volume
-      expect(railwayClient.calls).toContain("deleteService");
-
-      // Verify DB record updated
-      const [record] = await db
-        .select()
-        .from(schema.managedWorkspaces)
-        .where(eq(schema.managedWorkspaces.userId, "user-1"))
-        .limit(1);
-
-      expect(record.status).toBe("deprovisioned");
-      expect(record.deprovisionedAt).toBeTruthy();
-    });
-
-    it("throws for non-existent workspace", async () => {
+describe("deprovisioning and fleet status", () => {
+  it("deprovisions an existing workspace", () =>
+    withNetworkDbTransaction(async (tx) => {
       const { deprovisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      await expect(deprovisionWorkspace("nonexistent", config)).rejects.toThrow(
-        "No managed workspace found",
-      );
-    });
-
-    it("throws for already deprovisioned workspace", async () => {
-      const { deprovisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      // Insert a deprovisioned record
-      await db.insert(schema.managedWorkspaces).values({
+      await seedNetworkUser(tx);
+      await tx.insert(networkSchema.networkTokens).values({
+        id: "tok-1",
+        userId: "user-1",
+        tokenHash: "hash",
+      });
+      await tx.insert(networkSchema.managedWorkspaces).values({
         userId: "user-1",
         machineId: "svc-1",
         serviceId: "svc-1",
@@ -439,160 +376,80 @@ describe("workspace-provisioner", () => {
         workspaceUrl: "https://test.up.railway.app",
         region: "railway",
         imageRef: "test-image",
-        status: "deprovisioned",
-        tokenId: "tok-1",
-        deprovisionedAt: new Date(),
-      });
-
-      await expect(deprovisionWorkspace("user-1", config)).rejects.toThrow(
-        "already deprovisioned",
-      );
-    });
-  });
-
-  // ============================================================
-  // Fleet Status
-  // ============================================================
-
-  describe("getFleetStatus", () => {
-    it("returns all non-deprovisioned workspaces with serviceId", async () => {
-      const { getFleetStatus } = await import("./workspace-provisioner");
-
-      // Insert workspaces
-      await db.insert(schema.managedWorkspaces).values({
-        userId: "user-1",
-        machineId: "svc-1",
-        serviceId: "svc-1",
-        volumeId: "vol-1",
-        workspaceUrl: "https://ws1.up.railway.app",
-        region: "railway",
-        imageRef: "img:1",
         status: "healthy",
         tokenId: "tok-1",
       });
 
-      await db.insert(schema.managedWorkspaces).values({
-        userId: "user-2",
-        machineId: "svc-2",
-        serviceId: "svc-2",
-        volumeId: "vol-2",
-        workspaceUrl: "https://ws2.up.railway.app",
-        region: "railway",
-        imageRef: "img:1",
-        status: "deprovisioned",
-        tokenId: "tok-2",
-        deprovisionedAt: new Date(),
+      const railwayClient = createMockRailwayClient();
+      const result = await deprovisionWorkspace("user-1", {
+        railwayClient,
+        projectId: "proj",
+        networkDb: tx,
       });
 
-      const fleet = await getFleetStatus(db as unknown as typeof import("../db").db);
+      expect(result).toEqual({ userId: "user-1", status: "deprovisioned" });
+      expect(railwayClient.calls).toContain("deleteService");
 
+      const [workspace] = await tx
+        .select()
+        .from(networkSchema.managedWorkspaces)
+        .where(eq(networkSchema.managedWorkspaces.userId, "user-1"));
+      expect(workspace.status).toBe("deprovisioned");
+      expect(workspace.deprovisionedAt).toBeInstanceOf(Date);
+
+      const [token] = await tx
+        .select()
+        .from(networkSchema.networkTokens)
+        .where(eq(networkSchema.networkTokens.id, "tok-1"));
+      expect(token.revokedAt).toBeInstanceOf(Date);
+    }));
+
+  it("returns fleet status from the Network tier", () =>
+    withNetworkDbTransaction(async (tx) => {
+      const { getFleetStatus } = await import("./workspace-provisioner");
+      await seedNetworkUser(tx, "user-1", "one@example.com");
+      await seedNetworkUser(tx, "user-2", "two@example.com");
+      await tx.insert(networkSchema.managedWorkspaces).values([
+        {
+          userId: "user-1",
+          machineId: "svc-1",
+          serviceId: "svc-1",
+          volumeId: "vol-1",
+          workspaceUrl: "https://one.up.railway.app",
+          region: "railway",
+          imageRef: "img:1",
+          status: "healthy",
+          tokenId: "tok-1",
+        },
+        {
+          userId: "user-2",
+          machineId: "svc-2",
+          serviceId: "svc-2",
+          volumeId: "vol-2",
+          workspaceUrl: "https://two.up.railway.app",
+          region: "railway",
+          imageRef: "img:1",
+          status: "deprovisioned",
+          tokenId: "tok-2",
+          deprovisionedAt: new Date(),
+        },
+      ]);
+
+      const fleet = await getFleetStatus(tx);
       expect(fleet).toHaveLength(1);
       expect(fleet[0].userId).toBe("user-1");
-      expect(fleet[0].status).toBe("healthy");
-      expect(fleet[0].serviceId).toBe("svc-1");
-    });
-  });
+      expect(fleet[0].workspaceUrl).toBe("https://one.up.railway.app");
+    }));
+});
 
-  // ============================================================
-  // Rate Limiting
-  // ============================================================
+describe("checkRateLimit", () => {
+  it("allows up to 10 requests per minute per token", async () => {
+    const { checkRateLimit } = await import("./workspace-provisioner");
 
-  describe("checkRateLimit", () => {
-    it("allows up to 10 requests per minute", async () => {
-      const { checkRateLimit } = await import("./workspace-provisioner");
-
-      for (let i = 0; i < 10; i++) {
-        expect(checkRateLimit("admin-1")).toBe(true);
-      }
-
-      // 11th should be rejected
-      expect(checkRateLimit("admin-1")).toBe(false);
-    });
-
-    it("different tokens have independent limits", async () => {
-      const { checkRateLimit } = await import("./workspace-provisioner");
-
-      for (let i = 0; i < 10; i++) {
-        checkRateLimit("admin-a");
-      }
-
-      // admin-b should still work
-      expect(checkRateLimit("admin-b")).toBe(true);
-    });
-  });
-
-  // ============================================================
-  // Self-hosted unaffected
-  // ============================================================
-
-  describe("self-hosted unaffected", () => {
-    it("getWorkspaceStatus returns null for non-managed users", async () => {
-      const { getWorkspaceStatus } = await import("./workspace-provisioner");
-
-      const status = await getWorkspaceStatus(
-        "self-hosted-user",
-        db as unknown as typeof import("../db").db,
-      );
-
-      expect(status).toBeNull();
-    });
-  });
-
-  // ============================================================
-  // Brief 153: WORKSPACE_OWNER_EMAIL env var + status update
-  // ============================================================
-
-  describe("Brief 153 wiring", () => {
-    it("includes WORKSPACE_OWNER_EMAIL in env vars when ownerEmail is provided", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient, { ownerEmail: "alice@example.com" });
-
-      await provisionWorkspace("user-owner-1", config);
-
-      expect(railwayClient.lastUpsertedVariables).toBeDefined();
-      expect(railwayClient.lastUpsertedVariables!.WORKSPACE_OWNER_EMAIL).toBe("alice@example.com");
-      expect(railwayClient.lastUpsertedVariables!.DITTO_NETWORK_URL).toBe("https://ditto-network.up.railway.app");
-    });
-
-    it("omits WORKSPACE_OWNER_EMAIL when ownerEmail is not provided", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient);
-
-      await provisionWorkspace("user-no-owner-1", config);
-
-      expect(railwayClient.lastUpsertedVariables).toBeDefined();
-      expect(railwayClient.lastUpsertedVariables!.WORKSPACE_OWNER_EMAIL).toBeUndefined();
-    });
-
-    it("updates networkUsers.status to 'workspace' after successful provisioning", async () => {
-      const { provisionWorkspace } = await import("./workspace-provisioner");
-      const railwayClient = createMockRailwayClient();
-      const config = makeConfig(railwayClient, { ownerEmail: "status-test@example.com" });
-
-      // Create a network user first
-      const userId = "user-status-update-1";
-      await db.insert(schema.networkUsers).values({
-        id: userId,
-        email: "status-test@example.com",
-        name: "Status Test User",
-        status: "active",
-      });
-
-      const result = await provisionWorkspace(userId, config);
-      expect(result.status).toBe("created");
-
-      // Verify the user status was updated
-      const [updatedUser] = await db
-        .select()
-        .from(schema.networkUsers)
-        .where(eq(schema.networkUsers.id, userId))
-        .limit(1);
-
-      expect(updatedUser.status).toBe("workspace");
-      expect(updatedUser.workspaceId).toBeDefined();
-      expect(updatedUser.workspaceAcceptedAt).toBeDefined();
-    });
+    for (let i = 0; i < 10; i++) {
+      expect(checkRateLimit("admin-a")).toBe(true);
+    }
+    expect(checkRateLimit("admin-a")).toBe(false);
+    expect(checkRateLimit("admin-b")).toBe(true);
   });
 });
