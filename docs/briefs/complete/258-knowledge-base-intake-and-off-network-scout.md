@@ -1,7 +1,7 @@
 # Brief: 258 — Knowledge Base Intake and Off-Network Scout
 
 **Date:** 2026-05-12
-**Status:** approved for build via `/dev-builder`
+**Status:** complete (2026-05-12, Builder commit `4718c64` + Reviewer PASS WITH FIXES → final PASS + human approval + Documenter closeout). Focused Brief 258 Vitest PASS (14 files / 73 tests); `pnpm run type-check` PASS at root, web, and core. Full `pnpm test` still has repo-wide drift from pre-existing baseline (unrelated to 258).
 **Depends on:** Brief 263; client-lane base through Brief 266
 **Unlocks:** Brief 259 public profile-as-chat, Brief 260 share copy, Brief 261 introduction flow
 
