@@ -43,14 +43,21 @@ export interface RailwayDomain {
 
 export interface RailwayDeployment {
   id: string;
-  status: "BUILDING" | "DEPLOYING" | "ACTIVE" | "FAILED" | "CRASHED" | string;
+  status:
+    | "BUILDING"
+    | "DEPLOYING"
+    | "SUCCESS"
+    | "FAILED"
+    | "CRASHED"
+    | "REMOVED"
+    | string;
 }
 
 /**
  * Abstract Railway API client. Injected for testability.
  */
 export interface RailwayClient {
-  createService(projectId: string, name: string): Promise<RailwayService>;
+  createService(projectId: string, name: string, image?: string): Promise<RailwayService>;
   deleteService(serviceId: string): Promise<void>;
   createVolume(serviceId: string, mountPath: string): Promise<RailwayVolume>;
   deleteVolume(volumeId: string): Promise<void>;
@@ -101,12 +108,17 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
   }
 
   return {
-    async createService(_projectId, name) {
+    async createService(_projectId, name, image) {
+      // Pass `source.image` so Railway creates a serviceInstance bound to
+      // the Docker image — without this, the service has no instance and
+      // serviceInstanceDeploy is a no-op (no deployments ever surface).
+      const input: Record<string, unknown> = { projectId, name };
+      if (image) input.source = { image };
       const data = await gql<{ serviceCreate: RailwayService }>(
         `mutation($input: ServiceCreateInput!) {
           serviceCreate(input: $input) { id name }
         }`,
-        { input: { projectId, name } },
+        { input },
       );
       return data.serviceCreate;
     },
@@ -167,9 +179,11 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
       );
 
       // The just-fired deployment may take a moment to appear in the
-      // deployments list; brief retry loop. ~10s budget is generous for
-      // Railway's normal indexing latency (~1-3s).
-      for (let attempt = 0; attempt < 10; attempt++) {
+      // deployments list. Observed Railway indexing latency exceeds 10s in
+      // practice for fresh services, so budget 60s (30 attempts × 2s).
+      const maxAttempts = 30;
+      const intervalMs = 2000;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const data = await gql<{
           deployments: { edges: Array<{ node: RailwayDeployment }> };
         }>(
@@ -182,21 +196,22 @@ export function createRailwayClient(apiToken: string, projectId: string): Railwa
         );
         const node = data.deployments.edges[0]?.node;
         if (node) return node;
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, intervalMs));
       }
+      const budgetSec = Math.round((maxAttempts * intervalMs) / 1000);
       throw new Error(
-        `Railway: serviceInstanceDeploy fired but no deployment surfaced in list within 10s for service ${serviceId}`,
+        `Railway: serviceInstanceDeploy fired but no deployment surfaced in list within ${budgetSec}s for service ${serviceId}`,
       );
     },
 
     async createDomain(serviceId, environmentId) {
       const data = await gql<{ serviceDomainCreate: { domain: string; id: string } }>(
-        `mutation($serviceId: String!, $environmentId: String!) {
-          serviceDomainCreate(serviceId: $serviceId, environmentId: $environmentId) {
+        `mutation($input: ServiceDomainCreateInput!) {
+          serviceDomainCreate(input: $input) {
             id domain
           }
         }`,
-        { serviceId, environmentId },
+        { input: { serviceId, environmentId } },
       );
       return data.serviceDomainCreate;
     },
@@ -452,10 +467,15 @@ export async function provisionWorkspace(
     const environmentId = await config.railwayClient.getEnvironmentId(config.projectId);
     progress("Getting environment... done");
 
-    // Step 3: Create Railway Service
+    // Step 3: Create Railway Service (with image source so a serviceInstance
+    // is bound — without it, serviceInstanceDeploy is a no-op).
     progress("Creating service...");
     const serviceName = `ditto-ws-${userId.replace(/[^a-z0-9-]/gi, "-").slice(0, 30)}`;
-    const service = await config.railwayClient.createService(config.projectId, serviceName);
+    const service = await config.railwayClient.createService(
+      config.projectId,
+      serviceName,
+      config.imageRef,
+    );
     created.serviceId = service.id;
     progress("Creating service... done");
 
@@ -511,7 +531,7 @@ export async function provisionWorkspace(
     const deployment = await config.railwayClient.deployService(service.id, environmentId);
     progress("Deploying service... done");
 
-    // Step 10: Poll deployment status until ACTIVE
+    // Step 10: Poll deployment status until SUCCESS
     progress("Waiting for deployment...");
     const deployed = await waitForDeployment(
       config.railwayClient,
@@ -523,7 +543,7 @@ export async function provisionWorkspace(
       const timeoutSec = Math.round((config.healthCheckTimeoutMs ?? 120_000) / 1000);
       throw new Error(`Deployment failed or timed out after ${timeoutSec}s for workspace ${userId}`);
     }
-    progress("Waiting for deployment... active");
+    progress("Waiting for deployment... success");
 
     // Step 11: Deep health check — verify application-level health
     progress("Waiting for health check...");
@@ -739,8 +759,12 @@ export async function getWorkspaceStatus(
 // ============================================================
 
 /**
- * Wait for Railway deployment to reach ACTIVE status.
+ * Wait for Railway deployment to reach SUCCESS status.
  * Polls getDeploymentStatus every intervalMs until timeout.
+ *
+ * Railway's terminal good state is SUCCESS (not ACTIVE). REMOVED is treated
+ * as terminal failure — it indicates the deployment was superseded or torn
+ * down before reaching SUCCESS.
  */
 async function waitForDeployment(
   client: RailwayClient,
@@ -753,8 +777,14 @@ async function waitForDeployment(
   while (Date.now() < deadline) {
     try {
       const deployment = await client.getDeploymentStatus(deploymentId);
-      if (deployment.status === "ACTIVE") return true;
-      if (deployment.status === "FAILED" || deployment.status === "CRASHED") return false;
+      if (deployment.status === "SUCCESS") return true;
+      if (
+        deployment.status === "FAILED" ||
+        deployment.status === "CRASHED" ||
+        deployment.status === "REMOVED"
+      ) {
+        return false;
+      }
     } catch {
       // Expected during early deploy — API may not have the deployment yet
     }
@@ -767,7 +797,7 @@ async function waitForDeployment(
 
 /**
  * Wait for provisioning-mode deep health check to pass.
- * Polls GET /healthz?deep=true&mode=provisioning every intervalMs until timeout.
+ * Polls GET /api/healthz?deep=true&mode=provisioning every intervalMs until timeout.
  */
 async function waitForDeepHealth(
   workspaceUrl: string,
@@ -778,7 +808,7 @@ async function waitForDeepHealth(
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${workspaceUrl}/healthz?deep=true&mode=provisioning`, {
+      const res = await fetch(`${workspaceUrl}/api/healthz?deep=true&mode=provisioning`, {
         signal: AbortSignal.timeout(15_000),
       });
 

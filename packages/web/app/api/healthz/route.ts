@@ -129,7 +129,7 @@ export async function GET(request: Request) {
       // outage as degraded. Provisioning health accepts a bootstrapped local
       // workspace whose Network is temporarily unavailable.
       try {
-        const networkRes = await fetch(`${networkUrl}/healthz`, {
+        const networkRes = await fetch(`${networkUrl}/api/healthz`, {
           signal: AbortSignal.timeout(5_000),
         });
 

@@ -62,6 +62,10 @@ export async function POST(request: Request) {
       projectId: railwayProjectId,
       imageRef: image,
       networkUrl,
+      // Cold-start of a fresh workspace can exceed the 120s library default:
+      // image pull + container boot + seed import + network reachability.
+      // Each waitFor* stage gets this budget independently.
+      healthCheckTimeoutMs: 300_000,
     });
 
     return NextResponse.json({

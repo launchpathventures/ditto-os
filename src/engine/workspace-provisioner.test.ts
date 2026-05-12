@@ -78,7 +78,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async deployService() {
       calls.push("deployService");
-      return { id: "deploy_1", status: "ACTIVE" } as RailwayDeployment;
+      return { id: "deploy_1", status: "SUCCESS" } as RailwayDeployment;
     },
 
     async createDomain(serviceId) {
@@ -89,7 +89,7 @@ function createMockRailwayClient(overrides: Partial<RailwayClient> = {}): Railwa
 
     async getDeploymentStatus(deploymentId) {
       calls.push("getDeploymentStatus");
-      return { id: deploymentId, status: "ACTIVE" } as RailwayDeployment;
+      return { id: deploymentId, status: "SUCCESS" } as RailwayDeployment;
     },
 
     ...overrides,
@@ -280,7 +280,7 @@ describe("provisionWorkspace", () => {
         "getDeploymentStatus",
       ]);
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://ditto-ws-user-1.up.railway.app/healthz?deep=true&mode=provisioning",
+        "https://ditto-ws-user-1.up.railway.app/api/healthz?deep=true&mode=provisioning",
         expect.any(Object),
       );
 
