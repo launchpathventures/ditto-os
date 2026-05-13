@@ -3,7 +3,7 @@
 **Date:** 2026-05-12
 **Role:** Dev Designer
 **Consumers:** Dev Architect (Brief 259), Dev Builder (Brief 259)
-**Companion docs:** `docs/briefs/259-public-profile-as-chat-and-representative-rule.md`, `docs/briefs/254-network-two-sided-conversational-front-door.md` §Surface D, `docs/research/network-agent-character-and-experience-ux.md`, `docs/research/ai-chat-ux-patterns-competitive-audit.md`
+**Companion docs:** `docs/briefs/complete/259-public-profile-as-chat-and-representative-rule.md`, `docs/briefs/254-network-two-sided-conversational-front-door.md` §Surface D, `docs/research/network-agent-character-and-experience-ux.md`, `docs/research/ai-chat-ux-patterns-competitive-audit.md`
 
 ---
 

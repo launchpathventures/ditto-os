@@ -33,6 +33,22 @@ export function useNetworkPush({ enabled = true }: UseNetworkPushOptions = {}) {
   const queryClient = useQueryClient();
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  const importWorkspaceInbox = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/workspace/inbox/import", {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { imported?: number };
+      if ((data.imported ?? 0) > 0) {
+        queryClient.invalidateQueries({ queryKey: ["feed"] });
+      }
+    } catch {
+      // Network import is opportunistic; the next poll/SSE cycle can retry.
+    }
+  }, [queryClient]);
+
   const connect = useCallback(() => {
     if (!enabled) return;
 
@@ -47,10 +63,12 @@ export function useNetworkPush({ enabled = true }: UseNetworkPushOptions = {}) {
 
         switch (data.type) {
           case "workspace_blocks_push": {
+            void importWorkspaceInbox();
             // Invalidate the specific view's query to trigger re-render
             if (data.viewSlug) {
               queryClient.invalidateQueries({ queryKey: ["workspaceView", data.viewSlug] });
             }
+            queryClient.invalidateQueries({ queryKey: ["feed"] });
             break;
           }
 
@@ -80,13 +98,18 @@ export function useNetworkPush({ enabled = true }: UseNetworkPushOptions = {}) {
         if (enabled) connect();
       }, 5000);
     };
-  }, [enabled, queryClient]);
+  }, [enabled, importWorkspaceInbox, queryClient]);
 
   useEffect(() => {
+    void importWorkspaceInbox();
+    const importTimer = window.setInterval(() => {
+      void importWorkspaceInbox();
+    }, 30_000);
     connect();
     return () => {
+      window.clearInterval(importTimer);
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
     };
-  }, [connect]);
+  }, [connect, importWorkspaceInbox]);
 }

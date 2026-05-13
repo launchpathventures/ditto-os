@@ -23,6 +23,8 @@ import type { PersonaId } from "@ditto/core/db/network";
 import { EXPERT_LANE_QUESTIONS, NETWORK_ANTI_PERSONA_OPTIONS } from "./network-expert-intake";
 import { CLIENT_LANE_QUESTIONS } from "./network-client-intake";
 
+export const VISITOR_FORWARD_NOTE_TOOL_NAME = "forward_note_to_user";
+
 // ============================================================
 // Alex Response Tool Definition
 // ============================================================
@@ -449,6 +451,79 @@ When the user asks to scan outside the network after the card exists, use the ex
 Write your conversational reply as plain text. After writing your reply, ALWAYS call the alex_response tool. Keep question, suggestions, and learned aligned with the single current intake question. Do not ask for email, do not request location, do not set done, and do not start web search from this lane.
 `.trim();
 
+export interface VisitorRepresentativePromptContext {
+  greeterName?: string;
+  userName?: string;
+  userFirst?: string;
+  networkProfileCardSerialized?: string;
+  kbBioMd?: string;
+  kbFactsPublicAndOnRequest?: string;
+  antiPersonaRules?: string;
+}
+
+export const VISITOR_REPRESENTATIVE_PROMPT_TEMPLATE = `
+Template substitution variables used below:
+- {greeter_name}: Alex or Mira.
+- {user_name}: the public profile owner.
+- {user_first}: the public profile owner's first name.
+- {networkProfileCard_serialized}: serialized NetworkProfileCardBlock.
+- {kb_bio_md}: public bio markdown from the owner's knowledge base.
+- {kb_facts_public_and_on_request}: facts marked public or on-request only.
+- {anti_persona_rules}: private fit filters, honored silently and never revealed.
+
+You are {greeter_name} ("Alex" or "Mira"). You are NOT {user_name}.
+You are their REPRESENTATIVE — a thoughtful friend who knows their work
+and goals — talking to someone curious about them.
+
+You speak FROM the card, the user's bio, and the user's knowledge base.
+Cite ONLY facts marked \`public\` or \`on-request\`. For \`on-request\`, say:
+"They can speak to that. Want me to ask {user_first}?"
+
+Your job:
+1. Help the visitor decide if there's a fit.
+2. If yes, offer to draft an intro request for {user_first}'s inbox.
+3. If no, be honest about it. You're not selling them.
+
+Tone: warm, direct, no corporate fluff. Not a salesman. Not a chatbot.
+
+What you know about {user_name}:
+{networkProfileCard_serialized}
+{kb_bio_md}
+{kb_facts_public_and_on_request}
+{anti_persona_rules}     ← honored silently, never quoted
+
+Hard rules (six clauses, each MUST have unit-test coverage in sub-brief 259):
+1. **Identity.** NEVER claim to be {user_first}. You are {greeter_name}, their representative.
+2. **No fabrication.** NEVER invent specifics (companies, numbers, dates, names, quotes) not present in the KB.
+3. **No AI self-disclosure.** NEVER say "I'm an AI", "chatbot", or "language model". Be a thoughtful representative, not a disclaimer.
+4. **Forwarded-note capture.** If the visitor says "tell {user_first} X" — capture verbatim as a forwarded note attached to the intro request. Do NOT respond as if you ARE {user_first}.
+5. **Silent anti-persona.** Honor anti-persona rules silently — never quote, paraphrase, or reveal them to the visitor.
+6. **Gated intro emission.** If the visitor asks for an intro: emit AuthorizationRequestBlock with draft + costLabel null + full visitor transcript; say "I'll send this to {user_first}; if it lands, you'll hear back in a day or two." Never send the intro yourself — only the user can approve.
+   Brief 259 deliberately substitutes costLabel null here instead of the parent example string "1 of 2 free intros"; grep this line when the downstream free-counter brief fills the real label.
+
+Tool directive:
+- Use the exact tool name \`${VISITOR_FORWARD_NOTE_TOOL_NAME}\` when capturing a forwarded note.
+- The intro request artifact must be self-contained: request, draft, requesterId, preview with full visitor transcript, recipientLabel, and costLabel null.
+- Never include facts marked \`off\` in visitor-visible answers or prompt facts.
+`.trim();
+
+function fillVisitorRepresentativePrompt(ctx: VisitorRepresentativePromptContext = {}): string {
+  const substitutions: Record<string, string> = {
+    greeter_name: ctx.greeterName ?? "Alex",
+    user_name: ctx.userName ?? "the profile owner",
+    user_first: ctx.userFirst ?? "them",
+    networkProfileCard_serialized: ctx.networkProfileCardSerialized ?? "(no card supplied)",
+    kb_bio_md: ctx.kbBioMd ?? "(no public bio supplied)",
+    kb_facts_public_and_on_request: ctx.kbFactsPublicAndOnRequest ?? "(no public or on-request facts supplied)",
+    anti_persona_rules: ctx.antiPersonaRules ?? "(no anti-persona rules supplied)",
+  };
+  let prompt = VISITOR_REPRESENTATIVE_PROMPT_TEMPLATE;
+  for (const [key, value] of Object.entries(substitutions)) {
+    prompt = prompt.replaceAll(`{${key}}`, value);
+  }
+  return prompt;
+}
+
 // ============================================================
 // Visitor Context
 // ============================================================
@@ -680,7 +755,7 @@ Sound like Alex — warm, direct, opinionated. Not an interviewer ticking boxes.
 // Public API
 // ============================================================
 
-export type ChatContext = "front-door" | "referred" | "review" | "expert" | "client";
+export type ChatContext = "front-door" | "referred" | "review" | "expert" | "client" | "visitor";
 
 /** Conversation stage for stage-gated prompt injection (Insight-170: token efficiency) */
 export type ConversationStage = "gather" | "reflect" | "deliver" | "details" | "activate" | null;
@@ -854,6 +929,8 @@ export interface FrontDoorPromptOptions {
    * the cache between calls.
    */
   omitTemporal?: boolean;
+  /** Public /people/[handle] representative lane context. */
+  representativeContext?: VisitorRepresentativePromptContext;
 }
 
 export function buildFrontDoorPrompt(
@@ -874,6 +951,8 @@ export function buildFrontDoorPrompt(
     processInstructions = INTRO_PROCESS;
   } else if (promptMode === "interview") {
     processInstructions = INTERVIEW_PROCESS;
+  } else if (context === "visitor") {
+    processInstructions = fillVisitorRepresentativePrompt(options?.representativeContext);
   } else if (context === "referred") {
     processInstructions = REFERRED_PROCESS;
   } else if (context === "expert") {

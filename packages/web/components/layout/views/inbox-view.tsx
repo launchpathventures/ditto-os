@@ -11,6 +11,7 @@ import React from "react";
 import { useFeed } from "@/lib/feed-query";
 import type { ReviewItem } from "@/lib/feed-types";
 import { Greet, Zone, Row, AlexLine, EmptyHint } from "./view-shell";
+import { BlockList } from "@/components/blocks/block-registry";
 
 interface InboxViewProps {
   onAskAbout: (subject: string) => void;
@@ -70,6 +71,20 @@ function ReviewPrimary({
   review: ReviewItem;
   onAskAbout: (subject: string) => void;
 }) {
+  const hasBlocks = Boolean(review.data.blocks?.length);
+
+  async function handleBlockAction(actionId: string, payload?: Record<string, unknown>) {
+    if (actionId.startsWith("authorization-request:")) {
+      await fetch("/api/v1/workspace/inbox/authorization", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload ?? { actionId }),
+      }).catch(() => null);
+      return;
+    }
+    onAskAbout(String(payload?.message ?? actionId));
+  }
+
   return (
     <div
       style={{
@@ -135,6 +150,11 @@ function ReviewPrimary({
           {review.data.outputText.length > 240 ? "…" : ""}
         </div>
       )}
+      {hasBlocks ? (
+        <div style={{ marginBottom: 16 }}>
+          <BlockList blocks={review.data.blocks ?? []} onAction={handleBlockAction} />
+        </div>
+      ) : null}
       <AlexLine>
         <b style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>
           {review.data.stepName}
@@ -142,42 +162,46 @@ function ReviewPrimary({
         — read it carefully. I won’t send until you say go.
       </AlexLine>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 16 }}>
-        <button
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 500,
-            border: "1px solid var(--color-vivid)",
-            background: "var(--color-vivid)",
-            color: "#fff",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Approve &amp; send
-        </button>
-        <button
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 500,
-            border: "1px solid var(--color-border-strong)",
-            background: "var(--color-surface-raised)",
-            color: "var(--color-text-primary)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Edit
-        </button>
+        {!hasBlocks && (
+          <>
+            <button
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 500,
+                border: "1px solid var(--color-vivid)",
+                background: "var(--color-vivid)",
+                color: "#fff",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Approve &amp; send
+            </button>
+            <button
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 500,
+                border: "1px solid var(--color-border-strong)",
+                background: "var(--color-surface-raised)",
+                color: "var(--color-text-primary)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Edit
+            </button>
+          </>
+        )}
         <button
           onClick={() => onAskAbout(`the ${review.data.processName}`)}
           style={{

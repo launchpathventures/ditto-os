@@ -2135,7 +2135,7 @@ function readAuthActionPayload(payload: Record<string, unknown> | undefined): Re
 
 type PendingChatAuthorization = {
   block: AuthorizationRequestBlock;
-  toolName: "gmail-authorized-send";
+  toolName: "gmail-authorized-send" | "visitor_intro_request";
   toolInput: Record<string, unknown>;
   expiresAtMs: number;
 };
@@ -2205,7 +2205,7 @@ function pendingAuthorizationFromMetadata(metadata: unknown): PendingChatAuthori
   if (
     !block ||
     !isAuthorizationRequestBlock(block) ||
-    record.toolName !== "gmail-authorized-send" ||
+    (record.toolName !== "gmail-authorized-send" && record.toolName !== "visitor_intro_request") ||
     !toolInput ||
     typeof toolInput !== "object" ||
     typeof expiresAtMs !== "number"
@@ -2215,7 +2215,7 @@ function pendingAuthorizationFromMetadata(metadata: unknown): PendingChatAuthori
 
   return {
     block,
-    toolName: "gmail-authorized-send",
+    toolName: record.toolName,
     toolInput: toolInput as Record<string, unknown>,
     expiresAtMs,
   };
@@ -2297,7 +2297,7 @@ async function registerPendingChatAuthorization(sessionId: string, block: Conten
   if (
     block.state !== "pending" ||
     !authorizationId ||
-    toolName !== "gmail-authorized-send" ||
+    (toolName !== "gmail-authorized-send" && toolName !== "visitor_intro_request") ||
     !toolInput ||
     typeof toolInput !== "object"
   ) {
@@ -2368,6 +2368,14 @@ async function executeChatAuthorizationAction(
       toolName: pending.toolName,
       input: pending.toolInput,
       execute: async (input, stepRunId): Promise<AuthorizationResult> => {
+        if (pending.toolName === "visitor_intro_request") {
+          return {
+            status: "sent",
+            sentAt: new Date().toISOString(),
+            recipients: pending.block.recipientLabel ? [pending.block.recipientLabel] : [],
+            reasonForVisitor: "Intro request approved for follow-up.",
+          };
+        }
         return gmailAuthorizedSend({
           stepRunId,
           to: input.to as string | string[],
