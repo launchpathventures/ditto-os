@@ -520,6 +520,41 @@ const builtInTools: Record<string, BuiltInTool> = {
     },
   },
 
+  "generate_share_variants": {
+    definition: {
+      name: "generate_share_variants",
+      description:
+        "Generate quiet, loud, and ask share-copy variants for a completed NetworkProfileCardBlock using public KB facts only. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          card: {
+            type: "object",
+            description: "Completed NetworkProfileCardBlock to share.",
+          },
+          kb: {
+            type: "array",
+            items: { type: "object" },
+            description: "Public network KB facts available for share copy.",
+          },
+        },
+        required: ["card"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+    ): Promise<string> => {
+      const { generateShareVariants } = await import("./generate-share-variants");
+      const result = await generateShareVariants({
+        card: input.card as import("./content-blocks").NetworkProfileCardBlock,
+        kb: input.kb as import("./generate-share-variants").ShareKbFact[] | undefined,
+        stepRunId: executionStepRunId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
   "web-fetch": {
     definition: {
       name: "web_fetch",

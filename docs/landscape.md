@@ -73,6 +73,12 @@
 - **Ditto relevance:** HIGH for Layer 6 (conversation layer). The multi-step generative UI pattern is how "chat with my business" works — user asks, agent calls processes, results stream as components. `useChat` is the interaction primitive for pervasive conversation (ADR-010).
 - **Limitation:** Frontend-focused. No built-in workflow engine, trust, or governance.
 
+**next/og ImageResponse (Vercel / Next.js 15 — bundled, Added 2026-05-13)** — nextjs.org/docs/app/api-reference/functions/image-response
+- Server-side OG/social-card image generation primitive bundled with Next.js via `import { ImageResponse } from "next/og"`. Powered by Satori (HTML/CSS to SVG) + Resvg (SVG to PNG). 1200×630 OG dimensions are supported without adding a separate rendering service.
+- **Ditto relevance:** HIGH for Network Agent share surfaces. Brief 260 uses it for `/people/[handle]/opengraph-image` and the downloadable profile-card PNG endpoint so the same iconic card silhouette renders across in-product, OG, PNG, and social previews.
+- **Boundary:** Server route handlers and App Router metadata only. No client-side use. CSS support is Satori's subset, so shared image-rendered components must use flex/absolute positioning and inline styles rather than relying on Tailwind runtime classes. Custom fonts require `fonts` ArrayBuffers if exact typography is needed in OG output.
+- **Composition level:** depend — already present through `next@^15.3.3`; no new top-level dependency.
+
 **AI SDK Elements** — github.com/vercel/ai-elements
 - 1.8k stars | Active 2026 | TypeScript | Apache 2.0
 - 47+ pre-built React components for AI applications, distributed as shadcn/ui custom registry (copy into project, own the code). Five categories: chatbot (18), code (15), voice (6), workflow (7), utilities (2). Built on React 19, Tailwind v4, shadcn/ui, @xyflow/react.

@@ -54,7 +54,7 @@ function fallbackCard(user: NetworkUser, handle: string): NetworkProfileCardBloc
     lastUpdatedAt: user.updatedAt?.toISOString?.() ?? now,
     visibility: user.wantsVisibility ? "public" : "on-request",
     shareUrl: `${baseUrl()}/people/${handle}`,
-    ogImageUrl: `${baseUrl()}/api/og/people/${handle}`,
+    ogImageUrl: `${baseUrl()}/people/${handle}/opengraph-image`,
   };
 }
 
@@ -112,7 +112,13 @@ export async function generateMetadata({ params }: PeopleProfilePageProps): Prom
     openGraph: {
       title: `${profile.card.name} - Ditto`,
       description: profile.card.oneLineRole,
-      images: [{ url: profile.card.ogImageUrl }],
+      images: [{ url: `${baseUrl()}/people/${normalizeHandle(handle)}/opengraph-image`, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${profile.card.name} - Ditto`,
+      description: profile.card.oneLineRole,
+      images: [`${baseUrl()}/people/${normalizeHandle(handle)}/opengraph-image`],
     },
   };
 }

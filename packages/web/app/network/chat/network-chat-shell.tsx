@@ -794,7 +794,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
               {currentMode === "expert" && intakeComplete && previewCard ? (
                 <div className="grid max-w-full gap-3 overflow-hidden">
                   <div className="w-full max-w-[520px]">
-                    <NetworkProfileCardRenderer card={previewCard} />
+                    <NetworkProfileCardRenderer card={previewCard} sessionId={sessionId} />
                   </div>
                   {renderCardControls()}
                   {claimedHandle ? <NetworkKbShelf sessionId={sessionId} /> : null}

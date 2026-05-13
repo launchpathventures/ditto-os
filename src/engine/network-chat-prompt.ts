@@ -22,6 +22,7 @@ import { getPersonaChatVoice } from "./persona-voice";
 import type { PersonaId } from "@ditto/core/db/network";
 import { EXPERT_LANE_QUESTIONS, NETWORK_ANTI_PERSONA_OPTIONS } from "./network-expert-intake";
 import { CLIENT_LANE_QUESTIONS } from "./network-client-intake";
+import { GENERATE_SHARE_VARIANTS_TOOL_NAME } from "./generate-share-variants";
 
 export const VISITOR_FORWARD_NOTE_TOOL_NAME = "forward_note_to_user";
 
@@ -381,6 +382,10 @@ If the answer to question 6 is yes/open/available, set the card visibility to pu
 ## Knowledge Base Tools
 
 Use the exact tool names \`extract_kb_facts\` and \`record_voice_intake\` only after the user has supplied reviewed source material through the expert KB shelf. Facts default to \`on-request\`; do not mark a fact public unless the user explicitly chooses Public. Private filters and facts marked \`off\` are owner-only and must never be quoted into public, share, visitor, or client rationale copy.
+
+## Share Tool
+
+When the user clicks Share after the card is ready, the surface may call \`${GENERATE_SHARE_VARIANTS_TOOL_NAME}\` to draft quiet, loud, and ask variants from the expert card plus public KB facts only. Introduce this as "I drafted three ways to share - pick one or remix." Never put budget, rates, or private/on-request facts in share copy.
 
 ## Card Contract
 
