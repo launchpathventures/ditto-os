@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createHmac } from "crypto";
+import { getPublicBaseUrl } from "../../../lib/public-url";
 
 export const runtime = "nodejs";
 
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
 
   if (!token) {
-    return NextResponse.redirect(new URL("/login?error=missing_token", request.url));
+    return NextResponse.redirect(new URL("/login?error=missing_token", getPublicBaseUrl(request)));
   }
 
   const html = `<!DOCTYPE html>
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     const token = formData?.get("token")?.toString();
 
     if (!token) {
-      return NextResponse.redirect(new URL("/login?error=missing_token", request.url));
+      return NextResponse.redirect(new URL("/login?error=missing_token", getPublicBaseUrl(request)));
     }
 
     const {
@@ -81,16 +82,16 @@ export async function POST(request: Request) {
     } = await import("../../../../../src/engine/magic-link");
 
     const result = isWorkspaceBootstrapLoginToken(token)
-      ? await consumeWorkspaceBootstrapLoginToken(token, request.url)
+      ? await consumeWorkspaceBootstrapLoginToken(token, getPublicBaseUrl(request))
       : await consumeMagicLink(token);
 
     if (!result) {
-      return NextResponse.redirect(new URL("/login?error=invalid_or_expired", request.url));
+      return NextResponse.redirect(new URL("/login?error=invalid_or_expired", getPublicBaseUrl(request)));
     }
 
     // Verify this is a workspace magic link (sessionId starts with "workspace:")
     if (!result.sessionId.startsWith("workspace:") && !result.sessionId.startsWith("workspace-bootstrap:")) {
-      return NextResponse.redirect(new URL("/login?error=invalid_token_type", request.url));
+      return NextResponse.redirect(new URL("/login?error=invalid_token_type", getPublicBaseUrl(request)));
     }
 
     // Set workspace session cookie with HMAC-signed email to prevent forgery
@@ -103,9 +104,9 @@ export async function POST(request: Request) {
       path: "/",
     });
 
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/", getPublicBaseUrl(request)));
   } catch (error) {
     console.error("[/login/auth] Error:", error);
-    return NextResponse.redirect(new URL("/login?error=server_error", request.url));
+    return NextResponse.redirect(new URL("/login?error=server_error", getPublicBaseUrl(request)));
   }
 }
