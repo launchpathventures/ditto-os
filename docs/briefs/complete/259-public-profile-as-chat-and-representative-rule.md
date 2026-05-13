@@ -1,7 +1,7 @@
 # Brief 259: `/people/[handle]` Public Profile-as-Chat (REPRESENTATIVE-not-IMPERSONATOR)
 
 **Date:** 2026-05-12
-**Status:** draft
+**Status:** complete (2026-05-13; Builder + Reviewer fix loop + Documenter closeout)
 **Depends on:**
 - Brief 263 — Network Tier Postgres (complete) — provides `networkDb` proxy + `withNetworkDbAvailability` + `drizzle/network/` journal
 - Brief 256-shipped work — `networkUsers.handle` + `NetworkProfileCardBlock` content block + `AuthorizationRequestBlock.costLabel` stub field on the primitive (all already in the codebase)

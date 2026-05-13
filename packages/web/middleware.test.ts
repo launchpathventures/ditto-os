@@ -72,4 +72,34 @@ describe("workspace auth middleware", () => {
     const res = await middleware(req("/", signedCookie("owner@example.com", "workspace-secret")));
     expect(res.status).toBe(200);
   });
+
+  it("allows /people in public mode without workspace auth", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "public");
+    const { middleware } = await loadMiddleware();
+
+    const res = await middleware(req("/people/timhgreen"));
+    expect(res.status).toBe(200);
+  });
+
+  it("does not expose /people as public in workspace mode", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
+    vi.stubEnv("WORKSPACE_OWNER_EMAIL", "owner@example.com");
+    vi.stubEnv("SESSION_SECRET", "workspace-secret");
+    const { middleware } = await loadMiddleware();
+
+    const res = await middleware(req("/people/timhgreen"));
+    expect(res.status).not.toBe(200);
+  });
+
+  it("allows /api/healthz on a fully-configured managed workspace without auth", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
+    vi.stubEnv("WORKSPACE_OWNER_EMAIL", "owner@example.com");
+    vi.stubEnv("SESSION_SECRET", "workspace-secret");
+    const { middleware } = await loadMiddleware();
+
+    const res = await middleware(req("/api/healthz?deep=true&mode=provisioning"));
+    expect(res.status).toBe(200);
+  });
 });

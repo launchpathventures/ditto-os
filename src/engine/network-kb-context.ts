@@ -16,7 +16,9 @@ export function isFactAllowedForAudience(
   audience: NetworkKbAudience,
 ): boolean {
   if (audience === "owner") return true;
-  if (audience === "representative") return visibility === "public" || visibility === "on-request";
+  if (audience === "representative" || audience === "visitor") {
+    return visibility === "public" || visibility === "on-request";
+  }
   return visibility === "public";
 }
 
@@ -46,7 +48,7 @@ export async function buildNetworkKbContext({
     .where(eq(networkSchema.networkUserKbFacts.userId, userId));
   const filteredFacts = filterFactsForAudience(facts, audience);
   const privateFilters =
-    audience === "owner"
+    audience === "owner" || audience === "visitor"
       ? await db
           .select()
           .from(networkSchema.networkUserAntiPersona)

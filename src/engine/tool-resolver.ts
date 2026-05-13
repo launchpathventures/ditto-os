@@ -31,6 +31,7 @@ import {
   secretsFromAuthEnv,
 } from "./integration-handlers/scrub";
 import { resolveServiceAuth } from "./credential-vault";
+import { VISITOR_FORWARD_NOTE_TOOL_NAME } from "./network-chat-prompt";
 // Dynamic import to avoid pulling LanceDB native binary into webpack bundle
 // import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
@@ -101,6 +102,50 @@ interface BuiltInTool {
 }
 
 const builtInTools: Record<string, BuiltInTool> = {
+  [VISITOR_FORWARD_NOTE_TOOL_NAME]: {
+    definition: {
+      name: VISITOR_FORWARD_NOTE_TOOL_NAME,
+      description:
+        "Capture a public profile visitor's verbatim question or note for the network user's workspace inbox. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          factQuestionMd: {
+            type: "string",
+            description: "Verbatim visitor question or note to pass along.",
+          },
+          fromVisitor: {
+            type: ["object", "null"],
+            description: "Optional visitor name, organization, ip, and session id.",
+          },
+        },
+        required: ["factQuestionMd"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      context?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { forwardNoteToUser } = await import("./forward-note-to-user");
+      const scopedUserId = context?.userId;
+      if (!scopedUserId) {
+        throw new Error("forward_note_to_user requires execution context userId");
+      }
+      const result = await forwardNoteToUser({
+        stepRunId: executionStepRunId,
+        userId: scopedUserId,
+        fromVisitor: input.fromVisitor as import("./forward-note-to-user").ForwardNoteVisitor | undefined,
+        factQuestionMd: input.factQuestionMd as string,
+      });
+      return JSON.stringify(
+        { success: true, noteId: result.note.id, eventId: result.eventId },
+        null,
+        2,
+      );
+    },
+  },
+
   // ---- Greeter Beat 2 tools (Brief 248) ----
   "gmail-authorized-send": {
     definition: {

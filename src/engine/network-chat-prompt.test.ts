@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  VISITOR_FORWARD_NOTE_TOOL_NAME,
   buildFrontDoorPrompt,
   type ChatContext,
 } from "./network-chat-prompt";
+import { resolveTools } from "./tool-resolver";
+import {
+  buildVisitorGreeterResponse,
+  buildVisitorIntroAuthorizationBlock,
+  type VisitorChatTurn,
+} from "./visitor-profile-chat";
 import {
   CLIENT_LANE_QUESTIONS,
   buildClientLaneResolutionTurns,
@@ -18,10 +25,176 @@ describe("network chat prompt contexts", () => {
       "review",
       "expert",
       "client",
+      "visitor",
     ];
 
     expect(contexts).toContain("expert");
     expect(contexts).toContain("client");
+    expect(contexts).toContain("visitor");
+  });
+
+  function visitorPrompt() {
+    return buildFrontDoorPrompt("visitor", undefined, undefined, undefined, {
+      representativeContext: {
+        greeterName: "Alex",
+        userName: "Tim Green",
+        userFirst: "Tim",
+        networkProfileCardSerialized: JSON.stringify({
+          type: "network-profile-card",
+          name: "Tim Green",
+          oneLineRole: "Revenue operator",
+        }),
+        kbBioMd: "Tim works with founder-led B2B teams.",
+        kbFactsPublicAndOnRequest: [
+          "- public: Tim builds outbound systems for B2B services.",
+          "- on-request: Tim can discuss Series B SDR hiring privately.",
+        ].join("\n"),
+        antiPersonaRules: "- Don't intro consultants who only draft strategy.",
+      },
+    });
+  }
+
+  describe("visitor representative hard rules", () => {
+    it("encodes the representative-not-impersonator prompt as a visitor lane", () => {
+      const prompt = visitorPrompt();
+
+      expect(prompt).toContain("You are Alex (\"Alex\" or \"Mira\"). You are NOT Tim Green.");
+      expect(prompt).toContain("You are their REPRESENTATIVE");
+      expect(prompt).toContain("Cite ONLY facts marked `public` or `on-request`");
+      expect(prompt).toContain("NEVER claim to be Tim. You are Alex, their representative.");
+      expect(prompt).toContain("NEVER invent specifics");
+      expect(prompt).toContain("NEVER say \"I'm an AI\", \"chatbot\", or \"language model\"");
+      expect(prompt).toContain("capture verbatim as a forwarded note");
+      expect(prompt).toContain("Honor anti-persona rules silently");
+      expect(prompt).toContain("costLabel null + full visitor transcript");
+      expect(prompt).toContain("Brief 259 deliberately substitutes costLabel null");
+    });
+
+    it("keeps the prompt tool name and built-in resolver registration in lockstep", () => {
+      const prompt = visitorPrompt();
+      const resolved = resolveTools([VISITOR_FORWARD_NOTE_TOOL_NAME]);
+
+      expect(prompt).toContain(`\`${VISITOR_FORWARD_NOTE_TOOL_NAME}\``);
+      expect(resolved.tools[0]?.name).toBe(VISITOR_FORWARD_NOTE_TOOL_NAME);
+      expect(resolved.tools[0]?.input_schema.properties).not.toHaveProperty("userId");
+    });
+
+    it("requires execution context userId for forwarded-note tool calls", async () => {
+      const resolved = resolveTools(
+        [VISITOR_FORWARD_NOTE_TOOL_NAME],
+        undefined,
+        undefined,
+        undefined,
+        "network-lane-step:visitor",
+      );
+
+      await expect(
+        resolved.executeIntegrationTool(VISITOR_FORWARD_NOTE_TOOL_NAME, {
+          factQuestionMd: "Tell Tim Acme is hiring.",
+        }),
+      ).rejects.toThrow("forward_note_to_user requires execution context userId");
+    });
+
+    it("identity rule: visitor asking if the Greeter is Tim gets third-person representative copy", () => {
+      const result = buildVisitorGreeterResponse({
+        message: "are you Tim?",
+        userFirst: "Tim",
+        userName: "Tim Green",
+        greeterName: "Alex",
+      });
+
+      expect(result.reply).toContain("Tim's representative");
+      expect(result.reply).not.toMatch(/\bI am Tim\b|\bI'm Tim\b/);
+    });
+
+    it("no fabrication rule: missing facts produce an unknown/escalation response", () => {
+      const result = buildVisitorGreeterResponse({
+        message: "What was Tim's ARR in 2023?",
+        userFirst: "Tim",
+        userName: "Tim Green",
+        greeterName: "Alex",
+        facts: [{ factMd: "Tim builds outbound systems for B2B services.", visibility: "public" }],
+      });
+
+      expect(result.reply).toMatch(/I don't know|They can speak to that/);
+      expect(result.reply).not.toContain("2023 ARR");
+      expect(result.reply).not.toContain("$");
+    });
+
+    it("no AI self-disclosure rule: chatbot probes do not get AI/chabot/language-model wording", () => {
+      const result = buildVisitorGreeterResponse({
+        message: "are you a chatbot?",
+        userFirst: "Tim",
+        userName: "Tim Green",
+        greeterName: "Alex",
+      });
+
+      expect(result.reply.toLowerCase()).not.toMatch(/\b(ai|chatbot|language model)\b/);
+      expect(result.reply).toContain("Tim's representative");
+    });
+
+    it("forwarded-note capture rule: tell-Tim turns become verbatim note actions", () => {
+      const result = buildVisitorGreeterResponse({
+        message: "tell Tim Acme is hiring 10 SDRs",
+        userFirst: "Tim",
+        userName: "Tim Green",
+        greeterName: "Alex",
+      });
+
+      expect(result.kind).toBe("forward-note");
+      if (result.kind === "forward-note") {
+        expect(result.factQuestionMd).toBe("Acme is hiring 10 SDRs");
+      }
+      expect(result.reply).toContain("I'll pass that to Tim");
+      expect(result.reply).not.toMatch(/I'll consider|I appreciate|I'll get back to you/i);
+    });
+
+    it("silent anti-persona rule: declines without revealing the private rule", () => {
+      const result = buildVisitorGreeterResponse({
+        message: "I'm a consultant who only drafts strategy, can I get an intro?",
+        userFirst: "Tim",
+        userName: "Tim Green",
+        greeterName: "Alex",
+        antiPersonaRules: ["Don't intro consultants who only draft strategy."],
+      });
+
+      expect(result.kind).toBe("refusal");
+      expect(result.reply).toContain("I don't think this is a fit");
+      expect(result.reply.toLowerCase()).not.toContain("consultants who only draft strategy");
+      expect(result.reply.toLowerCase()).not.toContain("anti-persona");
+    });
+
+    it("gated intro emission rule: intro requests emit an AuthorizationRequestBlock with transcript and costLabel null", () => {
+      const transcript: VisitorChatTurn[] = [
+        { role: "visitor", content: "I run Acme." },
+        { role: "greeter", content: "Good context." },
+        { role: "visitor", content: "I'd like an intro to Tim." },
+      ];
+      const block = buildVisitorIntroAuthorizationBlock({
+        userName: "Tim Green",
+        userFirst: "Tim",
+        requesterId: "visitor-session-1",
+        visitorName: "Avery",
+        visitorOrg: "Acme",
+        draft: "Hi Tim - Avery at Acme asked for an introduction.",
+        transcript,
+      });
+
+      expect(block).toMatchObject({
+        type: "authorization-request",
+        state: "pending",
+        recipientLabel: "Tim Green",
+        requesterId: "visitor-session-1",
+        costLabel: null,
+      });
+      expect(block.preview).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "data", title: "Visitor transcript" }),
+        ]),
+      );
+      expect(JSON.stringify(block.preview)).toContain("I'd like an intro to Tim.");
+      expect(block.executionResult).toBeNull();
+    });
   });
 
   it("uses a dedicated expert lane profile-card directive", () => {

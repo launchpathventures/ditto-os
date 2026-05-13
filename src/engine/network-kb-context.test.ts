@@ -65,6 +65,11 @@ describe("network KB context assembly", () => {
         userId: "user-kb-context",
         audience: "owner",
       });
+      const visitorContext = await buildNetworkKbContext({
+        db,
+        userId: "user-kb-context",
+        audience: "visitor",
+      });
 
       expect(publicContext.facts.map((fact) => fact.factMd)).toEqual(["Public fact."]);
       expect(publicContext.privateFilters).toHaveLength(0);
@@ -74,6 +79,11 @@ describe("network KB context assembly", () => {
       ]);
       expect(ownerContext.facts).toHaveLength(3);
       expect(ownerContext.privateFilters[0]?.ruleMd).toContain("pure copywriting");
+      expect(visitorContext.facts.map((fact) => fact.visibility).sort()).toEqual([
+        "on-request",
+        "public",
+      ]);
+      expect(visitorContext.privateFilters[0]?.ruleMd).toContain("pure copywriting");
     });
   }, 20_000);
 

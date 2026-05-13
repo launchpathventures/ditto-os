@@ -293,6 +293,12 @@ export interface AuthorizationRequestBlock {
   actionClass: AuthorizationActionClass;
   executionResult: AuthorizationResult | null;
   expiresAt: string | null;
+  /** Self-contained request summary for cross-deployment auth artifacts. */
+  request?: string;
+  /** Editable/approved draft payload carried with the auth artifact. */
+  draft?: string;
+  /** Visitor/session/user id of the requester, when the artifact crosses deployments. */
+  requesterId?: string;
   /** Optional pricing/free-counter hint populated by later intro flows. */
   costLabel?: string | null;
   /** Optional server/client correlation id for affordance events. */

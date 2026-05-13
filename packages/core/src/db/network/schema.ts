@@ -16,7 +16,7 @@
  * to a workspace-tier table here. The no-engine-import test in
  * `src/db/network-db.test.ts` enforces this.
  *
- * Surface (post-Brief 258 KB/scout): 13 pgTable declarations.
+ * Surface (post-Brief 259 public profile chat): 15 pgTable declarations.
  * Provenance: Brief 263 (this brief; converted from sqliteTable per ADR-048).
  */
 
@@ -30,7 +30,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";
-import type { JobRequestCardBlock, NetworkProfileCardBlock } from "../../content-blocks.js";
+import type { ContentBlock, JobRequestCardBlock, NetworkProfileCardBlock } from "../../content-blocks.js";
 
 // ============================================================
 // Type unions — Network-specific
@@ -93,6 +93,15 @@ export type NetworkKbFactStatus = (typeof networkKbFactStatusValues)[number];
 
 export const networkVoiceIntakeStatusValues = ["reviewed", "processing", "failed", "complete"] as const;
 export type NetworkVoiceIntakeStatus = (typeof networkVoiceIntakeStatusValues)[number];
+
+export const networkForwardedNoteStatusValues = ["pending", "answered", "dismissed"] as const;
+export type NetworkForwardedNoteStatus = (typeof networkForwardedNoteStatusValues)[number];
+
+export const networkWorkspaceDeliveryKindValues = ["forwarded_note", "visitor_intro_request"] as const;
+export type NetworkWorkspaceDeliveryKind = (typeof networkWorkspaceDeliveryKindValues)[number];
+
+export const networkWorkspaceDeliveryStatusValues = ["pending", "imported", "failed"] as const;
+export type NetworkWorkspaceDeliveryStatus = (typeof networkWorkspaceDeliveryStatusValues)[number];
 
 export const workspaceStatusValues = [
   "provisioning",
@@ -387,6 +396,54 @@ export const networkUserVoiceIntake = pgTable("network_user_voice_intake", {
   index("network_user_voice_intake_user_id").on(table.userId),
   index("network_user_voice_intake_status").on(table.status),
   index("network_user_voice_intake_updated_at").on(table.updatedAt),
+]);
+
+export const networkForwardedNotes = pgTable("network_forwarded_notes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  fromVisitorName: text("from_visitor_name"),
+  fromVisitorOrg: text("from_visitor_org"),
+  factQuestionMd: text("fact_question_md").notNull(),
+  visitorIp: text("visitor_ip"),
+  visitorSessionId: text("visitor_session_id"),
+  status: text("status").notNull().$type<NetworkForwardedNoteStatus>().default("pending"),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_forwarded_notes_user_id").on(table.userId),
+  index("network_forwarded_notes_status").on(table.status),
+]);
+
+export const networkWorkspaceDeliveries = pgTable("network_workspace_deliveries", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  kind: text("kind").notNull().$type<NetworkWorkspaceDeliveryKind>(),
+  status: text("status").notNull().$type<NetworkWorkspaceDeliveryStatus>().default("pending"),
+  blocks: json("blocks").$type<ContentBlock[]>().notNull(),
+  dedupeKey: text("dedupe_key"),
+  sourceStepRunId: text("source_step_run_id"),
+  importedAt: timestamp("imported_at", { mode: "date", withTimezone: false }),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_workspace_deliveries_user_status").on(table.userId, table.status),
+  index("network_workspace_deliveries_dedupe_key").on(table.dedupeKey),
 ]);
 
 // ============================================================

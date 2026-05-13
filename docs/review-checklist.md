@@ -107,3 +107,10 @@ Do all external dependencies referenced by this work have evaluations in `docs/l
 - Any new external API, SDK, or service used in the implementation must have a landscape entry
 - FLAG if an external dependency was introduced without a landscape evaluation
 - The Researcher or Architect should have written the evaluation during design — if the Documenter has to add it, that's a process gap
+
+### 16. Cross-Deployment Delivery Durability (Insight-234)
+Do Network-originated artifacts that must appear inside a workspace have a durable delivery contract?
+- Require sender-side persistence for any Network → workspace inbox/review artifact; in-memory SSE or live event fanout is not sufficient across deployments
+- Require consumer-side local import so workspace rendering and actions do not depend on a live Network DB read
+- Require idempotent ACK retry: already-imported rows still need to ACK their source delivery ids
+- Require terminal-state persistence for imported review artifacts so approve/reject outcomes survive reloads
