@@ -16,6 +16,7 @@
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getPublicBaseUrl } from "../../../lib/public-url";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
 
   if (!token) {
-    return NextResponse.redirect(new URL("/chat?error=missing_token", request.url));
+    return NextResponse.redirect(new URL("/chat?error=missing_token", getPublicBaseUrl(request)));
   }
 
   // Serve auto-submitting form page
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     const token = formData?.get("token")?.toString();
 
     if (!token) {
-      return NextResponse.redirect(new URL("/chat?error=missing_token", request.url));
+      return NextResponse.redirect(new URL("/chat?error=missing_token", getPublicBaseUrl(request)));
     }
 
     // Load env vars
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     const result = await consumeMagicLink(token);
 
     if (!result) {
-      return NextResponse.redirect(new URL("/chat?error=invalid_or_expired", request.url));
+      return NextResponse.redirect(new URL("/chat?error=invalid_or_expired", getPublicBaseUrl(request)));
     }
 
     // Set httpOnly session cookie
@@ -96,9 +97,9 @@ export async function POST(request: Request) {
       path: "/",
     });
 
-    return NextResponse.redirect(new URL("/chat", request.url));
+    return NextResponse.redirect(new URL("/chat", getPublicBaseUrl(request)));
   } catch (error) {
     console.error("[/chat/auth] Error:", error);
-    return NextResponse.redirect(new URL("/chat?error=server_error", request.url));
+    return NextResponse.redirect(new URL("/chat?error=server_error", getPublicBaseUrl(request)));
   }
 }

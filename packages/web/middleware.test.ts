@@ -73,6 +73,27 @@ describe("workspace auth middleware", () => {
     expect(res.status).toBe(200);
   });
 
+  it("uses NEXT_PUBLIC_APP_URL for the login redirect when request.url reports the internal bind", async () => {
+    // Regression: on Railway, Next.js standalone listens on 0.0.0.0:8080 and
+    // doesn't trust X-Forwarded-Host by default, so `request.url` inside a
+    // route handler reports the internal bind. The Location header for the
+    // login redirect must use the public URL, not `https://0.0.0.0:8080`.
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
+    vi.stubEnv("WORKSPACE_OWNER_EMAIL", "owner@example.com");
+    vi.stubEnv("SESSION_SECRET", "workspace-secret");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://workspace.example.com");
+    const { middleware } = await loadMiddleware();
+
+    const internalReq = new NextRequest("https://0.0.0.0:8080/inbox");
+    const res = await middleware(internalReq);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe(
+      "https://workspace.example.com/login?redirect=%2Finbox",
+    );
+  });
+
   it("allows /api/healthz on a fully-configured managed workspace without auth", async () => {
     vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
     vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");

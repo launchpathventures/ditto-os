@@ -88,6 +88,41 @@ describe("POST /login/auth", () => {
     expect(markers[0].token).toBe("workspace-bootstrap:route-nonce");
   });
 
+  it("derives audience and redirect target from NEXT_PUBLIC_APP_URL when request.url reports the internal bind", async () => {
+    // Regression: Railway's Next.js standalone binds to 0.0.0.0:8080 and
+    // doesn't trust X-Forwarded-Host by default, so `request.url` in this
+    // route reports the internal bind. The bootstrap token's audience is the
+    // public URL — without NEXT_PUBLIC_APP_URL precedence, the audience check
+    // fails and the redirect Location leaks `https://0.0.0.0:8080`.
+    process.env.NEXT_PUBLIC_APP_URL = "https://workspace.example.com";
+    try {
+      const { createWorkspaceBootstrapLoginLink } = await import(
+        "../../../../../src/engine/magic-link"
+      );
+      const link = createWorkspaceBootstrapLoginLink({
+        workspaceUrl: "https://workspace.example.com",
+        userId: "user-1",
+        email: "owner@example.com",
+        secret: "workspace-secret",
+        jti: "internal-bind-nonce",
+      });
+
+      const { POST } = await loadRoute();
+      const internalReq = new Request("https://0.0.0.0:8080/login/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: link.token }),
+      });
+      const res = await POST(internalReq);
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toBe("https://workspace.example.com/");
+      expect(setCookie).toHaveBeenCalled();
+    } finally {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    }
+  });
+
   it("keeps existing DB-backed workspace magic links working", async () => {
     const { createWorkspaceMagicLink } = await import("../../../../../src/engine/magic-link");
     const link = await createWorkspaceMagicLink("owner@example.com");

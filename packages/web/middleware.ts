@@ -26,6 +26,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getDeploymentMode } from "./lib/deployment";
+import { getPublicBaseUrl } from "./lib/public-url";
 
 const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
 
@@ -128,8 +129,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // No session — redirect to login
-  const loginUrl = new URL("/login", request.url);
+  // No session — redirect to login. Use the public base URL so the Location
+  // header doesn't leak the internal Docker bind (`0.0.0.0:8080`) — see
+  // `./lib/public-url.ts` for the full rationale (Insight-234).
+  const loginUrl = new URL("/login", getPublicBaseUrl(request));
   loginUrl.searchParams.set("redirect", pathname);
   return NextResponse.redirect(loginUrl);
 }
