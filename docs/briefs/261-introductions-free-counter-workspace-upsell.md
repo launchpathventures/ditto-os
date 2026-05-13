@@ -1,7 +1,7 @@
 # Brief 261: Introductions Primitive + Free Counter + Workspace Upsell
 
 **Date:** 2026-05-13
-**Status:** draft
+**Status:** design-ready (reviewed twice — fresh-context Sonnet reviewers; all flags addressed inline 2026-05-13)
 **Depends on:**
 - Brief 263 (complete) — `networkDb` proxy + Postgres tier; required because the introductions table lives in the network tier and crosses deployment boundaries.
 - Brief 256 (complete) — `NetworkProfileCardBlock` content block + `AuthorizationRequestBlock.costLabel?: string | null` field already added to `packages/core/src/content-blocks.ts:297`. **This brief POPULATES the `costLabel` field — it does NOT add it.** Verified via grep against `packages/core/src/content-blocks.ts`.
@@ -93,17 +93,17 @@ Every intro request in Ditto — from any of the three originating contexts (wor
   Verified by three crossover test cases.
 - **Cross-deployment delivery uses Brief 259's chosen seam.** This brief does NOT introduce a parallel delivery mechanism. The Network → workspace bridge that delivers `forward_note_to_user` artifacts is the same one used here for intro delivery. If Brief 259 ships an in-memory bridge and 261 needs durability, that's a separate insight + brief.
 - **Insight-231: AuthorizationRequestBlock body is self-contained on workspace render path.** Test verifies the workspace-side render path of the intro block does NOT import `networkDb`. The block body carries: `request` (intro request summary), `draft` (the Greeter's draft email/message), `preview: ContentBlock[]` (full visitor or client-lane transcript), `recipientLabel` (the visitor's stated name/org or the client-lane requester's display name), `requesterId` (visitor session id or workspace user id), `costLabel` (populated string). NO Network-tier-only references.
-- **Workspace upsell trigger (locked — parent line 574).** Fires exactly ONCE per user per session-lane **after Q6 of either lane** (parent §"Workspace upsell" verbatim). Q6 completion is operationally:
+- **Workspace upsell trigger (locked — parent line 574).** Fires exactly ONCE per user per lane **after Q6 of either lane** (parent §"Workspace upsell" verbatim). Q6 completion is operationally:
   - **Expert lane:** the user has answered Q6 (`wantsVisibility` question per parent line 562) and the `NetworkProfileCardBlock` has been emitted to chat. Trigger key: `"expert-q6"`.
   - **Client lane:** the user has answered Q6 (off-network scout opt-in per parent line 570) and the `JobRequestCardBlock` has been emitted to chat. Trigger key: `"client-q6"`.
   Per parent line 582 ("Sub-briefs 256 + 257 must encode this verbatim"), Briefs 256 and 257 (both complete) own the Q6-completion seams. **Brief 261's build wires the `maybeFireWorkspaceUpsell` call into those seams** — verify at build time whether 256/257 already invoke a placeholder function or need the wiring inserted. The trigger does NOT fire on "first intro queued" or "first scout completes" — those are post-Q6 events outside the parent's locked design.
-  Idempotency keyed by `(userId, sessionLaneId, trigger)` — recorded as a row in the `network_session_upsell_log` table (this brief adds it as a minor primitive). Re-firing on the same `(userId, sessionLaneId, trigger)` tuple is suppressed.
+  **Idempotency key — durable, not ephemeral.** Parent line 582's "fires once per user per session-lane" means "fires once per `(userId, lane)`" where `lane` is one of `"expert" | "client"` and persists across visits. The trigger key (`"expert-q6"` / `"client-q6"`) already encodes the lane, so the durable uniqueness key collapses to `(userId, trigger)`. A user returning a second time with a fresh ephemeral chat session ID still hits the same `(userId, trigger)` row and the upsell does NOT re-fire. Idempotency rows live in `network_session_upsell_log` (this brief adds it as a minor primitive) keyed by `(userId, trigger)` as the unique constraint.
   The upsell text is the parent's verbatim copy:
   > *"Card's ready. I'll save this and you can chat with me at `ditto.partners/people/{handle}` — share that link with anyone curious about you.*
   >
   > *One more thing — want a workspace? It's where I'd remember the briefs you write up for me, track which intros went somewhere, and pull in calendar/email so 'who should I see next week' actually has an answer. Free tier covers it. **Worth it if you do this kind of hunting more than twice a year.**"*
   Encoded as a constant in `src/engine/network-upsell-copy.ts` and rendered via the chat. Test asserts substring presence ("Worth it if you do this kind of hunting more than twice a year") in the emitted message.
-- **Schema migration follows Insight-190 (dual-journal hygiene).** New `introductions` + `networkUserBlockList` + `network_session_upsell_log` tables added to `packages/core/src/db/network/schema.ts`. `drizzle-kit generate --config drizzle.network.config.ts` (or equivalent) creates the SQL file at the next available idx. **Verify journal at build time:** Brief 259 plans idx 3 (`0003_create_network_forwarded_notes.sql`); if 259 has shipped, 261's migration is idx 4. If 259 has not shipped, 261's migration is idx 3 and 259 must resequence on its build. Build-time check: read `drizzle/network/meta/_journal.json` and use `(max(idx) + 1)`. SQL file MUST exist for every journal entry; idx values MUST be sequential.
+- **Schema migration follows Insight-190 (dual-journal hygiene).** New `introductions` + `networkUserBlockList` + `network_session_upsell_log` tables added to `packages/core/src/db/network/schema.ts`. `drizzle-kit generate --config drizzle.network.config.ts` (or equivalent) creates the SQL file at the next available idx. **The Builder MUST re-read `drizzle/network/meta/_journal.json` at build time and use `(max(idx) + 1)` — do NOT assume any specific idx value.** Context for orientation only (NOT to be relied upon): at design time (2026-05-13), the journal had max idx = 2; Brief 259 plans idx 3 (`0003_create_network_forwarded_notes.sql`). If both 259 and a parallel-workspace migration have shipped before this brief's build, idx 4 or higher may be needed. If 259 has not shipped, this brief's migration is idx 3 and 259 must resequence on its build (resequence-on-conflict per Insight-190). SQL file MUST exist for every journal entry; idx values MUST be sequential; the snapshot file (`drizzle/network/meta/{idx}_snapshot.json`) MUST also exist.
 - **No engine boundary violation.** The introductions table lives in `packages/core/src/db/network/schema.ts` (engine — schema is core). `emit_intro_request` lives in `src/engine/` (Ditto product layer — uses Network-specific delivery seam). Per CLAUDE.md "Engine Core" rules: schema is reusable across consumers; the intro-emission orchestration is Ditto-specific (network agent, three-context emission, free counter). ProcessOS could reuse the introductions table primitive but would not reuse the network-specific tool.
 - **State transitions follow Brief 248's 9-state pattern.** Plus this brief adds three workflow states unique to introductions: `queued-for-review` (3rd+ intro under v1 free-only enforcement), `refused-by-greeter` (one of the 4 AC-J triggers fired), `fulfilled` (the user-side recipient confirmed the intro happened — out of scope for this brief; the field exists on the table and stays NULL until a downstream brief surfaces fulfillment).
 
@@ -120,7 +120,7 @@ Every intro request in Ditto — from any of the three originating contexts (wor
 | Free-then-paid counter (free intros up to 2; gated 3rd+) | Standard freemium gating | pattern | Counter scaffolding now, payment hooks deferred per parent Deferred Items. |
 | AC-J four refusal triggers (anti-persona / low-fit / user-block / rate-limit) | Original to Ditto, derived from Brief 248 + parent §Constraint | original | The 4-trigger taxonomy is unique to Ditto's representative-not-impersonator stance. No external precedent — LinkedIn, Contra, Upwork all rely on user-side rejection or paid gating, not Greeter-side refusal with one-sentence reasons. |
 | Workspace upsell verbatim copy fired once per session-lane | Parent §"Workspace upsell" (locked verbatim) | adopt | Copy is locked by the parent; idempotency mechanism is original. |
-| Idempotency log (`network_session_upsell_log`) | Original to Ditto | original | Minor primitive — stores `(userId, sessionLaneId, firedAt)` so re-firing is suppressed. No external precedent needed for a one-table flag. |
+| Idempotency log (`network_session_upsell_log`) | Original to Ditto | original | Minor primitive — stores `(userId, trigger, firedAt)` with unique constraint `(userId, trigger)` so re-firing is suppressed durably across ephemeral chat sessions. No external precedent needed for a one-table flag. |
 | Greeter rate-limiting per requester | Brief 259 visitor-rate-limit lifted from process-os | pattern | Same pattern, applied to intro-request rate not chat-message rate. |
 
 ## What Changes (Work Products)
@@ -129,7 +129,7 @@ Every intro request in Ditto — from any of the three originating contexts (wor
 |------|--------|
 | `packages/core/src/db/network/schema.ts` | Modify: add `introductions` pgTable: `{ id (uuid, pk), requesterUserId? (text — workspace user id), visitorSessionId? (text — visitor session if not authenticated), requesterDisplayName (text), requesterOrgLabel? (text), targetUserId (text — FK networkUsers.userId), state (text — one of "queued" \| "approved" \| "rejected" \| "expired" \| "fulfilled" \| "queued-for-review" \| "refused-by-greeter"), costLabel (text), freeCounterIndex (integer — 1, 2, or ≥3), refusalReason? (text — "anti-persona" \| "low-fit" \| "user-block" \| "rate-limit"), draftMd (text), transcriptJson (jsonb), originContext (text — "client-lane" \| "visitor" \| "expert-crossover"), createdAt (timestamp), decidedAt? (timestamp), fulfilledAt? (timestamp) }`. Index on `(targetUserId, state)` and `(requesterUserId, state)` and `(visitorSessionId, state)`. Constraint: exactly one of `requesterUserId` and `visitorSessionId` is non-null. |
 | `packages/core/src/db/network/schema.ts` | Modify (same file): add `networkUserBlockList` pgTable: `{ id (uuid, pk), targetUserId (text — FK networkUsers.userId), blockedRequesterIdentifier (text — workspace user id, visitor session id, or simple wildcard pattern e.g. `*@acme.com`), kind (text — "user" \| "visitor-session" \| "pattern"), reasonMd? (text — user's private note), createdAt (timestamp) }`. Index on `targetUserId`. **`pattern`-kind entries are bounded:** simple string wildcards only (one or more literal `*` characters in a string), no regex syntax, max length 254 chars. Enforced at write time by a validator that rejects values containing regex metacharacters other than `*` (i.e. rejects `?`, `(`, `)`, `[`, `]`, `\`, `^`, `$`, `+`, `{`, `}`). Prevents ReDoS and accidental over-blocking from operator-supplied patterns. |
-| `packages/core/src/db/network/schema.ts` | Modify (same file): add `network_session_upsell_log` pgTable: `{ id (uuid, pk), userId (text), sessionLaneId (text), trigger (text — "expert-q6" \| "client-q6"), firedAt (timestamp) }`. Unique constraint on `(userId, sessionLaneId, trigger)` for idempotency. |
+| `packages/core/src/db/network/schema.ts` | Modify (same file): add `network_session_upsell_log` pgTable: `{ id (uuid, pk), userId (text), trigger (text — "expert-q6" \| "client-q6"), firedAt (timestamp) }`. **Unique constraint on `(userId, trigger)`** for durable idempotency — the lane is already encoded in the trigger key, so the constraint persists across ephemeral chat sessions (Constraint section: "fires once per user per lane"). Re-firing on the same `(userId, trigger)` tuple is suppressed. |
 | `drizzle/network/{NEXT}_create_introductions_blocklist_upselllog.sql` | Create: generated by `drizzle-kit generate` with the next available idx (verify against `drizzle/network/meta/_journal.json` at build time per Insight-190). All three tables in one migration is acceptable since they're related to the same brief's scope. |
 | `drizzle/network/meta/_journal.json` | Modify: new entry with sequential idx. |
 | `src/engine/emit-intro-request.ts` | Create: `emitIntroRequest({ stepRunId, originContext, requesterUserId?, visitorSessionId?, requesterDisplayName, requesterOrgLabel?, targetUserId, intentSummary, transcript }) → AuthorizationRequestBlock`. Evaluates 4 AC-J triggers in order; on refusal, persists `introductions` row in `refused-by-greeter` state with `refusalReason` set, returns AuthorizationRequestBlock with state `rejected` (per Brief 248 9-state machine) and refusal reason in `executionResult`. On non-refusal, computes counter (counts non-refused/rejected/expired rows for this requester), populates `costLabel`, persists `introductions` row in `queued` (or `queued-for-review` if count ≥ 2), composes the draft via LLM (cite only public + on-request KB facts per Brief 259), emits AuthorizationRequestBlock with `preview: ContentBlock[]` carrying transcript, delivers via the same Network → workspace bridge used by `forward_note_to_user`. Refuses without `stepRunId` outside `DITTO_TEST_MODE`. |
@@ -137,7 +137,7 @@ Every intro request in Ditto — from any of the three originating contexts (wor
 | `src/engine/tool-resolver.ts` | Modify: register `emit_intro_request` in `builtInTools` keyed by the same string the Greeter directive references. |
 | `src/engine/network-chat-prompt.ts` | Modify: extend Greeter directive (BOTH expert lane and client lane variants, AND the visitor lane variant from Brief 259) to reference the `emit_intro_request` tool. The visitor-lane directive — currently planned to call a placeholder intro-emission stub in Brief 259 — is updated to call this brief's tool instead. (Coordination: this means Brief 261 build replaces the stub Brief 259 build introduces. Document this seam clearly in code comments.) |
 | `src/engine/network-upsell-copy.ts` | Create: encodes the parent's verbatim workspace upsell copy as a constant. Exports `WORKSPACE_UPSELL_COPY` and a function `composeWorkspaceUpsell({ greeterName, userFirstName, handle })` that interpolates the variables. |
-| `src/engine/workspace-upsell-trigger.ts` | Create: `maybeFireWorkspaceUpsell({ stepRunId, userId, sessionLaneId, trigger })` — checks `network_session_upsell_log` for an existing entry; if none, writes the row and emits the upsell message into the chat; if present, no-ops. Refuses without `stepRunId` outside `DITTO_TEST_MODE`. **Wired to fire from the Q6-completion seams (parent line 574 + 582):** (a) Brief 256's expert-card-emission seam (`trigger="expert-q6"`), and (b) Brief 257's JobRequest-emission seam (`trigger="client-q6"`). The build inspects 256/257 at implementation time; if those briefs already shipped a placeholder upsell-fire call site, Brief 261's build replaces it; if not, the build inserts the call at the right line. |
+| `src/engine/workspace-upsell-trigger.ts` | Create: `maybeFireWorkspaceUpsell({ stepRunId, userId, trigger })` — checks `network_session_upsell_log` for a row with matching `(userId, trigger)`; if none, writes the row and emits the upsell message into the chat; if present, no-ops. Refuses without `stepRunId` outside `DITTO_TEST_MODE`. **Wired to fire from the Q6-completion seams (parent line 574 + 582):** (a) Brief 256's expert-card-emission seam (`trigger="expert-q6"`), and (b) Brief 257's JobRequest-emission seam (`trigger="client-q6"`). The build inspects 256/257 at implementation time; if those briefs already shipped a placeholder upsell-fire call site, Brief 261's build replaces it; if not, the build inserts the call at the right line. |
 | `src/engine/workspace-upsell-trigger.test.ts` | Create: tests for stepRunId enforcement, idempotency (calling twice in same session-lane no-ops the second), substring assertion that the emitted message contains the locked verbatim line "Worth it if you do this kind of hunting more than twice a year". |
 | `packages/web/app/api/v1/network/people/[id]/intro-request/route.ts` | Modify (created by Brief 259 with placeholder; this brief replaces the placeholder): POST endpoint that takes the visitor-side intro intent + transcript, traverses the audited-route wrapper (Insight-232), calls `emit_intro_request`. Returns the AuthorizationRequestBlock JSON to the visitor's chat. |
 | `packages/web/app/api/v1/network/intros/route.ts` (or the existing client-lane intro path — verify at build time) | Modify: client-lane intro emission goes through `emit_intro_request` instead of any placeholder. |
@@ -179,16 +179,16 @@ How do we verify this work is complete? Each criterion is boolean: pass or fail.
    - 7a. Expert → Client crossover ("Find me clients" auto-flip) → intro emission goes through `emit_intro_request`; counter row keyed to user-as-requester.
    - 7b. Client → Expert crossover (`wantsVisibility=true` post-intro then candidate-match intro) → routes through `emit_intro_request` on subsequent intro.
    - 7c. Visitor → Expert crossover ("want a card of your own?" CTA mid-visitor-session) → existing `introductions` row remains under `visitorSessionId`; new expert account starts with count=0 under new `requesterUserId`.
-8. [ ] Workspace upsell trigger fires exactly once per `(userId, sessionLaneId, trigger)` tuple. Verified by test:
+8. [ ] Workspace upsell trigger fires exactly once per `(userId, trigger)` tuple — durable across ephemeral chat sessions. Verified by test:
    - 8a. First call writes `network_session_upsell_log` row + emits chat message containing verbatim "Worth it if you do this kind of hunting more than twice a year".
-   - 8b. Second call with same tuple no-ops (no row written, no message emitted).
+   - 8b. Second call with same `(userId, trigger)` no-ops (no row written, no message emitted) — even if invoked from a fresh ephemeral chat session.
 9. [ ] Workspace upsell fires after BOTH Q6-completion seams (parent line 574 literal): (a) first expert-lane card emission (`trigger="expert-q6"`), (b) first client-lane JobRequest emission (`trigger="client-q6"`). Two tests, one per seam. **Does NOT fire on "first intro queued" or "first scout completes"** — those are explicitly outside the parent's locked trigger.
 10. [ ] Cross-deployment delivery: a visitor-originated intro lands in the target user's workspace inbox via the same Network → workspace bridge used by `forward_note_to_user` (Brief 259's chosen seam). Verified by integration test or manual smoke (smoke section).
-11. [ ] Insight-231 self-contained block body: workspace-side render path of the AuthorizationRequestBlock does NOT import `networkDb`. Verified by an import-graph test that loads the workspace inbox renderer and asserts no `networkDb` symbol is reachable from its module graph.
+11. [ ] Insight-231 self-contained block body: workspace-side render path of the AuthorizationRequestBlock does NOT require `networkDb`. Verified by a **runtime render test** (per Brief 259 AC 10 pattern, more robust than a static import-graph assertion against conditional imports / code splitting): the test constructs an `AuthorizationRequestBlock` payload as it would be delivered cross-deployment, loads the workspace inbox renderer in a test harness with NO `networkDb` instance in scope (`networkDb` import path mocked to throw, OR test runs in a renderer-only build artifact where `networkDb` is absent), and asserts the block renders + the `Send it` / `Edit draft` / `Not now` actions are clickable end-to-end without any error.
 12. [ ] v1 free-only enforcement: no Stripe imports, no `pricing` payload in any new code, no payment route. Verified by grep test (`pnpm grep "stripe\|stripeCheckout\|paymentIntent" src/engine packages/web/app | head -1` returns nothing for the new files).
 13. [ ] Renderer surfaces `costLabel` as a one-line text under the draft when non-null; hidden when null (preserving Brief 259 placeholder behavior). Verified by component test.
 14. [ ] Workspace upsell CTA renders with the parent's verbatim copy and `[Yes, set up workspace] [Not now, just my card]` buttons. The Yes button posts to existing `/api/v1/network/admin/provision`.
-15. [ ] **HTTP route bypass-rejection (Insight-232 Implication 2).** The `packages/web/app/api/v1/network/people/[id]/intro-request/route.ts` POST endpoint rejects any request that supplies a `stepRunId` in the request body with a 4xx response — the wrapper is the only authority that injects `stepRunId`, never the client. Verified by a route test that sends `{ stepRunId: "fake" }` in the body and asserts 4xx + no `introductions` row written.
+15. [ ] **HTTP route bypass-rejection (Insight-232 Implication 2) — BOTH intro-emission routes.** The visitor-lane route at `packages/web/app/api/v1/network/people/[id]/intro-request/route.ts` AND the client-lane route at `packages/web/app/api/v1/network/intros/route.ts` (or whatever concrete path Brief 261's build identifies for the client-lane intro emission) each reject any request body containing a `stepRunId` field with a 4xx response — the audited-route wrapper is the only authority that may mint `stepRunId`, never the client. Verified by TWO route tests (one per route) that send `{ stepRunId: "fake" }` in the body and assert 4xx + `emit_intro_request` was NOT invoked + no `introductions` row written.
 16. [ ] **BlockList pattern validator.** `networkUserBlockList.blockedRequesterIdentifier` with `kind="pattern"` is bounded: simple wildcards only (`*` allowed; regex metacharacters `?()[]\^$+{}` rejected) and max length 254 chars. Verified by schema/insert test that rejects regex-style patterns and over-length values.
 
 **Smoke-test-relevant** (these are NOT acceptance criteria but the smoke proves the loop):
@@ -251,11 +251,13 @@ DITTO_DEPLOYMENT=public pnpm --filter @ditto/web dev
 #   - Workspace upsell CTA appears in chat with verbatim line
 #     "Worth it if you do this kind of hunting more than twice a year".
 #   - Two buttons present: [Yes, set up workspace] [Not now, just my card].
-#   - network_session_upsell_log row written: (userId, sessionLaneId, trigger="expert-q6").
+#   - network_session_upsell_log row written: (userId, trigger="expert-q6").
 # Click [Not now, just my card]. VERIFY: CTA disappears; no row written to
 #   workspace-creation table.
+# Log out, open a fresh browser session, log back in as the same user.
 # Submit another small edit to the card (re-trigger Q6 effectively).
-# VERIFY: upsell does NOT re-fire (idempotency on (userId, sessionLaneId, trigger)).
+# VERIFY: upsell does NOT re-fire — DURABLE idempotency on (userId, trigger)
+# persists across ephemeral chat sessions (Constraint: lane is in the trigger key).
 
 # 4c. Workspace upsell at Q6 (client lane).
 # Spawn a fresh client user "Casey" and walk them through client intake Q1-Q6.
@@ -263,7 +265,7 @@ DITTO_DEPLOYMENT=public pnpm --filter @ditto/web dev
 # VERIFY:
 #   - JobRequestCardBlock emits.
 #   - Workspace upsell CTA appears in Casey's chat with verbatim line.
-#   - network_session_upsell_log row: (Casey.userId, sessionLaneId, trigger="client-q6").
+#   - network_session_upsell_log row: (Casey.userId, trigger="client-q6").
 
 # 5. Visitor lane intro flow (cross-deployment).
 open http://localhost:3000/people/timhgreen
@@ -290,11 +292,18 @@ open https://ditto-ws-timhgreen.up.railway.app/inbox
 # VERIFY:
 #   - introductions.state transitions queued → approved.
 #   - decidedAt populated.
-#   - **No upsell CTA appears** — Tim's upsell already fired at his expert Q6
-#     (covered in step 4b). Upsell-on-approve is NOT the parent's trigger.
+#   - **No upsell CTA appears in Tim's approval flow.** The upsell is gated to Q6
+#     completion (not approval); per parent line 574 the trigger is Q6-of-either-lane.
+#     Tim never walked Q6 in this smoke session (the fresh expert in step 4b was
+#     "smoke-expert-{date}", not Tim — so Tim's `(userId, trigger)` row was never
+#     written). Therefore "no upsell on approve" is the expected behavior here AND
+#     would hold even if Tim HAD walked Q6 (because at Q6 the upsell would have
+#     fired then, suppressed here by idempotency). Either way: upsell-on-approve
+#     is NOT the parent's trigger.
 
 # 8. (Reserved — no upsell-dismiss step here; upsell is gated to Q6 completion,
-#     tested in steps 4b/4c. AC 9 unit-test covers idempotency at unit level.)
+#     tested in steps 4b/4c. AC 8 unit-test covers durable (userId, trigger)
+#     idempotency at unit level.)
 
 # 9. Second intro (still free).
 # Repeat steps 5-7 from a different visitor session id.

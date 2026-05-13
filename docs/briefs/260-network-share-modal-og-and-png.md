@@ -1,7 +1,7 @@
 # Brief 260: Network Share Modal + Three-Voice Variants + Dynamic OG + Downloadable PNG
 
 **Date:** 2026-05-13
-**Status:** draft
+**Status:** design-ready (reviewed twice — fresh-context Sonnet reviewers; all flags addressed inline 2026-05-13)
 **Depends on:**
 - Brief 263 (complete) — `networkDb` proxy + Postgres tier; required because share-variant generation reads KB facts from network tier.
 - Brief 256 (complete) — `NetworkProfileCardBlock` content block with `shareUrl: string` and `ogImageUrl: string` fields already present (verified via `packages/core/src/content-blocks.ts:68-85`). This brief POPULATES those endpoints — it does not extend the schema.
@@ -155,18 +155,19 @@ How do we verify this work is complete? Each criterion is boolean: pass or fail.
 4. [ ] Each variant string ends with `https://ditto.partners/people/{handle}` (exact suffix match). Verified by test with three string assertions.
 5. [ ] No variant contains budget language. Test rejects substring matches against the regex `/(\$\d|hourly|monthly|hr rate|budget|\bk\/(month|hour|hr|year))/i` across all three variants. Verified.
 6. [ ] Tool reads only KB facts where `visibility = "public"`. Test seeds three facts at `public`, `on-request`, `off` and verifies the `on-request` and `off` text never appears in any of the three returned variants.
-7. [ ] Shared `card-silhouette.tsx` component exists at `packages/web/components/network/card-silhouette.tsx` and is consumed by (a) the share modal live preview, (b) the OG route, (c) the PNG route, AND (d) the Brief 256 `NetworkProfileCardBlock` renderer (either by direct import or via a verified import chain from it — the in-product block MUST NOT remain unlinked to `card-silhouette.tsx`, since Soul Move #7 mandates one silhouette across four contexts). Verified by import-graph assertion (a Vitest test or grep that asserts all four render paths reach the same module path).
+7. [ ] Shared `card-silhouette.tsx` component exists at `packages/web/components/network/card-silhouette.tsx` AND all four render paths resolve to that single canonical module: (a) the share modal live preview, (b) the OG route `opengraph-image.tsx`, (c) the PNG route `card-png/route.ts`, (d) the Brief 256 `NetworkProfileCardBlock` renderer (either by direct import or via a verified import chain from it — the in-product block MUST NOT remain unlinked to `card-silhouette.tsx`, since Soul Move #7 mandates one silhouette across four contexts). Verified by a test or grep that resolves all four import paths to the single canonical module `packages/web/components/network/card-silhouette.tsx`. Drift between contexts is an architectural defect and requires an ADR per Design Rule #11.
 8. [ ] `packages/web/app/people/[handle]/opengraph-image.tsx` exists and returns a 1200×630 `ImageResponse` for a known existing handle. Verified by an integration test or by Playwright fetching `/people/timhgreen/opengraph-image` and asserting `200 OK` + `image/png` content type + dimensions.
 9. [ ] `packages/web/app/people/[handle]/page.tsx` sets `<meta property="og:image">` pointing at the dynamic OG route AND `<meta name="twitter:card" content="summary_large_image">`. Verified by Playwright/Vitest snapshot of the head tags or by direct HTML assertion.
 10. [ ] OG route handles 404 gracefully (handle does not exist) by returning a generic "Ditto" fallback OG image at HTTP 200 — not a 404 status. Verified by test fetching `/people/handle-that-does-not-exist/opengraph-image` and asserting `200 OK` + a fallback signature (e.g. a known marker pixel or a generic-fallback-flag in render).
 11. [ ] PNG download endpoint at `packages/web/app/api/v1/network/people/[id]/card-png/route.ts` returns `200 OK` + `image/png` content type + `Content-Disposition: attachment; filename="ditto-card-{handle}.png"` header. Verified.
 12. [ ] Share modal renders from the `⤴ Share` button on `NetworkProfileCardBlock`. Backdrop blur present (`bg-black/40 backdrop-blur-md` class). Live preview LEFT renders the same `card-silhouette` component used by OG. Three voice cards (QUIET / LOUD / ASK) RIGHT, default-selected card is LOUD. Verified by component test or Playwright test.
 13. [ ] Action row contains exactly `[Copy] [Post to LinkedIn] [Download card PNG]` buttons. Copy writes the selected variant to clipboard (mocked `navigator.clipboard.writeText` in test). LinkedIn opens `https://www.linkedin.com/sharing/share-offsite/?url={encoded canonical share URL}` in a new tab. Download triggers a request to the PNG endpoint.
-14. [ ] **Live-preview re-render on edit.** When the user edits the selected variant text in the modal textarea, the live-preview LEFT re-renders to show the edited copy (parent line 499: "re-renders as you type below"). Verified by component test simulating user input on the variant textarea and asserting the preview's text node updates.
+14. [ ] **Live-preview re-render on edit.** When the user edits the selected variant text in the modal textarea, the card-silhouette live-preview LEFT re-renders to show the edited copy wherever variant text is overlaid on the card preview (NOT a generic decoupled text node — the silhouette IS the preview surface, and the variant copy is the overlay) (parent line 499: "re-renders as you type below"). Verified by component test simulating user input on the variant textarea and asserting the rendered card-silhouette overlay text mutates to match.
 15. [ ] Phoenix gradient appears at most twice per OG render and at most twice per PNG render. Verified by inspecting the rendered SVG/HTML structure passed to `ImageResponse` (two gradient nodes max).
 16. [ ] Italic Instrument Serif applies only to the narrative verb (one word). Verified by snapshot of the rendered card-silhouette JSX/SVG showing the italic-class attribute appears on exactly one text node per card.
 17. [ ] `docs/landscape.md` contains the new `next/og ImageResponse` entry. Verified by grep.
 18. [ ] Visual identity across the four contexts. Manual verification matrix in Smoke Test below — Builder and Reviewer both run it before approval. (Boolean: all four contexts produce visually-identical card silhouettes at their native resolutions, modulo rendering aliasing.)
+19. [ ] **HTTP route bypass-rejection (Insight-232 Implication 2).** The `packages/web/app/api/v1/network/people/[id]/share/route.ts` POST endpoint rejects any request body containing a `stepRunId` field with a 4xx response — the audited-route wrapper is the only authority that may mint `stepRunId`, never the client. Verified by a route test that sends `{ stepRunId: "fake" }` in the body and asserts 4xx + `generate_share_variants` was NOT invoked.
 
 ## Review Process
 
@@ -174,7 +175,7 @@ How to validate the work after completion:
 
 1. Spawn review agent with `docs/architecture.md` + `docs/review-checklist.md` + parent brief 254 (§Surface F, §Soul Move #7, §Design Rules) + `docs/insights/180-steprun-guard-for-side-effecting-functions.md`.
 2. Review agent checks:
-   - All 18 acceptance criteria.
+   - All 19 acceptance criteria.
    - Layer alignment: Layer 6 (human surface — share modal) + Layer 2 (agent — `generate_share_variants` self-tool with stepRunId guard). No Layer 1 process changes.
    - Provenance: `next/og` landscape entry present.
    - Composition: shared card-silhouette component consumed by all three render paths (not duplicated).
