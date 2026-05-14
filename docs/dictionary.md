@@ -1141,3 +1141,45 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Runner Response Body** — The opaque-JSON channel `runner_dispatches.response_body` (column added by Brief 232 migration idx=17, prefix `0018_*`). The wire boundary `workItemStatusUpdateSchema` accepts an OPTIONAL `responseBody: z.record(z.unknown())` field; the status webhook persists it on the matched dispatch row inside the existing transaction (orphan callbacks silently drop). Per-shape validation is consumer-side: the project retrofitter reads `{commitSha, actuallyChangedFiles, skippedFiles?}` and falls back to a legacy hex-parse from `externalRunId` when responseBody is null/malformed (Brief 228 MVP behaviour preserved). Generic by design — future task types (post-merge linter results, deploy-runner output, branch coverage) compose without schema growth or new tables. Excludes `local-mac-mini` (synchronous bridge has no callback path; results return inline). Cloud runners (`claude-code-routine` + `claude-managed-agent` + `github-action`) carry the channel — the routine + managed-agent in-prompt callback stanza (`buildInternalCallbackSection`) and the GH Action template both name `responseBody` in the curl `-d` body shape.
 - Layer: 1 (Data — `runner_dispatches.response_body` column) / 3 (Harness — webhook persistence) / 6 (Human — the renderer's `skippedUserTouchedFiles` populates end-to-end)
 - Related: Brief 228 AC #11 (discharged), `parseRunnerResponse`, `workItemStatusUpdateSchema`, `buildInternalCallbackSection`
+
+## Network Superconnector Doctrine (Brief 271)
+
+**Superconnector** — The product thesis behind Ditto Network: a representative who quietly understands what people are excellent at, what they need, and when a thoughtful introduction could create value. Not a search engine and not a directory. The promise is fewer, better, consent-based introductions that produce concrete professional or economic outcomes (work, hires, funding, partnerships, advice, customers, collaborators). User-supplied canonical metaphor; original to Ditto. Headlines and first-viewport copy reference the term verbatim.
+- Layer: 6 (Human) / Cross-cutting (product doctrine)
+- Related: Member Signal, Need Signal, Active Request, Manual Search, Background Watch, Possible Connection, Introduction Proposal, Network Health, Source Provenance
+
+**Member Signal** — The living representation of a Network member: what they are excellent at, who fits them, who does not, sources behind every claim, and freshness. Built from links, work, and context that the member supplies and approves. The signal is what Ditto reasons about when a request arrives or a watch fires; the profile card is its public projection. Replaces the lane-mechanic phrasing of "expert profile" in product copy. Member signals are private by default; members choose visibility per facet.
+- Layer: 1 (Process — KB facts feeding `network_users`) / 6 (Human — profile card)
+- Related: Superconnector, Need Signal, Source Provenance, Possible Connection
+
+**Need Signal** — A user's stated or inferred professional need, including the outcome they want, who they are looking for, and the filters that must stay private (budget, anti-persona, sensitive context). Captured during intake; refined by the Greeter (Mira) into an Active Request when the user is ready. Distinct from the Active Request itself: the Need Signal is the user-side framing; the Active Request is the brief Ditto can work from.
+- Layer: 1 (Process — client intake) / 6 (Human — chat surface)
+- Related: Active Request, Superconnector, Manual Search, Background Watch
+
+**Active Request** — A captured need that Ditto can work from now. Carries the outcome, the criteria, the private filters, and the user's consent to act. Surfaces as a Job Request card to the user and as a brief to the matching pipeline. Replaces "job post" in product copy unless the user explicitly frames a job. Active Requests can be paused, edited, or closed; closing one does not delete the underlying Need Signal.
+- Layer: 1 (Process — `network_client_requests` / `JobRequestCardBlock`) / 6 (Human)
+- Related: Need Signal, Manual Search, Background Watch, Introduction Proposal
+
+**Manual Search** — A user-initiated, foreground search the user is watching happen. The Greeter checks the on-network and off-network sources, returns possible connections with source-traced evidence, and asks before any outreach. Manual Search is the "find someone now" entry job. Visibly distinct from Background Watch: the user is present, the result lands in the current session, and the next decision is theirs.
+- Layer: 1 (Process — client lane match + Brief 258 scout) / 6 (Human)
+- Related: Background Watch, Active Request, Possible Connection, Source Provenance
+
+**Background Watch** — A continuous, low-volume operating cycle that quietly looks for strong-fit people and timing on the user's behalf while they are not in the app. Surfaces only when there is something worth surfacing; pauses on demand. "Watching quietly," never "automating outreach." Distinct from Manual Search in cadence (continuous, not on-demand), surface (notification when ready, not in-session result), and user attention (none required by default). Maps to the existing Briefs 115-118 operating cycle model.
+- Layer: 4 (Awareness — cross-process intelligence) / 6 (Human — watch state surface)
+- Related: Manual Search, Operating Cycle Archetype, Active Request, Network Health
+
+**Possible Connection** — A person Ditto thinks may fit a Need Signal or Active Request, with source-backed evidence for why. Always shown with provenance ("from your LinkedIn first-degree", "from a Brief 258 scout", "from a member-signal match") and a "why this fits" rationale. Replaces "candidate" in product copy when the relationship is not employment or recruiting; "candidate" is reserved for explicit hiring contexts. A Possible Connection becomes an Introduction Proposal only after the user approves outreach.
+- Layer: 1 (Process — match output) / 6 (Human — suggested-candidates panel)
+- Related: Source Provenance, Active Request, Introduction Proposal, Manual Search
+
+**Introduction Proposal** — A drafted, reviewable introduction request the user can approve, edit, or decline. Carries the requester, the recipient (a Possible Connection), the drafted note, the transcript preview, and the consent surface ("ask if they are open"). Never "contact them." Reviewed in the workspace Inbox via the existing `AuthorizationRequestBlock` flow. The unit that turns a connection into a useful introduction and, downstream, a concrete outcome.
+- Layer: 1 (Process — `introductions` table) / 6 (Human — authorization block)
+- Related: Possible Connection, Active Request, Introductions Primitive (Brief 261)
+
+**Network Health** — The view that frames Ditto's value at the community scale: fewer noisy intros, more useful ones; sources that get more trusted as members approve them; representation that does not drift into impersonation. Network Health is the lens through which broadcast-style or systemic behaviour gets challenged. Product copy uses Network Health to justify constraints (consent, rate limits, source-traced claims) without lecturing the user.
+- Layer: Cross-cutting (governance) / 6 (Human — copy doctrine)
+- Related: Superconnector, Source Provenance, Consent, Trust Tier
+
+**Source Provenance** — The requirement that every claim Ditto surfaces about a member or a Possible Connection traces back to a named source the user can inspect. Includes link, document, member-approved statement, or scout result. UI copy uses "source", "evidence", and "why this fits", not "AI score" alone. Source Provenance is what makes warm-introduction-without-spam credible; absence of provenance is a refusal trigger.
+- Layer: 1 (Process — KB facts + scout results) / 6 (Human — possible-connection rendering)
+- Related: Possible Connection, Network Health, Superconnector, KB Fact

@@ -19,8 +19,14 @@ import {
   buildJobRequestCard,
   type ClientIntakeAnswers,
 } from "@/lib/network-client-intake";
-import type { JobRequestCardBlock, ReviewCardBlock, SuggestedCandidate } from "@/lib/engine";
+import type {
+  JobRequestCardBlock,
+  NetworkProfileCardBlock,
+  ReviewCardBlock,
+  SuggestedCandidate,
+} from "@/lib/engine";
 import { ReviewCardBlockComponent } from "@/components/blocks/review-card-block";
+import { WorkspaceUpsellCta } from "@/components/network/workspace-upsell-cta";
 
 import {
   ClientCardActions,
@@ -32,20 +38,43 @@ import {
   JobRequestCardRenderer,
   type JobRequestEditableField,
 } from "./job-request-card-renderer";
+import { trackMarketingEvent } from "@/lib/marketing-analytics";
+import type { NetworkEntryIntent } from "@/lib/network-entry-intent";
 import { ModeToggle } from "./mode-toggle";
 import { NetworkKbShelf } from "./network-kb-shelf";
 import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 import { PreviewPane, type NetworkChatMode } from "./preview-pane";
 import { SuggestedCandidatesPanel } from "./suggested-candidates-panel";
-import { emitWorkspaceUpsell } from "./workspace-upsell";
 
 const SESSION_KEY = "ditto-network-lane-session";
 const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
+const EXPERT_STAGE_LABELS = [
+  "Value",
+  "Bad fit",
+  "Best-fit client",
+  "Edge",
+  "Hook",
+  "Visibility",
+  "Ready",
+] as const;
+const CLIENT_STAGE_LABELS = [
+  "Outcome",
+  "Reference",
+  "Bad fit",
+  "Success",
+  "Budget",
+  "Search range",
+  "Matches",
+] as const;
 
 interface LaneMessage {
   role: "user" | "assistant";
   content: string;
   block?: JobRequestCardBlock | ReviewCardBlock;
+  upsell?: {
+    copy: string;
+    declineLabel: string;
+  };
 }
 
 interface LaneResponse {
@@ -76,7 +105,91 @@ export function clientEditAnswerKey(field: JobRequestEditableField): keyof Clien
   return CLIENT_EDIT_FIELD_KEYS[field];
 }
 
-export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode }) {
+function laneStage({
+  mode,
+  expertStep,
+  clientStep,
+  clientMatched,
+}: {
+  mode: NetworkChatMode;
+  expertStep: number;
+  clientStep: number;
+  clientMatched: boolean;
+}) {
+  if (mode === "expert") {
+    const index = Math.min(expertStep, EXPERT_STAGE_LABELS.length - 1);
+    return {
+      label: EXPERT_STAGE_LABELS[index],
+      current: Math.min(index + 1, EXPERT_LANE_QUESTIONS.length),
+      total: EXPERT_LANE_QUESTIONS.length,
+      note: "We are building a public card. You choose visibility; outreach still needs approval.",
+    };
+  }
+
+  const index = clientMatched
+    ? CLIENT_STAGE_LABELS.length - 1
+    : Math.min(clientStep, CLIENT_LANE_QUESTIONS.length - 1);
+  return {
+    label: CLIENT_STAGE_LABELS[index],
+    current: clientMatched ? CLIENT_STAGE_LABELS.length : Math.min(index + 1, CLIENT_LANE_QUESTIONS.length),
+    total: CLIENT_STAGE_LABELS.length,
+    note: "We are building a private brief. Budget and bad-fit filters stay out of candidate-facing copy.",
+  };
+}
+
+function laneBrief(mode: NetworkChatMode) {
+  if (mode === "client") {
+    return {
+      kicker: "Client lane",
+      title: "Write the brief before asking for intros.",
+      summary:
+        "Mira turns a rough need into a candidate-safe brief, checks who fits, and keeps sensitive filters private.",
+      points: [
+        { label: "Why", copy: "Specific briefs make warm introductions easier to trust." },
+        { label: "What", copy: "An opportunity brief, matched candidates, and intro requests for review." },
+        { label: "How", copy: "Answer the current prompt; the live brief updates as you go." },
+      ],
+    };
+  }
+
+  return {
+    kicker: "Expert lane",
+    title: "Build the card before anyone asks.",
+    summary:
+      "Alex asks for the sharp edges of your work, then turns them into a public card people can ask about.",
+    points: [
+      { label: "Why", copy: "The right opportunities need signal before they need your time." },
+      { label: "What", copy: "A profile card with your value, fit, edge, and visibility setting." },
+      { label: "How", copy: "Answer the prompt; approve the card before it becomes surfaceable." },
+    ],
+  };
+}
+
+export type NetworkChatEntryIntent = NetworkEntryIntent;
+
+export function NetworkChatShell({
+  initialMode,
+  initialIntent,
+}: {
+  initialMode: NetworkChatMode;
+  initialIntent?: NetworkEntryIntent;
+}) {
+  // page.tsx only forwards `initialIntent` when the URL carried an explicit,
+  // canonical intent value. Mode-toggle navigations drop the param, so this
+  // effect never fires on mode switches — it tracks only deliberate entry
+  // selections from /network.
+  useEffect(() => {
+    if (!initialIntent) return;
+    trackMarketingEvent(
+      "network_entry_selected",
+      { intent: initialIntent, mode: initialMode },
+      "network-chat",
+    );
+    // initialMode intentionally omitted from deps: an explicit-intent URL is
+    // a one-shot signal on mount, and initialMode does not change for the
+    // lifetime of a given page render (mode toggle navigates, remounting).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIntent]);
   const [currentMode, setCurrentMode] = useState<NetworkChatMode>(initialMode);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LaneMessage[]>([]);
@@ -313,23 +426,32 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     }
   }
 
-  function showUpsell(handle: string) {
+  function showUpsell(copy: string, declineLabel: string) {
     if (upsellShown) return;
     setUpsellShown(true);
     appendMessage({
       role: "assistant",
-      content: emitWorkspaceUpsell("expert", { sessionId, handle }),
+      content: "",
+      upsell: { copy, declineLabel },
     });
   }
 
   async function persistCard({
     visible,
     triggerUpsell,
+    card = previewCard,
   }: {
     visible: boolean;
     triggerUpsell: boolean;
-  }): Promise<{ ok: boolean; handle?: string; upsell?: boolean }> {
-    if (!previewCard) return { ok: false };
+    card?: NetworkProfileCardBlock | null;
+  }): Promise<{
+    ok: boolean;
+    handle?: string;
+    upsell?: boolean;
+    upsellCopy?: string | null;
+    upsellDeclineLabel?: string | null;
+  }> {
+    if (!card) return { ok: false };
 
     setPersisting(true);
     setHandleAlternatives([]);
@@ -342,7 +464,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
           sessionId,
           name: displayName,
           handle: handleInput,
-          card: previewCard,
+          card,
           wantsVisibility: visible,
           triggerUpsell,
         }),
@@ -352,6 +474,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         error?: string;
         handle?: string;
         upsell?: boolean;
+        upsellCopy?: string | null;
+        upsellDeclineLabel?: string | null;
         alternatives?: string[];
         reason?: string;
       };
@@ -378,9 +502,41 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       setClaimedHandle(result.handle);
       setHandleInput(result.handle);
       setWantsVisible(visible);
-      return { ok: true, handle: result.handle, upsell: result.upsell };
+      return {
+        ok: true,
+        handle: result.handle,
+        upsell: result.upsell,
+        upsellCopy: result.upsellCopy,
+        upsellDeclineLabel: result.upsellDeclineLabel,
+      };
     } finally {
       setPersisting(false);
+    }
+  }
+
+  async function maybeShowClientUpsell() {
+    if (upsellShown || !sessionId) return;
+    try {
+      const response = await fetch("/api/v1/network/workspace-upsell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          sessionId,
+          trigger: "client-q6",
+        }),
+      });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        fired?: boolean;
+        copy?: string | null;
+        declineLabel?: string | null;
+      };
+      if (payload.fired && payload.copy) {
+        showUpsell(payload.copy, payload.declineLabel || "Not now, just my brief");
+      }
+    } catch {
+      // The upsell is non-blocking; losing it must not break the completed card.
     }
   }
 
@@ -390,10 +546,10 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
 
     appendMessage({
       role: "assistant",
-      content: `Handle's yours: /people/${result.handle}. This is still editable.`,
+      content: `Saved. Your public link is /people/${result.handle}; you can still edit this.`,
     });
-    if (result.upsell) {
-      showUpsell(result.handle);
+    if (result.upsell && result.upsellCopy) {
+      showUpsell(result.upsellCopy, result.upsellDeclineLabel || "Not now, just my card");
     }
   }
 
@@ -434,10 +590,18 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     const answerKey = ["uvp", "antiPersona", "idealClient", "skills", "hook", "visibility"][
       expertStep
     ] as keyof ExpertIntakeAnswers;
-    setExpertAnswers((current) => ({ ...current, [answerKey]: answer }));
+    const nextAnswers = { ...expertAnswers, [answerKey]: answer };
+    setExpertAnswers(nextAnswers);
 
     if (expertStep === 5) {
       const visible = wantsNetworkVisibility(answer);
+      const completedCard = buildNetworkProfileCard({
+        answers: nextAnswers,
+        displayName,
+        greeterName,
+        handle: claimedHandle || handleInput,
+        visible,
+      });
       setWantsVisible(visible);
       setExpertStep(6);
       appendMessage({
@@ -445,6 +609,11 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         content: visible
           ? "I'll keep you surfaceable, but I'll check with you before reaching out."
           : "Got it. I'll keep this on request and won't promote you.",
+      });
+      void persistCard({ visible, triggerUpsell: true, card: completedCard }).then((result) => {
+        if (result.upsell && result.upsellCopy) {
+          showUpsell(result.upsellCopy, result.upsellDeclineLabel || "Not now, just my card");
+        }
       });
       return;
     }
@@ -468,7 +637,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     setSelectedCandidateHandle(null);
     appendMessage({
       role: "assistant",
-      content: "thinking about who'd be a fit...",
+      content: "Checking on-network candidates against the brief...",
     });
 
     try {
@@ -492,14 +661,14 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
         role: "assistant",
         content:
           candidates.length > 0
-            ? "Three I'd put forward — they each map back to the shape you described."
+            ? "I found candidates that map back to the brief."
             : "Nobody on-network matches your shape yet. Want me to scan further?",
       });
     } catch {
-      setClientMatchError("I tripped looking for matches. Give me a sec — try again, or ask me to widen the net.");
+      setClientMatchError("I couldn't finish the match search. Try again, or ask me to widen the brief.");
       appendMessage({
         role: "assistant",
-        content: "I tripped looking for matches. Give me a sec — try again, or ask me to widen the net.",
+        content: "I couldn't finish the match search. Try again, or ask me to widen the brief.",
       });
     } finally {
       setClientMatchPending(false);
@@ -556,6 +725,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       });
       setClientMatchCard(card);
       void requestClientMatches(card);
+      void maybeShowClientUpsell();
       return;
     }
 
@@ -582,8 +752,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
       role: "assistant",
       content: "You're now surfaceable in candidate-match results. I'll always check with you before reaching out.",
     });
-    if (result.upsell) {
-      showUpsell(result.handle);
+    if (result.upsell && result.upsellCopy) {
+      showUpsell(result.upsellCopy, result.upsellDeclineLabel || "Not now, just my card");
     }
   }
 
@@ -591,8 +761,8 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     const result = await persistCard({ visible: wantsVisible, triggerUpsell: true });
     if (!result.ok || !result.handle) return;
 
-    if (result.upsell) {
-      showUpsell(result.handle);
+    if (result.upsell && result.upsellCopy) {
+      showUpsell(result.upsellCopy, result.upsellDeclineLabel || "Not now, just my card");
     }
     appendMessage({
       role: "assistant",
@@ -613,14 +783,14 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
             setTweakMode(true);
             appendMessage({
               role: "assistant",
-              content: "Send me the line you want this card to orbit around.",
+              content: "Send the line you want this card to be built around.",
             });
           }}
           onOpenForOpportunities={() => void handleOpenForOpportunities()}
           onFindClients={() => void handleFindClients()}
         />
-        <div className="grid w-full max-w-full gap-3 rounded-[24px] border border-[#201a17]/10 bg-white/85 p-4 shadow-[0_12px_30px_rgba(32,26,23,0.06)] sm:grid-cols-[1fr_1fr_auto]">
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+        <div className="grid w-full max-w-full gap-3 rounded-2xl border border-border bg-white p-4 shadow-subtle sm:grid-cols-[1fr_1fr_auto]">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-text-muted">
             Name
             <input
               value={displayName}
@@ -628,10 +798,10 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                 setDisplayName(event.target.value);
                 if (!claimedHandle) setHandleInput(simpleNetworkHandle(event.target.value));
               }}
-              className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm font-medium normal-case tracking-normal text-text-primary outline-none transition focus:border-text-primary"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-text-muted">
             Handle
             <input
               value={handleInput}
@@ -639,14 +809,14 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                 setHandleInput(simpleNetworkHandle(event.target.value));
                 setClaimedHandle(null);
               }}
-              className="h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm font-medium normal-case tracking-normal text-[#201a17] outline-none transition focus:border-[#201a17]/30"
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm font-medium normal-case tracking-normal text-text-primary outline-none transition focus:border-text-primary"
             />
           </label>
           <button
             type="button"
             disabled={persisting}
             onClick={() => void claimCard()}
-            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-2xl bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-md bg-accent px-4 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55"
           >
             <Check className="h-4 w-4" />
             {claimedHandle ? "Saved" : "Claim"}
@@ -658,7 +828,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                   key={alternative}
                   type="button"
                   onClick={() => setHandleInput(alternative)}
-                  className="rounded-full border border-[#201a17]/10 bg-[#f8efe4] px-3 py-1.5 text-xs font-semibold text-[#4a3f39] transition hover:border-[#201a17]/25"
+                  className="rounded-full border border-border bg-surface-raised px-3 py-1.5 text-xs font-semibold text-text-secondary transition hover:border-text-primary/25 hover:text-text-primary"
                 >
                   {alternative}
                 </button>
@@ -670,30 +840,84 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
     );
   }
 
+  const stage = laneStage({
+    mode: currentMode,
+    expertStep,
+    clientStep,
+    clientMatched: Boolean(clientMatchCard && !clientMatchPending && !clientMatchError),
+  });
+  const brief = laneBrief(currentMode);
+
   return (
-    <main className="min-h-screen bg-[#fffaf4] text-[#201a17]">
+    <main className="min-h-screen bg-background text-text-primary">
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <section className="flex min-h-screen flex-1 flex-col border-r border-[#201a17]/10">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#201a17]/10 px-4 py-3 sm:px-6">
+        <section className="flex min-h-screen flex-1 flex-col border-r border-border bg-background">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
             <Link
               href="/network"
-              className="inline-flex items-center gap-2 text-sm font-medium text-[#5e514b] transition hover:text-[#201a17]"
+              className="inline-flex items-center gap-2 text-sm font-medium text-text-secondary transition hover:text-text-primary"
             >
               <ArrowLeft className="h-4 w-4" />
               Network
             </Link>
-            <ModeToggle mode={currentMode} />
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="hidden items-center gap-3 text-sm text-text-secondary sm:flex">
+                <span className="font-semibold text-text-primary">{stage.label}</span>
+                <span className="h-1 w-1 rounded-full bg-border" />
+                <span>{stage.current}/{stage.total}</span>
+              </div>
+              <ModeToggle mode={currentMode} />
+            </div>
+            <div className="basis-full sm:hidden">
+              <div className="flex items-center justify-between gap-3 text-sm text-text-secondary">
+                <span className="font-semibold text-text-primary">{stage.label}</span>
+                <span>{stage.current}/{stage.total}</span>
+              </div>
+            </div>
           </header>
 
           <Conversation className="flex-1 px-4 py-5 sm:px-6">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+              <div className="rounded-[var(--radius-xl)] border border-border bg-white p-4 shadow-subtle">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="max-w-[520px]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+                      {brief.kicker}
+                    </p>
+                    <h1 className="mt-1 text-xl font-semibold leading-tight text-text-primary">
+                      {brief.title}
+                    </h1>
+                    <p className="mt-2 text-sm leading-5 text-text-secondary">
+                      {brief.summary}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-surface-raised px-3 py-2 text-sm font-semibold text-text-primary">
+                    {stage.current}/{stage.total} · {stage.label}
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {brief.points.map((point) => (
+                    <div key={point.label} className="border-l border-border pl-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-primary">
+                        {point.label}
+                      </p>
+                      <p className="mt-1 text-sm leading-5 text-text-secondary">
+                        {point.copy}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-sm leading-5 text-text-secondary">
+                  {stage.note}
+                </p>
+              </div>
               {isLoading ? (
-                <div className="rounded-3xl border border-[#201a17]/10 bg-white/70 p-4 text-sm text-[#6f625c]">
-                  Opening the lane...
+                <div className="rounded-2xl border border-border bg-white p-4 text-sm text-text-secondary">
+                  Opening the {currentMode === "client" ? "client" : "expert"} lane...
                 </div>
               ) : null}
               {error ? (
-                <div className="rounded-3xl border border-[#d27b5d]/30 bg-[#fff0e8] p-4 text-sm text-[#8d3f25]">
+                <div className="rounded-2xl border border-vivid-subtle-border bg-vivid-subtle p-4 text-sm text-vivid-deep">
                   {error}
                 </div>
               ) : null}
@@ -701,12 +925,24 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                 <div
                   key={`${message.role}-${index}`}
                   className={
-                    message.role === "assistant"
-                      ? "max-w-[84%] rounded-[24px] border border-[#201a17]/10 bg-white/85 px-4 py-3 text-[15px] leading-6 shadow-[0_12px_30px_rgba(32,26,23,0.06)]"
-                      : "ml-auto max-w-[84%] rounded-[24px] bg-[#201a17] px-4 py-3 text-[15px] leading-6 text-white shadow-[0_12px_30px_rgba(32,26,23,0.12)]"
+                    message.upsell
+                      ? "max-w-[88%]"
+                      : message.role === "assistant"
+                      ? "max-w-[88%] border-l-2 border-vivid/70 py-2 pl-4 text-base leading-6 text-text-primary"
+                      : "ml-auto max-w-[78%] rounded-2xl bg-accent px-4 py-3 text-base leading-6 text-accent-foreground shadow-medium"
                   }
                 >
-                  {message.content}
+                  {message.upsell ? (
+                    <WorkspaceUpsellCta
+                      copy={message.upsell.copy}
+                      declineLabel={message.upsell.declineLabel}
+                      sessionId={sessionId}
+                      context={currentMode === "client" ? "client" : "expert"}
+                      className="mt-0"
+                    />
+                  ) : (
+                    message.content
+                  )}
                   {message.block?.type === "job-request-card" ? (
                     <div className="mt-4 max-w-full">
                       <JobRequestCardRenderer card={message.block} />
@@ -767,7 +1003,7 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
                   ) : null}
 
                   {clientMatchError ? (
-                    <div className="rounded-2xl bg-surface-raised px-4 py-3 text-sm text-text-secondary">
+                    <div className="rounded-2xl border border-border bg-white px-4 py-3 text-sm text-text-secondary shadow-subtle">
                       {clientMatchError}{" "}
                       <button
                         type="button"
@@ -805,26 +1041,26 @@ export function NetworkChatShell({ initialMode }: { initialMode: NetworkChatMode
 
           <form
             onSubmit={handleSubmit}
-            className="border-t border-[#201a17]/10 bg-[#fffaf4]/90 px-4 py-4 backdrop-blur sm:px-6"
+            className="border-t border-border bg-background/90 px-4 py-4 backdrop-blur sm:px-6"
           >
-            <div className="mx-auto flex max-w-3xl items-end gap-3 rounded-[26px] border border-[#201a17]/10 bg-white px-3 py-2 shadow-[0_18px_45px_rgba(32,26,23,0.08)]">
+            <div className="mx-auto flex max-w-3xl items-end gap-3 rounded-2xl border border-border bg-white px-3 py-2 shadow-medium">
               <textarea
                 value={input}
                 disabled={currentMode !== "expert" && currentMode !== "client"}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
                   currentMode === "expert"
-                    ? `Answer ${greeterName} here...`
-                    : `Answer ${greeterName} here...`
+                    ? "Answer the card prompt..."
+                    : "Answer the brief prompt..."
                 }
                 rows={1}
-                className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-[15px] leading-5 text-[#201a17] outline-none placeholder:text-[#a4958d] disabled:cursor-not-allowed"
+                className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-base leading-5 text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
                 disabled={(currentMode !== "expert" && currentMode !== "client") || input.trim().length === 0}
                 aria-label="Send"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#201a17] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <ArrowUp className="h-4 w-4" />
               </button>
