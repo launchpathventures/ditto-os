@@ -3,10 +3,8 @@ import { eq } from "drizzle-orm";
 import * as networkSchema from "@ditto/core/db/network";
 import { networkDb, withNetworkDbAvailability } from "../../../../../../../../../src/db/network-db";
 import { createNetworkLaneStepRun } from "../../../../../../../../../src/engine/network-step-run";
-import {
-  buildVisitorIntroAuthorizationBlock,
-  deliverVisitorIntroRequestToWorkspace,
-} from "../../../../../../../../../src/engine/visitor-profile-chat";
+import { emitIntroRequest } from "../../../../../../../../../src/engine/emit-intro-request";
+import { buildVisitorTranscriptPreview } from "../../../../../../../../../src/engine/visitor-profile-chat";
 import {
   consumePendingVisitorIntro,
   getPendingVisitorIntro,
@@ -39,6 +37,13 @@ function visitorIp(request: Request): string {
   );
 }
 
+function lastVisitorIntent(
+  transcript: Array<{ role: "visitor" | "greeter"; content: string }>,
+  fallback: string,
+): string {
+  return [...transcript].reverse().find((turn) => turn.role === "visitor")?.content ?? fallback;
+}
+
 async function loadUser(handle: string) {
   const [user] = await networkDb
     .select()
@@ -56,6 +61,9 @@ async function postHandler(request: Request, { params }: Params) {
   }
 
   const body = (await request.json()) as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(body, "stepRunId")) {
+    return NextResponse.json({ error: "step_run_bypass_rejected" }, { status: 400 });
+  }
   const draftOverride = typeof body.draft === "string" ? body.draft.trim().slice(0, 4_000) : "";
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim().slice(0, 200) : "";
   const fingerprint = typeof body.fingerprint === "string" ? body.fingerprint.slice(0, 200) : null;
@@ -90,31 +98,33 @@ async function postHandler(request: Request, { params }: Params) {
 
   const userName = user.name || user.handle || "the profile owner";
   const userFirst = firstName(userName);
-  const block = buildVisitorIntroAuthorizationBlock({
-    userName,
-    userFirst,
-    requesterId: sessionId,
-    draft,
-    transcript,
-    visitorName: typeof body.visitorName === "string" ? body.visitorName.slice(0, 160) : null,
-    visitorOrg: typeof body.visitorOrg === "string" ? body.visitorOrg.slice(0, 160) : null,
-  });
-
   const stepRunId = await createNetworkLaneStepRun({
     route: "people-profile-intro-request",
     sessionId,
     actorId: sessionId,
   });
-  await deliverVisitorIntroRequestToWorkspace({
-    userId: user.id,
-    block,
+  const result = await emitIntroRequest({
+    targetUserId: user.id,
+    targetDisplayName: userName,
+    visitorSessionId: sessionId,
+    requesterDisplayName: typeof body.visitorName === "string" ? body.visitorName.slice(0, 160) : null,
+    requesterOrgLabel: typeof body.visitorOrg === "string" ? body.visitorOrg.slice(0, 160) : null,
+    originContext: "visitor",
+    intentSummary: lastVisitorIntent(transcript, draft),
+    draft,
+    transcript: buildVisitorTranscriptPreview(transcript),
     stepRunId,
   });
   consumePendingVisitorIntro({ sessionId, userId: user.id });
 
   return NextResponse.json({
-    block,
-    message: `I'll send this to ${userFirst}; if it lands, you'll hear back in a day or two.`,
+    block: result.block,
+    introductionId: result.introduction.id,
+    state: result.introduction.state,
+    message:
+      result.block.state === "rejected"
+        ? result.block.executionResult?.reasonForVisitor ?? "I'm not the right person to introduce on this one."
+        : `I'll send this to ${userFirst}; if it lands, you'll hear back in a day or two.`,
   });
 }
 

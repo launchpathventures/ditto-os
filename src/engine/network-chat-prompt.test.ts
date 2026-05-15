@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  INTRO_REQUEST_TOOL_NAME,
   VISITOR_FORWARD_NOTE_TOOL_NAME,
   buildFrontDoorPrompt,
   type ChatContext,
@@ -66,17 +67,19 @@ describe("network chat prompt contexts", () => {
       expect(prompt).toContain("NEVER say \"I'm an AI\", \"chatbot\", or \"language model\"");
       expect(prompt).toContain("capture verbatim as a forwarded note");
       expect(prompt).toContain("Honor anti-persona rules silently");
-      expect(prompt).toContain("costLabel null + full visitor transcript");
-      expect(prompt).toContain("Brief 259 deliberately substitutes costLabel null");
+      expect(prompt).toContain("populated costLabel + full visitor transcript");
+      expect(prompt).toContain(`\`${INTRO_REQUEST_TOOL_NAME}\``);
     });
 
     it("keeps the prompt tool name and built-in resolver registration in lockstep", () => {
       const prompt = visitorPrompt();
-      const resolved = resolveTools([VISITOR_FORWARD_NOTE_TOOL_NAME]);
+      const resolved = resolveTools([VISITOR_FORWARD_NOTE_TOOL_NAME, INTRO_REQUEST_TOOL_NAME]);
 
       expect(prompt).toContain(`\`${VISITOR_FORWARD_NOTE_TOOL_NAME}\``);
       expect(resolved.tools[0]?.name).toBe(VISITOR_FORWARD_NOTE_TOOL_NAME);
       expect(resolved.tools[0]?.input_schema.properties).not.toHaveProperty("userId");
+      expect(prompt).toContain(`\`${INTRO_REQUEST_TOOL_NAME}\``);
+      expect(resolved.tools[1]?.name).toBe(INTRO_REQUEST_TOOL_NAME);
     });
 
     it("requires execution context userId for forwarded-note tool calls", async () => {
@@ -214,7 +217,9 @@ describe("network chat prompt contexts", () => {
     expect(prompt).toContain("Worth it if you do this kind of hunting more than twice a year.");
     expect(prompt).toContain("extract_kb_facts");
     expect(prompt).toContain("record_voice_intake");
+    expect(prompt).toContain("emit_intro_request");
     expect(prompt).toContain("Facts default to `on-request`");
+    expect(prompt).toContain("After Q6 is answered and the card is complete");
 
     let lastIndex = -1;
     for (const question of questions) {
@@ -234,6 +239,7 @@ describe("network chat prompt contexts", () => {
     expect(prompt).toContain("matchOnNetwork");
     expect(prompt).toContain("two distinct turns");
     expect(prompt).toContain("scout_off_network");
+    expect(prompt).toContain("emit_intro_request");
     expect(prompt).toContain("public source URL");
     expect(prompt).not.toContain("## Your Task: Front Door Advisor");
 

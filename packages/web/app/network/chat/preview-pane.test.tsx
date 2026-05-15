@@ -48,11 +48,11 @@ function jobRequestCard(): JobRequestCardBlock {
 
 describe("PreviewPane", () => {
   it("calculates the committed client and expert opacity table", () => {
-    expect(previewPaneOpacity("client", 1)).toBe(0.16);
-    expect(previewPaneOpacity("client", 6)).toBeCloseTo(0.16 + (5 / 6) * 0.84, 5);
+    expect(previewPaneOpacity("client", 1)).toBe(0.48);
+    expect(previewPaneOpacity("client", 6)).toBeCloseTo(0.48 + (5 / 6) * 0.52, 5);
     expect(previewPaneOpacity("client", 7)).toBe(1);
     expect(previewPaneOpacity("client", 8)).toBe(1);
-    expect(previewPaneOpacity("expert", 1)).toBe(0.16);
+    expect(previewPaneOpacity("expert", 1)).toBe(0.48);
     expect(previewPaneOpacity("expert", 6)).toBe(1);
     expect(previewPaneOpacity("expert", 7)).toBe(1);
     expect(previewPaneOpacity(null, 3)).toBe(1);
@@ -62,17 +62,17 @@ describe("PreviewPane", () => {
     const html = renderToStaticMarkup(
       React.createElement(PreviewPane, { mode: "expert" }),
     );
-    expect(html).toContain("Profile");
-    expect(html).toContain("Hunting next thing");
+    expect(html).toContain("Live profile card");
+    expect(html).toContain("Card preview builds here");
   });
 
   it("renders the client placeholder branch", () => {
     const html = renderToStaticMarkup(
       React.createElement(PreviewPane, { mode: "client" }),
     );
-    expect(html).toContain("Opportunity brief");
-    expect(html).toContain("Need the right person");
-    expect(html).toContain("Tap to see the brief");
+    expect(html).toContain("Live opportunity brief");
+    expect(html).toContain("Brief preview builds here");
+    expect(html).toContain("Open brief preview");
   });
 
   it("renders the live expert profile card preview", () => {
@@ -82,9 +82,10 @@ describe("PreviewPane", () => {
       React.createElement(PreviewPane, { mode: "expert", profileCard: card, profileProgress: 6 }),
     );
 
-    expect(html).toContain("Tap to see your card");
+    expect(html).toContain("Open card preview");
     expect(html).toContain("Tim Green");
     expect(html).toContain("still asking Tim");
+    expect(html).toContain("Draft card");
   });
 
   it("renders the live client job-request preview", () => {
@@ -96,10 +97,10 @@ describe("PreviewPane", () => {
       }),
     );
 
-    expect(html).toContain("Tap to see the brief");
+    expect(html).toContain("Open brief preview");
     expect(html).toContain("outbound with someone who can touch the CRM");
     expect(html).toContain("$8-12k/month, 3-month commitment");
-    expect(html).toContain("opacity:0.86");
+    expect(html).toContain("opacity:0.913");
   });
 
   it("renders mobile tap-to-edit chips without inline form fields", () => {
@@ -125,6 +126,6 @@ describe("PreviewPane", () => {
     const html = renderToStaticMarkup(
       React.createElement(PreviewPane, { mode: null }),
     );
-    expect(html).toContain("Profile");
+    expect(html).toContain("Live profile card");
   });
 });

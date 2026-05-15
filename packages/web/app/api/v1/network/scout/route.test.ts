@@ -139,6 +139,18 @@ describe("POST /api/v1/network/scout", () => {
     expect(mocks.scoutOffNetwork).not.toHaveBeenCalled();
   });
 
+  it.each(["", null, false, 0])("rejects falsy caller-supplied stepRunId fields: %s", async (stepRunId) => {
+    const response = await POST(request({
+      sessionId: "client-session",
+      stepRunId,
+      jobRequestCard: card(),
+    }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "step_run_bypass_rejected" });
+    expect(mocks.scoutOffNetwork).not.toHaveBeenCalled();
+  });
+
   it("returns cached scout results without rerunning search", async () => {
     const first = await POST(request({
       sessionId: "client-session",

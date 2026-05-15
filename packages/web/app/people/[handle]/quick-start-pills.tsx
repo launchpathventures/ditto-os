@@ -18,7 +18,7 @@ export function QuickStartPills({
           disabled={disabled}
           onClick={() => onSelect(pill)}
           className={cn(
-            "min-h-11 truncate rounded-[var(--radius-md)] border border-border bg-white px-3 py-2 text-left text-sm text-text-secondary transition",
+            "min-h-11 rounded-[var(--radius-md)] border border-border bg-white px-3 py-2 text-left text-sm leading-5 text-text-secondary transition",
             "hover:border-text-primary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
             "disabled:cursor-default disabled:opacity-50",
           )}

@@ -1551,8 +1551,22 @@ async function persistClientJobRequest(
     .insert(networkSchema.networkJobRequests)
     .values({
       userId,
+      visitorSessionId: session.sessionId,
       jobRequestCard: card,
       status: "open",
+      mode: card.scoutOptIn ? "both" : "manual-search",
+      rawNeed: card.jtbd,
+      outcomeNeeded: card.jtbd,
+      idealPerson: card.referenceShape,
+      proofRequired: card.referenceShape,
+      badFit: card.antiPersonaMd,
+      commercialShape: card.budgetShape.cadence,
+      successOutcome: card.successCriteria,
+      budgetPrivate: card.budgetShape.ballpark,
+      shareableSummary: `${card.jtbd} | Proof: ${card.referenceShape} | Success: ${card.successCriteria}`,
+      privateNotes: "Budget and bad-fit filters are private by default.",
+      sourcesAllowed: card.scoutOptIn ? "both" : "ditto-members",
+      contactPolicy: "ask-before-contact",
     })
     .returning({ id: networkSchema.networkJobRequests.id });
   return created?.id ?? null;

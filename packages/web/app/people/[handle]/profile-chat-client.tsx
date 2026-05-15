@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowUp, ChevronDown, Loader2, Send, X } from "lucide-react";
+import { ChevronDown, Loader2, Mic, Send, X } from "lucide-react";
 import type { AuthorizationRequestBlock, NetworkProfileCardBlock } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import { NetworkProfileCardRenderer } from "@/app/network/chat/network-profile-card-renderer";
@@ -45,7 +45,7 @@ const SESSION_KEY = "ditto-people-visitor-session";
 const FINGERPRINT_KEY = "ditto-people-visitor-fingerprint";
 
 function initialGreeting(greeterName: string, userFirst: string): string {
-  return `Hi - I'm ${greeterName}, ${userFirst}'s representative. Ask me about ${userFirst} - or tell me what you're up to.`;
+  return `Hi, I'm ${greeterName}, ${userFirst}'s representative. Ask me about ${userFirst}'s work, fit, or what you're trying to do.`;
 }
 
 function randomId(prefix: string): string {
@@ -203,7 +203,7 @@ export function ProfileChatClient({
         setDisabledUntil(Date.now() + data.retryAfterSec * 1000);
       }
     } catch {
-      setError(`${greeterName} needs a minute - try again in a sec.`);
+      setError(`${greeterName} could not answer that just now. Try again in a moment.`);
     } finally {
       setLoading(false);
     }
@@ -237,7 +237,7 @@ export function ProfileChatClient({
       setPendingForward(null);
       appendMessage("greeter", data.reply);
     } catch {
-      setError("I couldn't pass it on right now - try again in a sec.");
+      setError("I couldn't send that note right now. Try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -265,7 +265,7 @@ export function ProfileChatClient({
       setPendingIntro(null);
       appendMessage("greeter", data.message);
     } catch {
-      setError("Couldn't send it - try again?");
+      setError("I couldn't send that request right now. Try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -276,7 +276,7 @@ export function ProfileChatClient({
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-white/95 px-4 py-3 backdrop-blur md:hidden">
         <div>
           <p className="text-sm font-semibold">⊙ {greeterName} · representing {userFirst}</p>
-          <p className="text-xs text-text-secondary">{userFirst} sees what visitors ask.</p>
+          <p className="text-xs text-text-secondary">{userFirst} sees notes you choose to send.</p>
         </div>
         <div className="flex max-w-[46vw] items-center gap-2 rounded-full bg-surface-raised px-2.5 py-1.5">
           {card.portraitUrl ? (
@@ -302,7 +302,7 @@ export function ProfileChatClient({
           <header className="hidden border-b border-border px-5 py-4 md:block">
             <p className="text-sm font-semibold">⊙ {greeterName} · representing {userFirst}</p>
             <p className="mt-1 text-sm text-text-secondary">
-              Talks to people about {userFirst}'s work. {userFirst} sees what you ask.
+              Ask about {userFirst}'s work. {userFirst} only sees notes or intro requests you choose to send.
             </p>
           </header>
 
@@ -343,7 +343,7 @@ export function ProfileChatClient({
 
             {pendingForward && (
               <div className="rounded-[var(--radius-lg)] border border-border bg-white p-4 shadow-subtle">
-                <p className="text-sm font-semibold">I'll pass this to {userFirst}:</p>
+                <p className="text-sm font-semibold">Send this question to {userFirst}</p>
                 <textarea
                   value={pendingForward.question}
                   onChange={(event) => setPendingForward({ question: event.target.value })}
@@ -380,7 +380,7 @@ export function ProfileChatClient({
                     onClick={confirmForwardNote}
                     className="inline-flex min-h-10 items-center rounded-[var(--radius-md)] bg-accent px-4 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                   >
-                    Yes - pass it on
+                    Send note to {userFirst}
                   </button>
                 </div>
               </div>
@@ -388,7 +388,7 @@ export function ProfileChatClient({
 
             {pendingIntro && (
               <div className="rounded-[var(--radius-lg)] border border-border bg-white p-4 shadow-subtle">
-                <p className="text-sm font-semibold">I'll send this to {userFirst}</p>
+                <p className="text-sm font-semibold">Request an intro through {userFirst}</p>
                 <textarea
                   value={pendingIntro.draft}
                   onChange={(event) => setPendingIntro({ draft: event.target.value })}
@@ -400,7 +400,7 @@ export function ProfileChatClient({
                   className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary"
                 >
                   <ChevronDown className={cn("h-4 w-4 transition", introExpanded && "rotate-180")} />
-                  What {userFirst} will see
+                  What {userFirst} will review
                 </button>
                 {introExpanded && (
                   <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-[var(--radius-md)] bg-surface-raised p-3">
@@ -428,7 +428,7 @@ export function ProfileChatClient({
                     onClick={sendIntroRequest}
                     className="inline-flex min-h-10 items-center rounded-[var(--radius-md)] bg-accent px-4 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                   >
-                    Send to {userFirst}
+                    Send request
                   </button>
                 </div>
               </div>
@@ -437,7 +437,7 @@ export function ProfileChatClient({
             {loading && (
               <div className="flex items-center gap-2 text-sm text-text-secondary">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {greeterName} is reading...
+                {greeterName} is checking the profile...
               </div>
             )}
             {error && (
@@ -491,8 +491,8 @@ export function ProfileChatClient({
               onClick={() => setVoiceOpen((value) => !value)}
               className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-md)] px-2 text-sm font-medium text-text-secondary hover:bg-surface-raised hover:text-text-primary"
             >
-              <ArrowUp className="h-4 w-4" aria-hidden="true" />
-              talk to {greeterName} (voice)
+              <Mic className="h-4 w-4" aria-hidden="true" />
+              Talk to {greeterName} (voice)
             </button>
           </div>
         </section>

@@ -172,7 +172,7 @@ function sanitizePayload(
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    if (body.stepRunId) {
+    if (Object.prototype.hasOwnProperty.call(body, "stepRunId")) {
       return NextResponse.json(
         { error: "step_run_bypass_rejected" },
         { status: 400 },

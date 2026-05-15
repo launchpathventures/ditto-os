@@ -1149,8 +1149,12 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 - Related: Member Signal, Need Signal, Active Request, Manual Search, Background Watch, Possible Connection, Introduction Proposal, Network Health, Source Provenance
 
 **Member Signal** — The living representation of a Network member: what they are excellent at, who fits them, who does not, sources behind every claim, and freshness. Built from links, work, and context that the member supplies and approves. The signal is what Ditto reasons about when a request arrives or a watch fires; the profile card is its public projection. Replaces the lane-mechanic phrasing of "expert profile" in product copy. Member signals are private by default; members choose visibility per facet.
-- Layer: 1 (Process — KB facts feeding `network_users`) / 6 (Human — profile card)
-- Related: Superconnector, Need Signal, Source Provenance, Possible Connection
+- Layer: 1 (Process — `network_member_signals`, `network_signal_sources`, `network_signal_claims`, KB facts) / 6 (Human — profile card and review UI)
+- Related: Superconnector, Signal Claim, Need Signal, Source Provenance, Possible Connection
+
+**Signal Claim** — A single reviewed Member Signal statement such as `knownFor`, `bestIntroducedFor`, `canHelpWith`, `currentFocus`, `openTo`, `notAFitFor`, `proof`, `tasteAndStyle`, `preferredIntroStyle`, or `sourceSummary`. Each claim carries source label, source URL or source id, evidence snippet, confidence, visibility, and approval state. Public surfaces may use only approved or edited claims with `visibility = public`; private and on-request claims require the later Brief 278 scrubber before any external-facing use.
+- Layer: 1 (Process — `network_signal_claims`) / 6 (Human — claim review controls)
+- Related: Member Signal, Source Provenance, Consent, Public Profile
 
 **Need Signal** — A user's stated or inferred professional need, including the outcome they want, who they are looking for, and the filters that must stay private (budget, anti-persona, sensitive context). Captured during intake; refined by the Greeter (Mira) into an Active Request when the user is ready. Distinct from the Active Request itself: the Need Signal is the user-side framing; the Active Request is the brief Ditto can work from.
 - Layer: 1 (Process — client intake) / 6 (Human — chat surface)
@@ -1181,5 +1185,5 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 - Related: Superconnector, Source Provenance, Consent, Trust Tier
 
 **Source Provenance** — The requirement that every claim Ditto surfaces about a member or a Possible Connection traces back to a named source the user can inspect. Includes link, document, member-approved statement, or scout result. UI copy uses "source", "evidence", and "why this fits", not "AI score" alone. Source Provenance is what makes warm-introduction-without-spam credible; absence of provenance is a refusal trigger.
-- Layer: 1 (Process — KB facts + scout results) / 6 (Human — possible-connection rendering)
-- Related: Possible Connection, Network Health, Superconnector, KB Fact
+- Layer: 1 (Process — `network_signal_sources`, KB facts, scout results) / 6 (Human — claim chips and possible-connection rendering)
+- Related: Signal Claim, Possible Connection, Network Health, Superconnector, KB Fact

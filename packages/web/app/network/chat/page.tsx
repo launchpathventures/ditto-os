@@ -34,10 +34,16 @@ function normalizeIntent(value: string | null): NetworkEntryIntent | undefined {
   return isNetworkEntryIntent(value) ? value : undefined;
 }
 
+function normalizeInitialAnswer(value: string | null): string | undefined {
+  const answer = value?.trim();
+  return answer ? answer.slice(0, 700) : undefined;
+}
+
 export default async function NetworkChatPage({ searchParams }: NetworkChatPageProps) {
   const params = await searchParams;
   const mode = normalizeMode(firstParam(params.mode));
   const intent = normalizeIntent(firstParam(params.intent));
+  const initialAnswer = normalizeInitialAnswer(firstParam(params.seed));
 
-  return <NetworkChatShell initialMode={mode} initialIntent={intent} />;
+  return <NetworkChatShell initialMode={mode} initialIntent={intent} initialAnswer={initialAnswer} />;
 }

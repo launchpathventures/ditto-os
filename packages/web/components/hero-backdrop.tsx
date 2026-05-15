@@ -12,13 +12,15 @@
 
 import Image from "next/image";
 
-type HeroVariant = "atmosphere" | "workspace" | "architecture";
+type HeroVariant = "atmosphere" | "workspace" | "architecture" | "home" | "network";
 type HeroAnchor = "top" | "bottom" | "cover";
 
 const SOURCES: Record<HeroVariant, { src: string; alt: string }> = {
   atmosphere: { src: "/hero-atmosphere.png", alt: "" },
   workspace: { src: "/hero-workspace.png", alt: "" },
   architecture: { src: "/hero-architecture.png", alt: "" },
+  home: { src: "/hero-home.png", alt: "" },
+  network: { src: "/hero-network.png", alt: "" },
 };
 
 interface HeroBackdropProps {

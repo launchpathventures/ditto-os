@@ -114,3 +114,16 @@ Do Network-originated artifacts that must appear inside a workspace have a durab
 - Require consumer-side local import so workspace rendering and actions do not depend on a live Network DB read
 - Require idempotent ACK retry: already-imported rows still need to ACK their source delivery ids
 - Require terminal-state persistence for imported review artifacts so approve/reject outcomes survive reloads
+
+### 17. Network Superconnector Safety Gates
+When work touches Member Signals, Active Requests, manual search, background watch, discovery, claim invites, share loops, or introductions, are the superconnector gates explicit and tested?
+- Economic outcome: does the work optimize for concrete professional/economic outcomes rather than volume, vanity networking, or generic growth?
+- Provenance: does every claim, request inference, match rationale, and invite reason cite source labels/ids?
+- Privacy scrub: do public/search/share/email/watch surfaces prove private/on-request/hidden data cannot leak?
+- Source policy: are LinkedIn/public-web/source-registry rules enforced in code before collection, storage, or invite use?
+- LinkedIn posture: no unauthorized scraping, no fake accounts, no browser/cookie/session automation, no People Search automation without formal access, and no LinkedIn profile content stored as claims without consent/formal access.
+- Claim-before-public: do Discovery Profiles remain internal until the discovered person claims/approves?
+- No-contact background watch: can watches propose/digest without contacting a third party?
+- Two-sided intro consent: requester approval before asking recipient; recipient approval before shared thread.
+- Outbound email compliance: suppression, opt-out, sender identity, complaint handling, and misleading-subject checks for claim invites and intro emails.
+- Side-effect matrix: does every route/tool that writes, sends, searches, starts jobs, deletes/exports, or invokes LLM/external APIs require `stepRunId` or a wrapper step run and reject caller-supplied `stepRunId`, including falsy values?

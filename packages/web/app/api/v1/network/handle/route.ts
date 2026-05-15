@@ -170,12 +170,14 @@ export async function POST(request: Request) {
       { db, schema },
       { and, eq, sql },
       { suggestHandleAlternatives, validateHandle },
-      { hasFiredUpsell, recordUpsellFired },
+      { createNetworkLaneStepRun },
+      { maybeFireWorkspaceUpsell },
     ] = await Promise.all([
       import("../../../../../../../src/db"),
       import("drizzle-orm"),
       import("../../../../../../../src/engine/handle-claim"),
-      import("../../../../../../../src/engine/network-upsell-tracker"),
+      import("../../../../../../../src/engine/network-step-run"),
+      import("../../../../../../../src/engine/workspace-upsell-trigger"),
     ]);
 
     const [session] = await db
@@ -209,6 +211,7 @@ export async function POST(request: Request) {
       .where(eq(networkSchema.networkUsers.email, email));
 
     const userId = currentUser?.id ?? sessionId ?? email;
+    let persistedUserId = currentUser?.id ?? null;
 
     async function availableAlternatives(seed: string, count = 2): Promise<string[]> {
       const blocked = new Set<string>([seed]);
@@ -284,11 +287,16 @@ export async function POST(request: Request) {
           .update(networkSchema.networkUsers)
           .set(values)
           .where(eq(networkSchema.networkUsers.id, currentUser.id));
+        persistedUserId = currentUser.id;
       } else {
-        await networkDb.insert(networkSchema.networkUsers).values({
-          email,
-          ...values,
-        });
+        const [inserted] = await networkDb
+          .insert(networkSchema.networkUsers)
+          .values({
+            email,
+            ...values,
+          })
+          .returning({ id: networkSchema.networkUsers.id });
+        persistedUserId = inserted.id;
       }
     } catch (error) {
       if (isUniqueHandleConflict(error)) {
@@ -304,12 +312,21 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const shouldFireUpsell =
-      body.triggerUpsell === true &&
-      sessionId != null &&
-      !hasFiredUpsell(email, sessionId, "expert");
-    if (shouldFireUpsell) {
-      recordUpsellFired(email, sessionId, "expert");
+    let upsell:
+      | { fired: boolean; copy: string | null; declineLabel: string }
+      | null = null;
+    if (body.triggerUpsell === true && persistedUserId) {
+      const stepRunId = await createNetworkLaneStepRun({
+        route: "network-handle-upsell",
+        sessionId,
+        actorId: persistedUserId,
+      });
+      upsell = await maybeFireWorkspaceUpsell({
+        stepRunId,
+        userId: persistedUserId,
+        trigger: "expert-q6",
+        handle,
+      });
     }
 
     return NextResponse.json({
@@ -317,7 +334,9 @@ export async function POST(request: Request) {
       handle,
       shareUrl,
       card: cardToPersist,
-      upsell: shouldFireUpsell,
+      upsell: upsell?.fired ?? false,
+      upsellCopy: upsell?.copy ?? null,
+      upsellDeclineLabel: upsell?.declineLabel ?? null,
     });
   } catch (error) {
     if (isNetworkDbConnectionError(error)) {

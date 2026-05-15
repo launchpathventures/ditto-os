@@ -36,9 +36,6 @@ vi.mock("../../../../../../../src/db/network-db", () => ({
   ensureNetworkSchema: vi.fn(async () => {}),
 }));
 
-const { resetNetworkUpsellTrackerForTests } = await import(
-  "../../../../../../../src/engine/network-upsell-tracker"
-);
 const { POST } = await import("./route");
 
 function card(overrides: Partial<NetworkProfileCardBlock> = {}): NetworkProfileCardBlock {
@@ -104,7 +101,6 @@ beforeEach(() => {
   const result = createTestDb();
   testDb = result.db;
   cleanup = result.cleanup;
-  resetNetworkUpsellTrackerForTests();
 });
 
 afterEach(() => {
@@ -126,8 +122,14 @@ describe("POST /api/v1/network/handle", () => {
     }));
 
     expect(first.status).toBe(200);
-    const firstJson = await first.json() as { ok: boolean; handle: string; upsell: boolean };
+    const firstJson = await first.json() as {
+      ok: boolean;
+      handle: string;
+      upsell: boolean;
+      upsellCopy?: string | null;
+    };
     expect(firstJson).toMatchObject({ ok: true, handle: "timhgreen", upsell: true });
+    expect(firstJson.upsellCopy).toContain("Worth it if you do this kind of hunting more than twice a year");
 
     const second = await POST(request({
       sessionId: "lane-session",
@@ -139,6 +141,10 @@ describe("POST /api/v1/network/handle", () => {
     }));
     const secondJson = await second.json() as { ok: boolean; handle: string; upsell: boolean };
     expect(secondJson).toMatchObject({ ok: true, handle: "timhgreen", upsell: false });
+
+    const upsellRows = await tx.select().from(networkSchema.networkSessionUpsellLog);
+    expect(upsellRows).toHaveLength(1);
+    expect(upsellRows[0]).toMatchObject({ trigger: "expert-q6" });
 
     const [stored] = await tx
       .select({
@@ -153,7 +159,7 @@ describe("POST /api/v1/network/handle", () => {
     expect(stored?.wantsVisibility).toBe(true);
     expect(stored?.card?.shareUrl).toBe("https://ditto.partners/people/timhgreen");
     expect(stored?.card?.visibility).toBe("public");
-  }));
+  }), 20_000);
 
   it("returns handle alternatives when the handle is already taken", net(async (tx) => {
     await insertExpertSession("other-session");

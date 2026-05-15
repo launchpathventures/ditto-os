@@ -6,11 +6,10 @@ import type { JobRequestCardBlock, ReviewCardBlock, SuggestedCandidate } from "@
 import {
   CLIENT_LANE_UPSELL_COPY,
   ClientCardActions,
-  emitDebugWorkspaceUpsell,
-  introStubCopy,
+  requestIntroduction,
   scanOffNetwork,
 } from "./client-card-actions";
-import { WORKSPACE_UPSELL_OQ1_WARN, resetWorkspaceUpsellGuardsForTest } from "./workspace-upsell";
+import { resetWorkspaceUpsellGuardsForTest } from "./workspace-upsell";
 
 function selectedCandidate(overrides: Partial<SuggestedCandidate> = {}): SuggestedCandidate {
   return {
@@ -116,7 +115,49 @@ describe("ClientCardActions", () => {
     expect(body).not.toHaveProperty("stepRunId");
   });
 
-  it("renders the intro stub with selected-candidate copy and debug affordance", () => {
+  it("posts intro requests without accepting a caller supplied stepRunId", async () => {
+    const payload = {
+      introductionId: "intro-1",
+      state: "queued",
+      block: {
+        type: "authorization-request",
+        state: "pending",
+        header: "Intro request for Lisa Chen",
+        preview: null,
+        recipientLabel: "Lisa Chen",
+        actionClass: "email-send",
+        executionResult: null,
+        expiresAt: null,
+        costLabel: "1st of 2 free intros (1 left after this)",
+      },
+    };
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => payload,
+    })) as unknown as typeof fetch;
+
+    await expect(
+      requestIntroduction({
+        jobRequestCard: jobRequestCard(),
+        selectedCandidate: selectedCandidate(),
+        sessionId: "client-session",
+        fetchImpl,
+      }),
+    ).resolves.toEqual(payload);
+
+    const call = (fetchImpl as unknown as { mock: { calls: Array<[string, { body: string }]> } }).mock.calls[0];
+    expect(call[0]).toBe("/api/v1/network/intros");
+    expect(call[1]).toEqual(expect.objectContaining({ method: "POST", credentials: "include" }));
+    const body = JSON.parse(call[1].body) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      sessionId: "client-session",
+      jobRequestCard: expect.objectContaining({ type: "job-request-card" }),
+      selectedCandidate: expect.objectContaining({ handle: "lisa-chen" }),
+    });
+    expect(body).not.toHaveProperty("stepRunId");
+  });
+
+  it("renders the intro action without the old Brief 261 stub copy", () => {
     const html = renderToStaticMarkup(
       React.createElement(ClientCardActions, {
         selectedCandidate: selectedCandidate(),
@@ -125,12 +166,9 @@ describe("ClientCardActions", () => {
       }),
     );
 
-    expect(introStubCopy("Lisa Chen")).toBe(
-      "Coming in sub-brief 261 — the intro flow drops here. For now, your selection — Lisa Chen — is captured.",
-    );
-    expect(html).toContain("Coming in sub-brief 261");
-    expect(html).toContain("your selection — Lisa Chen — is captured");
-    expect(html).toContain("[ Pretend it sent ]");
+    expect(html).toContain("Intro:");
+    expect(html).not.toContain("Coming in sub-brief 261");
+    expect(html).not.toContain("[ Pretend it sent ]");
   });
 
   it("disables the primary action with cursor-wait during candidate refresh", () => {
@@ -145,36 +183,23 @@ describe("ClientCardActions", () => {
     expect(html).toContain("cursor-wait");
   });
 
-  it("fires the client OQ1 guard and renders the workspace upsell copy from the debug path", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const emitted: string[] = [];
-
-    const copy = emitDebugWorkspaceUpsell({
-      mode: "client",
-      sessionId: "client-session",
-      onUpsell: (value) => emitted.push(value),
-    });
+  it("renders the workspace upsell copy when supplied by the durable Q6 trigger", () => {
     const html = renderToStaticMarkup(
       React.createElement(ClientCardActions, {
         selectedCandidate: selectedCandidate(),
         isRefreshInFlight: false,
-        initialUpsellCopy: copy,
+        initialUpsellCopy: CLIENT_LANE_UPSELL_COPY,
       }),
     );
 
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(WORKSPACE_UPSELL_OQ1_WARN);
-    expect(emitted).toEqual([CLIENT_LANE_UPSELL_COPY]);
     expect(html).toContain("Brief&#x27;s saved.");
     expect(html).toContain("Yes, set up workspace");
     expect(html).toContain("Not now, just my brief");
   });
 
-  it("keeps the intro stub path side-effect-free while scout points at the real route", () => {
+  it("keeps scout and intro pointed at their audited HTTP routes", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-
-    introStubCopy("Lisa Chen");
 
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -183,8 +208,8 @@ describe("ClientCardActions", () => {
       "utf8",
     );
     expect(source).toContain("/api/v1/network/scout");
-    expect(source).not.toContain("emit_intro_request");
+    expect(source).toContain("/api/v1/network/intros");
     expect(source).not.toContain("gmail-authorized-send");
-    expect(source).toContain("TODO: remove when sub-brief 261 lands");
+    expect(source).not.toContain("Coming in sub-brief 261");
   });
 });

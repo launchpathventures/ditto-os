@@ -5,6 +5,10 @@ import * as networkSchema from "@ditto/core/db/network";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { networkDb } from "../../../../../src/db/network-db";
 import { buildNetworkKbContext } from "../../../../../src/engine/network-kb-context";
+import {
+  applyApprovedPublicClaimsToCard,
+  loadApprovedPublicMemberSignalClaims,
+} from "../../../../../src/engine/member-signal-review";
 import { ProfileChatClient } from "./profile-chat-client";
 
 export const dynamic = "force-dynamic";
@@ -65,12 +69,14 @@ async function loadProfile(handle: string) {
     .where(eq(networkSchema.networkUsers.handle, handle))
     .limit(1);
   if (!user) return null;
-  const card = user.card ?? fallbackCard(user, handle);
+  const baseCard = user.card ?? fallbackCard(user, handle);
+  const publicClaims = await loadApprovedPublicMemberSignalClaims({ userId: user.id });
+  const card = applyApprovedPublicClaimsToCard(baseCard, publicClaims);
   const kb = await buildNetworkKbContext({
     userId: user.id,
     audience: "visitor",
   });
-  return { user, card, kb };
+  return { user, card, kb, publicClaims };
 }
 
 function buildQuickStartPills(card: NetworkProfileCardBlock, facts: Array<{ factMd: string; visibility: string }>): string[] {

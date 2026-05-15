@@ -81,7 +81,7 @@ describe("SuggestedCandidatesPanel", () => {
     ];
 
     expect(staleSuggestionAgeHours(staleCandidates, now)).toBe(25);
-    expect(renderPanel(staleCandidates)).toContain("Suggestions from 25h ago — refresh ▸");
+    expect(renderPanel(staleCandidates)).toContain("Suggestions are 25h old - refresh");
   });
 
   it("refreshes candidates with exactly one POST and reports the in-flight state", async () => {
@@ -119,7 +119,7 @@ describe("SuggestedCandidatesPanel", () => {
     expect(inFlight).toEqual([true, false]);
   });
 
-  it("keeps per-card Introduce as a UI-only setter with no fetch or stub-contract reference", () => {
+  it("keeps per-card selection as a UI-only setter with no fetch or stub-contract reference", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const selected: string[] = [];

@@ -10,27 +10,16 @@ export const CLIENT_LANE_UPSELL_ACCEPT_LABEL = "Yes, set up workspace";
 export const CLIENT_LANE_UPSELL_DECLINE_LABEL = "Not now, just my brief";
 export const EXPERT_LANE_UPSELL_DECLINE_LABEL = "Not now, just my card";
 
-export const WORKSPACE_UPSELL_OQ1_WARN =
-  "Brief 257 OQ1: client-lane upsell using parent 254 §Workspace upsell — Client lane variant (post-2026-05-10 amendment)";
-
-const warnedSessionLanes = new Set<string>();
-
 export function resetWorkspaceUpsellGuardsForTest() {
-  warnedSessionLanes.clear();
+  // Kept for older focused tests; Brief 261 moved idempotency to the server-side
+  // network_session_upsell_log table.
 }
 
 export function emitWorkspaceUpsell(
   mode: WorkspaceUpsellMode,
   options: { sessionId?: string | null; handle?: string | null } = {},
 ): string {
-  const sessionId = options.sessionId || "anonymous";
   if (mode === "client") {
-    const warningKey = `client:${sessionId}`;
-    if (!warnedSessionLanes.has(warningKey)) {
-      warnedSessionLanes.add(warningKey);
-      // TODO(post-261): remove OQ1 guard when sub-brief 261 wires live upsell trigger
-      console.warn(WORKSPACE_UPSELL_OQ1_WARN);
-    }
     return CLIENT_LANE_UPSELL_COPY;
   }
 

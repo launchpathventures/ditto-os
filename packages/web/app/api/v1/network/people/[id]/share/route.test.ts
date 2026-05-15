@@ -5,12 +5,18 @@ const mocks = vi.hoisted(() => ({
   resolveNetworkLaneSession: vi.fn(),
   createNetworkLaneStepRun: vi.fn(),
   generateShareVariants: vi.fn(),
+  loadApprovedPublicMemberSignalClaims: vi.fn(),
+  applyApprovedPublicClaimsToCard: vi.fn(),
   select: vi.fn(),
 }));
 
 vi.mock("../../../kb/session", () => ({ resolveNetworkLaneSession: mocks.resolveNetworkLaneSession }));
 vi.mock("../../../../../../../../../src/engine/network-step-run", () => ({ createNetworkLaneStepRun: mocks.createNetworkLaneStepRun }));
 vi.mock("../../../../../../../../../src/engine/generate-share-variants", () => ({ generateShareVariants: mocks.generateShareVariants }));
+vi.mock("../../../../../../../../../src/engine/member-signal-review", () => ({
+  loadApprovedPublicMemberSignalClaims: mocks.loadApprovedPublicMemberSignalClaims,
+  applyApprovedPublicClaimsToCard: mocks.applyApprovedPublicClaimsToCard,
+}));
 vi.mock("../../../../../../../../../src/db/network-db", () => ({
   isNetworkDbConnectionError: () => false,
   networkDb: { select: mocks.select },
@@ -60,6 +66,8 @@ beforeEach(() => {
     loud: "loud https://ditto.partners/people/timhgreen",
     ask: "ask https://ditto.partners/people/timhgreen",
   });
+  mocks.loadApprovedPublicMemberSignalClaims.mockResolvedValue([]);
+  mocks.applyApprovedPublicClaimsToCard.mockImplementation((input: NetworkProfileCardBlock) => input);
   let call = 0;
   mocks.select.mockImplementation(() => ({
     from: () => ({

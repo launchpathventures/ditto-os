@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Share2 } from "lucide-react";
+import { CircleDashed, Share2 } from "lucide-react";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import { NetworkCardSilhouette } from "@/components/network/card-silhouette";
@@ -19,10 +19,12 @@ export function NetworkProfileCardRenderer({
   card,
   className,
   sessionId,
+  preview = false,
 }: {
   card: NetworkProfileCardBlock;
   className?: string;
   sessionId?: string | null;
+  preview?: boolean;
 }) {
   const greeter = greeterName(card);
   const name = firstName(card);
@@ -33,7 +35,12 @@ export function NetworkProfileCardRenderer({
       <NetworkCardSilhouette
         card={card}
         className={cn("text-text-primary", className)}
-        actionSlot={(
+        actionSlot={preview ? (
+          <div className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-text-secondary">
+            <CircleDashed className="h-4 w-4" aria-hidden="true" />
+            Draft card
+          </div>
+        ) : (
           <div className="flex flex-wrap gap-2">
             <a href={card.shareUrl} className="inline-flex min-h-11 items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90">
               <span aria-hidden="true" className="mr-2">▸</span>

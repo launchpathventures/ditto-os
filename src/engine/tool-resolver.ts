@@ -31,7 +31,10 @@ import {
   secretsFromAuthEnv,
 } from "./integration-handlers/scrub";
 import { resolveServiceAuth } from "./credential-vault";
-import { VISITOR_FORWARD_NOTE_TOOL_NAME } from "./network-chat-prompt";
+import {
+  INTRO_REQUEST_TOOL_NAME,
+  VISITOR_FORWARD_NOTE_TOOL_NAME,
+} from "./network-chat-prompt";
 // Dynamic import to avoid pulling LanceDB native binary into webpack bundle
 // import { searchKnowledge, formatResultsForPrompt } from "./knowledge/search";
 
@@ -140,6 +143,122 @@ const builtInTools: Record<string, BuiltInTool> = {
       });
       return JSON.stringify(
         { success: true, noteId: result.note.id, eventId: result.eventId },
+        null,
+        2,
+      );
+    },
+  },
+
+  [INTRO_REQUEST_TOOL_NAME]: {
+    definition: {
+      name: INTRO_REQUEST_TOOL_NAME,
+      description:
+        "Emit a gated introduction request with refusal checks, free-counter copy, persistence, and workspace inbox delivery. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          originContext: {
+            type: "string",
+            enum: ["client", "visitor", "expert-crossover"],
+            description: "Where the intro request originated.",
+          },
+          targetUserId: {
+            type: "string",
+            description: "Network user id whose workspace receives the approval block.",
+          },
+          targetDisplayName: {
+            type: ["string", "null"],
+            description: "Human label for the target user.",
+          },
+          requesterUserId: {
+            type: ["string", "null"],
+            description: "Authenticated requester network user id, when available.",
+          },
+          visitorSessionId: {
+            type: ["string", "null"],
+            description: "Anonymous visitor session id, when requesterUserId is unavailable.",
+          },
+          requesterDisplayName: {
+            type: ["string", "null"],
+            description: "Requester display name.",
+          },
+          requesterOrgLabel: {
+            type: ["string", "null"],
+            description: "Requester organization label.",
+          },
+          intentSummary: {
+            type: "string",
+            description: "One-sentence summary of why the requester wants the intro.",
+          },
+          draft: {
+            type: ["string", "null"],
+            description: "Optional Greeter-composed draft. If omitted, the tool composes a safe fallback draft.",
+          },
+          matchConfidence: {
+            type: ["number", "string", "null"],
+            description: "Fit confidence. Values below 0.5 or 'low' trigger a low-fit refusal.",
+          },
+          transcript: {
+            type: ["array", "null"],
+            items: { type: "object" },
+            description: "Self-contained ContentBlock preview transcript.",
+          },
+        },
+        required: ["originContext", "targetUserId", "intentSummary"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      context?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { emitIntroRequest } = await import("./emit-intro-request");
+      const originContext =
+        input.originContext === "visitor" ||
+        input.originContext === "expert-crossover"
+          ? input.originContext
+          : "client";
+      const contextUserId = context?.userId?.trim() || null;
+      const requesterUserId =
+        typeof input.requesterUserId === "string" && input.requesterUserId.trim()
+          ? input.requesterUserId
+          : originContext === "client" || originContext === "expert-crossover"
+            ? contextUserId
+            : null;
+      const targetUserId =
+        typeof input.targetUserId === "string" && input.targetUserId.trim()
+          ? input.targetUserId
+          : originContext === "visitor"
+            ? contextUserId
+            : null;
+      if (!targetUserId) {
+        throw new Error("emit_intro_request requires targetUserId");
+      }
+      const result = await emitIntroRequest({
+        stepRunId: executionStepRunId,
+        originContext,
+        targetUserId,
+        targetDisplayName: input.targetDisplayName as string | null | undefined,
+        requesterUserId,
+        visitorSessionId: input.visitorSessionId as string | null | undefined,
+        requesterDisplayName: input.requesterDisplayName as string | null | undefined,
+        requesterOrgLabel: input.requesterOrgLabel as string | null | undefined,
+        intentSummary: input.intentSummary as string,
+        draft: input.draft as string | null | undefined,
+        matchConfidence: input.matchConfidence as number | "high" | "medium" | "low" | null | undefined,
+        transcript: Array.isArray(input.transcript)
+          ? input.transcript as import("./content-blocks").ContentBlock[]
+          : null,
+      });
+      return JSON.stringify(
+        {
+          success: true,
+          introductionId: result.introduction.id,
+          state: result.introduction.state,
+          authorizationId: result.block.authorizationId,
+          costLabel: result.block.costLabel,
+          deliveryId: result.delivery?.id ?? null,
+        },
         null,
         2,
       );
@@ -520,6 +639,91 @@ const builtInTools: Record<string, BuiltInTool> = {
     },
   },
 
+  "draft_need_request": {
+    definition: {
+      name: "draft_need_request",
+      description:
+        "Draft an editable Active Request from a natural-language need. Captures outcome, ideal person, proof, private value/budget, and search/watch mode. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          rawNeed: {
+            type: "string",
+            description: "Plain-language need, opportunity, or economic outcome.",
+          },
+          requesterContext: {
+            type: ["object", "null"],
+            description: "Optional light identity context: name, email, orgSite, credibility.",
+          },
+        },
+        required: ["rawNeed"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+    ): Promise<string> => {
+      const { draftNeedRequest } = await import("./need-request-draft");
+      const result = await draftNeedRequest({
+        rawNeed: input.rawNeed as string,
+        requesterContext: input.requesterContext as import("./need-request-calibration").NeedRequestIdentity | null | undefined,
+        stepRunId: executionStepRunId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "update_need_request": {
+    definition: {
+      name: "update_need_request",
+      description:
+        "Create or update an Active Request row and audited search/watch handoff payloads. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          rawNeed: { type: "string" },
+          userId: { type: ["string", "null"] },
+          visitorSessionId: { type: ["string", "null"] },
+          mode: {
+            type: "string",
+            enum: ["manual-search", "background-watch", "both"],
+          },
+          publish: { type: "boolean" },
+          requesterContext: { type: ["object", "null"] },
+        },
+        required: ["rawNeed"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { draftNeedRequest } = await import("./need-request-draft");
+      const { saveNeedRequest } = await import("./need-request-storage");
+      const draft = await draftNeedRequest({
+        rawNeed: input.rawNeed as string,
+        requesterContext: input.requesterContext as import("./need-request-calibration").NeedRequestIdentity | null | undefined,
+        stepRunId: executionStepRunId,
+      });
+      const mode = (
+        input.mode === "manual-search" ||
+        input.mode === "background-watch" ||
+        input.mode === "both"
+      ) ? input.mode : draft.mode;
+      const request = await saveNeedRequest({
+        draft: { ...draft, mode },
+        userId: typeof input.userId === "string" ? input.userId : execContext?.userId ?? null,
+        visitorSessionId: typeof input.visitorSessionId === "string" ? input.visitorSessionId : null,
+        actorId: execContext?.userId,
+        status: input.publish === true ? "active" : "draft",
+        mode,
+        stepRunId: executionStepRunId,
+      });
+      return JSON.stringify({ draft, request }, null, 2);
+    },
+  },
+
   "generate_share_variants": {
     definition: {
       name: "generate_share_variants",
@@ -552,6 +756,150 @@ const builtInTools: Record<string, BuiltInTool> = {
         stepRunId: executionStepRunId,
       });
       return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "research_member_signal": {
+    definition: {
+      name: "research_member_signal",
+      description:
+        "Research user-provided public/profile sources for a Member Signal. Respects platform limits and requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          userId: {
+            type: "string",
+            description: "Network user id that owns the Member Signal.",
+          },
+          sources: {
+            type: "array",
+            items: { type: "object" },
+            description:
+              "LinkedIn, website, X, Instagram, other URLs, pasted text, or upload/text source inputs.",
+          },
+        },
+        required: ["userId", "sources"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { researchMemberSignal } = await import("./member-signal-research");
+      const userId = resolveNetworkToolUserId(
+        input.userId,
+        execContext,
+        "research_member_signal",
+      );
+      const result = await researchMemberSignal({
+        userId,
+        sources: Array.isArray(input.sources)
+          ? input.sources as import("./member-signal-source").MemberSignalSourceInput[]
+          : [],
+        stepRunId: executionStepRunId,
+        actorId: execContext?.userId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "draft_member_signal": {
+    definition: {
+      name: "draft_member_signal",
+      description:
+        "Draft provenance-backed Member Signal claims from researched sources. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          userId: {
+            type: "string",
+            description: "Network user id that owns the Member Signal.",
+          },
+          memberSignalId: {
+            type: ["string", "null"],
+            description: "Optional Member Signal id. Defaults to the user's current signal.",
+          },
+        },
+        required: ["userId"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { draftMemberSignal } = await import("./member-signal-draft");
+      const userId = resolveNetworkToolUserId(
+        input.userId,
+        execContext,
+        "draft_member_signal",
+      );
+      const result = await draftMemberSignal({
+        userId,
+        memberSignalId: typeof input.memberSignalId === "string" ? input.memberSignalId : null,
+        stepRunId: executionStepRunId,
+        actorId: execContext?.userId,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  },
+
+  "update_member_signal_claim": {
+    definition: {
+      name: "update_member_signal_claim",
+      description:
+        "Approve, edit, hide, or change visibility for one Member Signal claim while recording review feedback. Requires stepRunId at execution time.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          userId: {
+            type: "string",
+            description: "Network user id that owns the Member Signal.",
+          },
+          claimId: {
+            type: "string",
+            description: "Member Signal claim id.",
+          },
+          action: {
+            type: "string",
+            enum: ["approve", "edit", "hide", "visibility"],
+            description: "Review action to apply.",
+          },
+          claimText: {
+            type: ["string", "null"],
+            description: "Edited claim text for action=edit.",
+          },
+          visibility: {
+            type: ["string", "null"],
+            enum: ["public", "on-request", "private", "hidden", null],
+            description: "Next claim visibility.",
+          },
+        },
+        required: ["userId", "claimId", "action"],
+      },
+    },
+    execute: async (
+      input: Record<string, unknown>,
+      executionStepRunId?: string,
+      execContext?: ToolExecutionContext,
+    ): Promise<string> => {
+      const { updateMemberSignalClaim } = await import("./member-signal-review");
+      const userId = resolveNetworkToolUserId(
+        input.userId,
+        execContext,
+        "update_member_signal_claim",
+      );
+      const result = await updateMemberSignalClaim({
+        userId,
+        claimId: input.claimId as string,
+        action: input.action as import("./member-signal-review").MemberSignalClaimAction,
+        claimText: input.claimText as string | null | undefined,
+        visibility: input.visibility as import("@ditto/core/db/network").NetworkSignalClaimVisibility | null | undefined,
+        stepRunId: executionStepRunId,
+        actorId: execContext?.userId,
+      });
+      return JSON.stringify({ claim: result }, null, 2);
     },
   },
 

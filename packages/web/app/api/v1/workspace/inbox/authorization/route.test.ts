@@ -32,7 +32,10 @@ function pendingBlock(): AuthorizationRequestBlock {
     executionResult: null,
     expiresAt: null,
     authorizationId: "visitor-intro-auth-1",
-    costLabel: null,
+    request: "Avery asked for an intro to Tim.",
+    draft: "Hi Tim - Avery asked for an introduction.",
+    requesterId: "visitor-session-1",
+    costLabel: "1st of 2 free intros (1 left after this)",
   };
 }
 
@@ -80,6 +83,10 @@ describe("POST /api/v1/workspace/inbox/authorization", () => {
         recipientLabel: "Tim Green",
         actionClass: "email-send",
         preview: [],
+        request: block.request,
+        draft: block.draft,
+        requesterId: block.requesterId,
+        costLabel: block.costLabel,
       },
     }));
 
@@ -94,11 +101,73 @@ describe("POST /api/v1/workspace/inbox/authorization", () => {
       type: "authorization-request",
       authorizationId: "visitor-intro-auth-1",
       state: "rejected",
+      request: "Avery asked for an intro to Tim.",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      requesterId: "visitor-session-1",
+      costLabel: "1st of 2 free intros (1 left after this)",
     });
     expect(row.contentBlock).toMatchObject({
       type: "authorization-request",
       authorizationId: "visitor-intro-auth-1",
       state: "rejected",
+      request: "Avery asked for an intro to Tim.",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      requesterId: "visitor-session-1",
+      costLabel: "1st of 2 free intros (1 left after this)",
+    });
+  });
+
+  it("preserves intro fields from the stored activity when older clients omit them", async () => {
+    const block = pendingBlock();
+    await testDb.insert(schema.activities).values({
+      id: "activity-2",
+      action: "workspace_inbox_delivery",
+      description: "Intro request for Tim",
+      actorType: "network",
+      actorId: "user-1",
+      entityType: "network_workspace_delivery",
+      entityId: "delivery-2",
+      metadata: {
+        kind: "visitor_intro_request",
+        blocks: [block],
+      },
+      contentBlock: block as unknown as Record<string, unknown>,
+    });
+
+    const response = await POST(request({
+      authorizationAction: {
+        authorizationId: "visitor-intro-auth-1",
+        event: "not-yet",
+        header: "Intro request for Tim",
+        recipientLabel: "Tim Green",
+        actionClass: "email-send",
+        preview: [],
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    const [row] = await testDb
+      .select()
+      .from(schema.activities)
+      .where(eq(schema.activities.id, "activity-2"));
+    const metadata = row.metadata as { blocks?: AuthorizationRequestBlock[] };
+    expect(metadata.blocks?.[0]).toMatchObject({
+      type: "authorization-request",
+      authorizationId: "visitor-intro-auth-1",
+      state: "rejected",
+      request: "Avery asked for an intro to Tim.",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      requesterId: "visitor-session-1",
+      costLabel: "1st of 2 free intros (1 left after this)",
+    });
+    expect(row.contentBlock).toMatchObject({
+      type: "authorization-request",
+      authorizationId: "visitor-intro-auth-1",
+      state: "rejected",
+      request: "Avery asked for an intro to Tim.",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      requesterId: "visitor-session-1",
+      costLabel: "1st of 2 free intros (1 left after this)",
     });
   });
 });

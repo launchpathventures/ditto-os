@@ -4,6 +4,10 @@ import * as networkSchema from "@ditto/core/db/network";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { NetworkCardOgFrame } from "@/components/network/card-silhouette";
 import { networkDb } from "../../../../../src/db/network-db";
+import {
+  applyApprovedPublicClaimsToCard,
+  loadApprovedPublicMemberSignalClaims,
+} from "../../../../../src/engine/member-signal-review";
 
 export const runtime = "nodejs";
 export const alt = "Ditto network profile card";
@@ -52,8 +56,9 @@ async function loadCard(handle: string): Promise<NetworkProfileCardBlock> {
     .where(eq(networkSchema.networkUsers.handle, normalized))
     .limit(1);
   if (!user?.card) return fallbackCard(normalized);
+  const publicClaims = await loadApprovedPublicMemberSignalClaims({ userId: user.id });
   return {
-    ...user.card,
+    ...applyApprovedPublicClaimsToCard(user.card, publicClaims),
     shareUrl: `${baseUrl()}/people/${normalized}`,
     ogImageUrl: `${baseUrl()}/people/${normalized}/opengraph-image`,
   };

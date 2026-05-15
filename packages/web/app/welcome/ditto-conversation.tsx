@@ -997,20 +997,19 @@ export function DittoConversation() {
   return (
     <ConversationProvider>
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Phase-aware bottom-anchored hero. Landing shows the morning
-          workspace floor; picker + conversation phases share a soft pastel
-          sky (atmosphere) anchored to the bottom of the viewport so the
-          chat composer sits gorgeously on top of it. The image is
+      {/* Phase-aware bottom-anchored hero. The home page uses the first-dawn
+          city workspace background throughout, with a softer preamble layer
+          and a clearer picker/conversation layer. The image is
           decorative-only and sits at z-0 behind chrome. */}
       <div
         className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-700 ease-in-out"
         style={{ opacity: phase === "preamble" ? 1 : 0 }}
       >
         <HeroBackdrop
-          variant="workspace"
+          variant="home"
           anchor="bottom"
           height={420}
-          intensity={0.32}
+          intensity={0.3}
           priority
         />
       </div>
@@ -1019,10 +1018,10 @@ export function DittoConversation() {
         style={{ opacity: phase === "preamble" ? 0 : 1 }}
       >
         <HeroBackdrop
-          variant="atmosphere"
+          variant="home"
           anchor="bottom"
           height={560}
-          intensity={phase === "picker" ? 0.6 : 0.5}
+          intensity={phase === "picker" ? 0.48 : 0.42}
           priority
         />
       </div>

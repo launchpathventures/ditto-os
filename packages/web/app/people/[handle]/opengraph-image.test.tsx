@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 
 const mocks = vi.hoisted(() => ({
+  loadApprovedPublicMemberSignalClaims: vi.fn(),
+  applyApprovedPublicClaimsToCard: vi.fn(),
   select: vi.fn(),
 }));
 
+vi.mock("../../../../../src/engine/member-signal-review", () => ({
+  loadApprovedPublicMemberSignalClaims: mocks.loadApprovedPublicMemberSignalClaims,
+  applyApprovedPublicClaimsToCard: mocks.applyApprovedPublicClaimsToCard,
+}));
 vi.mock("../../../../../src/db/network-db", () => ({
   networkDb: { select: mocks.select },
 }));
@@ -33,6 +39,8 @@ function card(): NetworkProfileCardBlock {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.loadApprovedPublicMemberSignalClaims.mockResolvedValue([]);
+  mocks.applyApprovedPublicClaimsToCard.mockImplementation((input: NetworkProfileCardBlock) => input);
 });
 
 describe("/people/:handle/opengraph-image", () => {

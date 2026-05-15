@@ -5,6 +5,10 @@ import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { networkDb, isNetworkDbConnectionError } from "../../../../../../../../../src/db/network-db";
 import { createNetworkLaneStepRun } from "../../../../../../../../../src/engine/network-step-run";
 import { generateShareVariants } from "../../../../../../../../../src/engine/generate-share-variants";
+import {
+  applyApprovedPublicClaimsToCard,
+  loadApprovedPublicMemberSignalClaims,
+} from "../../../../../../../../../src/engine/member-signal-review";
 import { resolveNetworkLaneSession } from "../../../kb/session";
 
 export const runtime = "nodejs";
@@ -65,9 +69,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       actorId: session.actorId,
     });
     const bodyCard = isNetworkProfileCard(body.card) && body.card.handle === handle ? body.card : null;
+    const publicClaims = await loadApprovedPublicMemberSignalClaims({ userId: user.id });
+    const card = applyApprovedPublicClaimsToCard(bodyCard ?? user.card, publicClaims);
     const variants = await generateShareVariants({
       stepRunId,
-      card: bodyCard ?? user.card,
+      card,
       kb,
     });
     return NextResponse.json(variants);

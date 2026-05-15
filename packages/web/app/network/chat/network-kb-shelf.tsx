@@ -276,20 +276,20 @@ export function NetworkKbShelf({
       data-testid="network-kb-shelf"
       aria-label="Expert knowledge shelf"
       className={cn(
-        "grid w-full max-w-[720px] gap-3 rounded-[24px] border border-[#201a17]/10 bg-white/85 p-4 text-[#201a17] shadow-[0_12px_30px_rgba(32,26,23,0.06)]",
+        "grid w-full max-w-[720px] gap-3 rounded-2xl border border-border bg-white p-4 text-text-primary shadow-subtle",
         className,
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
             Knowledge shelf
           </p>
-          <p className="mt-1 text-sm leading-5 text-[#5e514b]">
+          <p className="mt-1 text-sm leading-5 text-text-secondary">
             Source facts default to on-request.
           </p>
         </div>
-        <div className="flex flex-wrap gap-1 rounded-full bg-[#f8efe4] p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-surface-raised p-1">
           {[
             ["source", FileUp, "Upload"],
             ["voice", Mic, "Voice"],
@@ -303,8 +303,8 @@ export function NetworkKbShelf({
               className={cn(
                 "inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition",
                 activeTab === tab
-                  ? "bg-[#201a17] text-white"
-                  : "text-[#5e514b] hover:bg-white",
+                  ? "bg-accent text-accent-foreground"
+                  : "text-text-secondary hover:bg-white hover:text-text-primary",
               )}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -320,20 +320,20 @@ export function NetworkKbShelf({
             ref={fileInputRef}
             type="file"
             accept=".txt,.md,.markdown,.pdf,.csv,.json,text/plain,text/markdown,application/pdf,text/csv,application/json"
-            className="block w-full rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 py-3 text-sm text-[#4a3f39] file:mr-3 file:rounded-full file:border-0 file:bg-[#201a17] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+            className="block w-full rounded-md border border-border bg-background px-3 py-3 text-sm text-text-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-2 file:text-xs file:font-semibold file:text-accent-foreground"
           />
           <input
             value={sourceTitle}
             onChange={(event) => setSourceTitle(event.target.value)}
             placeholder="Source label"
-            className="min-h-11 rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 text-sm outline-none focus:border-[#201a17]/30"
+            className="min-h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-text-primary"
           />
           <textarea
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
             placeholder="Or paste source notes"
             rows={4}
-            className="min-h-[112px] resize-y rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 py-3 text-sm leading-5 outline-none focus:border-[#201a17]/30"
+            className="min-h-[112px] resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-5 outline-none focus:border-text-primary"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <VisibilityPicker
@@ -345,7 +345,7 @@ export function NetworkKbShelf({
               type="button"
               disabled={status === "loading"}
               onClick={() => void uploadSource()}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-55"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-55"
             >
               <FileUp className="h-4 w-4" aria-hidden="true" />
               Extract facts
@@ -361,13 +361,13 @@ export function NetworkKbShelf({
             onChange={(event) => setVoiceTranscript(event.target.value)}
             placeholder="Paste the reviewed transcript"
             rows={6}
-            className="min-h-[148px] resize-y rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 py-3 text-sm leading-5 outline-none focus:border-[#201a17]/30"
+            className="min-h-[148px] resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-5 outline-none focus:border-text-primary"
           />
           <button
             type="button"
             disabled={status === "loading"}
             onClick={() => void saveVoiceTranscript()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-55"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-55"
           >
             <Mic className="h-4 w-4" aria-hidden="true" />
             Save transcript
@@ -382,7 +382,7 @@ export function NetworkKbShelf({
             onChange={(event) => setManualFact(event.target.value)}
             placeholder="Add one fact"
             rows={3}
-            className="min-h-[96px] resize-y rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 py-3 text-sm leading-5 outline-none focus:border-[#201a17]/30"
+            className="min-h-[96px] resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-5 outline-none focus:border-text-primary"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <VisibilityPicker value={manualVisibility} onChange={setManualVisibility} label="Visibility" />
@@ -390,7 +390,7 @@ export function NetworkKbShelf({
               type="button"
               disabled={status === "loading"}
               onClick={() => void addManualFact()}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-55"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-55"
             >
               <Type className="h-4 w-4" aria-hidden="true" />
               Save fact
@@ -406,13 +406,13 @@ export function NetworkKbShelf({
             onChange={(event) => setPrivateFilter(event.target.value)}
             placeholder="Private disqualification rule"
             rows={4}
-            className="min-h-[112px] resize-y rounded-2xl border border-[#201a17]/10 bg-[#fffaf4] px-3 py-3 text-sm leading-5 outline-none focus:border-[#201a17]/30"
+            className="min-h-[112px] resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-5 outline-none focus:border-text-primary"
           />
           <button
             type="button"
             disabled={status === "loading"}
             onClick={() => void savePrivateFilter()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#201a17] px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-55"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-55"
           >
             <Shield className="h-4 w-4" aria-hidden="true" />
             Save privately
@@ -426,8 +426,8 @@ export function NetworkKbShelf({
           className={cn(
             "rounded-2xl px-3 py-2 text-sm leading-5",
             status === "error"
-              ? "bg-[#fff0e8] text-[#8d3f25]"
-              : "bg-[#f8efe4] text-[#5e514b]",
+              ? "bg-vivid-subtle text-vivid-deep"
+              : "bg-surface-raised text-text-secondary",
           )}
         >
           {message}
@@ -435,19 +435,19 @@ export function NetworkKbShelf({
       ) : null}
 
       {activeFacts.length > 0 ? (
-        <div className="grid gap-2 border-t border-[#201a17]/10 pt-3">
+        <div className="grid gap-2 border-t border-border pt-3">
           {activeFacts.map((fact) => {
             const editing = editingFactId === fact.id;
             return (
               <div
                 key={fact.id}
-                className="grid gap-2 rounded-2xl bg-[#fffaf4] p-3 text-sm leading-5"
+                className="grid gap-2 rounded-2xl bg-surface-raised p-3 text-sm leading-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-[#201a17]">
+                  <p className="min-w-0 flex-1 text-text-primary">
                     {editing ? null : fact.factMd}
                   </p>
-                  <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-[#786a63]">
+                  <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-text-muted">
                     {factVisibilityLabel(fact.visibility)}
                   </span>
                 </div>
@@ -456,11 +456,11 @@ export function NetworkKbShelf({
                     value={editingFactText}
                     onChange={(event) => setEditingFactText(event.target.value)}
                     rows={3}
-                    className="min-h-[88px] resize-y rounded-2xl border border-[#201a17]/10 bg-white px-3 py-3 text-sm outline-none focus:border-[#201a17]/30"
+                    className="min-h-[88px] resize-y rounded-md border border-border bg-white px-3 py-3 text-sm outline-none focus:border-text-primary"
                   />
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="truncate text-xs text-[#786a63]">
+                  <span className="truncate text-xs text-text-muted">
                     {fact.sourceLabel}
                     {fact.sourceLocator ? ` · ${fact.sourceLocator}` : ""}
                   </span>
@@ -475,7 +475,7 @@ export function NetworkKbShelf({
                       <button
                         type="button"
                         onClick={() => void updateFact(fact, { factMd: editingFactText.trim() })}
-                        className="inline-flex min-h-9 items-center rounded-full bg-[#201a17] px-3 text-xs font-semibold text-white"
+                        className="inline-flex min-h-9 items-center rounded-md bg-accent px-3 text-xs font-semibold text-accent-foreground"
                       >
                         Save
                       </button>
@@ -486,7 +486,7 @@ export function NetworkKbShelf({
                           setEditingFactId(fact.id);
                           setEditingFactText(fact.factMd);
                         }}
-                        className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-semibold text-[#5e514b] hover:bg-white"
+                        className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-semibold text-text-secondary hover:bg-white hover:text-text-primary"
                       >
                         <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                         Edit
@@ -495,7 +495,7 @@ export function NetworkKbShelf({
                     <button
                       type="button"
                       onClick={() => void updateFact(fact, { status: "archived" })}
-                      className="inline-flex min-h-9 items-center gap-1 rounded-full px-2 text-xs font-semibold text-[#5e514b] hover:bg-white"
+                      className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-semibold text-text-secondary hover:bg-white hover:text-text-primary"
                     >
                       <Archive className="h-3.5 w-3.5" aria-hidden="true" />
                       Archive
@@ -523,12 +523,12 @@ function VisibilityPicker({
   compact?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#786a63]">
+    <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-muted">
       <span className={compact ? "sr-only" : ""}>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as FactVisibility)}
-        className="min-h-9 rounded-full border border-[#201a17]/10 bg-white px-3 text-xs font-semibold normal-case tracking-normal text-[#201a17] outline-none focus:border-[#201a17]/30"
+        className="min-h-9 rounded-md border border-border bg-white px-3 text-xs font-semibold normal-case tracking-normal text-text-primary outline-none focus:border-text-primary"
       >
         {VISIBILITY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

@@ -129,7 +129,7 @@ export function rationaleText(
 
 function MoreLikeNotice({ candidate }: { candidate: SuggestedCandidate }) {
   return (
-    <div className="mt-3 rounded-2xl bg-surface-raised px-4 py-3 text-sm leading-6 text-text-secondary">
+    <div className="mt-3 rounded-2xl border border-border bg-white px-4 py-3 text-sm leading-6 text-text-secondary shadow-subtle">
       <span className="font-semibold text-text-primary">Scout hint:</span>{" "}
       I'll use{" "}
       <span className="font-semibold text-text-primary">{candidate.name}</span>{" "}
@@ -198,7 +198,7 @@ export function SuggestedCandidatesPanel({
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-          Suggestions
+          Candidate suggestions
         </p>
         {staleAgeHours != null ? (
           <button
@@ -211,7 +211,7 @@ export function SuggestedCandidatesPanel({
               className={cn("h-3.5 w-3.5", refreshing ? "animate-spin" : "")}
               aria-hidden="true"
             />
-            Suggestions from {staleAgeHours}h ago — refresh ▸
+            Suggestions are {staleAgeHours}h old - refresh
           </button>
         ) : null}
       </div>
@@ -231,15 +231,15 @@ export function SuggestedCandidatesPanel({
             <div
               key={candidate.handle}
               className={cn(
-                "w-[80vw] max-w-[320px] flex-none snap-start rounded-[18px] p-[2px] md:w-auto md:max-w-none",
-                selected ? "bg-[linear-gradient(135deg,#ff4000,#201a17)]" : "bg-transparent",
+                "w-[80vw] max-w-[320px] flex-none snap-start rounded-[18px] border p-[2px] md:w-auto md:max-w-none",
+                selected ? "border-vivid bg-vivid-subtle" : "border-transparent bg-transparent",
               )}
             >
               <article
                 aria-label={`Candidate: ${candidate.name}, ${candidate.oneLineRole}, fit confidence ${candidate.fitConfidence}`}
                 className={cn(
                   "min-h-[148px] rounded-2xl border border-border bg-white p-3 shadow-subtle transition",
-                  selected ? "shadow-[inset_0_0_0_1px_rgba(255,64,0,0.14),0_14px_34px_rgba(32,26,23,0.09)]" : "",
+                  selected ? "shadow-medium" : "",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -315,7 +315,7 @@ export function SuggestedCandidatesPanel({
                       )}
                     >
                       <UserRoundPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                      {scouted ? "Use as hint" : "Introduce"}
+                      {scouted ? "Use as hint" : "Select"}
                     </button>
                     <button
                       type="button"
@@ -338,7 +338,7 @@ export function SuggestedCandidatesPanel({
 
       {moreLikeCandidate ? <MoreLikeNotice candidate={moreLikeCandidate} /> : null}
       {refreshError ? (
-        <p className="mt-2 rounded-2xl bg-surface-raised px-4 py-3 text-sm text-text-secondary">
+        <p className="mt-2 rounded-2xl border border-border bg-white px-4 py-3 text-sm text-text-secondary shadow-subtle">
           {refreshError}
         </p>
       ) : null}

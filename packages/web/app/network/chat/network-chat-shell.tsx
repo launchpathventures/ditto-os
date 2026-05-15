@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUp, Check } from "lucide-react";
 
@@ -170,9 +170,11 @@ export type NetworkChatEntryIntent = NetworkEntryIntent;
 export function NetworkChatShell({
   initialMode,
   initialIntent,
+  initialAnswer,
 }: {
   initialMode: NetworkChatMode;
   initialIntent?: NetworkEntryIntent;
+  initialAnswer?: string;
 }) {
   // page.tsx only forwards `initialIntent` when the URL carried an explicit,
   // canonical intent value. Mode-toggle navigations drop the param, so this
@@ -195,7 +197,7 @@ export function NetworkChatShell({
   const [messages, setMessages] = useState<LaneMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialAnswer ?? "");
   const [expertStep, setExpertStep] = useState(0);
   const [expertAnswers, setExpertAnswers] = useState<ExpertIntakeAnswers>({});
   const [clientStep, setClientStep] = useState(0);
@@ -217,6 +219,7 @@ export function NetworkChatShell({
   const [persisting, setPersisting] = useState(false);
   const [upsellShown, setUpsellShown] = useState(false);
   const [tweakMode, setTweakMode] = useState(false);
+  const landingAnswerConsumedRef = useRef(false);
 
   useEffect(() => {
     const nextMode = initialMode;
@@ -224,7 +227,7 @@ export function NetworkChatShell({
     setMessages([]);
     setError(null);
     setIsLoading(true);
-    setInput("");
+    setInput(initialAnswer ?? "");
     setExpertStep(0);
     setExpertAnswers({});
     setClientStep(0);
@@ -242,10 +245,13 @@ export function NetworkChatShell({
     setHandleAlternatives([]);
     setUpsellShown(false);
     setTweakMode(false);
+    landingAnswerConsumedRef.current = false;
 
     let cancelled = false;
 
     async function openLane() {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 8000);
       try {
         const sourceSessionId = window.localStorage.getItem(FRONT_DOOR_SESSION_KEY);
         const storedSessionId = window.localStorage.getItem(`${SESSION_KEY}:${nextMode}`);
@@ -253,6 +259,7 @@ export function NetworkChatShell({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
+          signal: controller.signal,
           body: JSON.stringify({
             context: nextMode,
             sessionId: storedSessionId,
@@ -312,6 +319,7 @@ export function NetworkChatShell({
               ],
         );
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setIsLoading(false);
       }
     }
@@ -321,7 +329,7 @@ export function NetworkChatShell({
     return () => {
       cancelled = true;
     };
-  }, [initialMode]);
+  }, [initialMode, initialAnswer]);
 
   const intakeComplete = expertStep >= EXPERT_LANE_QUESTIONS.length;
   const previewCard = useMemo(
@@ -742,6 +750,22 @@ export function NetworkChatShell({
     }
     handleClientSubmit(input);
   }
+
+  useEffect(() => {
+    const answer = initialAnswer?.trim();
+    if (isLoading || landingAnswerConsumedRef.current || !answer) return;
+
+    landingAnswerConsumedRef.current = true;
+    if (currentMode === "expert") {
+      handleExpertSubmit(answer);
+      return;
+    }
+    handleClientSubmit(answer);
+    // `initialAnswer` is a one-shot seed from `/network`, consumed after the
+    // lane opens. The submit handlers intentionally use the current first-step
+    // state from this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMode, initialAnswer, isLoading]);
 
   async function handleOpenForOpportunities() {
     setWantsVisible(true);

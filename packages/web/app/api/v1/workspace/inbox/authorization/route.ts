@@ -44,6 +44,22 @@ function isAuthorizationRequestBlock(value: unknown): value is AuthorizationRequ
   );
 }
 
+function preserveIntroArtifactFields(
+  source: Record<string, unknown>,
+  block: ContentBlock,
+): ContentBlock {
+  if (!isAuthorizationRequestBlock(block)) return block;
+  return {
+    ...block,
+    ...(typeof source.request === "string" ? { request: source.request } : {}),
+    ...(typeof source.draft === "string" ? { draft: source.draft } : {}),
+    ...(typeof source.requesterId === "string" ? { requesterId: source.requesterId } : {}),
+    ...(typeof source.costLabel === "string" || source.costLabel === null
+      ? { costLabel: source.costLabel }
+      : {}),
+  };
+}
+
 async function updateImportedAuthorizationBlock(
   authorizationId: string,
   block: ContentBlock,
@@ -73,12 +89,21 @@ async function updateImportedAuthorizationBlock(
     );
     if (blockIndex === -1) continue;
 
-    const nextBlocks = blocks.map((candidate, index) => (index === blockIndex ? block : candidate));
+    const existingBlock = blocks[blockIndex];
+    const preservedBlock = isAuthorizationRequestBlock(existingBlock)
+      ? preserveIntroArtifactFields(existingBlock as unknown as Record<string, unknown>, block)
+      : block;
+    const nextBlocks = blocks.map((candidate, index) =>
+      index === blockIndex ? preservedBlock : candidate,
+    );
     const currentContentBlock = row.contentBlock as ContentBlock | null;
     const nextContentBlock =
       isAuthorizationRequestBlock(currentContentBlock) &&
       currentContentBlock.authorizationId === authorizationId
-        ? block
+        ? preserveIntroArtifactFields(
+            currentContentBlock as unknown as Record<string, unknown>,
+            preservedBlock,
+          )
         : currentContentBlock;
     await db
       .update(schema.activities)
@@ -95,6 +120,23 @@ async function updateImportedAuthorizationBlock(
       .where(eq(schema.activities.id, row.id));
     return;
   }
+}
+
+async function notifyNetworkIntroAuthorization(
+  authorizationId: string,
+  event: AuthorizationGateRequest["event"],
+): Promise<void> {
+  const url = process.env.DITTO_NETWORK_URL?.replace(/\/+$/, "");
+  const token = process.env.DITTO_NETWORK_TOKEN;
+  if (!url || !token) return;
+  await fetch(`${url}/api/v1/network/intros`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ authorizationId, event }),
+  }).catch(() => null);
 }
 
 export async function POST(request: Request) {
@@ -192,10 +234,12 @@ export async function POST(request: Request) {
 
   await authorizationGateHandler.execute(ctx);
   const blocks = ctx.stepResult?.outputs.contentBlocks;
-  const block = Array.isArray(blocks) ? blocks[0] : null;
+  const rawBlock = Array.isArray(blocks) ? blocks[0] : null;
+  const block = rawBlock ? preserveIntroArtifactFields(action, rawBlock) : null;
   if (!block) {
     return NextResponse.json({ error: "authorization_failed" }, { status: 500 });
   }
   await updateImportedAuthorizationBlock(authorizationId, block);
+  await notifyNetworkIntroAuthorization(authorizationId, event);
   return NextResponse.json({ block });
 }

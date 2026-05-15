@@ -5,6 +5,10 @@ import { eq } from "drizzle-orm";
 import * as networkSchema from "@ditto/core/db/network";
 import { NetworkCardOgFrame } from "@/components/network/card-silhouette";
 import { networkDb, isNetworkDbConnectionError } from "../../../../../../../../../src/db/network-db";
+import {
+  applyApprovedPublicClaimsToCard,
+  loadApprovedPublicMemberSignalClaims,
+} from "../../../../../../../../../src/engine/member-signal-review";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,8 +49,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!user?.card) {
       return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
     }
+    const publicClaims = await loadApprovedPublicMemberSignalClaims({ userId: user.id });
+    const card = applyApprovedPublicClaimsToCard(user.card, publicClaims);
     const response = new ImageResponse(
-      React.createElement(NetworkCardOgFrame, { card: user.card }),
+      React.createElement(NetworkCardOgFrame, { card }),
       { width: 1200, height: 630 },
     );
     response.headers.set("Content-Disposition", `attachment; filename="ditto-card-${handle}.png"`);

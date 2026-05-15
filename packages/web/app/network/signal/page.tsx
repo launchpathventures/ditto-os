@@ -6,12 +6,20 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, CircleDashed } from "lucide-react";
 import { MemberSignalSourceIntake, type MemberSignalResearchResponse } from "@/components/network/member-signal-source-intake";
 import { MemberSignalReview, type MemberSignalClaimRow } from "@/components/network/member-signal-review";
+import { NetworkSceneBackground } from "@/components/network/network-scene-background";
 import { cn } from "@/lib/utils";
 
 const SESSION_KEY = "ditto-network-lane-session";
 const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
 
 type DraftStatus = "idle" | "drafting" | "ready" | "error";
+
+const PROFILE_SCENES = [
+  "/hero-profile-onboarding.png",
+  "/hero-network-park.png",
+  "/hero-network-event.png",
+  "/hero-network-cafe.png",
+] as const;
 
 export default function NetworkSignalPage() {
   const searchParams = useSearchParams();
@@ -98,24 +106,26 @@ export default function NetworkSignalPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-background px-5 py-5 text-text-primary sm:px-8">
-      <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4">
-        <Link href="/network" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-raised">
+    <main className="relative isolate min-h-dvh bg-[#050912] px-5 py-5 text-text-primary sm:px-8">
+      <NetworkSceneBackground images={PROFILE_SCENES} />
+
+      <div className="relative z-10 mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4">
+        <Link href="/network" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/18 bg-white/12 px-3 text-sm font-semibold text-white transition-colors hover:bg-white/18">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Network
         </Link>
-        <Link href="/network/request" className="text-sm font-semibold text-text-secondary underline-offset-4 hover:text-text-primary hover:underline">
+        <Link href="/network/request" className="text-sm font-semibold text-white/76 underline-offset-4 hover:text-white hover:underline">
           Research people
         </Link>
       </div>
 
-      <section className="mx-auto grid w-full max-w-[1240px] gap-7 pb-12 pt-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
+      <section className="relative z-10 mx-auto grid w-full max-w-[1240px] gap-7 pb-12 pt-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-text-muted">Profile setup</p>
-          <h1 className="mt-4 max-w-3xl text-[42px] font-semibold leading-[1] text-text-primary sm:text-[56px]">
+          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-white/68">Profile setup</p>
+          <h1 className="mt-4 max-w-3xl text-[42px] font-semibold leading-[1] text-white sm:text-[56px]">
             Create a profile people can find.
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-text-secondary">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-white/76">
             Add a short bio, LinkedIn, website, or proof of work. Ditto drafts from sources it can cite and waits for your approval before anything becomes public.
           </p>
 
@@ -128,7 +138,7 @@ export default function NetworkSignalPage() {
             />
           </div>
 
-          <div className="mt-4 rounded-2xl bg-surface-raised p-4">
+          <div className="mt-4 rounded-2xl bg-white/94 p-4 shadow-medium backdrop-blur-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className={cn(

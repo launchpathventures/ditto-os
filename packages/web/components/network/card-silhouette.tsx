@@ -164,7 +164,7 @@ export function NetworkCardSilhouette({
             </div>
           </div>
           <div aria-hidden="true" style={{ display: "flex", color: "#6e6e6e", fontSize: imageMode ? 24 : 16, letterSpacing: 2 }}>
-            up ...
+            ...
           </div>
         </div>
 
