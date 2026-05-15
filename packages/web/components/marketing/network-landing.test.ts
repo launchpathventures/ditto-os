@@ -12,7 +12,6 @@ describe("network landing source contract", () => {
   const surfaceASource = [
     "packages/web/app/network/page.tsx",
     "packages/web/components/marketing/network-landing.tsx",
-    "packages/web/components/marketing/network-card-preview.tsx",
   ].map(read).join("\n");
 
   it("keeps Surface A persona-neutral", () => {
@@ -25,9 +24,15 @@ describe("network landing source contract", () => {
     );
   });
 
-  it("honors reduced motion for the cycling preview", () => {
-    expect(surfaceASource).toContain("prefers-reduced-motion: reduce");
-    expect(surfaceASource).toContain("window.setInterval");
+  it("does not auto-cycle through preview cards", () => {
+    expect(surfaceASource).not.toContain("NetworkCardPreview");
+    expect(surfaceASource).not.toContain("activeIntent");
+  });
+
+  it("keeps rotating prompt ideas inside the input only", () => {
+    expect(surfaceASource).toContain("useTypedPrompt");
+    expect(surfaceASource).toContain("placeholder={typedPrompt || active.placeholder}");
+    expect(surfaceASource).not.toContain("onClick={() => setAnswer(typedPrompt");
   });
 
   it("uses the Instrument Serif utility on the headline verb", () => {
@@ -40,52 +45,67 @@ describe("network landing source contract", () => {
 
   it("names economic outcomes in product copy (Brief 271 AC 1a)", () => {
     expect(surfaceASource).toMatch(/work|hires|funding|partnerships|advice|collaborators/);
-    expect(surfaceASource).toMatch(/introductions/);
+    expect(surfaceASource).toMatch(/intro/);
   });
 
-  it("presents the four entry jobs", () => {
-    expect(surfaceASource).toContain("Help Ditto understand me");
-    expect(surfaceASource).toContain("Find someone now");
-    expect(surfaceASource).toContain("Create a request");
-    expect(surfaceASource).toContain("Keep watch for me");
+  it("presents one Ethos-style composer with two user-side choices", () => {
+    expect(surfaceASource).toContain("Create profile");
+    expect(surfaceASource).toContain("Research");
+    expect(surfaceASource).toContain("Research people and companies");
+    expect(surfaceASource).toContain("Who are you trying to find");
+    expect(surfaceASource).toContain("What should people come to you for");
+    expect(surfaceASource).toContain("Research");
+    expect(surfaceASource).toContain("Be found");
+    expect(surfaceASource).not.toContain("Make my signal");
+    expect(surfaceASource).not.toContain("Create a request");
+    expect(surfaceASource).not.toContain("Keep watch");
   });
 
-  it("distinguishes manual search from background watch", () => {
-    expect(surfaceASource).toContain("Manual search");
-    expect(surfaceASource).toContain("Background watch");
-    expect(surfaceASource).toContain("Watching quietly");
+  it("defaults to manual search and keeps member signal as the expert mode", () => {
+    expect(surfaceASource).toContain("manual-search");
+    expect(surfaceASource).toContain("member-signal");
   });
 
-  it("uses the copy doctrine (possible connection / request / source / ask if they are open / watching quietly)", () => {
-    expect(surfaceASource).toMatch(/possible connection/i);
-    expect(surfaceASource).toContain("Source:");
-    expect(surfaceASource).toContain("ask if they are open");
-    expect(surfaceASource).toContain("Watching quietly");
+  it("uses the copy doctrine (source / approval / asks before intro)", () => {
+    expect(surfaceASource).toMatch(/Source-backed/i);
+    expect(surfaceASource).toContain("asks before");
+    expect(surfaceASource).toContain("approved");
   });
 
   it("avoids marketplace / recruiting / lead-gen framing", () => {
     expect(surfaceASource).not.toMatch(/\b(lead database|leads pipeline|recruiter|recruiting platform|candidate pipeline|talent marketplace)\b/i);
   });
 
-  it("preserves existing direct lane links via mode=expert and mode=client (AC 8)", () => {
-    expect(surfaceASource).toContain("/network/chat?mode=expert");
-    expect(surfaceASource).toContain("/network/chat?mode=client");
+  it("hands off landing answers to the onboarding routes", () => {
+    expect(surfaceASource).toContain('mode: "expert"');
+    expect(surfaceASource).toContain('mode: "client"');
+    expect(surfaceASource).toContain("/network/request");
+    expect(surfaceASource).toContain("/network/signal");
   });
 
-  it("tracks the network_entry_selected event with one of four canonical intents (AC 7)", () => {
+  it("passes the first landing answer into onboarding as a seed", () => {
+    const requestPageSource = read("packages/web/app/network/request/page.tsx");
+    const signalPageSource = read("packages/web/app/network/signal/page.tsx");
+
+    expect(surfaceASource).toContain("seed");
+    expect(requestPageSource).toContain("initialNeed");
+    expect(signalPageSource).toContain("initialProfileHint");
+  });
+
+  it("tracks the network_entry_selected event with the two front-door intents", () => {
     const landingSource = read("packages/web/components/marketing/network-landing.tsx");
     expect(landingSource).toContain("network_entry_selected");
     expect(landingSource).toContain("member-signal");
     expect(landingSource).toContain("manual-search");
-    expect(landingSource).toContain('"request"');
-    expect(landingSource).toContain("background-watch");
   });
 
-  it("uses the empty/loading state language system (AC 10)", () => {
-    expect(surfaceASource).toContain("Reading sources");
-    expect(surfaceASource).toContain("Drafting signal");
-    expect(surfaceASource).toContain("Watch active");
-    expect(surfaceASource).toContain("Needs approval");
+  it("keeps the approval language in the first viewport", () => {
+    expect(surfaceASource).toContain("Private until approved");
+    expect(surfaceASource).toContain("asks before");
+  });
+
+  it("does not use detached floating proof cards in the hero", () => {
+    expect(surfaceASource).not.toContain("ProofCard");
   });
 
   it("does not treat seeded expert/client lane sessions as Turnstile-verified chat sessions", () => {

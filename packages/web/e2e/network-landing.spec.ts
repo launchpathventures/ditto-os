@@ -3,8 +3,8 @@
  *
  * Coverage on `/network` at desktop and mobile viewports:
  *   - First viewport renders the "superconnector" thesis.
- *   - All four entry jobs are visible.
- *   - Selecting an entry hands off to `/network/chat?mode=...&intent=...`.
+ *   - One composer offers client/expert starts.
+ *   - Submitting either mode hands off to the relevant onboarding route with `seed=...`.
  *   - 375×667 viewport has no overlapping fixed CTA/toggle controls.
  */
 
@@ -16,42 +16,60 @@ const VIEWPORTS = [
   { name: "iPhone 13 390×844", width: 390, height: 844 },
 ] as const;
 
-const ENTRY_LABELS = [
-  "Help Ditto understand me",
-  "Find someone now",
-  "Create a request",
-  "Keep watch for me",
-] as const;
-
-const ENTRY_HANDOFFS: ReadonlyArray<{ label: (typeof ENTRY_LABELS)[number]; mode: string; intent: string }> = [
-  { label: "Help Ditto understand me", mode: "expert", intent: "member-signal" },
-  { label: "Find someone now", mode: "client", intent: "manual-search" },
-  { label: "Create a request", mode: "client", intent: "request" },
-  { label: "Keep watch for me", mode: "client", intent: "background-watch" },
+const ENTRY_HANDOFFS: ReadonlyArray<{
+  tab: string;
+  intent: string;
+  cta: string;
+  mode: string;
+  path: string;
+  seed: string;
+}> = [
+  {
+    tab: "Be found",
+    intent: "member-signal",
+    cta: "Create profile",
+    mode: "expert",
+    path: "/network/signal",
+    seed: "I help founders make sales repeatable.",
+  },
+  {
+    tab: "Research",
+    intent: "manual-search",
+    cta: "Research",
+    mode: "client",
+    path: "/network/request",
+    seed: "Research marketplace operators who have rebuilt trust.",
+  },
 ];
 
 for (const viewport of VIEWPORTS) {
   test.describe(`/network at ${viewport.name}`, () => {
-    test("first viewport names the superconnector thesis and shows all four entry jobs", async ({ page }) => {
+    test("first viewport names the superconnector thesis and shows the two start modes", async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/network");
 
-      await expect(page.getByRole("heading", { level: 1 })).toContainText(/superconnector/i);
+      await expect(page.getByRole("heading", { level: 1 })).toContainText(/right people/i);
+      await expect(page.getByText(/personal superconnector/i)).toBeVisible();
 
-      for (const label of ENTRY_LABELS) {
-        await expect(page.getByText(label, { exact: true })).toBeVisible();
-      }
+      await expect(page.getByRole("button", { name: "Research" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Research" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Be found" })).toBeVisible();
+      await page.getByRole("tab", { name: "Be found" }).click();
+      await expect(page.getByRole("button", { name: "Create profile" })).toBeVisible();
     });
   });
 }
 
 test.describe("/network entry handoff (Brief 271 AC 7, AC 8)", () => {
-  for (const { label, mode, intent } of ENTRY_HANDOFFS) {
-    test(`"${label}" routes to /network/chat?mode=${mode}&intent=${intent}`, async ({ page }) => {
+  for (const { tab, cta, mode, intent, path, seed } of ENTRY_HANDOFFS) {
+    test(`"${cta}" routes to ${path}?mode=${mode}&intent=${intent}&seed=...`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto("/network");
-      await page.getByText(label, { exact: true }).first().click();
-      await expect(page).toHaveURL(new RegExp(`/network/chat\\?mode=${mode}&intent=${intent}`));
+      await page.getByRole("tab", { name: tab }).click();
+      const card = page.locator(`[data-intent="${intent}"]`);
+      await card.getByRole("textbox").fill(seed);
+      await card.getByRole("button", { name: cta }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}\\?mode=${mode}&intent=${intent}&seed=`));
     });
   }
 

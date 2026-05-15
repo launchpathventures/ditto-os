@@ -16,7 +16,7 @@
  * to a workspace-tier table here. The no-engine-import test in
  * `src/db/network-db.test.ts` enforces this.
  *
- * Surface (post-Brief 259 public profile chat): 15 pgTable declarations.
+ * Surface (post-Brief 272 Member Signal): 23 pgTable declarations.
  * Provenance: Brief 263 (this brief; converted from sqliteTable per ADR-048).
  */
 
@@ -28,6 +28,7 @@ import {
   timestamp,
   json,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";
 import type { ContentBlock, JobRequestCardBlock, NetworkProfileCardBlock } from "../../content-blocks.js";
@@ -76,8 +77,35 @@ export type InteractionOutcome = (typeof interactionOutcomeValues)[number];
 export const networkUserStatusValues = ["active", "workspace", "churned"] as const;
 export type NetworkUserStatus = (typeof networkUserStatusValues)[number];
 
-export const networkJobRequestStatusValues = ["open", "closed"] as const;
+export const networkJobRequestStatusValues = ["draft", "active", "paused", "fulfilled", "closed", "open"] as const;
 export type NetworkJobRequestStatus = (typeof networkJobRequestStatusValues)[number];
+
+export const networkRequestModeValues = ["manual-search", "background-watch", "both"] as const;
+export type NetworkRequestMode = (typeof networkRequestModeValues)[number];
+
+export const networkRequestSourcesAllowedValues = ["ditto-members", "public-web", "both"] as const;
+export type NetworkRequestSourcesAllowed = (typeof networkRequestSourcesAllowedValues)[number];
+
+export const networkRequestContactPolicyValues = [
+  "ask-before-contact",
+  "ask-before-intro",
+  "never-contact-without-approval",
+] as const;
+export type NetworkRequestContactPolicy = (typeof networkRequestContactPolicyValues)[number];
+
+export const networkRequestAuditEventValues = [
+  "drafted",
+  "created",
+  "updated",
+  "published",
+  "paused",
+  "resumed",
+  "fulfilled",
+  "closed",
+  "search_started",
+  "watch_seeded",
+] as const;
+export type NetworkRequestAuditEvent = (typeof networkRequestAuditEventValues)[number];
 
 export const networkKbDocumentKindValues = ["upload", "voice", "manual"] as const;
 export type NetworkKbDocumentKind = (typeof networkKbDocumentKindValues)[number];
@@ -94,8 +122,109 @@ export type NetworkKbFactStatus = (typeof networkKbFactStatusValues)[number];
 export const networkVoiceIntakeStatusValues = ["reviewed", "processing", "failed", "complete"] as const;
 export type NetworkVoiceIntakeStatus = (typeof networkVoiceIntakeStatusValues)[number];
 
+export const networkMemberSignalStatusValues = ["draft", "review", "published", "archived", "deleted"] as const;
+export type NetworkMemberSignalStatus = (typeof networkMemberSignalStatusValues)[number];
+
+export const networkSignalSourceTypeValues = [
+  "linkedin",
+  "website",
+  "x",
+  "instagram",
+  "github",
+  "substack",
+  "youtube",
+  "portfolio",
+  "other_url",
+  "pasted_text",
+  "upload",
+  "web_search",
+  "inference",
+] as const;
+export type NetworkSignalSourceType = (typeof networkSignalSourceTypeValues)[number];
+
+export const networkSignalSourceStatusValues = [
+  "queued",
+  "reading",
+  "found",
+  "limited",
+  "failed",
+  "needs_paste",
+  "removed",
+] as const;
+export type NetworkSignalSourceStatus = (typeof networkSignalSourceStatusValues)[number];
+
+export const networkSignalClaimSectionValues = [
+  "knownFor",
+  "bestIntroducedFor",
+  "canHelpWith",
+  "currentFocus",
+  "openTo",
+  "notAFitFor",
+  "proof",
+  "tasteAndStyle",
+  "preferredIntroStyle",
+  "sourceSummary",
+] as const;
+export type NetworkSignalClaimSection = (typeof networkSignalClaimSectionValues)[number];
+
+export const networkSignalClaimConfidenceValues = ["high", "medium", "low"] as const;
+export type NetworkSignalClaimConfidence = (typeof networkSignalClaimConfidenceValues)[number];
+
+export const networkSignalClaimVisibilityValues = ["public", "on-request", "private", "hidden"] as const;
+export type NetworkSignalClaimVisibility = (typeof networkSignalClaimVisibilityValues)[number];
+
+export const networkSignalClaimApprovalStateValues = [
+  "suggested",
+  "approved",
+  "edited",
+  "hidden",
+  "rejected",
+] as const;
+export type NetworkSignalClaimApprovalState = (typeof networkSignalClaimApprovalStateValues)[number];
+
+export const networkSignalReviewEventTypeValues = [
+  "source_added",
+  "source_removed",
+  "claim_drafted",
+  "claim_approved",
+  "claim_edited",
+  "claim_hidden",
+  "claim_visibility_changed",
+  "signal_published",
+  "signal_deleted",
+] as const;
+export type NetworkSignalReviewEventType = (typeof networkSignalReviewEventTypeValues)[number];
+
 export const networkForwardedNoteStatusValues = ["pending", "answered", "dismissed"] as const;
 export type NetworkForwardedNoteStatus = (typeof networkForwardedNoteStatusValues)[number];
+
+export const introductionOriginContextValues = ["client", "visitor", "expert-crossover"] as const;
+export type IntroductionOriginContext = (typeof introductionOriginContextValues)[number];
+
+export const introductionStateValues = [
+  "queued",
+  "queued-for-review",
+  "approved",
+  "rejected",
+  "fulfilled",
+  "refused-by-greeter",
+  "expired",
+] as const;
+export type IntroductionState = (typeof introductionStateValues)[number];
+
+export const introductionRefusalReasonValues = [
+  "anti-persona",
+  "low-fit",
+  "user-block",
+  "rate-limit",
+] as const;
+export type IntroductionRefusalReason = (typeof introductionRefusalReasonValues)[number];
+
+export const networkUserBlockListKindValues = ["workspace-user", "visitor-session", "pattern"] as const;
+export type NetworkUserBlockListKind = (typeof networkUserBlockListKindValues)[number];
+
+export const networkUpsellTriggerValues = ["expert-q6", "client-q6"] as const;
+export type NetworkUpsellTrigger = (typeof networkUpsellTriggerValues)[number];
 
 export const networkWorkspaceDeliveryKindValues = ["forwarded_note", "visitor_intro_request"] as const;
 export type NetworkWorkspaceDeliveryKind = (typeof networkWorkspaceDeliveryKindValues)[number];
@@ -266,10 +395,39 @@ export const networkJobRequests = pgTable("network_job_requests", {
     .primaryKey()
     .$defaultFn(() => randomUUID()),
   userId: text("user_id")
-    .references(() => networkUsers.id)
-    .notNull(),
+    .references(() => networkUsers.id),
+  visitorSessionId: text("visitor_session_id"),
   jobRequestCard: json("job_request_card").$type<JobRequestCardBlock>().notNull(),
   status: text("status").notNull().$type<NetworkJobRequestStatus>().default("open"),
+  mode: text("mode").notNull().$type<NetworkRequestMode>().default("manual-search"),
+  rawNeed: text("raw_need"),
+  outcomeNeeded: text("outcome_needed"),
+  idealPerson: text("ideal_person"),
+  proofRequired: text("proof_required"),
+  badFit: text("bad_fit"),
+  urgency: text("urgency"),
+  geography: text("geography"),
+  commercialShape: text("commercial_shape"),
+  successOutcome: text("success_outcome"),
+  outcomeValueHint: text("outcome_value_hint"),
+  budgetPrivate: text("budget_private"),
+  budgetShareableLabel: text("budget_shareable_label"),
+  shareableSummary: text("shareable_summary"),
+  privateNotes: text("private_notes"),
+  sourcesAllowed: text("sources_allowed")
+    .notNull()
+    .$type<NetworkRequestSourcesAllowed>()
+    .default("both"),
+  contactPolicy: text("contact_policy")
+    .notNull()
+    .$type<NetworkRequestContactPolicy>()
+    .default("ask-before-contact"),
+  requesterName: text("requester_name"),
+  requesterEmail: text("requester_email"),
+  requesterOrgSite: text("requester_org_site"),
+  requesterCredibility: text("requester_credibility"),
+  searchHandoff: json("search_handoff").$type<Record<string, unknown> | null>(),
+  watchHandoff: json("watch_handoff").$type<Record<string, unknown> | null>(),
   createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -278,8 +436,30 @@ export const networkJobRequests = pgTable("network_job_requests", {
     .$defaultFn(() => new Date()),
 }, (table) => [
   index("network_job_requests_user_id").on(table.userId),
+  index("network_job_requests_visitor_session_id").on(table.visitorSessionId),
   index("network_job_requests_status").on(table.status),
+  index("network_job_requests_mode").on(table.mode),
   index("network_job_requests_updated_at").on(table.updatedAt),
+]);
+
+export const networkRequestAuditEvents = pgTable("network_request_audit_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  requestId: text("request_id")
+    .references(() => networkJobRequests.id)
+    .notNull(),
+  eventType: text("event_type").notNull().$type<NetworkRequestAuditEvent>(),
+  actorId: text("actor_id"),
+  stepRunId: text("step_run_id").notNull(),
+  before: json("before").$type<Record<string, unknown> | null>(),
+  after: json("after").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_request_audit_events_request_id").on(table.requestId),
+  index("network_request_audit_events_event_type").on(table.eventType),
 ]);
 
 // ============================================================
@@ -398,6 +578,157 @@ export const networkUserVoiceIntake = pgTable("network_user_voice_intake", {
   index("network_user_voice_intake_updated_at").on(table.updatedAt),
 ]);
 
+// ============================================================
+// Member Signal — reviewed projection over KB evidence (Brief 272)
+// ============================================================
+
+export const networkMemberSignals = pgTable("network_member_signals", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  status: text("status")
+    .notNull()
+    .$type<NetworkMemberSignalStatus>()
+    .default("draft"),
+  sourceSummary: text("source_summary"),
+  calibrationQuestions: json("calibration_questions").$type<string[] | null>(),
+  approvedAt: timestamp("approved_at", { mode: "date", withTimezone: false }),
+  publishedAt: timestamp("published_at", { mode: "date", withTimezone: false }),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  unique("network_member_signals_user_id_unique").on(table.userId),
+  index("network_member_signals_user_status").on(table.userId, table.status),
+  index("network_member_signals_updated_at").on(table.updatedAt),
+]);
+
+export const networkSignalSources = pgTable("network_signal_sources", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  memberSignalId: text("member_signal_id")
+    .references(() => networkMemberSignals.id)
+    .notNull(),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  sourceType: text("source_type")
+    .notNull()
+    .$type<NetworkSignalSourceType>(),
+  sourceLabel: text("source_label").notNull(),
+  sourceUrl: text("source_url"),
+  originalInput: text("original_input"),
+  kbDocumentId: text("kb_document_id").references(() => networkUserKbDocuments.id),
+  status: text("status")
+    .notNull()
+    .$type<NetworkSignalSourceStatus>()
+    .default("queued"),
+  accessNote: text("access_note"),
+  evidenceSnippet: text("evidence_snippet"),
+  confidence: text("confidence")
+    .notNull()
+    .$type<NetworkSignalClaimConfidence>()
+    .default("medium"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_signal_sources_signal_id").on(table.memberSignalId),
+  index("network_signal_sources_user_id").on(table.userId),
+  index("network_signal_sources_type_status").on(table.sourceType, table.status),
+  index("network_signal_sources_kb_document_id").on(table.kbDocumentId),
+]);
+
+export const networkSignalClaims = pgTable("network_signal_claims", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  memberSignalId: text("member_signal_id")
+    .references(() => networkMemberSignals.id)
+    .notNull(),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  sourceId: text("source_id")
+    .references(() => networkSignalSources.id)
+    .notNull(),
+  kbFactId: text("kb_fact_id").references(() => networkUserKbFacts.id),
+  section: text("section")
+    .notNull()
+    .$type<NetworkSignalClaimSection>(),
+  claimText: text("claim_text").notNull(),
+  sourceType: text("source_type")
+    .notNull()
+    .$type<NetworkSignalSourceType>(),
+  sourceLabel: text("source_label").notNull(),
+  sourceUrl: text("source_url"),
+  evidenceSnippet: text("evidence_snippet").notNull(),
+  confidence: text("confidence")
+    .notNull()
+    .$type<NetworkSignalClaimConfidence>()
+    .default("medium"),
+  visibility: text("visibility")
+    .notNull()
+    .$type<NetworkSignalClaimVisibility>()
+    .default("on-request"),
+  approvalState: text("approval_state")
+    .notNull()
+    .$type<NetworkSignalClaimApprovalState>()
+    .default("suggested"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_signal_claims_signal_id").on(table.memberSignalId),
+  index("network_signal_claims_user_visibility").on(table.userId, table.visibility),
+  index("network_signal_claims_approval_state").on(table.approvalState),
+  index("network_signal_claims_source_id").on(table.sourceId),
+  index("network_signal_claims_kb_fact_id").on(table.kbFactId),
+]);
+
+export const networkSignalReviewEvents = pgTable("network_signal_review_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  memberSignalId: text("member_signal_id")
+    .references(() => networkMemberSignals.id)
+    .notNull(),
+  claimId: text("claim_id").references(() => networkSignalClaims.id),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  eventType: text("event_type")
+    .notNull()
+    .$type<NetworkSignalReviewEventType>(),
+  actorId: text("actor_id"),
+  stepRunId: text("step_run_id").notNull(),
+  before: json("before").$type<Record<string, unknown> | null>(),
+  after: json("after").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_signal_review_events_signal_id").on(table.memberSignalId),
+  index("network_signal_review_events_claim_id").on(table.claimId),
+  index("network_signal_review_events_user_id").on(table.userId),
+  index("network_signal_review_events_type").on(table.eventType),
+]);
+
 export const networkForwardedNotes = pgTable("network_forwarded_notes", {
   id: text("id")
     .primaryKey()
@@ -420,6 +751,88 @@ export const networkForwardedNotes = pgTable("network_forwarded_notes", {
 }, (table) => [
   index("network_forwarded_notes_user_id").on(table.userId),
   index("network_forwarded_notes_status").on(table.status),
+]);
+
+// ============================================================
+// Introductions — gated intro requests + v1 free counter (Brief 261)
+// ============================================================
+
+export const introductions = pgTable("introductions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  targetUserId: text("target_user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  requesterUserId: text("requester_user_id").references(() => networkUsers.id),
+  visitorSessionId: text("visitor_session_id"),
+  requesterDisplayName: text("requester_display_name"),
+  requesterOrgLabel: text("requester_org_label"),
+  originContext: text("origin_context").notNull().$type<IntroductionOriginContext>(),
+  intentSummary: text("intent_summary").notNull(),
+  draft: text("draft"),
+  costLabel: text("cost_label"),
+  authorizationId: text("authorization_id"),
+  authorizationBlock: json("authorization_block").$type<ContentBlock | null>(),
+  transcript: json("transcript").$type<ContentBlock[] | null>(),
+  state: text("state").notNull().$type<IntroductionState>(),
+  refusalReason: text("refusal_reason").$type<IntroductionRefusalReason>(),
+  sourceStepRunId: text("source_step_run_id"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("introductions_target_user_id").on(table.targetUserId),
+  index("introductions_requester_user_id").on(table.requesterUserId),
+  index("introductions_visitor_session_id").on(table.visitorSessionId),
+  index("introductions_state").on(table.state),
+  index("introductions_authorization_id").on(table.authorizationId),
+]);
+
+export const networkUserBlockList = pgTable("network_user_block_list", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  targetUserId: text("target_user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  kind: text("kind").notNull().$type<NetworkUserBlockListKind>(),
+  blockedRequesterIdentifier: text("blocked_requester_identifier").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_user_block_list_target_user_id").on(table.targetUserId),
+  index("network_user_block_list_identifier").on(table.blockedRequesterIdentifier),
+  unique("network_user_block_list_target_identifier_unique").on(
+    table.targetUserId,
+    table.kind,
+    table.blockedRequesterIdentifier,
+  ),
+]);
+
+export const networkSessionUpsellLog = pgTable("network_session_upsell_log", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .references(() => networkUsers.id)
+    .notNull(),
+  trigger: text("trigger").notNull().$type<NetworkUpsellTrigger>(),
+  firedAt: timestamp("fired_at", { mode: "date", withTimezone: false })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => [
+  index("network_session_upsell_log_user_id").on(table.userId),
+  unique("network_session_upsell_log_user_trigger_unique").on(table.userId, table.trigger),
 ]);
 
 export const networkWorkspaceDeliveries = pgTable("network_workspace_deliveries", {

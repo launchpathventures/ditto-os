@@ -1,186 +1,265 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Compass, Search, FilePlus, Eye } from "lucide-react";
-import { NetworkCardPreview } from "./network-card-preview";
+import { ArrowRight, Compass, Search } from "lucide-react";
 import { trackMarketingEvent } from "@/lib/marketing-analytics";
 import type { NetworkEntryIntent } from "@/lib/network-entry-intent";
 import { cn } from "@/lib/utils";
 
 export type { NetworkEntryIntent };
 
-interface EntryDefinition {
+type LandingMode = "client" | "expert";
+
+interface ModeDefinition {
+  mode: LandingMode;
   intent: NetworkEntryIntent;
-  label: string;
-  copy: string;
+  laneMode: "client" | "expert";
+  href: "/network/request" | "/network/signal";
+  tab: string;
+  eyebrow: string;
+  title: string;
+  question: string;
+  placeholder: string;
+  promptIdeas: string[];
   cta: string;
-  href: string;
-  icon: typeof Compass;
+  icon: typeof Search;
 }
 
-const ENTRIES: EntryDefinition[] = [
-  {
-    intent: "member-signal",
-    label: "Help Ditto understand me",
-    copy: "Build a living signal from your links, work, and context. You choose what is visible.",
-    cta: "Start my signal",
-    href: "/network/chat?mode=expert&intent=member-signal",
-    icon: Compass,
-  },
-  {
+const MODES: Record<LandingMode, ModeDefinition> = {
+  client: {
+    mode: "client",
     intent: "manual-search",
-    label: "Find someone now",
-    copy: "Search for the person who can change the outcome, with source-backed evidence — not guesswork.",
-    cta: "Search now",
-    href: "/network/chat?mode=client&intent=manual-search",
+    laneMode: "client",
+    href: "/network/request",
+    tab: "Research",
+    eyebrow: "Research",
+    title: "Research people and companies.",
+    question: "Who are you trying to find, or what problem are you trying to solve?",
+    placeholder: "Find marketplace operators who rebuilt trust after a supply-quality problem.",
+    promptIdeas: [
+      "Find marketplace operators who rebuilt trust after a supply-quality problem.",
+      "Research AI infrastructure companies hiring their first partnerships lead.",
+      "Who has scaled expert marketplaces from seed to Series B?",
+      "Find operators who have sold into UK construction firms.",
+    ],
+    cta: "Research",
     icon: Search,
   },
-  {
-    intent: "request",
-    label: "Create a request",
-    copy: "Turn a need, opportunity, or target outcome into a brief Ditto can quietly work from.",
-    cta: "Draft a request",
-    href: "/network/chat?mode=client&intent=request",
-    icon: FilePlus,
+  expert: {
+    mode: "expert",
+    intent: "member-signal",
+    laneMode: "expert",
+    href: "/network/signal",
+    tab: "Be found",
+    eyebrow: "Profile",
+    title: "Be found for what you actually know.",
+    question: "What should people come to you for?",
+    placeholder: "I help B2B founders turn messy customer data into sales calls.",
+    promptIdeas: [
+      "I help B2B founders turn messy customer data into sales calls.",
+      "I advise marketplaces on supply quality, trust, and liquidity.",
+      "I know early-stage finance ops for AI companies.",
+      "I can help founders make outbound sales repeatable.",
+    ],
+    cta: "Create profile",
+    icon: Compass,
   },
-  {
-    intent: "background-watch",
-    label: "Keep watch for me",
-    copy: "Let Ditto quietly look for strong-fit people and timing while you are not scrolling.",
-    cta: "Set the watch",
-    href: "/network/chat?mode=client&intent=background-watch",
-    icon: Eye,
-  },
-];
+};
+
+function buildOnboardingHref(definition: ModeDefinition, answer: string): string {
+  const params = new URLSearchParams({
+    mode: definition.laneMode,
+    intent: definition.intent,
+  });
+  const seed = answer.trim();
+  if (seed) {
+    params.set("seed", seed.slice(0, 700));
+  }
+  return `${definition.href}?${params.toString()}`;
+}
+
+function useTypedPrompt(ideas: string[]): string {
+  const [typedPrompt, setTypedPrompt] = useState(ideas[0] ?? "");
+
+  useEffect(() => {
+    if (ideas.length === 0) return;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    let intervalId: number | undefined;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      let index = 0;
+      setTypedPrompt(ideas[index]);
+      intervalId = window.setInterval(() => {
+        index = (index + 1) % ideas.length;
+        setTypedPrompt(ideas[index]);
+      }, 3600);
+      return () => {
+        if (intervalId) window.clearInterval(intervalId);
+      };
+    }
+
+    function typeIdea(index: number) {
+      const fullText = ideas[index];
+      let characterCount = 0;
+      setTypedPrompt("");
+
+      function tick() {
+        if (cancelled) return;
+        characterCount += 1;
+        setTypedPrompt(fullText.slice(0, characterCount));
+        if (characterCount < fullText.length) {
+          timeoutId = window.setTimeout(tick, 24);
+          return;
+        }
+        timeoutId = window.setTimeout(() => typeIdea((index + 1) % ideas.length), 2300);
+      }
+
+      tick();
+    }
+
+    typeIdea(0);
+    return () => {
+      cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [ideas]);
+
+  return typedPrompt;
+}
 
 export function NetworkLanding() {
   const router = useRouter();
-  const [activeIntent, setActiveIntent] = useState<NetworkEntryIntent>("member-signal");
-  const isInteractingRef = useRef(false);
+  const [mode, setMode] = useState<LandingMode>("client");
+  const [answer, setAnswer] = useState("");
+  const active = MODES[mode];
+  const Icon = active.icon;
+  const typedPrompt = useTypedPrompt(active.promptIdeas);
 
-  function selectEntry(intent: NetworkEntryIntent, href: string) {
-    trackMarketingEvent("network_entry_selected", { intent });
-    router.push(href);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    trackMarketingEvent("network_entry_selected", {
+      intent: active.intent,
+      mode: active.laneMode,
+      seeded: answer.trim().length > 0,
+    });
+    router.push(buildOnboardingHref(active, answer));
   }
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const id = window.setInterval(() => {
-      // Pause auto-cycle while the user is hovering / focusing an entry —
-      // otherwise the preview fights the user's interaction.
-      if (isInteractingRef.current) return;
-      setActiveIntent((current) => {
-        const index = ENTRIES.findIndex((entry) => entry.intent === current);
-        return ENTRIES[(index + 1) % ENTRIES.length].intent;
-      });
-    }, 5000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const active = ENTRIES.find((entry) => entry.intent === activeIntent) ?? ENTRIES[0];
+  function switchMode(nextMode: LandingMode) {
+    setMode(nextMode);
+    setAnswer("");
+  }
 
   return (
-    <section className="relative flex min-h-[calc(100dvh-72px)] overflow-hidden px-5 pb-20 pt-4 sm:px-8">
-      <div className="relative mx-auto grid w-full max-w-[1180px] items-start gap-8 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)] lg:items-center lg:py-10">
-        <div className="max-w-[720px] text-left">
-          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-text-muted">
-            Ditto Network
-          </p>
-          <h1 className="mt-4 text-[44px] font-semibold leading-[0.96] tracking-[-0.035em] text-text-primary sm:text-[56px] md:text-[64px]">
-            A{" "}
-            <span className="font-instrument-serif font-normal">superconnector</span>{" "}
-            for everyone.
-          </h1>
-          <p className="mt-5 max-w-[620px] text-base leading-relaxed text-text-secondary md:text-[17px]">
-            Ditto understands what people are excellent at, what they need, and when a thoughtful
-            introduction could create real value — work, hires, funding, partnerships, advice,
-            collaborators. Fewer, better, consent-based introductions, not more networking activity.
-          </p>
+    <section className="relative min-h-dvh overflow-hidden bg-[#070b16] px-5 pb-12 pt-[88px] text-white sm:px-8 sm:pt-24">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-cover"
+        style={{
+          backgroundImage: "url('/hero-network.png')",
+          backgroundPosition: "right center",
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "auto 120%",
+          filter: "brightness(1.16) contrast(1.18) saturate(1.08)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{
+          background: [
+            "linear-gradient(90deg, rgba(5, 9, 18, 0.88) 0%, rgba(5, 9, 18, 0.64) 34%, rgba(5, 9, 18, 0.24) 72%, rgba(5, 9, 18, 0.12) 100%)",
+            "linear-gradient(180deg, rgba(5, 9, 18, 0.04) 0%, rgba(5, 9, 18, 0.12) 54%, rgba(5, 9, 18, 0.62) 100%)",
+          ].join(", "),
+        }}
+      />
+      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-112px)] w-full max-w-[1160px] flex-col justify-center py-6">
+        <div className="grid items-center gap-8 lg:grid-cols-[0.86fr_1.14fr]">
+          <div>
+            <p className="hidden text-xs font-semibold uppercase text-white/70 sm:block">Ditto Network</p>
+            <h1 className="max-w-[650px] text-[42px] font-semibold leading-none tracking-normal text-white sm:mt-4 sm:text-[64px]">
+              The right people{" "}
+              <span className="font-instrument-serif font-normal">find you</span>.
+            </h1>
+            <p className="mt-5 max-w-[610px] text-base leading-7 text-white/78 sm:text-lg">
+              A personal superconnector for work, hires, funding, and advice. It builds the context
+              and asks before any intro.
+            </p>
+          </div>
 
-          <nav
-            aria-label="Network entry points"
-            className="mt-7 grid gap-3 sm:grid-cols-2"
-            onMouseEnter={() => {
-              isInteractingRef.current = true;
-            }}
-            onMouseLeave={() => {
-              isInteractingRef.current = false;
-            }}
-            onFocusCapture={() => {
-              isInteractingRef.current = true;
-            }}
-            onBlurCapture={() => {
-              isInteractingRef.current = false;
-            }}
-          >
-            {ENTRIES.map((entry) => (
-              <EntryCard
-                key={entry.intent}
-                entry={entry}
-                active={activeIntent === entry.intent}
-                onHover={() => setActiveIntent(entry.intent)}
-                onClick={() => selectEntry(entry.intent, entry.href)}
-              />
-            ))}
-          </nav>
+          <div className="relative mx-auto w-full max-w-[540px]">
+            <form
+              onSubmit={submit}
+              data-intent={active.intent}
+              className="relative z-10 rounded-md border border-border bg-white p-4 shadow-large sm:p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-text-muted">{active.eyebrow}</p>
+                  <h2 className="mt-2 max-w-[420px] text-xl font-semibold leading-tight text-text-primary sm:text-2xl">
+                    {active.title}
+                  </h2>
+                </div>
+                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-raised text-text-primary">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+              </div>
 
-          <p className="mt-6 max-w-[620px] text-sm leading-5 text-text-secondary">
-            Search now or keep watch quietly. Ditto asks if someone is open before any introduction;
-            sensitive filters stay private. Every claim Ditto surfaces traces back to a source.
-          </p>
+              <label className="mt-5 grid gap-2">
+                <span className="text-sm font-semibold leading-5 text-text-primary">{active.question}</span>
+                <textarea
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder={typedPrompt || active.placeholder}
+                  rows={3}
+                  className="min-h-[64px] resize-none rounded-md border border-border bg-surface px-4 py-3 text-base leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-text-primary sm:min-h-[104px] sm:py-4"
+                />
+              </label>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="hidden text-sm leading-5 text-text-secondary sm:block">
+                  Source-backed. Private until approved. No cold intros.
+                </p>
+                <button
+                  type="submit"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent px-5 text-sm font-semibold text-accent-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary/25"
+                >
+                  {active.cta}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
 
-        <div className="w-full">
-          <NetworkCardPreview
-            intent={activeIntent}
-            onOpen={() => selectEntry(active.intent, active.href)}
-          />
-          <p className="mx-auto mt-4 max-w-[520px] text-center text-sm leading-5 text-text-secondary lg:text-left">
-            {active.copy}
-          </p>
+        <div
+          role="tablist"
+          aria-label="Choose Network side"
+          className="relative z-20 mx-auto mt-14 grid w-full max-w-[320px] grid-cols-2 rounded-full border border-border bg-white p-1 shadow-medium sm:mt-16"
+        >
+          {(["client", "expert"] as const).map((option) => {
+            const selected = mode === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => switchMode(option)}
+                className={cn(
+                  "min-h-10 rounded-full px-4 text-xs font-semibold uppercase text-text-secondary transition",
+                  selected ? "bg-accent text-accent-foreground" : "hover:bg-surface-raised hover:text-text-primary",
+                )}
+              >
+                {MODES[option].tab}
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
-  );
-}
-
-function EntryCard({
-  entry,
-  active,
-  onHover,
-  onClick,
-}: {
-  entry: EntryDefinition;
-  active: boolean;
-  onHover: () => void;
-  onClick: () => void;
-}) {
-  const Icon = entry.icon;
-  return (
-    <button
-      type="button"
-      aria-current={active ? "true" : undefined}
-      onClick={onClick}
-      onMouseEnter={onHover}
-      onFocus={onHover}
-      data-intent={entry.intent}
-      className={cn(
-        "group flex min-h-[112px] flex-col gap-2 rounded-lg border bg-white p-4 text-left shadow-subtle transition-all",
-        active
-          ? "border-text-primary shadow-medium"
-          : "border-border hover:border-text-primary/50 hover:shadow-medium",
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-text-primary" aria-hidden="true" />
-        <span className="text-sm font-semibold text-text-primary">{entry.label}</span>
-      </span>
-      <span className="text-[13px] leading-5 text-text-secondary">{entry.copy}</span>
-      <span className="mt-auto inline-flex items-center gap-1 text-[12px] font-semibold text-text-primary opacity-0 transition-opacity group-hover:opacity-100">
-        {entry.cta}
-        <ArrowRight className="h-3 w-3" aria-hidden="true" />
-      </span>
-    </button>
   );
 }

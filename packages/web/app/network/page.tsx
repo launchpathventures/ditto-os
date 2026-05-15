@@ -10,14 +10,14 @@ export const metadata: Metadata = {
 
 export default function NetworkPage() {
   return (
-    <div className="min-h-dvh overflow-hidden bg-background text-text-primary">
-      <nav className="relative z-30 flex h-[72px] items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="text-xl font-semibold text-text-primary">
+    <div className="min-h-dvh overflow-hidden bg-[#070b16] text-white">
+      <nav className="absolute inset-x-0 top-0 z-30 flex h-[72px] items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="text-xl font-semibold text-white drop-shadow-[0_1px_12px_rgba(0,0,0,0.45)]">
           ditto
         </Link>
         <Link
           href="/login"
-          className="rounded-md border border-border bg-white px-4 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-raised"
+          className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-sm transition-colors hover:bg-white/18"
         >
           Sign in
         </Link>
