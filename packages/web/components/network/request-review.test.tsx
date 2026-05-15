@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RequestReview, saveActiveRequest, type ActiveRequestDraft } from "./request-review";
+import { saveActiveRequest, type ActiveRequestDraft } from "./request-review";
 import { draftActiveRequest } from "./request-intake";
+import { RequestCanvas } from "./request-canvas";
+import type { RequestIdentity } from "./request-identity-card";
 
 function draft(overrides: Partial<ActiveRequestDraft> = {}): ActiveRequestDraft {
   return {
@@ -24,16 +26,25 @@ function draft(overrides: Partial<ActiveRequestDraft> = {}): ActiveRequestDraft 
     contactPolicy: "ask-before-contact",
     mode: "manual-search",
     missingFields: [],
+    quickAnswerField: null,
+    quickAnswers: [],
     ...overrides,
   };
 }
 
-describe("request review components", () => {
+function emptyIdentity(): RequestIdentity {
+  return { name: "", email: "", orgSite: "", credibility: "" };
+}
+
+describe("request canvas", () => {
   it("renders editable request fields, private labels, and mode choice", () => {
     const html = renderToStaticMarkup(
-      React.createElement(RequestReview, {
-        initialDraft: draft(),
+      React.createElement(RequestCanvas, {
+        draft: draft(),
+        onDraftChange: () => {},
         visitorSessionId: "visitor-1",
+        identity: emptyIdentity(),
+        onIdentityChange: () => {},
       }),
     );
 
@@ -48,11 +59,14 @@ describe("request review components", () => {
 
   it("scrubs private fields from match-facing preview", () => {
     const html = renderToStaticMarkup(
-      React.createElement(RequestReview, {
-        initialDraft: draft({
+      React.createElement(RequestCanvas, {
+        draft: draft({
           shareableSummary: "Need a CMO with $20k/month budget.",
         }),
+        onDraftChange: () => {},
         visitorSessionId: "visitor-1",
+        identity: emptyIdentity(),
+        onIdentityChange: () => {},
       }),
     );
 

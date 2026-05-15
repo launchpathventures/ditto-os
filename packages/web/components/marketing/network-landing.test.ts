@@ -83,6 +83,26 @@ describe("network landing source contract", () => {
     expect(surfaceASource).toContain("/network/signal");
   });
 
+  it("keeps the landing form from submitting empty requests or reloading /network", () => {
+    const landingSource = read("packages/web/components/marketing/network-landing.tsx");
+
+    expect(landingSource).toContain("MIN_LANDING_ANSWER_CHARS");
+    expect(landingSource).toContain('action={active.href}');
+    expect(landingSource).toContain('method="get"');
+    expect(landingSource).toContain('name="seed"');
+    expect(landingSource).toContain('required');
+    expect(landingSource).toContain('minLength={MIN_LANDING_ANSWER_CHARS}');
+    expect(landingSource).not.toMatch(/\sdisabled=\{!canSubmit\}/);
+    expect(landingSource).not.toContain("aria-disabled");
+    expect(landingSource).toContain('data-ready={canSubmit ? "true" : "false"}');
+    expect(landingSource).toContain('readAnswerFromForm(event.currentTarget, answer)');
+    expect(landingSource).toContain("answerTextareaRef");
+    expect(landingSource).toContain('defaultValue=""');
+    expect(landingSource).toContain('"pageshow"');
+    expect(landingSource).toContain("syncAnswerFromTextarea");
+    expect(landingSource).toContain("onPointerDown={syncAnswerFromTextarea}");
+  });
+
   it("passes the first landing answer into onboarding as a seed", () => {
     const requestPageSource = read("packages/web/app/network/request/page.tsx");
     const signalPageSource = read("packages/web/app/network/signal/page.tsx");

@@ -38,7 +38,7 @@ const SKIPPABLE_STEP: ConversationStep = {
 };
 
 describe("RequestChatRail", () => {
-  it("renders the original need preview and message log", () => {
+  it("renders Mira and the message log without repeating the prompt summary", () => {
     const messages: RequestChatMessage[] = [
       { id: "m1", role: "assistant", content: "I drafted what I heard." },
       { id: "m2", role: "user", content: "Add: prefers Lisbon-based candidates." },
@@ -53,8 +53,7 @@ describe("RequestChatRail", () => {
         error: null,
       }),
     );
-    expect(html).toContain("Original request");
-    expect(html).toContain("Need a fractional CMO for a climate startup.");
+    expect(html).not.toContain("Original request");
     expect(html).toContain("I drafted what I heard.");
     expect(html).toContain("Add: prefers Lisbon-based candidates.");
     expect(html).toContain("Mira");
@@ -86,7 +85,7 @@ describe("RequestChatRail", () => {
         error: null,
       }),
     );
-    expect(html).toContain("Quick answer");
+    expect(html).toContain("Suggested from analysis");
     expect(html).toContain("Fractional CMO, climate background");
     expect(html).toContain("Seed-stage operator");
     expect(html).toContain("Board-level advisor");

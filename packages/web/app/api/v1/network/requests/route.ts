@@ -20,12 +20,16 @@ import type {
   NeedRequestDraft,
   NeedRequestIdentity,
 } from "../../../../../../../src/engine/need-request-calibration";
+import type { SuggestedCandidate } from "../../../../../../../src/engine/content-blocks";
 import { resolveNetworkLaneSession } from "../kb/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_NEED_LENGTH = 4_000;
+const MAX_INITIAL_RESEARCH_PER_HOUR = 8;
+const INITIAL_RESEARCH_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1_000;
+const INITIAL_RESEARCH_CACHE_TTL_MS = 10 * 60 * 1_000;
 const MODE_VALUES = new Set<NetworkRequestMode>(["manual-search", "background-watch", "both"]);
 const SOURCES_VALUES = new Set<NetworkRequestSourcesAllowed>(["ditto-members", "public-web", "both"]);
 const CONTACT_VALUES = new Set<NetworkRequestContactPolicy>([
@@ -33,6 +37,8 @@ const CONTACT_VALUES = new Set<NetworkRequestContactPolicy>([
   "ask-before-intro",
   "never-contact-without-approval",
 ]);
+const initialResearchRateLimit = new Map<string, { count: number; resetAt: number }>();
+const initialResearchCache = new Map<string, { expiresAt: number; candidates: SuggestedCandidate[] }>();
 
 function hasCallerStepRun(body: Record<string, unknown>): boolean {
   return Object.prototype.hasOwnProperty.call(body, "stepRunId");
@@ -68,6 +74,32 @@ function contactPolicy(value: unknown, fallback: NetworkRequestContactPolicy): N
     : fallback;
 }
 
+function checkInitialResearchRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = initialResearchRateLimit.get(key);
+  if (!entry || entry.resetAt <= now) {
+    initialResearchRateLimit.set(key, {
+      count: 1,
+      resetAt: now + INITIAL_RESEARCH_RATE_LIMIT_WINDOW_MS,
+    });
+    return true;
+  }
+  if (entry.count >= MAX_INITIAL_RESEARCH_PER_HOUR) return false;
+  entry.count += 1;
+  return true;
+}
+
+function initialResearchCacheKey(draft: NeedRequestDraft): string {
+  return JSON.stringify({
+    outcomeNeeded: draft.outcomeNeeded,
+    idealPerson: draft.idealPerson,
+    proofRequired: draft.proofRequired,
+    geography: draft.geography,
+    commercialShape: draft.commercialShape,
+    sourcesAllowed: draft.sourcesAllowed,
+  });
+}
+
 function identityFrom(value: unknown): NeedRequestIdentity {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -98,6 +130,8 @@ function applyEditableFields(draft: NeedRequestDraft, value: unknown): NeedReque
     sourcesAllowed: sources(input.sourcesAllowed, draft.sourcesAllowed),
     contactPolicy: contactPolicy(input.contactPolicy, draft.contactPolicy),
     mode: mode(input.mode, draft.mode),
+    quickAnswerField: draft.quickAnswerField,
+    quickAnswers: draft.quickAnswers,
   };
   next.jobRequestCard = {
     ...draft.jobRequestCard,
@@ -113,6 +147,90 @@ function applyEditableFields(draft: NeedRequestDraft, value: unknown): NeedReque
     lastUpdatedAt: new Date().toISOString(),
   };
   return next;
+}
+
+async function attachInitialMatches({
+  draft,
+  actor,
+  ip,
+}: {
+  draft: NeedRequestDraft;
+  actor: Awaited<ReturnType<typeof resolveActor>>;
+  ip: string;
+}): Promise<NeedRequestDraft> {
+  if (draft.mode === "background-watch") {
+    return draft;
+  }
+  const rateLimitKey = actor.sessionId ? `session:${actor.sessionId}` : `ip:${ip}`;
+  if (!checkInitialResearchRateLimit(rateLimitKey)) return draft;
+
+  const cacheKey = initialResearchCacheKey(draft);
+  const cached = initialResearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      ...draft,
+      jobRequestCard: {
+        ...draft.jobRequestCard,
+        suggestedCandidates: cached.candidates,
+        lastUpdatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  const candidates: SuggestedCandidate[] = [];
+  try {
+    if (draft.sourcesAllowed !== "public-web") {
+      const { matchOnNetwork } = await import(
+        "../../../../../../../src/engine/network-match"
+      );
+      candidates.push(...await matchOnNetwork(draft.jobRequestCard, {
+        sampleLimit: 200,
+      }));
+    }
+  } catch (error) {
+    console.warn("[/api/v1/network/requests] Initial on-network match skipped:", error);
+  }
+
+  try {
+    if (draft.sourcesAllowed !== "ditto-members" && draft.jobRequestCard.scoutOptIn) {
+      const scoutStepRunId = await createNetworkLaneStepRun({
+        route: "network-request-initial-scout",
+        sessionId: actor.sessionId,
+        actorId: actor.actorId,
+      });
+      const { scoutOffNetwork } = await import(
+        "../../../../../../../src/engine/network-scout"
+      );
+      const result = await scoutOffNetwork({
+        jobRequestCard: draft.jobRequestCard,
+        stepRunId: scoutStepRunId,
+      });
+      candidates.push(...result.candidates);
+    }
+  } catch (error) {
+    console.warn("[/api/v1/network/requests] Initial public scout skipped:", error);
+  }
+
+  const deduped = candidates
+    .filter((candidate, index, list) =>
+      list.findIndex((item) => item.handle === candidate.handle) === index,
+    )
+    .slice(0, 5);
+  if (deduped.length === 0) {
+    return draft;
+  }
+  initialResearchCache.set(cacheKey, {
+    expiresAt: Date.now() + INITIAL_RESEARCH_CACHE_TTL_MS,
+    candidates: deduped,
+  });
+  return {
+    ...draft,
+    jobRequestCard: {
+      ...draft.jobRequestCard,
+      suggestedCandidates: deduped,
+      lastUpdatedAt: new Date().toISOString(),
+    },
+  };
 }
 
 async function resolveActor(body: Record<string, unknown>) {
@@ -171,6 +289,8 @@ export async function POST(request: Request) {
     if (!actor.userId && !actor.visitorSessionId) {
       return NextResponse.json({ error: "request_actor_required" }, { status: 400 });
     }
+    const forwarded = request.headers.get("x-forwarded-for");
+    const ip = forwarded?.split(",")[0]?.trim() || "127.0.0.1";
     const stepRunId = await createNetworkLaneStepRun({
       route: action === "draft" ? "network-request-draft" : "network-request-save",
       sessionId: actor.sessionId,
@@ -182,7 +302,10 @@ export async function POST(request: Request) {
       requesterContext,
       stepRunId,
     });
-    const draft = applyEditableFields(drafted, body.draft);
+    const editedDraft = applyEditableFields(drafted, body.draft);
+    const draft = action === "draft"
+      ? await attachInitialMatches({ draft: editedDraft, actor, ip })
+      : editedDraft;
     if (action === "draft") {
       return NextResponse.json({ draft });
     }

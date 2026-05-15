@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { draftNeedRequest } from "./need-request-draft";
 import {
+  buildNeedRequestQuickAnswers,
   determineNeedRequestMissingFields,
   draftNeedRequestFromText,
   draftNeedRequestWithLlm,
@@ -45,6 +46,50 @@ describe("need request calibration", () => {
     expect(draft.missingFields.length).toBeLessThan(3);
   });
 
+  it("understands looking-for requests as target person plus outcome", () => {
+    const draft = draftNeedRequestFromText({
+      rawNeed: "Looking for a lead agentic engineer to help me build custom real estate crms",
+    });
+
+    expect(draft.idealPerson).toBe("lead agentic engineer");
+    expect(draft.outcomeNeeded).toBe("build custom real estate CRMs");
+    expect(draft.proofRequired).toBe("");
+    expect(draft.missingFields).toContain("proofRequired");
+    expect(draft.quickAnswerField).toBe("proofRequired");
+    expect(draft.quickAnswers).toEqual([
+      "Shipped production AI agents",
+      "Built CRM workflows before",
+      "Real estate domain proof",
+    ]);
+    expect(draft.shareableSummary).toBe("Looking for lead agentic engineer to build custom real estate CRMs.");
+  });
+
+  it("understands direct role-to-outcome requests without a looking-for prefix", () => {
+    const draft = draftNeedRequestFromText({
+      rawNeed: "Lead agentic engineer to help me build custom crm for real estate agency",
+    });
+
+    expect(draft.idealPerson).toBe("Lead agentic engineer");
+    expect(draft.outcomeNeeded).toBe("build custom CRM for real estate agency");
+    expect(draft.shareableSummary).toBe("Looking for Lead agentic engineer to build custom CRM for real estate agency.");
+  });
+
+  it("cleans obvious typos and requester phrasing before building the working brief", () => {
+    const draft = draftNeedRequestFromText({
+      rawNeed: "Lead agentic engieenr to help my agency deliver custom CRMs for real estate clients",
+    });
+
+    expect(draft.rawNeed).toContain("engieenr");
+    expect(draft.idealPerson).toBe("Lead agentic engineer");
+    expect(draft.outcomeNeeded).toBe("deliver custom CRMs for real estate clients");
+    expect(draft.successOutcome).toBe("deliver custom CRMs for real estate clients");
+    expect(draft.outcomeValueHint).toBeNull();
+    expect(draft.shareableSummary).toBe(
+      "Looking for Lead agentic engineer to deliver custom CRMs for real estate clients.",
+    );
+    expect(draft.shareableSummary).not.toContain("engieenr");
+  });
+
   it("returns next-best questions only for missing fields", () => {
     const missing = determineNeedRequestMissingFields({
       outcomeNeeded: "",
@@ -59,6 +104,19 @@ describe("need request calibration", () => {
       "What outcome would make this a success?",
       "What proof would make someone credible?",
       "What would make this connection worth it?",
+    ]);
+  });
+
+  it("builds analysis-derived quick answers for the active missing field", () => {
+    expect(buildNeedRequestQuickAnswers({
+      rawNeed: "Looking for a lead agentic engineer to help me build custom real estate crms",
+      outcomeNeeded: "build custom real estate crms",
+      idealPerson: "lead agentic engineer",
+      commercialShape: "",
+    }, "proofRequired")).toEqual([
+      "Shipped production AI agents",
+      "Built CRM workflows before",
+      "Real estate domain proof",
     ]);
   });
 
@@ -78,6 +136,11 @@ describe("need request calibration", () => {
             sourcesAllowed: "both",
             contactPolicy: "ask-before-contact",
             mode: "manual-search",
+            quickAnswers: [
+              "Launched embedded payments",
+              "Vertical SaaS operator",
+              "Partner references available",
+            ],
           }),
         }],
         tokensUsed: 120,
@@ -90,6 +153,11 @@ describe("need request calibration", () => {
     expect(draft.outcomeNeeded).toBe("Build a payments partnership shortlist for vertical SaaS.");
     expect(draft.idealPerson).toContain("Payments partnership operators");
     expect(draft.shareableSummary).toContain("payments partnership operators");
+    expect(draft.quickAnswers).toEqual([
+      "Launched embedded payments",
+      "Vertical SaaS operator",
+      "Partner references available",
+    ]);
     expect(draft.missingFields).not.toContain("outcomeNeeded");
   });
 });

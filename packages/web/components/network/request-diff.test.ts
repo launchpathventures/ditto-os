@@ -22,6 +22,8 @@ function draft(overrides: Partial<ActiveRequestDraft> = {}): ActiveRequestDraft 
     contactPolicy: "ask-before-contact",
     mode: "manual-search",
     missingFields: [],
+    quickAnswerField: null,
+    quickAnswers: [],
     ...overrides,
   };
 }

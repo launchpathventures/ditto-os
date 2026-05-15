@@ -34,7 +34,7 @@ export function NetworkSceneBackground({
           style={{
             backgroundImage: `url('${image}')`,
             backgroundPosition: position,
-            opacity: index === activeIndex ? 0.94 : 0,
+            opacity: index === activeIndex ? 1 : 0,
           }}
         />
       ))}
@@ -43,8 +43,8 @@ export function NetworkSceneBackground({
         className="pointer-events-none fixed inset-0 z-[1]"
         style={{
           background: [
-            "linear-gradient(90deg, rgba(5, 9, 18, 0.9) 0%, rgba(5, 9, 18, 0.66) 42%, rgba(5, 9, 18, 0.34) 100%)",
-            "linear-gradient(180deg, rgba(5, 9, 18, 0.18) 0%, rgba(5, 9, 18, 0.34) 58%, rgba(5, 9, 18, 0.82) 100%)",
+            "linear-gradient(90deg, rgba(5, 9, 18, 0.72) 0%, rgba(5, 9, 18, 0.46) 42%, rgba(5, 9, 18, 0.2) 100%)",
+            "linear-gradient(180deg, rgba(5, 9, 18, 0.06) 0%, rgba(5, 9, 18, 0.18) 58%, rgba(5, 9, 18, 0.46) 100%)",
           ].join(", "),
         }}
       />

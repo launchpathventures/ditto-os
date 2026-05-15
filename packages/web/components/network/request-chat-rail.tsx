@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ArrowUp, CheckCircle2, Eye, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUp, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConversationStep } from "./request-step-engine";
 
@@ -67,6 +67,7 @@ export function RequestChatRail({
   }
 
   const progressPct = Math.min(100, Math.round((step.index / step.total) * 100));
+  void originalNeed;
 
   return (
     <aside
@@ -78,43 +79,18 @@ export function RequestChatRail({
       )}
     >
       <header className="flex items-start gap-3 border-b border-border bg-background px-5 py-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-text-primary text-[14px] font-semibold text-accent-foreground">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-text-primary text-[13px] font-semibold text-accent-foreground">
           M
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-            Talking with
-          </p>
           <p className="text-[16px] font-semibold leading-snug text-text-primary">
-            Mira <span className="font-normal text-text-muted">— your network agent</span>
+            Mira
           </p>
           <p className="mt-1 text-[12px] leading-4 text-text-secondary">
-            I lock the brief with you, scan live, then bring people with sources. You approve every
-            move.
+            I'll tighten the brief, then search with sources. You approve every move.
           </p>
         </div>
       </header>
-
-      <div className="grid gap-2 border-b border-border bg-background px-5 py-3 sm:grid-cols-3">
-        <div className="flex items-start gap-2">
-          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-primary" aria-hidden="true" />
-          <p className="text-[11px] leading-4 text-text-secondary">
-            <span className="font-semibold text-text-primary">Refines</span> the brief as we talk.
-          </p>
-        </div>
-        <div className="flex items-start gap-2">
-          <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-primary" aria-hidden="true" />
-          <p className="text-[11px] leading-4 text-text-secondary">
-            <span className="font-semibold text-text-primary">Scans</span> Ditto + warm graph live.
-          </p>
-        </div>
-        <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-primary" aria-hidden="true" />
-          <p className="text-[11px] leading-4 text-text-secondary">
-            <span className="font-semibold text-text-primary">Private</span> filters stay private.
-          </p>
-        </div>
-      </div>
 
       <div className="border-b border-border bg-background px-5 py-3">
         <div className="flex items-center justify-between gap-2">
@@ -138,15 +114,6 @@ export function RequestChatRail({
             style={{ width: `${progressPct}%` }}
           />
         </div>
-      </div>
-
-      <div className="border-b border-border bg-background px-5 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-          Original request
-        </p>
-        <p className="mt-1 line-clamp-2 text-[12px] leading-4 text-text-secondary">
-          {originalNeed}
-        </p>
       </div>
 
       <div
@@ -211,7 +178,7 @@ export function RequestChatRail({
         {refining ? (
           <div className="flex items-center gap-2 text-xs font-medium text-text-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            <span>Mira is thinking…</span>
+            <span>Mira is thinking...</span>
           </div>
         ) : null}
         {error ? <p className="text-xs font-medium text-negative">{error}</p> : null}
@@ -220,7 +187,7 @@ export function RequestChatRail({
       {!isReady && step.examples.length > 0 ? (
         <div className="border-t border-border bg-background px-5 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-            Quick answer
+            Suggested from analysis
           </p>
           <div className="mt-1.5 flex flex-col items-start gap-0.5">
             {step.examples.map((example) => (
@@ -251,7 +218,7 @@ export function RequestChatRail({
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isReady ? "Ask Mira anything about this brief…" : "Answer Mira, or just say more…"}
+            placeholder={isReady ? "Ask Mira anything about this brief..." : "Answer Mira, or just say more..."}
             rows={1}
             className="max-h-32 flex-1 resize-none bg-transparent py-1 text-sm leading-6 text-text-primary outline-none placeholder:text-text-muted"
             disabled={refining}

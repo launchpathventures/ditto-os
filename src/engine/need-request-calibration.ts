@@ -38,6 +38,8 @@ export interface NeedRequestDraft {
   mode: NetworkRequestMode;
   identity: NeedRequestIdentity;
   missingFields: NeedRequestMissingField[];
+  quickAnswerField: NeedRequestMissingField | null;
+  quickAnswers: string[];
   jobRequestCard: JobRequestCardBlock;
 }
 
@@ -49,7 +51,15 @@ export type NeedRequestMissingField =
   | "successOutcome"
   | "shareableSummary";
 
-const VALUE_HINT_RE = /(?:\$|£|€|revenue|arr|mrr|funding|investment|contract|deal|hire|client|customer|paid|budget)[^.;\n]*/i;
+export const NEED_REQUEST_ANALYSIS_PROCESS = [
+  "1. Interpret the ask: identify the person or company type the user needs and the outcome they want.",
+  "2. Build search angles: role/title, domain, implementation proof, and adjacent phrases a real source may use.",
+  "3. Define evidence criteria: what would prove the person can deliver the outcome.",
+  "4. Split private from shareable: budget, filters, and sensitive context stay private by default.",
+  "5. Pick the next calibration question: ask only the missing detail that most improves search quality.",
+] as const;
+
+const VALUE_HINT_RE = /(?:\$|£|€|revenue|arr|mrr|funding|investment|contract|deal|hire|paid|budget)[^.;\n]*/i;
 const BUDGET_RE = /(?:budget|paid|rate|retainer|hourly|monthly|project|£|\$|€)[^.;\n]*/i;
 const GEOGRAPHY_RE = /\b(?:uk|u\.k\.|united kingdom|europe|eu|london|us|u\.s\.|united states|north america|australia|new zealand|remote|global)\b/i;
 const PROOF_RE = /\b(?:proof|case stud(?:y|ies)|built|scaled|grew|shipped|ran|led|operator|ex-[\w-]+|b2b|saas|marketplace|founder|cmo|cto|cfo|investor|advisor)\b/i;
@@ -76,6 +86,7 @@ interface NeedRequestLlmDraft {
   sourcesAllowed?: unknown;
   contactPolicy?: unknown;
   mode?: unknown;
+  quickAnswers?: unknown;
 }
 
 function clean(value: string | null | undefined, fallback = ""): string {
@@ -83,8 +94,32 @@ function clean(value: string | null | undefined, fallback = ""): string {
   return text || fallback;
 }
 
+function normalizeNeedTextForAnalysis(value: string): string {
+  return clean(value)
+    .replace(/\b(?:engieenr|engineerr|enginerr|enginer)\b/gi, "engineer")
+    .replace(/\bcrms\b/g, "CRMs")
+    .replace(/\bcrm\b/g, "CRM")
+    .replace(/\bai\b/g, "AI");
+}
+
 function cleanUnknown(value: unknown, max = 900): string {
-  return typeof value === "string" ? clean(value).slice(0, max) : "";
+  return typeof value === "string" ? normalizeNeedTextForAnalysis(value).slice(0, max) : "";
+}
+
+function cleanStringArray(value: unknown, maxItems = 3, maxLength = 72): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const answers: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const answer = clean(item).slice(0, maxLength);
+    const key = answer.toLowerCase();
+    if (!answer || seen.has(key)) continue;
+    seen.add(key);
+    answers.push(answer);
+    if (answers.length >= maxItems) break;
+  }
+  return answers;
 }
 
 function excerpt(raw: string, re: RegExp): string {
@@ -95,14 +130,59 @@ function firstSentence(raw: string): string {
   return clean(raw.split(/[.\n]/)[0], raw);
 }
 
+function stripRequesterSubject(value: string): string {
+  return clean(value.replace(
+    /^(?:me|us|my team|our team|my agency|our agency|my company|our company|my business|our business|we need to|i need to)\s+/i,
+    "",
+  ));
+}
+
+function requestStructure(raw: string): { idealPerson?: string; outcomeNeeded?: string } {
+  const helpMatch = raw.match(
+    /\b(?:looking for|need|seeking|find|want)\s+(?:an?\s+|the\s+)?(.+?)\s+(?:to help(?:\s+(?:me|us|my team|our team))?|who can|that can)\s+(.+?)(?:[.;\n]|$)/i,
+  );
+  if (helpMatch) {
+    return {
+      idealPerson: clean(helpMatch[1]),
+      outcomeNeeded: stripRequesterSubject(helpMatch[2]),
+    };
+  }
+
+  const directHelpMatch = raw.match(
+    /^(.+?)\s+(?:to help(?:\s+(?:me|us|my team|our team))?|who can|that can)\s+(.+?)(?:[.;\n]|$)/i,
+  );
+  if (directHelpMatch) {
+    return {
+      idealPerson: clean(directHelpMatch[1]),
+      outcomeNeeded: stripRequesterSubject(directHelpMatch[2]),
+    };
+  }
+
+  const forMatch = raw.match(
+    /\b(?:looking for|need|seeking|find|want)\s+(?:an?\s+|the\s+)?(.+?)\s+for\s+(.+?)(?:[.;\n]|$)/i,
+  );
+  if (forMatch) {
+    return {
+      idealPerson: clean(forMatch[1]),
+      outcomeNeeded: clean(forMatch[2]),
+    };
+  }
+
+  return {};
+}
+
 function inferIdealPerson(raw: string): string {
+  const structured = requestStructure(raw).idealPerson;
+  if (structured) return structured;
   const match = raw.match(/\b(?:need|find|looking for|seeking|want)\s+(?:an?\s+|the\s+)?([^,.;\n]+)/i);
   return clean(match?.[1] ?? "", firstSentence(raw));
 }
 
 function inferOutcome(raw: string): string {
+  const structured = requestStructure(raw).outcomeNeeded;
+  if (structured) return structured;
   const value = raw.match(/\b(?:for|to help|who can|so we can)\s+([^.;\n]+)/i)?.[1];
-  return clean(value ?? "", firstSentence(raw));
+  return stripRequesterSubject(value ?? "") || firstSentence(raw);
 }
 
 function inferCommercialShape(raw: string): string {
@@ -152,16 +232,15 @@ function safeContactPolicy(value: unknown, fallback: NetworkRequestContactPolicy
 export function buildNeedRequestShareableSummary(draft: Pick<NeedRequestDraft,
   "outcomeNeeded" | "idealPerson" | "proofRequired" | "geography" | "commercialShape"
 >): string {
-  return [
-    draft.outcomeNeeded,
-    draft.idealPerson ? `Ideal person: ${draft.idealPerson}` : "",
-    draft.proofRequired ? `Proof: ${draft.proofRequired}` : "",
+  const lead = draft.idealPerson && draft.outcomeNeeded
+    ? `Looking for ${draft.idealPerson} to ${draft.outcomeNeeded}.`
+    : draft.outcomeNeeded || draft.idealPerson || "";
+  const context = [
+    draft.proofRequired ? `Proof to check: ${draft.proofRequired}` : "",
     draft.geography ? `Geography: ${draft.geography}` : "",
     draft.commercialShape ? `Shape: ${draft.commercialShape}` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ")
-    .slice(0, 900);
+  ].filter(Boolean);
+  return [lead, ...context].filter(Boolean).join(" ").slice(0, 900);
 }
 
 export function determineNeedRequestMissingFields(
@@ -191,6 +270,80 @@ export function nextNeedRequestQuestions(missing: NeedRequestMissingField[]): st
   return missing.slice(0, 3).map((field) => questionByField[field]);
 }
 
+function normalizedWords(...values: string[]): string {
+  return values.join(" ").toLowerCase();
+}
+
+export function buildNeedRequestQuickAnswers(
+  draft: Pick<NeedRequestDraft, "rawNeed" | "outcomeNeeded" | "idealPerson" | "commercialShape">,
+  field: NeedRequestMissingField | null,
+): string[] {
+  const words = normalizedWords(draft.rawNeed, draft.outcomeNeeded, draft.idealPerson, draft.commercialShape);
+  if (!field) return [];
+
+  if (field === "proofRequired") {
+    if (words.includes("agentic") || words.includes("ai agent")) {
+      return [
+        "Shipped production AI agents",
+        words.includes("crm") ? "Built CRM workflows before" : "Integrated AI into operations",
+        words.includes("real estate") ? "Real estate domain proof" : "Operator reference available",
+      ];
+    }
+    if (words.includes("crm")) {
+      return ["Built CRM systems before", "Integrated sales ops data", "Operator reference available"];
+    }
+    if (words.includes("payments")) {
+      return ["Launched payments partnerships", "Worked with vertical SaaS", "References from partners"];
+    }
+    if (words.includes("climate") || words.includes("b2b saas")) {
+      return ["Scaled B2B SaaS GTM", "Climate category experience", "Founder reference available"];
+    }
+    return [
+      `Shipped similar ${draft.outcomeNeeded ? "work" : "outcomes"} before`,
+      "Relevant operator reference",
+      "Can show concrete examples",
+    ];
+  }
+
+  if (field === "commercialShape") {
+    if (words.includes("engineer") || words.includes("build")) {
+      return ["Contract build", "Fractional technical lead", "Paid discovery sprint"];
+    }
+    if (words.includes("hire") || words.includes("lead")) {
+      return ["Full-time hire", "Contract-to-hire", "Paid advisory first"];
+    }
+    return ["Paid advisory", "Project contract", "Exploratory intro"];
+  }
+
+  if (field === "successOutcome") {
+    return [
+      draft.outcomeNeeded ? `Can start ${draft.outcomeNeeded}` : "A credible match is found",
+      "Shortlist of credible matches",
+      "Warm intro accepted",
+    ];
+  }
+
+  if (field === "shareableSummary") {
+    const target = draft.idealPerson || "the right person";
+    const outcome = draft.outcomeNeeded || "help with this request";
+    return [`Looking for ${target} to ${outcome}`, "Keep it high level", "Share after approval"];
+  }
+
+  if (field === "idealPerson") {
+    return [
+      draft.idealPerson || "Senior operator",
+      "Builder with domain proof",
+      "Trusted referral first",
+    ];
+  }
+
+  return [
+    draft.outcomeNeeded || "Define the outcome",
+    "Make the request concrete",
+    "Ask Mira to suggest wording",
+  ];
+}
+
 export function draftNeedRequestFromText({
   rawNeed,
   requesterContext,
@@ -202,16 +355,17 @@ export function draftNeedRequestFromText({
 }): NeedRequestDraft {
   const raw = clean(rawNeed);
   if (!raw) throw new Error("rawNeed is required");
+  const analyzed = normalizeNeedTextForAnalysis(raw);
 
-  const geography = excerpt(raw, GEOGRAPHY_RE);
-  const budgetPrivate = excerpt(raw, BUDGET_RE);
-  const outcomeValueHint = excerpt(raw, VALUE_HINT_RE) || null;
-  const idealPerson = inferIdealPerson(raw);
-  const outcomeNeeded = inferOutcome(raw);
-  const proofRequired = PROOF_RE.test(raw) ? firstSentence(raw) : "";
-  const commercialShape = inferCommercialShape(raw);
-  const badFit = clean(raw.match(BAD_FIT_RE)?.[0] ?? "");
-  const urgency = excerpt(raw, URGENCY_RE);
+  const geography = excerpt(analyzed, GEOGRAPHY_RE);
+  const budgetPrivate = excerpt(analyzed, BUDGET_RE);
+  const outcomeValueHint = excerpt(analyzed, VALUE_HINT_RE) || null;
+  const idealPerson = inferIdealPerson(analyzed);
+  const outcomeNeeded = inferOutcome(analyzed);
+  const proofRequired = PROOF_RE.test(analyzed) ? firstSentence(analyzed) : "";
+  const commercialShape = inferCommercialShape(analyzed);
+  const badFit = clean(analyzed.match(BAD_FIT_RE)?.[0] ?? "");
+  const urgency = excerpt(analyzed, URGENCY_RE);
   const successOutcome = outcomeValueHint
     ? `A connection that helps produce ${outcomeValueHint}.`
     : outcomeNeeded;
@@ -231,6 +385,13 @@ export function draftNeedRequestFromText({
     successOutcome,
     shareableSummary,
   });
+  const quickAnswerField = missingFields[0] ?? null;
+  const quickAnswers = buildNeedRequestQuickAnswers({
+    rawNeed: analyzed,
+    outcomeNeeded,
+    idealPerson,
+    commercialShape,
+  }, quickAnswerField);
   const jobRequestCard = buildJobRequestCard({
     answers: {
       jtbd: outcomeNeeded || raw,
@@ -259,11 +420,13 @@ export function draftNeedRequestFromText({
     budgetShareableLabel: "",
     shareableSummary,
     privateNotes: budgetPrivate || outcomeValueHint ? "Budget/outcome value kept private by default." : "",
-    sourcesAllowed: inferSources(raw),
+    sourcesAllowed: inferSources(analyzed),
     contactPolicy: "ask-before-contact",
-    mode: inferMode(raw),
+    mode: inferMode(analyzed),
     identity: requesterContext ?? {},
     missingFields,
+    quickAnswerField,
+    quickAnswers,
     jobRequestCard,
   };
 }
@@ -314,6 +477,11 @@ function rebuildDraftFromFields({
     next.shareableSummary = buildNeedRequestShareableSummary(next);
   }
   next.missingFields = determineNeedRequestMissingFields(next);
+  next.quickAnswerField = next.missingFields[0] ?? null;
+  next.quickAnswers = cleanStringArray(parsed.quickAnswers);
+  if (next.quickAnswers.length === 0) {
+    next.quickAnswers = buildNeedRequestQuickAnswers(next, next.quickAnswerField);
+  }
   next.jobRequestCard = buildJobRequestCard({
     answers: {
       jtbd: next.outcomeNeeded || next.rawNeed,
@@ -348,9 +516,18 @@ export async function draftNeedRequestWithLlm({
       maxTokens: 1400,
       system: [
         "You turn a user's people/company research need into a structured Ditto Network request brief.",
+        ...NEED_REQUEST_ANALYSIS_PROCESS,
+        "For phrasing like 'Looking for X to help me Y', set idealPerson to X and outcomeNeeded to Y without the requester pronoun.",
+        "Correct obvious spelling, capitalization, and grammar errors in structured fields and shareableSummary while preserving the user's intent.",
+        "Enrich sparse asks into useful search language: include role, domain, delivery context, likely proof to verify, and recipient-safe wording when supported.",
+        "Do not copy the whole raw request into multiple fields. Each field must add distinct value.",
+        "proofRequired should describe evidence to verify, not repeat the user's ask. If no evidence is implied, leave it blank so the UI can ask.",
+        "successOutcome should describe the professional result the user wants, not repeat the role.",
+        "shareableSummary should be one clean recipient-safe sentence.",
+        "quickAnswers must be 2-3 short user-selectable answers for the current highest-value missing field. They must be specific to the user's request, not generic canned options.",
         "Extract only what is supported by the user's text. Do not invent private budget, geography, proof, or urgency.",
-        "Use plain user-facing language. Avoid jargon such as lead, candidate, marketplace, funnel, or signal unless the user used it.",
-        "Return JSON only, with these keys: outcomeNeeded, idealPerson, proofRequired, badFit, urgency, geography, commercialShape, successOutcome, outcomeValueHint, budgetPrivate, budgetShareableLabel, shareableSummary, privateNotes, sourcesAllowed, contactPolicy, mode.",
+        "Use plain user-facing language. Avoid jargon such as candidate, marketplace, funnel, or signal unless the user used it.",
+        "Return JSON only, with these keys: outcomeNeeded, idealPerson, proofRequired, badFit, urgency, geography, commercialShape, successOutcome, outcomeValueHint, budgetPrivate, budgetShareableLabel, shareableSummary, privateNotes, sourcesAllowed, contactPolicy, mode, quickAnswers.",
         'Allowed sourcesAllowed: "ditto-members", "public-web", "both".',
         'Allowed contactPolicy: "ask-before-contact", "ask-before-intro", "never-contact-without-approval".',
         'Allowed mode: "manual-search", "background-watch", "both".',
@@ -360,6 +537,7 @@ export async function draftNeedRequestWithLlm({
           role: "user",
           content: [
             `Raw need: ${base.rawNeed}`,
+            `Local working read: ${base.idealPerson} to ${base.outcomeNeeded}`,
             `Requester context: ${JSON.stringify(requesterContext ?? {})}`,
           ].join("\n"),
         },

@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveRequestDraft } from "./request-review";
+import { RequestAnalysisTransition } from "./request-analysis";
+
+const FRONT_DOOR_ANALYSIS_MS = 45_000;
 
 const EXAMPLES = [
   "Need a fractional CMO for a climate startup, B2B SaaS, UK or Europe, paid advisory.",
@@ -53,6 +56,10 @@ export async function draftActiveRequest({
   return payload.draft;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function RequestIntake({
   initialNeed,
   onDraft,
@@ -65,18 +72,29 @@ export function RequestIntake({
   const [rawNeed, setRawNeed] = useState(initialNeed ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analysisDraft, setAnalysisDraft] = useState<ActiveRequestDraft | null>(null);
   const initialNeedSubmittedRef = useRef(false);
+  const cleanInitialNeed = initialNeed?.trim() ?? "";
+  const showInitialAnalysis =
+    cleanInitialNeed.length >= 12 &&
+    !error &&
+    (loading || !initialNeedSubmittedRef.current);
   const canSubmit = rawNeed.trim().length >= 12 && !loading;
 
-  async function submitNeed(need: string) {
+  async function submitNeed(need: string, options: { minimumAnalysisMs?: number } = {}) {
     const cleanNeed = need.trim();
     if (cleanNeed.length < 12 || loading) return;
     setRawNeed(cleanNeed);
     setLoading(true);
     setError(null);
+    setAnalysisDraft(null);
     const visitorSessionId = getOrCreateVisitorSessionId();
+    const startedAt = Date.now();
     try {
       const draft = await draftActiveRequest({ rawNeed: cleanNeed, visitorSessionId });
+      setAnalysisDraft(draft);
+      const remaining = Math.max(0, (options.minimumAnalysisMs ?? 0) - (Date.now() - startedAt));
+      if (remaining > 0) await wait(remaining);
       onDraft(draft, visitorSessionId);
     } catch {
       setError("I couldn't draft that request. Try again in a moment.");
@@ -88,13 +106,17 @@ export function RequestIntake({
   useEffect(() => {
     if (!initialNeed || initialNeedSubmittedRef.current) return;
     initialNeedSubmittedRef.current = true;
-    void submitNeed(initialNeed);
+    void submitNeed(initialNeed, { minimumAnalysisMs: FRONT_DOOR_ANALYSIS_MS });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNeed]);
 
   async function handleSubmit() {
     if (!canSubmit) return;
     await submitNeed(rawNeed);
+  }
+
+  if (showInitialAnalysis) {
+    return <RequestAnalysisTransition rawNeed={rawNeed} draft={analysisDraft} className={className} />;
   }
 
   return (

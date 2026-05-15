@@ -23,6 +23,8 @@ function makeDraft(overrides: Partial<ActiveRequestDraft> = {}): ActiveRequestDr
     contactPolicy: "ask-before-intro",
     mode: "background-watch",
     missingFields: [],
+    quickAnswerField: null,
+    quickAnswers: [],
     ...overrides,
   };
 }
@@ -82,6 +84,46 @@ describe("deriveCurrentStep", () => {
     expect(step.kind).toBe("need");
     expect(step.field).toBe("commercialShape");
     expect(step.index).toBe(4);
+  });
+
+  it("uses calibrated missing fields instead of every optional blank field", () => {
+    const step = deriveCurrentStep(
+      makeDraft({
+        outcomeNeeded: "Build custom real estate CRMs",
+        idealPerson: "Lead agentic engineer",
+        proofRequired: "",
+        commercialShape: "Contract build",
+        missingFields: ["proofRequired"],
+        quickAnswerField: "proofRequired",
+        quickAnswers: ["Shipped production AI agents", "Real estate CRM proof"],
+      }),
+      EMPTY_IDENTITY,
+      { mode: null, modeConfirmed: false },
+    );
+    expect(step.kind).toBe("need");
+    expect(step.field).toBe("proofRequired");
+    expect(step.index).toBe(1);
+    expect(step.total).toBe(3);
+    expect(step.examples).toEqual(["Shipped production AI agents", "Real estate CRM proof"]);
+  });
+
+  it("does not label static fallback examples as analysed suggestions", () => {
+    const step = deriveCurrentStep(
+      makeDraft({
+        outcomeNeeded: "Build custom real estate CRMs",
+        idealPerson: "Lead agentic engineer",
+        proofRequired: "",
+        commercialShape: "Contract build",
+        missingFields: ["proofRequired"],
+        quickAnswerField: "proofRequired",
+        quickAnswers: [],
+      }),
+      EMPTY_IDENTITY,
+      { mode: null, modeConfirmed: false },
+    );
+    expect(step.kind).toBe("need");
+    expect(step.field).toBe("proofRequired");
+    expect(step.examples).toEqual([]);
   });
 
   it("moves to the identity step once all need fields are filled", () => {

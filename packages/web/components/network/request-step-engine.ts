@@ -89,7 +89,7 @@ const IDENTITY_STEP: Omit<ConversationStep, "index" | "total"> = {
   lead: "Before any introduction goes out, I need to know who I'm introducing.",
   question: "What's your name, email, and a one-line reason you're credible?",
   examples: [
-    "Alex Rivers, alex@launchpath.co, founder raising seed",
+    "Sam Rivers, sam@launchpath.co, founder raising seed",
     "Ben Tan, ben@kite.io, GTM lead at Series B SaaS",
   ],
   skipLabel: "Skip — search-only for now",
@@ -120,11 +120,41 @@ function isFieldEmpty(draft: ActiveRequestDraft, field: TrackedField): boolean {
   return value.trim().length === 0;
 }
 
+function calibratedNeedSteps(draft: ActiveRequestDraft): NeedStep[] {
+  const missing = new Set(draft.missingFields);
+  if (missing.size === 0) return [];
+  return NEED_STEPS.filter((step) => missing.has(step.field) && isFieldEmpty(draft, step.field));
+}
+
+function examplesForStep(draft: ActiveRequestDraft, step: NeedStep): string[] {
+  if (draft.quickAnswerField === step.field && draft.quickAnswers.length > 0) {
+    return draft.quickAnswers;
+  }
+  if (draft.quickAnswerField) return [];
+  return step.examples;
+}
+
 export function deriveCurrentStep(
   draft: ActiveRequestDraft,
   identity: RequestIdentity,
   options: { mode: ActiveRequestDraft["mode"] | null; modeConfirmed: boolean },
 ): ConversationStep {
+  const calibrated = calibratedNeedSteps(draft);
+  if (calibrated.length > 0) {
+    const step = calibrated[0];
+    return {
+      kind: "need",
+      field: step.field,
+      index: 1,
+      total: calibrated.length + 2,
+      label: step.label,
+      lead: step.lead,
+      question: step.question,
+      examples: examplesForStep(draft, step),
+      skipLabel: step.skipLabel,
+    };
+  }
+
   for (let i = 0; i < NEED_STEPS.length; i += 1) {
     const step = NEED_STEPS[i];
     if (isFieldEmpty(draft, step.field)) {
@@ -136,7 +166,7 @@ export function deriveCurrentStep(
         label: step.label,
         lead: step.lead,
         question: step.question,
-        examples: step.examples,
+        examples: examplesForStep(draft, step),
         skipLabel: step.skipLabel,
       };
     }

@@ -13,7 +13,7 @@ import {
 } from "@/components/network/request-intake";
 import type { ActiveRequestDraft, ActiveRequestMode } from "@/components/network/request-review";
 import type { RequestIdentity } from "@/components/network/request-identity-card";
-import { RequestFirstLook } from "@/components/network/request-first-look";
+import { RequestBriefFocus } from "@/components/network/request-analysis";
 import { fieldLabel, type TrackedField } from "@/components/network/request-diff";
 import { extractIdentityFromMessage } from "@/components/network/request-identity-extract";
 import {
@@ -59,6 +59,26 @@ function buildAssistantTurn(step: ConversationStep, withLead: boolean): string {
   return step.question;
 }
 
+function cleanSentence(value: string, fallback: string): string {
+  const clean = value.replace(/\s+/g, " ").trim() || fallback;
+  return clean.charAt(0).toLowerCase() + clean.slice(1);
+}
+
+function buildInitialAssistantTurn(draft: ActiveRequestDraft, step: ConversationStep): string {
+  const target = cleanSentence(draft.idealPerson, "the right person");
+  const outcome = cleanSentence(draft.outcomeNeeded, draft.rawNeed);
+  if (step.kind === "need") {
+    return `I read this as: find ${target} to ${outcome}. The useful gap is ${step.label.toLowerCase()}. ${step.question}`;
+  }
+  if (step.kind === "identity") {
+    return `I read this as: find ${target} to ${outcome}. The search brief is usable; I just need your intro details before any outreach. ${step.question}`;
+  }
+  if (step.kind === "mode") {
+    return `I read this as: find ${target} to ${outcome}. The brief is usable; choose how active I should be. ${step.question}`;
+  }
+  return `I read this as: find ${target} to ${outcome}. ${step.question}`;
+}
+
 export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
   const [draft, setDraft] = useState<ActiveRequestDraft | null>(null);
   const [visitorSessionId, setVisitorSessionId] = useState<string | null>(null);
@@ -75,6 +95,7 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
   });
   const [highlightedFields, setHighlightedFields] = useState<TrackedField[]>([]);
   const [modeConfirmed, setModeConfirmed] = useState(false);
+  const [showFullBrief, setShowFullBrief] = useState(false);
 
   const greetingShownRef = useRef(false);
   const highlightTimerRef = useRef<number | null>(null);
@@ -102,19 +123,13 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
   useEffect(() => {
     if (!draft || !currentStep || greetingShownRef.current) return;
     greetingShownRef.current = true;
-    const intro: RequestChatMessage = {
-      id: `mira-intro-${Date.now()}`,
-      role: "assistant",
-      content:
-        "Hi — I'm Mira, your network agent. Here's how this works: we lock the brief together in chat, candidates appear live above as we go, then I scan Ditto, your warm graph, and the public web. You approve every move.",
-    };
     const firstQuestion: RequestChatMessage = {
       id: `mira-q-${Date.now() + 1}`,
       role: "assistant",
-      content: buildAssistantTurn(currentStep, true),
+      content: buildInitialAssistantTurn(draft, currentStep),
     };
     lastQuestionedStepRef.current = `${currentStep.kind}:${currentStep.field ?? ""}:${currentStep.index}`;
-    setMessages([intro, firstQuestion]);
+    setMessages([firstQuestion]);
   }, [draft, currentStep]);
 
   // Briefly highlight changed fields, then clear after 2.5s.
@@ -201,10 +216,13 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
       // advances deterministically. Background refine then enriches summaries.
       if (currentStep.kind === "need" && currentStep.field) {
         const field = currentStep.field as TrackedField;
+        const remainingMissingFields = draft.missingFields.filter((f) => f !== field);
         const localDraft: ActiveRequestDraft = {
           ...draft,
           [field]: trimmed,
-          missingFields: draft.missingFields.filter((f) => f !== field),
+          missingFields: remainingMissingFields,
+          quickAnswerField: remainingMissingFields[0] ?? null,
+          quickAnswers: [],
         };
         setDraft(localDraft);
         setHighlightedFields([field]);
@@ -284,11 +302,16 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
       const field = currentStep.field as TrackedField;
       setDraft((current) =>
         current
-          ? {
-              ...current,
-              [field]: current[field] || "Open — no preference",
-              missingFields: current.missingFields.filter((f) => f !== field),
-            }
+          ? (() => {
+              const remainingMissingFields = current.missingFields.filter((f) => f !== field);
+              return {
+                ...current,
+                [field]: current[field] || "Open — no preference",
+                missingFields: remainingMissingFields,
+                quickAnswerField: remainingMissingFields[0] ?? null,
+                quickAnswers: [],
+              };
+            })()
           : current,
       );
       setMessages((current) => [
@@ -311,39 +334,52 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
 
   if (!draft || !visitorSessionId || !currentStep) {
     return (
-      <main className="relative isolate min-h-[calc(100dvh-72px)] bg-[#050912]">
+      <main className="relative isolate h-dvh overflow-hidden bg-[#050912]">
         <NetworkSceneBackground images={RESEARCH_SCENES} />
-        <div className="relative z-10 mx-auto w-full max-w-[1180px] px-5 pb-12 pt-5 sm:px-8">
-          <Link
-            href="/network"
-            className="inline-flex min-h-11 items-center gap-2 rounded-full px-2 text-sm font-semibold text-white/78 transition hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Network
-          </Link>
-          <RequestIntake
-            initialNeed={initialNeed}
-            onDraft={handleDraft}
-            className="mt-6"
-          />
+        <div className="relative z-10 h-dvh">
+          <header className="absolute inset-x-0 top-0 z-20 px-5 pt-5 sm:px-8">
+            <div className="mx-auto flex w-full max-w-[1180px] items-center justify-between gap-4 pb-3">
+              <Link
+                href="/network"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full px-2 text-sm font-semibold text-white/78 transition hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Network
+              </Link>
+            </div>
+          </header>
+          <div className="mx-auto flex h-full w-full max-w-[1180px] px-5 pb-6 pt-24 sm:px-8">
+            <RequestIntake
+              initialNeed={initialNeed}
+              onDraft={handleDraft}
+              className="w-full"
+            />
+          </div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="relative isolate min-h-[calc(100dvh-72px)] bg-[#050912]">
+    <main className="relative isolate min-h-dvh bg-[#050912] lg:h-dvh lg:overflow-hidden">
       <NetworkSceneBackground images={RESEARCH_SCENES} />
-      <div className="relative z-10 mx-auto w-full max-w-[1480px] px-5 pb-16 pt-5 sm:px-8 lg:px-10">
-        <Link
-          href="/network"
-          className="inline-flex min-h-11 items-center gap-2 rounded-full px-2 text-sm font-semibold text-white/78 transition hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Network
-        </Link>
+      <div className="relative z-10 flex min-h-dvh flex-col lg:h-dvh">
+        <header className="sticky top-0 z-20 shrink-0 px-5 pt-5 sm:px-8 lg:px-10">
+          <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4 pb-3">
+            <Link
+              href="/network"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full px-2 text-sm font-semibold text-white/78 transition hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Network
+            </Link>
+            <div className="hidden rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/72 sm:block">
+              Draft request - no contact without approval
+            </div>
+          </div>
+        </header>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(380px,460px)_minmax(0,1fr)] lg:gap-7">
+        <div className="mx-auto grid min-h-0 w-full max-w-[1480px] flex-1 gap-5 px-5 pb-5 pt-2 sm:px-8 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] lg:gap-7 lg:px-10">
           <RequestChatRail
             messages={messages}
             originalNeed={originalNeed ?? draft.rawNeed}
@@ -352,22 +388,29 @@ export function RequestWorkspace({ initialNeed }: { initialNeed?: string }) {
             onSkip={handleSkip}
             refining={refining}
             error={refineError}
-            className="lg:sticky lg:top-5 lg:max-h-[calc(100dvh-104px)]"
+            className="min-h-[460px] lg:h-full lg:max-h-none"
           />
-          <div className="flex flex-col gap-4">
-            <RequestFirstLook draft={draft} ready={currentStep.kind === "ready"} />
-            <RequestCanvas
-              draft={draft}
-              onDraftChange={setDraft}
-              visitorSessionId={visitorSessionId}
-              identity={identity}
-              onIdentityChange={setIdentity}
-              highlightedFields={highlightedFields}
-              currentStepField={
-                currentStep.kind === "need" ? (currentStep.field as TrackedField) : null
-              }
-            />
-          </div>
+          <section
+            aria-label="Request brief and research process"
+            className="min-h-0 overflow-y-auto overscroll-contain pr-1 lg:pr-2"
+          >
+            <div className="flex flex-col gap-4 pb-8">
+              <RequestBriefFocus draft={draft} onOpenEditor={() => setShowFullBrief(true)} />
+              {showFullBrief ? (
+                <RequestCanvas
+                  draft={draft}
+                  onDraftChange={setDraft}
+                  visitorSessionId={visitorSessionId}
+                  identity={identity}
+                  onIdentityChange={setIdentity}
+                  highlightedFields={highlightedFields}
+                  currentStepField={
+                    currentStep.kind === "need" ? (currentStep.field as TrackedField) : null
+                  }
+                />
+              ) : null}
+            </div>
+          </section>
         </div>
       </div>
     </main>

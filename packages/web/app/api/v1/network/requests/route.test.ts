@@ -29,6 +29,8 @@ vi.mock("../../../../../../../src/engine/need-request-draft", () => ({
     mode: "manual-search",
     identity: {},
     missingFields: [],
+    quickAnswerField: null,
+    quickAnswers: [],
     jobRequestCard: {
       type: "job-request-card",
       jtbd: "fractional CMO",
@@ -45,6 +47,48 @@ vi.mock("../../../../../../../src/engine/need-request-draft", () => ({
   })),
 }));
 
+vi.mock("../../../../../../../src/engine/network-match", () => ({
+  matchOnNetwork: vi.fn(async () => [
+    {
+      handle: "mira-fit",
+      name: "Priya Shah",
+      oneLineRole: "Agentic CRM engineer for real estate teams",
+      rationaleMd: "Mira: production CRM workflow experience with AI agents.",
+      fitConfidence: "high",
+      source: "on-network",
+      computedAt: "2026-05-14T00:00:00.000Z",
+    },
+  ]),
+}));
+
+vi.mock("../../../../../../../src/engine/network-scout", () => ({
+  scoutOffNetwork: vi.fn(async () => ({
+    query: "public scout query",
+    review: {
+      type: "review_card",
+      processRunId: "network-lane-step:request:test",
+      stepName: "scout_off_network",
+      outputText: "Found one public lead.",
+      confidence: "medium",
+      actions: [],
+      knowledgeUsed: ["Public web search"],
+    },
+    candidates: [
+      {
+        handle: "scouted:public-fit",
+        name: "Jordan Lee",
+        oneLineRole: "Publicly sourced CRM automation engineer",
+        rationaleMd: "Mira: public source shows CRM automation work.",
+        fitConfidence: "medium",
+        source: "scouted",
+        sourceUrl: "https://example.com/jordan",
+        sourceLabel: "example.com",
+        computedAt: "2026-05-14T00:00:00.000Z",
+      },
+    ],
+  })),
+}));
+
 vi.mock("../../../../../../../src/engine/need-request-storage", () => ({
   listNeedRequests: vi.fn(async () => []),
   saveNeedRequest: vi.fn(async () => ({ id: "request-1", status: "active" })),
@@ -54,6 +98,8 @@ vi.mock("../../../../../../../src/engine/need-request-storage", () => ({
 import { GET, POST, PATCH } from "./route";
 import { createNetworkLaneStepRun } from "../../../../../../../src/engine/network-step-run";
 import { draftNeedRequest } from "../../../../../../../src/engine/need-request-draft";
+import { matchOnNetwork } from "../../../../../../../src/engine/network-match";
+import { scoutOffNetwork } from "../../../../../../../src/engine/network-scout";
 import { listNeedRequests, saveNeedRequest, updateNeedRequestState } from "../../../../../../../src/engine/need-request-storage";
 
 function request(body: Record<string, unknown>) {
@@ -115,6 +161,29 @@ describe("/api/v1/network/requests", () => {
       stepRunId: "network-lane-step:request:test",
       status: "active",
     }));
+  });
+
+  it("runs an initial non-contact on-network and public scout pass for draft requests", async () => {
+    const response = await POST(request({
+      action: "draft",
+      rawNeed: "Need a fractional CMO",
+      visitorSessionId: "visitor-1",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(matchOnNetwork).toHaveBeenCalledWith(expect.objectContaining({
+      type: "job-request-card",
+    }), { sampleLimit: 200 });
+    expect(createNetworkLaneStepRun).toHaveBeenCalledWith(expect.objectContaining({
+      route: "network-request-initial-scout",
+      sessionId: "visitor-1",
+    }));
+    expect(scoutOffNetwork).toHaveBeenCalledWith(expect.objectContaining({
+      stepRunId: "network-lane-step:request:test",
+    }));
+    const json = await response.json() as { draft: { jobRequestCard: { suggestedCandidates: unknown[] } } };
+    expect(json.draft.jobRequestCard.suggestedCandidates).toHaveLength(2);
+    expect(saveNeedRequest).not.toHaveBeenCalled();
   });
 
   it("requires a resolved session or visitor session before drafting", async () => {

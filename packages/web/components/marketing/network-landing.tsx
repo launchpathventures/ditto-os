@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Compass, Search } from "lucide-react";
 import { trackMarketingEvent } from "@/lib/marketing-analytics";
@@ -67,6 +67,8 @@ const MODES: Record<LandingMode, ModeDefinition> = {
   },
 };
 
+const MIN_LANDING_ANSWER_CHARS = 12;
+
 function buildOnboardingHref(definition: ModeDefinition, answer: string): string {
   const params = new URLSearchParams({
     mode: definition.laneMode,
@@ -77,6 +79,11 @@ function buildOnboardingHref(definition: ModeDefinition, answer: string): string
     params.set("seed", seed.slice(0, 700));
   }
   return `${definition.href}?${params.toString()}`;
+}
+
+function readAnswerFromForm(form: HTMLFormElement, fallback: string): string {
+  const seedField = form.elements.namedItem("seed");
+  return seedField instanceof HTMLTextAreaElement ? seedField.value : fallback;
 }
 
 function useTypedPrompt(ideas: string[]): string {
@@ -132,25 +139,73 @@ function useTypedPrompt(ideas: string[]): string {
 
 export function NetworkLanding() {
   const router = useRouter();
+  const answerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mode, setMode] = useState<LandingMode>("client");
   const [answer, setAnswer] = useState("");
   const active = MODES[mode];
   const Icon = active.icon;
   const typedPrompt = useTypedPrompt(active.promptIdeas);
+  const trimmedAnswer = answer.trim();
+  const answerCharacterCount = trimmedAnswer.length;
+  const canSubmit = answerCharacterCount >= MIN_LANDING_ANSWER_CHARS;
+  const remainingCharacters = Math.max(0, MIN_LANDING_ANSWER_CHARS - answerCharacterCount);
+
+  function syncAnswerFromTextarea() {
+    const restoredAnswer = answerTextareaRef.current?.value ?? "";
+    setAnswer((current) => (current === restoredAnswer ? current : restoredAnswer));
+  }
+
+  useEffect(() => {
+    let animationFrame = 0;
+    const scheduleSync = () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(syncAnswerFromTextarea);
+    };
+
+    scheduleSync();
+    window.addEventListener("pageshow", scheduleSync);
+    window.addEventListener("focus", scheduleSync);
+    document.addEventListener("visibilitychange", scheduleSync);
+
+    return () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("pageshow", scheduleSync);
+      window.removeEventListener("focus", scheduleSync);
+      document.removeEventListener("visibilitychange", scheduleSync);
+    };
+  }, [mode]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
+    const submittedAnswer = readAnswerFromForm(event.currentTarget, answer);
+    const submittedAnswerLength = submittedAnswer.trim().length;
+    setAnswer((current) => (current === submittedAnswer ? current : submittedAnswer));
+
+    if (submittedAnswerLength < MIN_LANDING_ANSWER_CHARS) {
+      event.preventDefault();
+      const seedField = event.currentTarget.elements.namedItem("seed");
+      if (seedField instanceof HTMLTextAreaElement) {
+        seedField.setCustomValidity(`Enter at least ${MIN_LANDING_ANSWER_CHARS} characters to start.`);
+        seedField.reportValidity();
+        seedField.setCustomValidity("");
+      }
+      return;
+    }
+
     event.preventDefault();
     trackMarketingEvent("network_entry_selected", {
       intent: active.intent,
       mode: active.laneMode,
-      seeded: answer.trim().length > 0,
+      seeded: submittedAnswerLength > 0,
     });
-    router.push(buildOnboardingHref(active, answer));
+    router.push(buildOnboardingHref(active, submittedAnswer));
   }
 
   function switchMode(nextMode: LandingMode) {
     setMode(nextMode);
     setAnswer("");
+    if (answerTextareaRef.current) {
+      answerTextareaRef.current.value = "";
+    }
   }
 
   return (
@@ -193,9 +248,13 @@ export function NetworkLanding() {
           <div className="relative mx-auto w-full max-w-[540px]">
             <form
               onSubmit={submit}
+              action={active.href}
+              method="get"
               data-intent={active.intent}
               className="relative z-10 rounded-md border border-border bg-white p-4 shadow-large sm:p-5"
             >
+              <input type="hidden" name="mode" value={active.laneMode} />
+              <input type="hidden" name="intent" value={active.intent} />
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase text-text-muted">{active.eyebrow}</p>
@@ -209,14 +268,32 @@ export function NetworkLanding() {
               </div>
 
               <label className="mt-5 grid gap-2">
-                <span className="text-sm font-semibold leading-5 text-text-primary">{active.question}</span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold leading-5 text-text-primary">{active.question}</span>
+                  <span className="shrink-0 text-xs font-semibold text-text-muted">
+                    {answerCharacterCount}/{MIN_LANDING_ANSWER_CHARS}
+                  </span>
+                </span>
                 <textarea
-                  value={answer}
+                  ref={answerTextareaRef}
+                  name="seed"
+                  defaultValue=""
                   onChange={(event) => setAnswer(event.target.value)}
+                  onFocus={syncAnswerFromTextarea}
                   placeholder={typedPrompt || active.placeholder}
+                  required
+                  minLength={MIN_LANDING_ANSWER_CHARS}
+                  aria-describedby="network-landing-answer-help"
                   rows={3}
                   className="min-h-[64px] resize-none rounded-md border border-border bg-surface px-4 py-3 text-base leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-text-primary sm:min-h-[104px] sm:py-4"
                 />
+                <span id="network-landing-answer-help" className="text-xs leading-5 text-text-muted">
+                  {canSubmit
+                    ? "Ready to start a focused brief."
+                    : remainingCharacters === MIN_LANDING_ANSWER_CHARS
+                      ? `Enter at least ${MIN_LANDING_ANSWER_CHARS} characters to start.`
+                      : `${remainingCharacters} more character${remainingCharacters === 1 ? "" : "s"} needed.`}
+                </span>
               </label>
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -225,7 +302,15 @@ export function NetworkLanding() {
                 </p>
                 <button
                   type="submit"
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent px-5 text-sm font-semibold text-accent-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary/25"
+                  data-ready={canSubmit ? "true" : "false"}
+                  onPointerDown={syncAnswerFromTextarea}
+                  onFocus={syncAnswerFromTextarea}
+                  className={cn(
+                    "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary/25",
+                    canSubmit
+                      ? "bg-accent text-accent-foreground hover:opacity-90"
+                      : "bg-surface-raised text-text-muted",
+                  )}
                 >
                   {active.cta}
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
