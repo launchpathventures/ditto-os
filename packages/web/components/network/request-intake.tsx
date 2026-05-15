@@ -11,6 +11,12 @@ const EXAMPLES = [
   "Find angel investors who understand developer tools and can make useful customer intros.",
 ] as const;
 
+const STEPS = [
+  { label: "Describe", copy: "One line is enough." },
+  { label: "Refine", copy: "Mira asks only what's missing." },
+  { label: "Act", copy: "Search now or keep watch." },
+] as const;
+
 export function getOrCreateVisitorSessionId(): string {
   if (typeof window === "undefined") return "server";
   const key = "ditto-network-request-visitor";
@@ -92,48 +98,103 @@ export function RequestIntake({
   }
 
   return (
-    <section className={cn("rounded-3xl bg-white p-5 shadow-medium md:p-6", className)}>
-      <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-        <Sparkles className="h-4 w-4 text-vivid" aria-hidden="true" />
-        Active Request
-      </div>
-      <h1 className="mt-4 max-w-[620px] text-3xl font-semibold leading-[1.05] text-text-primary md:text-[42px]">
-        Start with the outcome.
-      </h1>
-      <textarea
-        value={rawNeed}
-        onChange={(event) => setRawNeed(event.target.value)}
-        placeholder="Describe the person, opportunity, or outcome you need..."
-        className="mt-6 min-h-[176px] w-full resize-none rounded-2xl border border-border bg-background px-4 py-4 text-base leading-6 text-text-primary outline-none transition focus:border-text-primary"
+    <section
+      className={cn(
+        "relative overflow-hidden rounded-2xl border border-border bg-white shadow-medium",
+        className,
+      )}
+    >
+      {/* Decorative wash — Phoenix gradient as restrained corner accent, never chrome */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 -top-32 h-[320px] w-[320px] rounded-full opacity-[0.18] blur-3xl"
+        style={{ background: "var(--gradient-phoenix-orange)" }}
       />
-      <div className="mt-3 flex flex-wrap gap-2">
-        {EXAMPLES.map((example) => (
-          <button
-            key={example}
-            type="button"
-            onClick={() => setRawNeed(example)}
-            className="rounded-full border border-border bg-background px-3 py-2 text-left text-xs font-medium leading-4 text-text-secondary transition hover:border-text-primary hover:text-text-primary"
-          >
-            {example}
-          </button>
-        ))}
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-[420px] text-sm leading-5 text-text-secondary">
-          Budget and private filters stay private unless you mark a shareable label.
+
+      <div className="relative px-6 pb-8 pt-7 md:px-10 md:pb-10 md:pt-9">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-primary">
+            <Sparkles className="h-3 w-3 text-text-primary" aria-hidden="true" />
+            Active Request
+          </span>
+          <span className="text-[11px] font-medium text-text-muted">
+            Need-first · Account later
+          </span>
+        </div>
+
+        <h1 className="mt-6 max-w-[680px] text-4xl font-semibold leading-[1.02] tracking-tight text-text-primary md:text-[52px]">
+          Start with the{" "}
+          <span className="font-instrument-serif italic font-normal">outcome.</span>
+        </h1>
+        <p className="mt-3 max-w-[560px] text-[15px] leading-6 text-text-secondary md:text-base">
+          Describe the person, opportunity, or outcome you need. Mira drafts a brief, asks only
+          what's missing, then searches now or keeps watch — your call.
         </p>
-        <button
-          type="button"
-          disabled={!canSubmit}
-          onClick={() => void handleSubmit()}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          Draft request
-          {!loading ? <ArrowRight className="h-4 w-4" aria-hidden="true" /> : null}
-        </button>
+
+        <div className="mt-7 rounded-2xl border border-border bg-background p-2 shadow-subtle transition focus-within:border-text-primary">
+          <textarea
+            value={rawNeed}
+            onChange={(event) => setRawNeed(event.target.value)}
+            placeholder="e.g. Need a fractional CMO for a climate startup, B2B SaaS, UK or Europe, paid advisory."
+            rows={4}
+            className="block w-full resize-none rounded-xl bg-transparent px-3 py-3 text-base leading-6 text-text-primary outline-none placeholder:text-text-muted"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 pb-2 pt-3">
+            <span className="text-xs font-medium text-text-muted">
+              Budget and private filters stay private unless you mark a shareable label.
+            </span>
+            <button
+              type="button"
+              disabled={!canSubmit}
+              onClick={() => void handleSubmit()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              Draft request
+              {!loading ? <ArrowRight className="h-4 w-4" aria-hidden="true" /> : null}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+            Try a starter
+          </p>
+          <div className="mt-2 flex flex-col items-start gap-0.5">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => setRawNeed(example)}
+                className="group inline-flex max-w-full items-baseline gap-2 rounded px-0 py-1 text-left text-xs font-medium leading-5 text-text-secondary transition hover:text-text-primary"
+              >
+                <span className="text-text-muted transition group-hover:text-text-primary">→</span>
+                <span className="truncate underline decoration-border decoration-1 underline-offset-4 transition group-hover:decoration-text-primary">
+                  {example}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-4 border-t border-border pt-6 sm:grid-cols-3">
+          {STEPS.map((step, index) => (
+            <div key={step.label} className="flex items-start gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[10px] font-semibold text-text-primary">
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold leading-tight text-text-primary">
+                  {step.label}
+                </p>
+                <p className="mt-0.5 text-[12px] leading-4 text-text-secondary">{step.copy}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {error ? <p className="mt-4 text-sm font-medium text-negative">{error}</p> : null}
       </div>
-      {error ? <p className="mt-3 text-sm font-medium text-negative">{error}</p> : null}
     </section>
   );
 }
