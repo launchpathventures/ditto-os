@@ -2,6 +2,27 @@
 
 Historical record of completed phases, research, design decisions, and retrospectives. For current state, see `docs/state.md`.
 
+> **Curation note (2026-05-16):** This changelog was maintained through the Phase 4–6 era, then lapsed — Phases 7–14 lived as session narratives in `docs/state.md` until the 2026-05-16 compaction. Those per-session logs remain in git history (`git log -p docs/state.md`); the roadmap is the authoritative capability map for that span. Curated milestone entries resume below from Brief 280.
+
+---
+
+## Phase 10: Workspace Conversational Front Door — Self-First IA (Brief 280 — 2026-05-16)
+
+**Brief:** `docs/briefs/complete/280-workspace-conversational-front-door-ia-inversion.md`
+**Review:** Fresh-context maker-checker — APPROVE WITH NITS. One required fix (AC8) + two non-blocking observations, all resolved. Human approved.
+**Verification:** Root `pnpm run type-check` 0 errors; focused vitest 74/74 (self-stream · action-boundaries · chat-conversation); Playwright `onboarding.spec.ts` + `workspace-chat-front-door.spec.ts` 6/6.
+
+**What changed:**
+- The authenticated post-Day-Zero workspace home is now a single Mira/Self conversation at `/chat`. EntryPoint redirects `/` → `/chat` *after* the Day Zero gate (never before).
+- `/chat` drives the AI SDK `useChat` transport against `/api/chat` / `selfConverseStream` (replacing hand-rolled `/api/v1/network/chat/stream` SSE parsing + manual reconciliation).
+- Processes, reviews, work items, briefings, and pipeline progress render inline as existing ContentBlocks (no new variants, no `@ditto/core` change). Legacy primitive pages remain drill-downs.
+- AC8 fix: `adjust_trust` now renders canonical trust-tier labels via `trustTierLabel()` (`Supervised`/`Spot-checked`/`Autonomous`/`Critical`), regression-pinned with `it.each` over all four tiers.
+- Orphaned pre-280 `packages/web/app/workspace-page.tsx` (three-panel shell, zero importers) deleted.
+
+**Insight captured:** Insight-235 — a boundary enforced by transport/routing (which engine a surface talks to) is not a runtime filter; annotate the non-enforcing seam and write ACs to the enforcement mechanism, not a proxy table. `/chat`'s front-door safety is transport-level (it no longer reaches the Network engine's `buildFrontDoorPrompt`), correct by construction but not a runtime tool filter.
+
+**Follow-on:** Brief 281 (Workspace Artifact Recall & Archive) — drafted, depends on 280, now unblocked.
+
 ---
 
 ## Phase 4b: Human Steps + Capture (2026-03-21)

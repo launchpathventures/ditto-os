@@ -18,6 +18,10 @@ function greeterName(card: NetworkProfileCardBlock): string {
   return card.greeterCuratedBy === "mira" ? "Mira" : "Alex";
 }
 
+function publicAntiPersonaLabel(card: NetworkProfileCardBlock): string {
+  return card.antiPersonaMd ? "owner-visible only" : `...still asking ${firstName(card)}`;
+}
+
 function updatedLabel(value: string): string {
   const then = new Date(value).getTime();
   if (Number.isNaN(then)) return "Updated today";
@@ -241,7 +245,7 @@ export function NetworkCardSilhouette({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", marginTop: imageMode ? 32 : 20, borderRadius: 8, background: "#f1f1f1", padding: imageMode ? "18px 20px" : "10px 12px" }}>
             <p style={{ margin: 0, color: "#6e6e6e", fontSize: imageMode ? 20 : 14, lineHeight: 1.35 }}>
-              Allergic to: <span style={{ color: "#1c1c1c", fontWeight: 600 }}>{card.antiPersonaMd ?? `...still asking ${name}`}</span>
+              Allergic to: <span style={{ color: "#1c1c1c", fontWeight: 600 }}>{publicAntiPersonaLabel(card)}</span>
             </p>
           </div>
         )}
@@ -265,13 +269,35 @@ export function NetworkCardSilhouette({
 export function NetworkCardOgFrame({
   card,
   shareTextOverlay,
+  storyMode = false,
 }: {
   card: NetworkProfileCardBlock;
   shareTextOverlay?: string | null;
+  /**
+   * Brief 290 Q6: 1080×1920 Instagram-story portrait. Explicit pixel
+   * dimensions on every node, Flexbox-only — no `aspect-ratio` CSS
+   * (Vercel/Satori issue #264). Default false preserves the 1200×630 OG path.
+   */
+  storyMode?: boolean;
 }) {
+  const publicCard = { ...card, antiPersonaMd: null };
+  const frameStyle = storyMode
+    ? { width: "1080px", height: "1920px", padding: "120px 80px" }
+    : { width: "1200px", height: "630px", padding: "0px" };
   return (
-    <div style={{ display: "flex", width: "1200px", height: "630px", alignItems: "center", justifyContent: "center", background: "#fafafa", fontFamily: "Geist, Arial, sans-serif" }}>
-      <NetworkCardSilhouette card={card} imageMode shareTextOverlay={shareTextOverlay} />
+    <div
+      style={{
+        display: "flex",
+        width: frameStyle.width,
+        height: frameStyle.height,
+        padding: frameStyle.padding,
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#fafafa",
+        fontFamily: "Geist, Arial, sans-serif",
+      }}
+    >
+      <NetworkCardSilhouette card={publicCard} imageMode shareTextOverlay={shareTextOverlay} />
     </div>
   );
 }

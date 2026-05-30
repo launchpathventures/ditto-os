@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUp, Check } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ShieldCheck } from "lucide-react";
 
 import { Conversation } from "@/components/ai-elements/conversation";
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/lib/network-client-intake";
 import type {
   JobRequestCardBlock,
+  NetworkManualSearchResult,
   NetworkProfileCardBlock,
   ReviewCardBlock,
   SuggestedCandidate,
@@ -45,6 +46,9 @@ import { NetworkKbShelf } from "./network-kb-shelf";
 import { NetworkProfileCardRenderer } from "./network-profile-card-renderer";
 import { PreviewPane, type NetworkChatMode } from "./preview-pane";
 import { SuggestedCandidatesPanel } from "./suggested-candidates-panel";
+import { SearchBox, type ManualSearchSubmit } from "@/components/network/search-box";
+import { SearchResultsPanel } from "@/components/network/search-results-panel";
+import type { PossibleConnectionFeedbackKind } from "@/components/network/possible-connection-card";
 
 const SESSION_KEY = "ditto-network-lane-session";
 const FRONT_DOOR_SESSION_KEY = "ditto-chat-session";
@@ -219,6 +223,15 @@ export function NetworkChatShell({
   const [persisting, setPersisting] = useState(false);
   const [upsellShown, setUpsellShown] = useState(false);
   const [tweakMode, setTweakMode] = useState(false);
+  // Brief 274 — manual search grounded in the Active Request brief.
+  const [manualSearchResult, setManualSearchResult] =
+    useState<NetworkManualSearchResult | null>(null);
+  const [manualSearchLoading, setManualSearchLoading] = useState(false);
+  const [manualSearchError, setManualSearchError] = useState<string | null>(null);
+  const [connectionActionBusy, setConnectionActionBusy] = useState<{
+    connectionId: string;
+    kind: PossibleConnectionFeedbackKind;
+  } | null>(null);
   const landingAnswerConsumedRef = useRef(false);
 
   useEffect(() => {
@@ -245,6 +258,10 @@ export function NetworkChatShell({
     setHandleAlternatives([]);
     setUpsellShown(false);
     setTweakMode(false);
+    setManualSearchResult(null);
+    setManualSearchLoading(false);
+    setManualSearchError(null);
+    setConnectionActionBusy(null);
     landingAnswerConsumedRef.current = false;
 
     let cancelled = false;
@@ -683,6 +700,106 @@ export function NetworkChatShell({
     }
   }
 
+  async function runManualSearch(submit: ManualSearchSubmit) {
+    setManualSearchLoading(true);
+    setManualSearchError(null);
+    setManualSearchResult(null);
+    appendMessage({
+      role: "user",
+      content: `Find me: ${submit.query}`,
+    });
+    try {
+      const response = await fetch("/api/v1/network/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          query: submit.query,
+          mode: submit.mode,
+          sourcesAllowed: submit.sourcesAllowed,
+          // Grounding the search in the brief is what lets the engine
+          // scrub the seeker's private budget/anti-persona from the copy.
+          jobRequestCard: clientMatchCard ?? undefined,
+          sessionId,
+          visitorSessionId: sessionId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        result: NetworkManualSearchResult;
+      };
+      setManualSearchResult(data.result);
+      appendMessage({
+        role: "assistant",
+        content:
+          data.result.connections.length > 0
+            ? "Here are the possible connections I'd put forward — with why, the evidence, and the risks. Nothing happens to them until you say so."
+            : "Nothing strong enough to put forward yet. Tell me what to change and I'll run it again.",
+      });
+    } catch {
+      setManualSearchError(
+        "I couldn't finish that search. Try again, or narrow what you're looking for.",
+      );
+    } finally {
+      setManualSearchLoading(false);
+    }
+  }
+
+  async function recordConnectionAction(
+    kind: PossibleConnectionFeedbackKind,
+    connectionId: string,
+  ) {
+    if (!manualSearchResult) return;
+    setConnectionActionBusy({ connectionId, kind });
+    try {
+      const response = await fetch("/api/v1/network/search", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          searchRunId: manualSearchResult.searchRunId,
+          kind,
+          possibleConnectionId: connectionId,
+          sessionId,
+          visitorSessionId: sessionId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Feedback failed: ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        result: { notice?: string | null };
+      };
+      // Hidden / not-a-fit drop out of the visible set immediately so the
+      // seeker isn't shown what they just dismissed (AC #12).
+      if (kind === "hide" || kind === "not-a-fit") {
+        setManualSearchResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                connections: prev.connections.filter(
+                  (connection) => connection.id !== connectionId,
+                ),
+              }
+            : prev,
+        );
+      }
+      if (data.result?.notice) {
+        appendMessage({ role: "assistant", content: data.result.notice });
+      }
+    } catch {
+      appendMessage({
+        role: "assistant",
+        content:
+          "I couldn't record that just now — nothing was sent. Try that action again.",
+      });
+    } finally {
+      setConnectionActionBusy(null);
+    }
+  }
+
   function handleClientSubmit(value: string) {
     const answer = value.trim();
     if (!answer) return;
@@ -890,6 +1007,17 @@ export function NetworkChatShell({
                 <span className="h-1 w-1 rounded-full bg-border" />
                 <span>{stage.current}/{stage.total}</span>
               </div>
+              <Link
+                href={
+                  sessionId
+                    ? `/network/privacy?sessionId=${encodeURIComponent(sessionId)}&context=${currentMode}`
+                    : "/network/privacy"
+                }
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-white px-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-raised"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                Privacy & your data
+              </Link>
               <ModeToggle mode={currentMode} />
             </div>
             <div className="basis-full sm:hidden">
@@ -1048,13 +1176,35 @@ export function NetworkChatShell({
                       onScoutComplete={mergeScoutedCandidates}
                     />
                   ) : null}
+
+                  {/* Manual Search (Brief 274) — grounded in the brief that
+                      gates this same block, so it shares the one gate. */}
+                  <SearchBox
+                    onSubmit={(submit) => void runManualSearch(submit)}
+                    loading={manualSearchLoading}
+                    groundedMode="from-request"
+                    showSaveToRequest={false}
+                  />
+                  {manualSearchLoading ||
+                  manualSearchResult ||
+                  manualSearchError ? (
+                    <SearchResultsPanel
+                      result={manualSearchResult}
+                      loading={manualSearchLoading}
+                      error={manualSearchError}
+                      busy={connectionActionBusy}
+                      onAction={(kind, connectionId) =>
+                        void recordConnectionAction(kind, connectionId)
+                      }
+                    />
+                  ) : null}
                 </div>
               ) : null}
 
               {currentMode === "expert" && intakeComplete && previewCard ? (
                 <div className="grid max-w-full gap-3 overflow-hidden">
                   <div className="w-full max-w-[520px]">
-                    <NetworkProfileCardRenderer card={previewCard} sessionId={sessionId} />
+                    <NetworkProfileCardRenderer card={previewCard} sessionId={sessionId} shareMode="studio" />
                   </div>
                   {renderCardControls()}
                   {claimedHandle ? <NetworkKbShelf sessionId={sessionId} /> : null}

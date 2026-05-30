@@ -7,10 +7,19 @@ export const dynamic = "force-dynamic";
 
 interface NetworkDelivery {
   id: string;
-  kind: "forwarded_note" | "visitor_intro_request";
+  kind: "forwarded_note" | "visitor_intro_request" | "intro-proposal-card";
   blocks: ContentBlock[];
   createdAt: string;
 }
+
+// Brief 288 AC #17: kinds the workspace pull-and-ack loop will import into a
+// local activities row. Anything else is left on the Network queue (not ACKed)
+// so a future deploy that understands it can still pick it up.
+const IMPORTABLE_KINDS: ReadonlySet<NetworkDelivery["kind"]> = new Set([
+  "forwarded_note",
+  "visitor_intro_request",
+  "intro-proposal-card",
+]);
 
 function networkConfig(): { url: string; token: string } | null {
   const url = process.env.DITTO_NETWORK_URL?.replace(/\/+$/, "");
@@ -23,6 +32,7 @@ function summarizeDelivery(delivery: NetworkDelivery): string {
   const first = delivery.blocks[0];
   if (!first) return "Network inbox delivery";
   if (first.type === "authorization-request") return first.header;
+  if (first.type === "intro-proposal-card") return first.header;
   if (first.type === "record") return first.title;
   if (first.type === "text") return first.text.slice(0, 160);
   return `${delivery.kind} delivery`;
@@ -89,7 +99,7 @@ export async function POST() {
     if (
       typeof delivery.id !== "string" ||
       !Array.isArray(delivery.blocks) ||
-      !["forwarded_note", "visitor_intro_request"].includes(delivery.kind)
+      !IMPORTABLE_KINDS.has(delivery.kind)
     ) {
       continue;
     }

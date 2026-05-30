@@ -102,6 +102,25 @@ describe("workspace auth middleware", () => {
     expect(res.status).toBe(200);
   });
 
+  it("sets a signed share-ref cookie for /people ref landings without a durable write", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "public");
+    vi.stubEnv("SESSION_SECRET", "share-ref-secret");
+    const { middleware } = await loadMiddleware();
+    const { SHARE_REF_COOKIE, verifyRefToken } = await import("./lib/signed-cookie");
+
+    const res = await middleware(new NextRequest("https://ditto.partners/people/timhgreen?ref=linkedin"));
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain(`${SHARE_REF_COOKIE}=`);
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=lax");
+    expect(setCookie).toContain("Domain=.ditto.partners");
+    const token = decodeURIComponent(setCookie.match(new RegExp(`${SHARE_REF_COOKIE}=([^;]+)`))?.[1] ?? "");
+    await expect(verifyRefToken(token)).resolves.toMatchObject({
+      channel: "linkedin",
+      ph: "timhgreen",
+    });
+  });
+
   it("does not expose /people as public in workspace mode", async () => {
     vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
     vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
@@ -122,5 +141,45 @@ describe("workspace auth middleware", () => {
 
     const res = await middleware(req("/api/healthz?deep=true&mode=provisioning"));
     expect(res.status).toBe(200);
+  });
+
+  it("hard-blocks network admin APIs in workspace mode", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("DITTO_NETWORK_URL", "https://ditto.partners");
+    vi.stubEnv("WORKSPACE_OWNER_EMAIL", "owner@example.com");
+    vi.stubEnv("SESSION_SECRET", "workspace-secret");
+    const { middleware } = await loadMiddleware();
+
+    const res = await middleware(
+      req("/api/v1/network/admin/superconnector/reveal"),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("allows workspace referral handoff routes only with a host-bound ditto_ref", async () => {
+    vi.stubEnv("DITTO_DEPLOYMENT", "workspace");
+    vi.stubEnv("SESSION_SECRET", "share-ref-secret");
+    const { middleware } = await loadMiddleware();
+    const { signRefToken } = await import("./lib/signed-cookie");
+    const token = await signRefToken({
+      channel: "linkedin",
+      ph: "timhgreen",
+      ts: Date.now(),
+    });
+
+    const welcome = await middleware(
+      new NextRequest(`https://timhgreen.ditto.you/welcome?ditto_ref=${encodeURIComponent(token)}`),
+    );
+    expect(welcome.status).toBe(200);
+
+    const requestPage = await middleware(
+      new NextRequest(`https://timhgreen.ditto.you/network/request?ditto_ref=${encodeURIComponent(token)}`),
+    );
+    expect(requestPage.status).toBe(200);
+
+    const mismatch = await middleware(
+      new NextRequest(`https://other.ditto.you/welcome?ditto_ref=${encodeURIComponent(token)}`),
+    );
+    expect(mismatch.status).toBe(404);
   });
 });

@@ -50,8 +50,8 @@ Three **activity contexts** coexist (not hard mode switches):
 | Context | Good for | Interface |
 |---------|----------|-----------|
 | **Analyze** | Understanding how the org actually works — connecting to systems, surfacing patterns, validating reality vs. design | Connected data views, pattern reports, gap alerts |
-| **Explore** | Defining and refining processes — guided by evidence from Analyze or from a blank canvas | Conversation in centre column + Process Builder in right panel (Brief 046) |
-| **Operate** | Execution, monitoring, review, improvement | Process graph, queues, brief, metrics |
+| **Explore** | Defining and refining processes — guided by evidence from Analyze or from a blank canvas | Conversation with Self → `generate_process` → `ProcessProposalBlock` inline in the `/chat` conversation (post-Brief 280; the right-panel Process Builder of Brief 046 was removed) |
+| **Operate** | Execution, monitoring, review, improvement | Inline pipeline progress, review, and metrics in the `/chat` conversation; composition queries and `/process/[id]` reachable as drill-downs |
 
 The magic is in the **transitions**: Analyze surfaces what's really happening → Explore crystallises that into process definitions → Operate runs them. And conversation flows across all three.
 
@@ -322,6 +322,8 @@ The distinction matters: proactive outreach must not pollute the Self's session 
 **Relationship pulse** (Brief 099b): Proactive relationship building runs as step 4 of `pulseTick()`. For each active user, assembles a context snapshot (days since signup, last contact, user model density, active processes, pending deliverables, correction history) and asks an LLM (via proactive composition) whether to reach out. The LLM can decline ("stay silent"). 1-hour minimum gap between proactive outreaches; early-relationship bias (first 7 days raises outreach propensity). Co-ordinates with `status-composer.ts` — users who received status this tick are skipped.
 
 **Action boundaries** (Brief 102): System-enforced tool sets, not prompt-derived. `determineActionContext(state)` returns one of three contexts based on workspace/session state: `front_door` (research-only: search, assess_confidence, web_search, person_research, draft_plan), `workspace` (full 21-tool set), `workspace_budgeted` (workspace + budget-ledger tools). `getToolSetForContext(context)` returns the tool set; `filterToolsForContext()` applies it. This is the security boundary between a front-door visitor (who cannot spend money or send real email) and an authenticated workspace user (who can). Boundaries derived from state, not prompts — a compromised Self cannot escalate its own permissions.
+
+**Where the boundary is *enforced* — transport, not a universal runtime filter (Insight-235):** `filterToolsForContext()` is the contract the **Network front-door engine** (`buildFrontDoorPrompt`) applies. The post-Brief-280 workspace `/chat` home talks to `/api/chat` → `selfConverseStream()`, which passes the **full** workspace tool set and intentionally does **not** call `determineActionContext()`/`filterToolsForContext()`. `/chat` is workspace context *by construction* — because it is wired to the authenticated Self endpoint and no longer reaches the Network engine — not because a per-call runtime filter guards it. The `action-boundaries` table is therefore an internally-consistent contract enforced at the front-door transport seam, not a runtime gate on every Self path. When reasoning about or testing a surface's safety, locate the enforcement seam (which engine/endpoint the surface is routed to) rather than asserting a proxy table gates a path that never consults it. Acceptance criteria that assert this boundary must name the enforcement seam and exercise the routing invariant, not a table-consistency proxy.
 
 **Orchestrator — dual decomposition paths** (Brief 102): The orchestrator has two decomposition paths. (1) **Step-based decomposition** (original): goal has a `processSlug` → decompose into the process's steps. Used when the routing already has a process. (2) **LLM-powered goal decomposition** (Brief 102): goal has no `processSlug` → `decomposeGoalWithLLM()` gathers process inventory + industry patterns + optional web search, calls LLM, parses structured `GoalDecompositionResult` (sub-goals tagged `find`/`build`, optional phase grouping). Gated by `DimensionMap` clarity assessment — vague goals trigger clarifying questions before decomposition.
 
@@ -769,25 +771,27 @@ A conversation-first workspace, not a dashboard. The user works IN Ditto — it'
 
 **1. Conversation is the primary interaction.** The user talks to the Conversational Self. Self understands intent, assembles context, delegates to processes, and renders structured results back into the conversation as ContentBlocks. The conversation IS the workspace — not a feature buried in a tab.
 
-**2. The unified task surface.** Composition intents (Today, Inbox, Work, Projects, Routines) render ContentBlock arrays in the center column. The user sees one workspace with things needing their attention — reviews, active work, process health — surfaced as structured blocks, not separate pages. Three types of work items surface together:
+**2. The unified task surface.** Composition intents (Today, Inbox, Work, Projects, Routines) render ContentBlock arrays inline in the one `/chat` conversation (post-Brief 280; no separate composed-canvas column). The user sees one workspace with things needing their attention — reviews, active work, process health — surfaced as structured blocks, not separate pages. Three types of work items surface together:
 - **Review tasks** — "check this output" (from harness review patterns, rendered as ReviewCardBlock)
 - **Action tasks** — "do this thing" (from human steps in processes, rendered as ActionBlock)
 - **Goal-driven tasks** — "work toward this" (decomposed by orchestrator agent, rendered as StatusCardBlock)
 
 **3. Memory is visible.** The system demonstrates accumulated context on every surface. The Daily Brief feels like a briefing from a chief of staff who knows everything. Processes show their learning history. The system never feels like "new chat." (Insight-028)
 
-Three activity contexts coexist (not hard mode switches):
+Three activity contexts coexist (not hard mode switches), all expressed within one conversation:
 - **Analyze** — conversation with Self + data/chart blocks in response
-- **Explore** — conversation with Self → `generate_process` tool → Process Builder in right panel
-- **Operate** — composition intents (Today/Work/Inbox) + pipeline progress + inline review
+- **Explore** — conversation with Self → `generate_process` tool → `ProcessProposalBlock` inline in the conversation
+- **Operate** — pipeline progress + review rendered inline in the conversation; composition queries reachable as drill-downs
 
-**Workspace architecture:** Three-panel layout — sidebar (navigation to composition intents + process list) + center column (composed canvas + conversation + prompt input) + right panel (context-reactive: feed, process detail, briefing). Artifact mode for deep review: conversation (compact) + artifact host (ContentBlock[] via BlockList) + context panel. See `human-layer.md` for full workspace specification.
+**Workspace architecture (post-Brief 280/281 — IA inversion):** The authenticated post-Day-Zero home is a **single `/chat` Self conversation**, not a three-panel layout. `/` routes to `/chat` after Day Zero (`entry-point.tsx`); `/chat` drives the AI SDK `useChat` against `/api/chat` → `selfConverseStream()` (the authenticated workspace Self stream, **not** the Network front-door engine — see Action boundaries / Insight-235). Processes, reviews, work, briefings, and progress render inline as existing `ContentBlock` types; the deleted three-panel shell (`workspace-page.tsx`) and its sidebar/right-panel are gone. Recall is the chat-header **Archive drawer** (Brief 281) backed by the read-only shared `recallWorkspace()` primitive (see Layer 4 below). Legacy full-page destinations (`/process/[id]`, `/projects/[slug]`, `/memories/[id]`, `/review`, `/setup`, `/admin`) remain reachable as drill-downs. Artifact mode for deep review (ADR-024) overlays this same surface: conversation (compact) + artifact host (ContentBlock[] via BlockList). See `human-layer.md` for the full post-280 workspace specification.
 
-**Surface-aware Self** (Brief 099a): `selfConverse(surface, input)` takes a surface type — `"web" | "cli" | "telegram" | "inbound"`. Same 26-tool Self brain; different session scoping and delegation guidance. When `surface === "inbound"`, the workspace-specific `<delegation_guidance>` block (panels, artifact mode, process builder references) is replaced with async-appropriate instructions (bias toward action, mention timelines, no workspace UI references). The Self is one identity across surfaces; the surface is a hint that shapes framing, not a fork.
+**Workspace recall as a shared scoped primitive (Brief 281, Insight-236):** `recallWorkspace()` (implemented in `src/engine/workspace-recall.ts`) is one read-only helper that fans out across heterogeneous kinds (projects, processes, memories, work, reviews, recent activity) and backs both the workspace-gated `search_workspace` Self tool and the `GET /api/v1/workspace/archive` route behind the Archive drawer. It is a Layer-4 (Awareness) context primitive surfaced at Layer 6. **Cross-cutting filter contract:** any filter that applies to some but not all kinds (e.g. a project scope) is resolved **exactly once** into a single typed object (`ProjectFilter`) and threaded into every collector — never re-derived per kind. The contract is explicit at three points: (1) an unresolved filter short-circuits to empty (a project slug that resolves to nothing returns nothing, never an unscoped fallback); (2) kinds the filter cannot scope are omitted, not silently returned unfiltered; (3) the resolved object carries enough to apply the filter through indirect ownership paths (a memory's project via its process scope / `appliedProjectIds`, not a direct column). Per-collector re-derivation of the same filter is the defect class — the asymmetry hides on the happy path and only surfaces under cross-kind filtering.
+
+**Surface-aware Self** (Brief 099a): `selfConverse(surface, input)` takes a surface type — `"web" | "cli" | "telegram" | "inbound"`. Same 26-tool Self brain; different session scoping and delegation guidance. When `surface === "inbound"`, the workspace-specific `<delegation_guidance>` block (inline artifacts, artifact mode, drill-down references — post-Brief 280 this no longer mentions panels or a right-panel process builder, per Insight-183 branch parity) is replaced with async-appropriate instructions (bias toward action, mention timelines, no workspace UI references). The Self is one identity across surfaces; the surface is a hint that shapes framing, not a fork.
 
 **Public profile-as-chat surface** (Brief 259): `/people/[handle]` is a Network Service public route, not a workspace route. It renders the user's `NetworkProfileCardBlock` next to an Ask-Greeter conversation with `⊙ {Greeter} · representing {first}` posture, dynamic quick-start pills, forwarded-note capture, rate limiting, and intro-request preview. Network-originated inbox artifacts persist in `network_workspace_deliveries`; the workspace imports them into local `activities` so review rendering and authorization actions do not require a live cross-deployment Network DB call. `wantsVisibility=false` drives robots noindex/nofollow and match-result surfacing only; direct profile URLs still render for existing handles.
 
-**Composition engine** (Briefs 073, 154): Every sidebar destination is a `CompositionIntent`, not a page. The composition engine in `packages/web/lib/compositions/` contains one pure function per intent (`composeToday(context)`, `composeInbox(context)`, etc.) returning `ContentBlock[]`. Deterministic and synchronous — no LLM in the hot path. Phase 10 MVP pattern (ADR-024): Self-driven composition deferred to Phase 11+; current functions encode reference compositions as defaults. Fallback composition renders on error (conversation input + TextBlock apology).
+**Composition engine** (Briefs 073, 154): Every composition intent is a `CompositionIntent`, not a page (post-Brief 280 these are reached by asking Self or via the Archive drawer, not a persistent sidebar). The composition engine in `packages/web/lib/compositions/` contains one pure function per intent (`composeToday(context)`, `composeInbox(context)`, etc.) returning `ContentBlock[]`. Deterministic and synchronous — no LLM in the hot path. Phase 10 MVP pattern (ADR-024): Self-driven composition deferred to Phase 11+; current functions encode reference compositions as defaults. Fallback composition renders on error (conversation input + TextBlock apology).
 
 **Composition intents — 8 destinations** (Briefs 073, 138, 140, 154, 166-168):
 
@@ -802,7 +806,7 @@ Three activity contexts coexist (not hard mode switches):
 | **Library** | Process capability catalog (Brief 138) + recommended-for-you (Brief 168) | Personalised recommendations from user model | `compositions/library.ts` |
 | **Adaptive views** | Data-driven compositions registered at runtime (Brief 154) | — | `compositions/adaptive.ts` + `workspaceViews` table |
 
-**Intent context injection** (Brief 073): `selfConverseStream()` accepts `intentContext` — when the user starts a conversation from a specific sidebar destination, the composition intent is injected into the system prompt as `<intent_context>`. Routines → "focus on recurring cadence." Projects → "group work by parent goal." Inbox → "focus on pending reviews." This shapes Self's framing without routing to a different agent — one Self, context-aware per intent.
+**Intent context injection** (Brief 073): `selfConverseStream()` accepts `intentContext` — when a conversation is started in the context of a composition intent (post-Brief 280: via the Archive drawer or a Self-initiated query, not a sidebar tab), that intent is injected into the system prompt as `<intent_context>`. Routines → "focus on recurring cadence." Projects → "group work by parent goal." Inbox → "focus on pending reviews." This shapes Self's framing without routing to a different agent — one Self, context-aware per intent.
 
 **Adaptive workspace views** (Brief 154, Insight-189): Network agents push blocks to the workspace live. `workspaceViews` table (core schema, opaque JSON `CompositionSchema`). `pushBlocksToWorkspace()` / `refreshWorkspaceView()` / `registerWorkspaceView()` with 20/min rate limit. `workspace.push_blocks` + `workspace.register_view` tools with `stepRunId` guards (Insight-180). Companion view registration available via `generate_process`. This closes the loop between long-running network processes and the living workspace — the agent doesn't just send an email, it materialises a dashboard.
 
@@ -856,8 +860,8 @@ The 16 user-facing concepts from the original design (v0.1.0) remain valid as ex
 
 | Primitive | Realized as |
 |-----------|-------------|
-| **Conversation Thread** | Center column conversation with Self. Self's tools handle routing, process definition, work capture. |
-| **Process Builder** | Right panel surface, populated by `generate_process` tool. YAML structure with "Drafting" badge. |
+| **Conversation Thread** | The single `/chat` Self conversation (post-Brief 280 home). Self's tools handle routing, process definition, work capture. |
+| **Process Builder** | `generate_process` emits a `ProcessProposalBlock` inline in the conversation with a "Drafting" badge; YAML structure sits behind a drill-down, not a right-panel surface. |
 
 #### Delegate (Who does it?)
 
@@ -895,7 +899,7 @@ The 16 user-facing concepts from the original design (v0.1.0) remain valid as ex
 | **Work** | StatusCardBlock, ProgressBlock, ChecklistBlock | Active work tracking |
 | **Projects** | StatusCardBlock, MetricBlock, ChartBlock | Process portfolio health |
 | **Routines** | StatusCardBlock, DataBlock | Recurring process management |
-| **Process Detail** | StatusCardBlock + activity log + trust control + sparklines | Process owner (drill-down from sidebar) |
+| **Process Detail** | StatusCardBlock + activity log + trust control + sparklines | Process owner (drill-down from conversation or Archive drawer) |
 | **Artifact Mode** | Any ContentBlock[] via BlockList — review lifecycle (approve/edit/reject) | Deep review of process outputs |
 
 ---

@@ -29,6 +29,11 @@ const canRunUnipile = !!(
 );
 
 const canRunAnthropic = !!process.env.ANTHROPIC_API_KEY;
+const canRunAgentMailHeaders = !!(
+  process.env.AGENTMAIL_API_KEY &&
+  (process.env.AGENTMAIL_TEST_INBOX || process.env.AGENTMAIL_ALEX_INBOX) &&
+  process.env.AGENTMAIL_SPIKE_TO
+);
 
 describe("X API v2 spike", () => {
   it.skipIf(!canRunX)("can authenticate — verify config loads", async () => {
@@ -114,4 +119,28 @@ describe("Anthropic image generation spike", () => {
     const buffer = Buffer.from(imageBlock!.source!.data, "base64");
     console.log(`[spike] Generated image: ${buffer.length} bytes, type: ${imageBlock!.source!.media_type}`);
   }, 30000); // 30s timeout for image generation
+});
+
+describe("AgentMail headers spike", () => {
+  it.skipIf(!canRunAgentMailHeaders)(
+    "accepts RFC 8058 List-Unsubscribe headers on a real send",
+    async () => {
+      const { AgentMailClient } = await import("agentmail");
+      const client = new AgentMailClient({ apiKey: process.env.AGENTMAIL_API_KEY! });
+      const inboxId = process.env.AGENTMAIL_TEST_INBOX ?? process.env.AGENTMAIL_ALEX_INBOX!;
+      const to = process.env.AGENTMAIL_SPIKE_TO!;
+      const result = await client.inboxes.messages.send(inboxId, {
+        to: [to],
+        subject: `[Ditto integration test - safe to ignore] ${new Date().toISOString()}`,
+        text: "Testing AgentMail custom headers for RFC 8058 support.",
+        headers: {
+          "List-Unsubscribe": "<mailto:unsubscribe@ditto.partners>, <https://ditto.partners/api/v1/network/unsubscribe>",
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+      });
+
+      expect(result.messageId).toBeTruthy();
+    },
+    30_000,
+  );
 });

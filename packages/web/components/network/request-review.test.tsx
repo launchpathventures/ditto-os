@@ -87,6 +87,13 @@ describe("request canvas", () => {
     await saveActiveRequest({
       draft: draft(),
       visitorSessionId: "visitor-1",
+      requestId: "request-1",
+      identity: {
+        name: "Alex Rivers",
+        email: "alex@example.com",
+        orgSite: "example.com",
+        credibility: "Founder",
+      },
       publish: true,
       fetchImpl,
     });
@@ -95,5 +102,15 @@ describe("request canvas", () => {
     for (const [, init] of calls) {
       expect(JSON.parse(init.body)).not.toHaveProperty("stepRunId");
     }
+    const saveBody = JSON.parse(calls[1][1].body) as Record<string, unknown>;
+    expect(saveBody).toMatchObject({
+      requestId: "request-1",
+      identity: {
+        name: "Alex Rivers",
+        email: "alex@example.com",
+        orgSite: "example.com",
+        credibility: "Founder",
+      },
+    });
   });
 });

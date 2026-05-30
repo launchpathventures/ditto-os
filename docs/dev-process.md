@@ -269,6 +269,8 @@ Reference docs are maintained by the roles that use them, not by a centralised c
 
 **Flag vs fix:** Roles that own a doc type fix drift directly. Roles that consume a doc flag drift in their output for the owner to address. When parallel roles (Designer + Researcher) encounter shared docs, both flag — the downstream Architect resolves.
 
+**Boundary-AC enforcement-seam rule (Insight-235):** When a brief's acceptance criterion asserts a safety or capability boundary, the AC must name the *enforcement seam* (which engine/endpoint/route the surface is wired to) and require the test to exercise *that seam* or the routing invariant — not a plausible-sounding proxy (e.g. a boundary-table consistency unit test on a path that never consults the table). If a boundary is enforced by transport/routing rather than a runtime filter, the brief must say so and require an annotating comment at the non-enforcing call site.
+
 **Landscape-before-brief rule (Insight-180 retro):** Every external API, SDK, or service referenced in a brief must have an evaluation in `docs/landscape.md` *before* the brief is written. The Researcher adds evaluations during research; the Architect verifies coverage before writing the brief. If the Documenter has to add landscape entries during the retrospective, that's a process gap to flag.
 
 **Handoff visibility:** Every producing role's output includes a "Reference docs" line:

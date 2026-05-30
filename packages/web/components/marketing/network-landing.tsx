@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowRight, Compass, Search } from "lucide-react";
 import { trackMarketingEvent } from "@/lib/marketing-analytics";
 import type { NetworkEntryIntent } from "@/lib/network-entry-intent";
@@ -138,7 +137,6 @@ function useTypedPrompt(ideas: string[]): string {
 }
 
 export function NetworkLanding() {
-  const router = useRouter();
   const answerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mode, setMode] = useState<LandingMode>("client");
   const [answer, setAnswer] = useState("");
@@ -197,7 +195,7 @@ export function NetworkLanding() {
       mode: active.laneMode,
       seeded: submittedAnswerLength > 0,
     });
-    router.push(buildOnboardingHref(active, submittedAnswer));
+    window.location.assign(buildOnboardingHref(active, submittedAnswer));
   }
 
   function switchMode(nextMode: LandingMode) {
@@ -234,8 +232,7 @@ export function NetworkLanding() {
       <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-112px)] w-full max-w-[1160px] flex-col justify-center py-6">
         <div className="grid items-center gap-8 lg:grid-cols-[0.86fr_1.14fr]">
           <div>
-            <p className="hidden text-xs font-semibold uppercase text-white/70 sm:block">Ditto Network</p>
-            <h1 className="max-w-[650px] text-[42px] font-semibold leading-none tracking-normal text-white sm:mt-4 sm:text-[64px]">
+            <h1 className="max-w-[650px] text-[42px] font-semibold leading-none tracking-normal text-white sm:text-[64px]">
               The right people{" "}
               <span className="font-instrument-serif font-normal">find you</span>.
             </h1>

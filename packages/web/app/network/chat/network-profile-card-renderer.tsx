@@ -20,20 +20,24 @@ export function NetworkProfileCardRenderer({
   className,
   sessionId,
   preview = false,
+  shareMode = "compact",
 }: {
   card: NetworkProfileCardBlock;
   className?: string;
   sessionId?: string | null;
   preview?: boolean;
+  /** Brief 290 — `"studio"` opens the multi-channel Share Studio. */
+  shareMode?: "compact" | "studio";
 }) {
   const greeter = greeterName(card);
   const name = firstName(card);
   const [shareOpen, setShareOpen] = React.useState(false);
+  const displayCard = preview ? card : { ...card, antiPersonaMd: null };
 
   return (
     <>
       <NetworkCardSilhouette
-        card={card}
+        card={displayCard}
         className={cn("text-text-primary", className)}
         actionSlot={preview ? (
           <div className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-text-secondary">
@@ -53,7 +57,7 @@ export function NetworkProfileCardRenderer({
           </div>
         )}
       />
-      <ShareModal card={card} sessionId={sessionId} open={shareOpen} onOpenChange={setShareOpen} />
+      <ShareModal card={displayCard} sessionId={sessionId} open={shareOpen} onOpenChange={setShareOpen} mode={shareMode} />
     </>
   );
 }

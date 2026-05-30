@@ -66,6 +66,7 @@ import { handleAdaptProcess } from "./self-tools/adapt-process";
 import { handleEditProcess, handleProcessHistory, handleRollbackProcess } from "./self-tools/edit-process";
 import { handleAssessConfidence } from "./self-tools/assess-confidence";
 import { handleSearchKnowledge } from "./self-tools/search-knowledge";
+import { handleSearchWorkspace } from "./self-tools/search-workspace";
 import {
   handleActivateCycle,
   handlePauseCycle,
@@ -78,7 +79,7 @@ import { updateUserModel, type UserModelDimension, USER_MODEL_DIMENSIONS } from 
 import { setSessionTrust } from "./session-trust";
 import { createMagicLink } from "./magic-link";
 import { loadProcessFile } from "./process-loader";
-import { flattenSteps } from "./process-loader";
+import { flattenSteps, type ProcessDefinition } from "./process-loader";
 
 // ============================================================
 // Tool Definitions (Ditto-native format)
@@ -621,6 +622,52 @@ export const selfTools: LlmToolDefinition[] = [
         },
       },
       required: ["query"],
+    },
+  },
+  // ============================================================
+  // Brief 281 — Workspace Artifact Recall
+  // ============================================================
+  {
+    name: "search_workspace",
+    description:
+      "Read-only recall over the user's durable workspace: projects, processes, memories, work items, reviews, and recent activity. Use this FIRST when the user asks 'where did X go?', 'show me my…', 'find the … about …', or 'what is waiting for review?' — return the inline results and only point to a full page as a drill-down. Searches durable records and curated memory, not just this chat.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Free-text filter (matched against titles, summaries, memory content). Omit to browse/list.",
+        },
+        kinds: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["project", "process", "memory", "work", "review", "activity"],
+          },
+          description:
+            "Restrict to these artifact families. Omit for all. Human labels: Projects, Processes, Memories, Work, Reviews, Recent activity.",
+        },
+        projectSlug: {
+          type: "string",
+          description: "Restrict to one project by slug.",
+        },
+        status: {
+          type: "string",
+          description:
+            "Restrict to a lifecycle/status value (e.g. 'active', 'waiting_review').",
+        },
+        includeArchived: {
+          type: "boolean",
+          description:
+            "Include archived/inactive records. Default false — only set when the user asks for archived items.",
+        },
+        limit: {
+          type: "number",
+          description: "Max results across all kinds (default 8, hard cap 25).",
+        },
+      },
+      required: [],
     },
   },
   // ============================================================
@@ -1202,6 +1249,17 @@ export async function executeDelegation(
         topK: toolInput.topK as number | undefined,
       });
 
+    // Brief 281 — Workspace Artifact Recall
+    case "search_workspace":
+      return await handleSearchWorkspace({
+        query: toolInput.query as string | undefined,
+        kinds: toolInput.kinds as string[] | undefined,
+        projectSlug: toolInput.projectSlug as string | undefined,
+        status: toolInput.status as string | undefined,
+        includeArchived: toolInput.includeArchived as boolean | undefined,
+        limit: toolInput.limit as number | undefined,
+      });
+
     // Brief 118 — Operating Cycle Management
     case "activate_cycle":
       return await handleActivateCycle({
@@ -1335,17 +1393,39 @@ async function handleStartPipeline(params: {
   const { processSlug, task, sessionTrust } = params;
 
   try {
-    // Load process definition to get step names
+    // Resolve step names for display. Generated processes are persisted to
+    // the DB by generate_process(save=true) (a `definition` column, no YAML
+    // file); legacy processes live as YAML on disk. startProcessRun() and
+    // fullHeartbeat() always execute from the DB definition
+    // (heartbeat.ts — `process.definition`), so a DB-only process is fully
+    // runnable; only this display lookup must stop assuming a YAML file.
+    // Try the DB first, fall back to YAML. (Brief 280 — close the
+    // generated-process run seam without changing harness primitives.)
     let stepNames: string[];
     try {
-      const processDir = resolve(process.cwd(), "processes");
-      const definition = loadProcessFile(resolve(processDir, `${processSlug}.yaml`));
-      stepNames = flattenSteps(definition).map((s) => s.name);
+      const { db: dbRef, schema: schemaRef } = await import("../db");
+      const { eq } = await import("drizzle-orm");
+      const [proc] = await dbRef
+        .select({ definition: schemaRef.processes.definition })
+        .from(schemaRef.processes)
+        .where(eq(schemaRef.processes.slug, processSlug))
+        .limit(1);
+      if (proc?.definition) {
+        stepNames = flattenSteps(
+          proc.definition as unknown as ProcessDefinition,
+        ).map((s) => s.name);
+      } else {
+        const processDir = resolve(process.cwd(), "processes");
+        const definition = loadProcessFile(
+          resolve(processDir, `${processSlug}.yaml`),
+        );
+        stepNames = flattenSteps(definition).map((s) => s.name);
+      }
     } catch {
       return {
         toolName: "start_pipeline",
         success: false,
-        output: `Process not found: ${processSlug}. Check that processes/${processSlug}.yaml exists.`,
+        output: `Process not found: ${processSlug}. It isn't saved in your workspace and no processes/${processSlug}.yaml file exists.`,
       };
     }
 

@@ -14,6 +14,7 @@ export type MemberSignalClaimAction =
   | "approve"
   | "edit"
   | "hide"
+  | "delete"
   | "visibility";
 
 export interface UpdateMemberSignalClaimInput {
@@ -32,6 +33,7 @@ function eventTypeForAction(action: MemberSignalClaimAction): networkSchema.Netw
   if (action === "approve") return "claim_approved";
   if (action === "edit") return "claim_edited";
   if (action === "hide") return "claim_hidden";
+  if (action === "delete") return "claim_hidden";
   return "claim_visibility_changed";
 }
 
@@ -78,6 +80,15 @@ export async function updateMemberSignalClaim(
   if (input.action === "hide") {
     next.approvalState = "hidden";
     next.visibility = "hidden";
+  }
+  if (input.action === "delete") {
+    next.approvalState = "rejected";
+    next.visibility = "hidden";
+    next.metadata = {
+      ...(before.metadata ?? {}),
+      deletedAt: now.toISOString(),
+      deletedByActorId: input.actorId ?? null,
+    };
   }
   if (input.action === "visibility") {
     if (!input.visibility) throw new Error("Member Signal visibility update requires visibility");

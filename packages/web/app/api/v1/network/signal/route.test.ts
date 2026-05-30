@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   researchMemberSignal: vi.fn(),
   draftMemberSignal: vi.fn(),
   updateMemberSignalClaim: vi.fn(),
+  getClaimTokenSignalReviewData: vi.fn(),
   select: vi.fn(),
   insert: vi.fn(),
 }));
@@ -30,6 +31,10 @@ vi.mock("../../../../../../../src/engine/member-signal-review", () => ({
   updateMemberSignalClaim: mocks.updateMemberSignalClaim,
 }));
 
+vi.mock("../../../../../../../src/engine/claim-invite", () => ({
+  getClaimTokenSignalReviewData: mocks.getClaimTokenSignalReviewData,
+}));
+
 vi.mock("../../../../../../../src/db/network-db", () => ({
   isNetworkDbConnectionError: () => false,
   networkDb: {
@@ -38,7 +43,7 @@ vi.mock("../../../../../../../src/db/network-db", () => ({
   },
 }));
 
-const { POST } = await import("./route");
+const { GET, POST } = await import("./route");
 
 function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/v1/network/signal", {
@@ -72,9 +77,29 @@ beforeEach(() => {
     visibility: "public",
     approvalState: "approved",
   });
+  mocks.getClaimTokenSignalReviewData.mockResolvedValue({
+    claimTokenId: "token-row-1",
+    userId: "user-1",
+    memberSignal: { id: "signal-1", sourceSummary: "Imported seed." },
+    claims: [{ id: "claim-1", visibility: "on-request", approvalState: "suggested" }],
+  });
 });
 
 describe("POST /api/v1/network/signal", () => {
+  it("loads claim-token imported claims for logged-out review", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/v1/network/signal?memberSignalId=signal-1&claimToken=raw-token"),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).claims).toHaveLength(1);
+    expect(mocks.getClaimTokenSignalReviewData).toHaveBeenCalledWith({
+      token: "raw-token",
+      memberSignalId: "signal-1",
+    });
+    expect(mocks.createNetworkLaneStepRun).not.toHaveBeenCalled();
+  });
+
   it.each(["bad", "", null, false, 0])("rejects caller stepRunId before invoking tools: %s", async (stepRunId) => {
     const response = await POST(request({
       action: "research",
@@ -138,6 +163,46 @@ describe("POST /api/v1/network/signal", () => {
       action: "approve",
       visibility: "public",
       stepRunId: "network-lane-step:signal",
+    }));
+  });
+
+  it("routes claim delete as a distinct review action", async () => {
+    const response = await POST(request({
+      action: "update_claim",
+      sessionId: "expert-session",
+      claimId: "claim-1",
+      claimAction: "delete",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateMemberSignalClaim).toHaveBeenCalledWith(expect.objectContaining({
+      claimId: "claim-1",
+      action: "delete",
+      stepRunId: "network-lane-step:signal",
+    }));
+  });
+
+  it("uses a redeemed claim token as the review session for claim updates", async () => {
+    mocks.resolveNetworkLaneSession.mockResolvedValueOnce(null);
+    const response = await POST(request({
+      action: "update_claim",
+      memberSignalId: "signal-1",
+      claimToken: "raw-token",
+      claimId: "claim-1",
+      claimAction: "approve",
+      visibility: "public",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.createNetworkLaneStepRun).toHaveBeenCalledWith(expect.objectContaining({
+      route: "network-signal-update_claim",
+      sessionId: "claim-token:token-row-1",
+      actorId: "user-1",
+    }));
+    expect(mocks.updateMemberSignalClaim).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      claimId: "claim-1",
+      action: "approve",
     }));
   });
 });

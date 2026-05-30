@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { ActiveRequestDraft } from "./request-review";
 import { RequestAnalysisTransition } from "./request-analysis";
 
-const FRONT_DOOR_ANALYSIS_MS = 45_000;
+const FRONT_DOOR_ANALYSIS_MS = 1_800;
 
 const EXAMPLES = [
   "Need a fractional CMO for a climate startup, B2B SaaS, UK or Europe, paid advisory.",

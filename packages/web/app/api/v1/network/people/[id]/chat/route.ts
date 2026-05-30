@@ -21,9 +21,12 @@ import {
   setPendingVisitorIntro,
 } from "../../../../../../../../../src/engine/visitor-profile-session";
 import {
-  checkVisitorRateLimit,
-  visitorRateLimitCopy,
-} from "../../../../../../../../../src/engine/visitor-rate-limit";
+  checkRateLimits,
+} from "../../../../../../../../../src/engine/network-abuse-controls";
+import {
+  extractIntentKeywords,
+  inferVisitorIntent,
+} from "../../../../../../../../../src/engine/visitor-intent-inference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +61,11 @@ async function loadUser(handle: string) {
 function visitorSessionId(value: unknown, fingerprint: string | null, ip: string): string {
   if (typeof value === "string" && value.trim()) return value.trim().slice(0, 200);
   return `anonymous:${fingerprint || ip}`.slice(0, 200);
+}
+
+function visitorSharedRateLimitCopy(greeterName: string, retryAfterSec: number): string {
+  const minutes = Math.ceil(retryAfterSec / 60);
+  return `I need a minute - we've covered a lot. Back in ${minutes} min, where were we?`;
 }
 
 function profileCardFacts(card: NetworkProfileCardBlock | null, fallbackBio: string | null): VisitorChatFact[] {
@@ -125,13 +133,23 @@ async function postHandler(request: Request, { params }: Params) {
   const userName = user.name || normalizedHandle;
   const userFirst = firstName(userName);
 
-  const rateLimit = await checkVisitorRateLimit({ ip, fingerprint, sessionId });
-  if ("blocked" in rateLimit) {
+  const rateLimit = await checkRateLimits([
+    {
+      limitName: "profile-chat",
+      actor: { kind: "session", id: `${sessionId}:${fingerprint ?? "no-fingerprint"}` },
+    },
+    {
+      limitName: "profile-chat",
+      actor: { kind: "ip", id: ip },
+      policy: { max: 200 },
+    },
+  ]);
+  if (!rateLimit.allowed) {
     return NextResponse.json(
       {
         rateLimited: true,
         retryAfterSec: rateLimit.retryAfterSec,
-        reply: visitorRateLimitCopy(greeterName, rateLimit),
+        reply: visitorSharedRateLimitCopy(greeterName, rateLimit.retryAfterSec),
       },
       { status: 429 },
     );
@@ -201,6 +219,12 @@ async function postHandler(request: Request, { params }: Params) {
       sourceLabel: fact.sourceLabel,
     })),
   ];
+  const memberSignalKeywords = extractIntentKeywords([
+    user.card?.oneLineRole ?? "",
+    user.card?.narrativeMd ?? "",
+    user.businessContext ?? "",
+    ...facts.map((fact) => fact.factMd),
+  ]);
   const antiPersonaRules = [
     user.card?.antiPersonaMd,
     ...kb.privateFilters.map((rule) => rule.ruleMd),
@@ -285,6 +309,7 @@ async function postHandler(request: Request, { params }: Params) {
   return NextResponse.json({
     reply: response.reply,
     transcript,
+    intentInference: inferVisitorIntent(transcript, memberSignalKeywords),
     forwardedNoteOffer:
       response.kind === "forward-offer"
         ? { factQuestionMd: response.factQuestionMd }

@@ -41,12 +41,13 @@ The original design (v0.1.0) was dashboard-centric: a Home View with Daily Brief
 
 The user talks to the Conversational Self. Self understands intent, assembles context, delegates to processes, and renders structured results back into the conversation as ContentBlocks. The conversation IS the workspace.
 
-This means:
-- **Orient** happens through composition intents (Today, Inbox, Work) that render blocks into the center column — not through a dashboard of cards
-- **Review** happens inline in conversation when Self surfaces review prompts, or in artifact mode for deep review — not through a separate review queue page
-- **Define** happens through conversation with Self, who proposes processes and solicits feedback — not through a dual-pane process builder
-- **Capture** happens through the prompt input — not through a separate capture widget
-- The right panel provides **context** (feed, process detail, briefing) that adapts to what the user is doing
+This means (post-Brief 280/281 IA — the authenticated home is a single `/chat` Self conversation):
+- **Orient** happens by asking Self in `/chat`; briefings, reviews, work, and process health render inline as ContentBlocks in that one conversation — not through a dashboard of cards or a separate composition canvas
+- **Review** happens inline in conversation when Self surfaces review prompts, or in artifact mode for deep review (ADR-024) — not through a separate review queue page
+- **Define** happens through conversation with Self, who proposes processes inline as a `ProcessProposalBlock` and solicits feedback — not through a dual-pane process builder
+- **Capture** happens through the chat prompt input — not through a separate capture widget
+- **Recall** happens through the chat-header Archive drawer (Brief 281), backed by the shared `recallWorkspace()` primitive over projects/processes/memories/work/reviews/recent-activity — not through scattered per-primitive index pages
+- Legacy full-page destinations (`/process/[id]`, `/projects/[slug]`, `/memories/[id]`, `/review`, `/setup`, `/admin`) remain reachable as **drill-downs**, not as the home surface
 
 ### Three Activity Contexts
 
@@ -55,8 +56,8 @@ Different phases of work need different interfaces. These are fluid contexts, no
 | Context | Good for | How it works |
 |---------|----------|--------------|
 | **Analyze** | Understanding how the org actually works — connecting to systems, surfacing patterns | Conversation with Self + data blocks + chart blocks in response |
-| **Explore** | Defining and refining processes — guided by evidence or from a blank canvas | Conversation with Self → `generate_process` tool → Process Builder in right panel |
-| **Operate** | Execution, monitoring, review, improvement | Composition intents (Today/Work/Inbox) + pipeline progress + inline review |
+| **Explore** | Defining and refining processes — guided by evidence or from a blank canvas | Conversation with Self → `generate_process` tool → `ProcessProposalBlock` inline in the conversation |
+| **Operate** | Execution, monitoring, review, improvement | Inline pipeline progress + inline review in the `/chat` conversation; composition queries reachable as drill-downs |
 
 The magic is in the **transitions**: Analyze surfaces what's really happening → Explore crystallises that into process definitions → Operate runs them. And conversation flows across all three.
 
@@ -88,54 +89,49 @@ The human doesn't need to understand AI's limitations. The platform handles them
 
 ## Workspace Architecture
 
-### The Three-Panel Layout
+### The Conversational Workspace Home (Brief 280/281)
 
-The primary desktop interface is a three-panel workspace:
+> **History:** v0.1.0 specified a three-panel workspace (sidebar + composed-canvas center column + context-reactive right panel). Brief 280 inverted that IA after the launchpath owner diagnosed the panelled workspace as "everything chunked up into siloed chats with processes/tasks." The three-panel shell (`workspace-page.tsx`) was deleted. The durable design — and what is built — is a single conversation.
+
+The authenticated post-Day-Zero home is **one `/chat` Self conversation**. There is no sidebar of composition intents and no context-reactive right panel; the conversation IS the workspace.
 
 ```
-┌──────────┬────────────────────────────────┬──────────┐
-│          │                                │          │
-│ SIDEBAR  │        CENTER COLUMN           │  RIGHT   │
-│  (w-56)  │                                │  PANEL   │
-│          │  ┌──────────────────────────┐  │  (w-72)  │
-│ Today    │  │  Composed Canvas         │  │          │
-│ Inbox    │  │  (ContentBlock[] from    │  │ Context  │
-│ Work     │  │   composition engine)    │  │ feed,    │
-│ Projects │  │                          │  │ process  │
-│ Routines │  │  OR                      │  │ detail,  │
-│ Settings │  │                          │  │ briefing │
-│          │  │  Process Detail View     │  │          │
-│ ──────── │  │                          │  │          │
-│ My Work  │  │  OR                      │  │          │
-│ ∘ Item 1 │  │                          │  │          │
-│ ∘ Item 2 │  │  Artifact Mode           │  │          │
-│          │  └──────────────────────────┘  │          │
-│ Recurring│                                │          │
-│ ∘ Proc 1 │  ┌──────────────────────────┐  │          │
-│ ∘ Proc 2 │  │  Conversation Messages   │  │          │
-│          │  │  (Self ↔ User)           │  │          │
-│          │  └──────────────────────────┘  │          │
-│          │                                │          │
-│          │  ┌──────────────────────────┐  │          │
-│          │  │  Prompt Input            │  │          │
-│          │  └──────────────────────────┘  │          │
-└──────────┴────────────────────────────────┴──────────┘
+┌─────────────────────────────────────────────────────┐
+│  ChatNav        ⌕ Archive          ⊙ {Self} status   │  ← header (Archive drawer, Brief 281)
+├─────────────────────────────────────────────────────┤
+│                                                       │
+│   Conversation (Self ↔ User)                          │
+│                                                       │
+│   Artifacts render INLINE as ContentBlocks:           │
+│   • ProcessProposalBlock / process status & runs      │
+│   • ReviewCardBlock (approve/edit/reject inline)      │
+│   • ProgressBlock (live pipeline progress)            │
+│   • WorkItemFormBlock, briefing/knowledge blocks      │
+│                                                       │
+│   Deep review → Artifact Mode (ADR-024) overlays      │
+│   this same surface; chat stays compact, does not     │
+│   move to a different page.                            │
+│                                                       │
+├─────────────────────────────────────────────────────┤
+│  Prompt Input (text + file drag-drop)                 │
+└─────────────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
-- **Sidebar** navigates to composition intents (Today, Inbox, Work, Projects, Routines) — these are NOT separate pages but different data queries into the same canvas
-- **Center column** has three zones: composed canvas (top), conversation messages (middle), prompt input (bottom, pinned)
-- **Right panel** is context-reactive — shows feed by default, switches to process-scoped context when viewing a process, shows briefing when Self delivers a briefing
-- **Chat position never moves** between modes (Insight: layout violations feedback)
-- **Right panel never disappears** — it adapts, but the spatial structure is constant
+- **One surface.** Post-Day-Zero, `/` routes to `/chat` (`entry-point.tsx`); `/chat` drives the AI SDK `useChat` against `/api/chat` → `selfConverseStream()` (the authenticated workspace Self stream, **not** the Network front-door engine).
+- **Artifacts are inline.** Processes, reviews, work, briefings, and progress render as existing `ContentBlock` types in the conversation — no separate composition canvas, no per-primitive home pages.
+- **Recall is the Archive drawer** (Brief 281), opened from the chat header, backed by the read-only shared `recallWorkspace()` primitive (see Layer 4/6 in `architecture.md`).
+- **Drill-downs persist.** `/process/[id]`, `/projects/[slug]`, `/memories/[id]`, `/review`, `/setup`, `/admin` remain reachable from inline affordances; they are detail destinations, not the home.
+- **Day Zero is preserved.** Configured workspace users are not server-redirected away from Day Zero before it has been seen/completed.
+- **The front-door/workspace boundary for `/chat` is enforced by transport, not a runtime tool filter** — see "Boundary enforcement is transport-level" below and Insight-235.
 
-### Responsive Breakpoints
+### Boundary enforcement is transport-level (Insight-235)
 
-| Breakpoint | Layout |
-|-----------|--------|
-| ≥1280px | Full three-panel |
-| 1024-1279px | Sidebar collapses to icon rail, center + right panel |
-| <1024px | Hamburger drawer for sidebar, right panel hidden, bottom sheet for artifact review |
+`selfConverseStream()` passes the full workspace tool set and does **not** call `filterToolsForContext()`/`determineActionContext()`. The front-door restriction (research-only tools) is enforced inside the separate Network engine (`buildFrontDoorPrompt`), which `/chat` no longer reaches after the IA inversion. So `/chat` is workspace context **by construction** — because it is wired to the authenticated Self endpoint — not because a runtime filter gates each call. `action-boundaries`/`filterToolsForContext()` is the contract the Network front door enforces; the workspace Self stream is unfiltered on purpose. When reasoning about `/chat` safety, locate the enforcement seam (the endpoint/engine routing), not a plausible-sounding proxy table.
+
+### Responsive Behavior
+
+A single conversation column is inherently responsive: it reflows from desktop to mobile without a panel-collapse ladder. Artifact Mode uses a bottom sheet below 1024px (ADR-024); the chat prompt input stays pinned at the bottom at every breakpoint.
 
 ### Artifact Mode
 
@@ -165,11 +161,13 @@ When deep review or document work is needed, the workspace transitions to artifa
 - Artifacts render through the **same block registry** as everything else — no bespoke viewers (Insight-107)
 - `start_dev_role` outputs >500 chars auto-promote to artifact mode
 - Mobile: full-screen swipe artifact with bottom sheet for actions
-- Back button or sidebar navigation exits artifact mode
+- Back/close action exits artifact mode, returning to the conversation
 
 ### Navigation Model
 
-Sidebar destinations are **composition intents** — each one triggers a different query to the composition engine, which returns ContentBlock[] rendered by the ComposedCanvas:
+> **Post-Brief 280:** there is no persistent sidebar on the home. **Composition intents are still real composition-engine queries** (the `compositions/*.ts` modules below are unchanged), but they are reached by asking Self in `/chat`, via the Archive drawer (Brief 281), or as drill-down destinations — not as a fixed sidebar of tabs. The table documents *what each intent composes*, not a navigation chrome that still exists.
+
+Composition intents — each triggers a different query to the composition engine, which returns ContentBlock[]:
 
 | Intent | What it shows | Blocks used | Module |
 |--------|--------------|-------------|--------|
@@ -303,14 +301,14 @@ New users experience a guided intake:
 4. **First process proposal** — Self proposes a process based on the conversation (ProcessProposalBlock — plain language steps, approve/adjust)
 5. **First real work** — The proposed process runs, first output appears for review
 
-**Progressive reveal:** The workspace starts as conversation-only. When the first process is created, the sidebar and full workspace layout appear. This prevents "overwhelm on arrival."
+**Progressive reveal:** The workspace is conversation-only from the start and stays that way (post-Brief 280). There is no sidebar/full-layout reveal on first process; instead, artifacts (the saved process, its runs, reviews) begin rendering inline in the same `/chat` conversation. This prevents "overwhelm on arrival" without introducing a second IA.
 
 ### Daily Use (Operate Context)
 
 The morning experience:
 
-1. **User opens Ditto** — Today composition loads in center column
-2. **Self delivers briefing** — session gap detected, briefing assembled from 5 dimensions (focus, attention, upcoming, risk, suggestions)
+1. **User opens Ditto** — lands in the `/chat` Self conversation (the authenticated home)
+2. **Self delivers briefing** — session gap detected, briefing assembled from 5 dimensions (focus, attention, upcoming, risk, suggestions) and rendered inline in the conversation
 3. **Review items surface** — ReviewCardBlocks appear inline, user can approve/edit/reject without leaving the conversation
 4. **Pipeline progress visible** — ProgressBlocks show running pipelines with real-time updates
 5. **Quick decisions** — ActionBlocks and SuggestionBlocks enable one-tap decisions
@@ -322,9 +320,8 @@ When defining a new process:
 1. **User describes pain** — "I spend hours writing listing descriptions for new properties"
 2. **Self recognises pattern** — draws on industry knowledge (APQC patterns for 5 industries)
 3. **Self asks clarifying questions** — one at a time, never overwhelms
-4. **Process proposal appears** — ProcessProposalBlock in conversation shows proposed structure
-5. **Right panel shows Process Builder** — `generate_process` tool triggers process builder panel with YAML structure, "Drafting" badge
-6. **User reviews and approves** — process is created, first run is triggered
+4. **Process proposal appears** — `generate_process` tool emits a `ProcessProposalBlock` inline in the conversation: plain-language steps with a "Drafting" badge; raw YAML/slugs/executor names stay behind a drill-down
+5. **User reviews and approves** — process is created, first run is triggered; saved process and run state then render inline
 
 ### Deep Review (Artifact Mode)
 
@@ -340,11 +337,11 @@ When an output needs careful review:
 
 For running processes:
 
-1. **Sidebar shows process list** — "My Work" (active items with status dots) + "Recurring" (domain processes with health indicators)
-2. **Process detail view** — click a process in sidebar → center shows process detail (3 variants: living-roadmap, domain-process, process-runner)
+1. **Process list on demand** — ask Self or open the Archive drawer (Brief 281) for "My Work" (active items) + "Recurring" (domain processes with health indicators), rendered inline
+2. **Process detail** — selecting a process opens its detail (3 variants: living-roadmap, domain-process, process-runner) as an inline artifact or the `/process/[id]` drill-down
 3. **Trust control** — natural language slider ("Check everything" ↔ "Let it run") with evidence narrative
 4. **Activity log** — unified human+system timeline, filterable
-5. **Right panel adapts** — shows process-scoped context when viewing a process
+5. **Process-scoped context** — surfaced inline alongside the process artifact, not in a separate persistent panel
 
 ---
 
@@ -374,7 +371,7 @@ For running processes:
 |------|-------------|
 | **Conversation-first** | User describes pain to Self. Self guides with industry knowledge. Process emerges from dialogue. |
 | **Process Proposal** | ProcessProposalBlock in conversation — plain language steps, approve/adjust. |
-| **Process Builder** | Right panel shows structured process definition (YAML). Populated by `generate_process` tool. |
+| **Process Builder** | `generate_process` emits a `ProcessProposalBlock` inline; structured definition (YAML) sits behind a drill-down, not a persistent panel. |
 | **Adaptive processes** | `adapt_process` tool modifies run-scoped definition. Template stays durable. |
 
 ### Delegate — "Who does it and how much do I trust them?"
@@ -389,7 +386,7 @@ For running processes:
 
 | What | How it works |
 |------|-------------|
-| **Prompt Input** | Primary capture surface. Text + file drag-drop. Always visible at bottom of center column. |
+| **Prompt Input** | Primary capture surface. Text + file drag-drop. Always pinned at the bottom of the `/chat` conversation. |
 | **Quick Capture** | Self's `quick_capture` tool. Auto-classifies and routes. Surfaces in next briefing if actionable. |
 | **Voice Capture** | Future capability. Transcribe → classify → route pipeline. |
 
@@ -410,10 +407,10 @@ Desktop is primary. Mobile is a seamless supporting surface (not a degraded expe
 
 | Mobile adaptation | How |
 |------------------|-----|
-| **Sidebar** | Hamburger drawer overlay |
-| **Right panel** | Hidden (not shown on mobile) |
+| **Conversation** | Full width, same quality as desktop — the single home surface reflows without a panel ladder |
+| **Archive drawer** | Full-screen sheet (Brief 281 recall surface) |
 | **Artifact review** | Bottom sheet with swipe-to-dismiss |
-| **Conversation** | Full width, same quality as desktop |
+| **Drill-downs** | Standard full-page navigation back to the conversation |
 | **Prompt input** | Full width, same functionality |
 | **Pipeline progress** | Same real-time updates via SSE |
 

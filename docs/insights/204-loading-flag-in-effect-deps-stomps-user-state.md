@@ -39,6 +39,10 @@ The ref turns `loading` in deps from "re-fire trigger" into "re-check gate" — 
 - **Trust-impact is severe.** A message that flashes and disappears is worse than a visible error — the user has no signal that anything went wrong, just a growing sense that the app is losing their work. Per Architecture "Trust Enforcement" — a surface that silently drops user-visible artifacts violates the trust primitive.
 - **Test coverage gap this revealed:** e2e assertions that wait for `[data-testid="assistant-message"]` to appear but don't then re-check it after a delay will pass during the visible-for-one-second window, even though the message is about to disappear. The Brief 211 AC ("still visible 30s after stream completes") is now the template for any streaming-UI e2e.
 
+## Recurrence — Brief 290 (2026-05-19)
+
+The Share Studio multi-channel fetch effect hit the **exact same trap, mirror-imaged**: deps were `[open, activeChannel, card, sessionId, cache, statusByChannel]`. Setting a channel's status to `"loading"` mutated `statusByChannel`, re-firing the effect; the effect's cleanup `return () => { cancelled = true; }` then flipped `cancelled` on the *in-flight* fetch, so the resolve handler's `if (cancelled) return;` skipped `setCache`/`setStatus` and the channel was permanently stuck "loading" (X tab never rendered its textbox; Playwright caught it, not the maker-checker reviewer). Fix was textbook 204: a `requestedRef: Set<ShareChannel>` dedupes one POST per channel, the effect deps shrank to `[open, activeChannel, loadChannel]` (no status/cache), and the fetch result is **always** applied keyed by its own channel — never gated by an effect-cleanup `cancelled` flag. Confirms the "future consideration" lint rule below is worth building: this is the second independent occurrence, and the bug is invisible to static review + maker-checker review — only a delayed/interaction e2e assertion exposes it.
+
 ## Where It Should Land
 
 - **Immediate:** workspace.tsx fix (Brief 211) — the instance that prompted the insight

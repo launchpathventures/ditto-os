@@ -9,12 +9,42 @@ import {
   applyApprovedPublicClaimsToCard,
   loadApprovedPublicMemberSignalClaims,
 } from "../../../../../src/engine/member-signal-review";
+import { isSubjectTombstoned } from "../../../../../src/engine/network-tombstones";
 import { ProfileChatClient } from "./profile-chat-client";
 
 export const dynamic = "force-dynamic";
 
+function TombstoneFallback() {
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        background: "#f6f5f1",
+        color: "#1a1a1a",
+        padding: "2.5rem 2rem",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: "32rem" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 500, margin: "0 0 0.75rem" }}>
+          Profile removed
+        </h1>
+        <p style={{ margin: 0, lineHeight: 1.55, color: "#4a4a4a" }}>
+          This profile is no longer available.
+        </p>
+      </div>
+    </main>
+  );
+}
+
 interface PeopleProfilePageProps {
   params: Promise<{ handle: string }>;
+  searchParams?: Promise<{ ref?: string | string[] }>;
 }
 
 type NetworkUser = typeof networkSchema.networkUsers.$inferSelect;
@@ -108,6 +138,15 @@ export async function generateMetadata({ params }: PeopleProfilePageProps): Prom
       robots: { index: false, follow: false },
     };
   }
+  if (
+    profile.user.status === "deleted" ||
+    (await isSubjectTombstoned("public-profile", profile.user.id))
+  ) {
+    return {
+      title: "Profile removed",
+      robots: { index: false, follow: false },
+    };
+  }
 
   return {
     title: `${profile.card.name} - Ditto`,
@@ -129,11 +168,37 @@ export async function generateMetadata({ params }: PeopleProfilePageProps): Prom
   };
 }
 
-export default async function PeopleProfilePage({ params }: PeopleProfilePageProps) {
+const REF_CHANNELS = new Set([
+  "linkedin",
+  "x",
+  "instagram",
+  "email-signature",
+  "website-badge",
+  "badge",
+]);
+
+function referralChannelFromSearch(params: { ref?: string | string[] } | undefined): string | null {
+  const value = Array.isArray(params?.ref) ? params?.ref[0] : params?.ref;
+  const clean = value?.trim() ?? "";
+  return REF_CHANNELS.has(clean) ? clean : null;
+}
+
+export default async function PeopleProfilePage({ params, searchParams }: PeopleProfilePageProps) {
   const { handle } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const normalizedHandle = normalizeHandle(handle);
   const profile = await loadProfile(normalizedHandle);
   if (!profile) notFound();
+
+  // Anti-resurrection fallback (Brief 284, Insight-234 #4): middleware is the
+  // primary 410 enforcer, but render a neutral tombstone view server-side if
+  // the deletion happened after middleware's lightweight check.
+  if (
+    profile.user.status === "deleted" ||
+    (await isSubjectTombstoned("public-profile", profile.user.id))
+  ) {
+    return <TombstoneFallback />;
+  }
 
   const greeterName = profile.card.greeterCuratedBy === "mira" ? "Mira" : "Alex";
   const userFirst = firstName(profile.card.name);
@@ -148,6 +213,7 @@ export default async function PeopleProfilePage({ params }: PeopleProfilePagePro
       userFirst={userFirst}
       greeterName={greeterName}
       quickStartPills={quickStartPills}
+      referralChannel={referralChannelFromSearch(resolvedSearchParams)}
     />
   );
 }

@@ -251,6 +251,23 @@ describe("network chat prompt contexts", () => {
     }
   });
 
+  it("keeps Network search and discovery prompt tool names in resolver lockstep", () => {
+    const prompt = buildFrontDoorPrompt("client");
+    const toolNames = [
+      "run_network_search",
+      "record_network_search_feedback",
+      "discover_public_people",
+      "compose_claim_invite",
+      "send_claim_invite",
+    ];
+    const resolved = resolveTools(toolNames);
+
+    for (const name of toolNames) {
+      expect(prompt).toContain(`\`${name}\``);
+    }
+    expect(resolved.tools.map((tool) => tool.name)).toEqual(toolNames);
+  });
+
   it("builds a client JobRequestCard with lastUpdatedAt and v1 curator parity", () => {
     const card = buildJobRequestCard({
       greeter: "mira",

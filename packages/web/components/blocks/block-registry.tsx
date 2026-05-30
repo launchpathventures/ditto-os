@@ -13,6 +13,7 @@ import type { ContentBlock } from "@/lib/engine";
 import { TextBlockComponent } from "./text-block";
 import { ReviewCardBlockComponent } from "./review-card-block";
 import { NetworkProfileCardBlockComponent } from "./network-profile-card-block";
+import { IntroProposalCard } from "@/components/network/intro-proposal-card";
 import { StatusCardBlockComponent } from "./status-card-block";
 import { ActionBlockComponent } from "./action-block";
 import { InputRequestBlockComponent } from "./input-request-block";
@@ -54,6 +55,8 @@ export function BlockRenderer({ block, onAction }: BlockRendererProps) {
       return <ReviewCardBlockComponent block={block} onAction={onAction} />;
     case "network-profile-card":
       return <NetworkProfileCardBlockComponent block={block} />;
+    case "intro-proposal-card":
+      return <IntroProposalCard block={block} onAction={onAction} />;
     case "job-request-card":
       return (
         <div className="rounded-lg border border-border bg-surface-primary p-3 text-sm text-text-primary">

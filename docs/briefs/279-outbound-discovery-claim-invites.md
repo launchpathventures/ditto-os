@@ -1,7 +1,7 @@
 # Brief 279: Outbound Discovery, Public Search, and Claim Invites
 
 **Date:** 2026-05-14
-**Status:** draft
+**Status:** implemented & fresh-context reviewed APPROVE; pending human approval
 **Depends on:** Brief 274; Brief 272; Brief 273; Brief 261; Brief 278 foundation checkpoint
 **Unlocks:** Brief 275 refinement; Brief 276 recipient invitation paths; Brief 278 trust/privacy/admin closeout
 
@@ -285,28 +285,41 @@ Example active-request invite:
 
 ## Acceptance Criteria
 
-1. [ ] Source registry exists and every discovery source class has allowed use, collection method, storage policy, rate limit, and invite policy.
-1a. [ ] Brief 278 foundation checkpoint is implemented and reviewed before production discovery sends claim invites or stores new production Discovery Profiles.
-2. [ ] LinkedIn source policy explicitly forbids logged-in scraping, unauthenticated profile fetching, cached-page extraction, credentialed automation, fake accounts, cookie replay, browser automation, search-result snippet-to-claim conversion, and People Search automation without formal access.
-3. [ ] Discovery supports public search results, user-provided URLs, public websites, X/public posts where allowed, opportunity portals where registered, and referral lists.
-4. [ ] `discover_public_people(stepRunId, ...)` refuses without `stepRunId` outside `DITTO_TEST_MODE`.
-5. [ ] `compose_claim_invite(stepRunId, ...)` and `send_claim_invite(stepRunId, ...)` refuse without `stepRunId`.
-6. [ ] HTTP discovery/invite routes reject caller-supplied `stepRunId`.
-7. [ ] Discovered profiles remain internal and cannot render as public `/people/[handle]` pages until claimed/approved.
-8. [ ] Discovery Profile claims have source URL/id, evidence snippet, confidence, source type, and retrieval time.
-9. [ ] Invitation Candidate scoring includes superconnector fit, active-opportunity fit, active-request fit, source confidence, invite risk, and network health.
-10. [ ] Suppression rules block candidates with no professional signal, no allowed contact path, sensitive/protected-class inference, stale/unverifiable evidence, prior decline/complaint/opt-out/delete request, paused source/segment, or weak/generic invite reason.
-11. [ ] v1 invite sending requires operator approval, source-policy pass, suppression pass, email compliance pass, and network-health pass.
-12. [ ] Operator queue shows evidence, source links, fit reason, risk flags, proposed invite copy, and approve/suppress controls.
-13. [ ] Invite copy makes clear the person is not publicly listed on Ditto until they claim/approve, and ties the invite to a plausible professional/economic outcome rather than generic network growth.
-14. [ ] Claim token flow shows what Ditto found, source list, editable claims, delete/decline controls, and approval path into Member Signal onboarding.
-15. [ ] A discovered person can decline and suppress future invites.
-16. [ ] A discovered person can request deletion of the Discovery Profile.
-17. [ ] Active Request can seed discovery and invite a relevant non-member only via approved path.
-18. [ ] Background Watch can consume discovered candidates but cannot invite/contact without the same approval path.
-19. [ ] Metrics track search source, candidate score, operator approval rate, invite sent, claim rate, decline, complaint, and intro conversion.
-20. [ ] Tests cover LinkedIn policy guard, source registry enforcement, internal-only profile rendering, scoring/suppression, operator approval, email compliance/suppression, claim token, decline/delete, and stepRunId guards.
-21. [ ] HTTP routes reject caller-supplied `stepRunId`, including falsy values, and tests assert no discovery rows, invite drafts, or sends are created on bypass.
+1. [x] Source registry exists and every discovery source class has allowed use, collection method, storage policy, rate limit, and invite policy.
+1a. [x] Brief 278 foundation checkpoint is implemented and reviewed before production discovery sends claim invites or stores new production Discovery Profiles.
+2. [x] LinkedIn source policy explicitly forbids logged-in scraping, unauthenticated profile fetching, cached-page extraction, credentialed automation, fake accounts, cookie replay, browser automation, search-result snippet-to-claim conversion, and People Search automation without formal access.
+3. [x] Discovery supports public search results, user-provided URLs, public websites, X/public posts where allowed, opportunity portals where registered, and referral lists.
+4. [x] `discover_public_people(stepRunId, ...)` refuses without `stepRunId` outside `DITTO_TEST_MODE`.
+5. [x] `compose_claim_invite(stepRunId, ...)` and `send_claim_invite(stepRunId, ...)` refuse without `stepRunId`.
+6. [x] HTTP discovery/invite routes reject caller-supplied `stepRunId`.
+7. [x] Discovered profiles remain internal and cannot render as public `/people/[handle]` pages until claimed/approved.
+8. [x] Discovery Profile claims have source URL/id, evidence snippet, confidence, source type, and retrieval time.
+9. [x] Invitation Candidate scoring includes superconnector fit, active-opportunity fit, active-request fit, source confidence, invite risk, and network health.
+10. [x] Suppression rules block candidates with no professional signal, no allowed contact path, sensitive/protected-class inference, stale/unverifiable evidence, prior decline/complaint/opt-out/delete request, paused source/segment, or weak/generic invite reason.
+11. [x] v1 invite sending requires operator approval, source-policy pass, suppression pass, email compliance pass, and network-health pass.
+12. [x] Operator queue shows evidence, source links, fit reason, risk flags, proposed invite copy, and approve/suppress controls.
+13. [x] Invite copy makes clear the person is not publicly listed on Ditto until they claim/approve, and ties the invite to a plausible professional/economic outcome rather than generic network growth.
+14. [x] Claim token flow shows what Ditto found, source list, editable claims, delete/decline controls, and approval path into Member Signal onboarding.
+15. [x] A discovered person can decline and suppress future invites.
+16. [x] A discovered person can request deletion of the Discovery Profile.
+17. [x] Active Request can seed discovery and invite a relevant non-member only via approved path.
+18. [x] Background Watch can consume discovered candidates but cannot invite/contact without the same approval path.
+19. [x] Metrics track search source, candidate score, operator approval rate, invite sent, claim rate, decline, complaint, and intro conversion.
+20. [x] Tests cover LinkedIn policy guard, source registry enforcement, internal-only profile rendering, scoring/suppression, operator approval, email compliance/suppression, claim token, decline/delete, and stepRunId guards.
+21. [x] HTTP routes reject caller-supplied `stepRunId`, including falsy values, and tests assert no discovery rows, invite drafts, or sends are created on bypass.
+
+## Completion Notes (2026-05-19)
+
+- Implemented with network discovery schema migration idx 13, the source registry, guarded discovery/compose/send tools, internal Discovery Profiles, source-backed candidate scoring/suppression, admin operator queue, claim-token route/page, claim-token identity verification, and privacy export/delete/retention coverage for Discovery Profiles, source rows, and tokens.
+- Fresh-context review initially found LinkedIn snippet persistence, arbitrary-email claim redemption, claim-token review loading/update, source-row privacy export/delete/purge, send durability, and prompt/tool parity gaps. Fixes were applied; the final fresh-context review returned APPROVE.
+- Verification: focused Brief-279/privacy vitest 161/161 across 17 files, adjacent privacy/policy/retention vitest 94/94, `pnpm type-check`, and `git diff --check`.
+- Residual follow-up: `sendClaimInvite()` records a prepared token/event before the external send and revokes on known failure, but it is not a full outbox. A process crash after provider acceptance and before the final sent update can leave a prepared token/event without the final sent event.
+
+## Retrospective
+
+- What worked: the review loop found real privacy/source-row and durable-send issues before handoff; the source registry kept the LinkedIn pointer-only posture concrete.
+- What surprised: source rows needed explicit profile association even when no claims exist, and claim-token review needed a token-backed session path rather than a generic profile path.
+- Change next time: specify durable source association and outbox/attempt semantics in the brief acceptance criteria before build starts.
 
 ## Review Process
 

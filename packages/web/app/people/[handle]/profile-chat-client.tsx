@@ -6,6 +6,7 @@ import type { AuthorizationRequestBlock, NetworkProfileCardBlock } from "@/lib/e
 import { cn } from "@/lib/utils";
 import { NetworkProfileCardRenderer } from "@/app/network/chat/network-profile-card-renderer";
 import { QuickStartPills } from "./quick-start-pills";
+import { VisitorCtaStrip, type IntentInference } from "./visitor-cta-strip";
 import { VoiceMode } from "./voice-mode";
 
 type TurnRole = "visitor" | "greeter";
@@ -30,6 +31,7 @@ interface PendingIntro {
 interface ChatApiResponse {
   reply: string;
   transcript?: VisitorChatTurn[];
+  intentInference?: IntentInference;
   forwardedNoteOffer?: { factQuestionMd: string };
   introDraft?: string;
   rateLimited?: boolean;
@@ -99,6 +101,7 @@ export function ProfileChatClient({
   userFirst,
   greeterName,
   quickStartPills,
+  referralChannel,
 }: {
   card: NetworkProfileCardBlock;
   handle: string;
@@ -107,6 +110,7 @@ export function ProfileChatClient({
   userFirst: string;
   greeterName: string;
   quickStartPills: string[];
+  referralChannel: string | null;
 }) {
   const [visitorIds, setVisitorIds] = useState<{ sessionId: string; fingerprint: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -122,11 +126,13 @@ export function ProfileChatClient({
   const [pendingForward, setPendingForward] = useState<PendingForwardNote | null>(null);
   const [pendingIntro, setPendingIntro] = useState<PendingIntro | null>(null);
   const [introExpanded, setIntroExpanded] = useState(false);
+  const [intentInference, setIntentInference] = useState<IntentInference | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disabledUntil, setDisabledUntil] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const transcript = useMemo(() => transcriptFromMessages(messages), [messages]);
   const disabled = loading || (disabledUntil != null && disabledUntil > Date.now());
@@ -199,6 +205,9 @@ export function ProfileChatClient({
       if (data.introDraft) {
         setPendingIntro({ draft: data.introDraft });
       }
+      if (data.intentInference) {
+        setIntentInference(data.intentInference);
+      }
       if (data.rateLimited && data.retryAfterSec) {
         setDisabledUntil(Date.now() + data.retryAfterSec * 1000);
       }
@@ -212,6 +221,14 @@ export function ProfileChatClient({
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault();
     await sendText(input);
+  }
+
+  function focusChat() {
+    inputRef.current?.focus();
+  }
+
+  function requestIntroFromCta() {
+    void sendText("I'd like an intro.");
   }
 
   async function confirmForwardNote() {
@@ -293,8 +310,17 @@ export function ProfileChatClient({
 
       <div className="mx-auto grid min-h-screen w-full max-w-6xl gap-6 px-4 py-6 md:grid-cols-[minmax(280px,440px)_minmax(0,1fr)] md:px-6 md:py-10 lg:gap-10">
         <aside className="hidden md:block">
-          <div className="sticky top-10">
+          <div className="sticky top-10 space-y-4">
             <NetworkProfileCardRenderer card={card} className="max-w-none" />
+            <VisitorCtaStrip
+              handle={handle}
+              userFirst={userFirst}
+              referralChannel={referralChannel}
+              intentInference={intentInference}
+              sessionId={visitorIds?.sessionId ?? null}
+              onAsk={focusChat}
+              onIntro={requestIntroFromCta}
+            />
           </div>
         </aside>
 
@@ -466,6 +492,7 @@ export function ProfileChatClient({
             )}
             <form onSubmit={sendMessage} className="flex items-end gap-2">
               <textarea
+                ref={inputRef}
                 value={input}
                 disabled={disabled}
                 onChange={(event) => setInput(event.target.value)}
@@ -496,6 +523,18 @@ export function ProfileChatClient({
             </button>
           </div>
         </section>
+
+        <div className="md:hidden">
+          <VisitorCtaStrip
+            handle={handle}
+            userFirst={userFirst}
+            referralChannel={referralChannel}
+            intentInference={intentInference}
+            sessionId={visitorIds?.sessionId ?? null}
+            onAsk={focusChat}
+            onIntro={requestIntroFromCta}
+          />
+        </div>
       </div>
     </main>
   );

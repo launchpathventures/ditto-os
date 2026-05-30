@@ -163,6 +163,14 @@ export async function* selfConverseStream(
       purpose: "conversation",
       system: context.systemPrompt,
       messages,
+      // The workspace Self path passes the full `selfTools` — it does NOT
+      // consult `action-boundaries` (`filterToolsForContext`). Brief 280's
+      // front-door safety (AC4/AC5) is a *transport-level* guarantee, not a
+      // runtime tool filter here: `/chat` talks to this Self stream and no
+      // longer reaches the Network engine, where `buildFrontDoorPrompt`
+      // applies the research-only front-door tool set. The action-boundary
+      // table is the contract the Network front door enforces; this stream
+      // is workspace context by construction. See Insight-235.
       tools: selfTools,
       maxTokens: 4096,
       // Cache breakpoint after cognitive framework (static across turns) — Insight-170
@@ -461,12 +469,18 @@ import type {
   MetricBlock,
   SuggestionBlock,
   KnowledgeCitationBlock,
+  InteractiveTableBlock,
   WorkItemFormBlock,
   ConnectionSetupBlock,
   InteractiveField,
 } from "./content-blocks";
 import { getUserModel } from "./user-model";
 import type { DelegationResult } from "./self-delegation";
+import type {
+  RecallResponse,
+  RecallResult,
+  RecallKind,
+} from "./workspace-recall";
 
 /**
  * Parse command output sections from a dev role result into typed ContentBlocks.
@@ -558,6 +572,27 @@ function parseCommandOutputBlocks(output: string): ContentBlock[] {
 }
 
 /**
+ * Canonical trust-tier display label (Brief 280 AC8). Raw tier values are
+ * the four `trustTierValues` (`supervised`, `spot_checked`, `autonomous`,
+ * `critical`); inline process surfaces must show the canonical labels rather
+ * than a naive underscore→space transform.
+ */
+function trustTierLabel(tier: unknown): string {
+  switch (String(tier)) {
+    case "supervised":
+      return "Supervised";
+    case "spot_checked":
+      return "Spot-checked";
+    case "autonomous":
+      return "Autonomous";
+    case "critical":
+      return "Critical";
+    default:
+      return "Supervised";
+  }
+}
+
+/**
  * Convert a tool result into typed content blocks for surface rendering.
  * Each tool declares its output block type.
  */
@@ -578,7 +613,7 @@ export async function toolResultToContentBlocks(
         // RecordBlock: process entity with fields
         const fields: RecordBlock["fields"] = [];
         if (parsed.status) fields.push({ label: "Status", value: String(parsed.status) });
-        if (parsed.trustTier) fields.push({ label: "Trust tier", value: String(parsed.trustTier) });
+        if (parsed.trustTier) fields.push({ label: "Trust tier", value: trustTierLabel(parsed.trustTier) });
 
         const trust = parsed.trust as Record<string, unknown> | undefined;
         if (trust) {
@@ -605,7 +640,7 @@ export async function toolResultToContentBlocks(
           type: "record",
           title: (parsed.name as string) ?? "Process",
           subtitle: (parsed.slug as string) ?? undefined,
-          status: trustTier ? { label: String(trustTier).replace(/_/g, " "), variant: statusVariant } : undefined,
+          status: trustTier ? { label: trustTierLabel(trustTier), variant: statusVariant } : undefined,
           fields,
         };
         blocks.push(record);
@@ -859,6 +894,79 @@ export async function toolResultToContentBlocks(
           return [];
         }
       }
+
+      // When the process is saved (save=true), emit an inline, human-readable
+      // saved-process summary using existing blocks (Brief 280 AC7). Lead with
+      // purpose / trigger / trust tier / status / steps; the slug and id stay
+      // behind drill-down/action payloads, never displayed raw.
+      if (result.success && input.save === true) {
+        try {
+          const parsed = JSON.parse(result.output) as Record<string, unknown>;
+          const name = (input.name as string) ?? (parsed.name as string) ?? "New Process";
+          const description = (input.description as string) ?? "";
+          const trigger =
+            typeof input.trigger === "string" && input.trigger
+              ? (input.trigger as string)
+              : "Manual";
+          const stepCount =
+            typeof parsed.stepCount === "number"
+              ? parsed.stepCount
+              : Array.isArray(input.steps)
+                ? (input.steps as unknown[]).length
+                : 0;
+          const processSlug =
+            (parsed.processSlug as string) ?? (parsed.slug as string) ?? "";
+          const processId = (parsed.id as string) ?? "";
+
+          const fields: RecordBlock["fields"] = [];
+          if (description) fields.push({ label: "Purpose", value: description });
+          fields.push({ label: "Trigger", value: trigger });
+          fields.push({ label: "Trust tier", value: trustTierLabel(input.trustTier) });
+          fields.push({ label: "Steps", value: String(stepCount) });
+
+          const record: RecordBlock = {
+            type: "record",
+            title: name,
+            status: { label: "Draft", variant: "neutral" },
+            fields,
+            ...(processId
+              ? {
+                  actions: [
+                    {
+                      id: "open-process",
+                      label: "Open details",
+                      style: "secondary" as const,
+                      payload: { processId, href: `/process/${processId}` },
+                    },
+                  ],
+                }
+              : {}),
+          };
+
+          const suggestion: SuggestionBlock = {
+            type: "suggestion",
+            content:
+              "Saved as a draft. Run it now to see it work, or keep refining the steps before activating.",
+            reasoning:
+              "New processes start as drafts so you can review them before they run unattended.",
+            actions: [
+              {
+                id: "proposal-run",
+                label: "Run now",
+                style: "primary",
+                payload: {
+                  processSlug,
+                  message: `Run the ${name} process now.`,
+                },
+              },
+            ],
+          };
+
+          return [record, suggestion];
+        } catch {
+          return [];
+        }
+      }
       return [];
     }
 
@@ -1000,7 +1108,7 @@ export async function toolResultToContentBlocks(
 
         const textBlock: TextBlock = {
           type: "text",
-          text: `Starting the dev pipeline (${parsed.steps.length} steps). I'll keep you updated as steps complete.`,
+          text: `Starting the process (${parsed.steps.length} ${parsed.steps.length === 1 ? "step" : "steps"}). I'll keep you updated as steps complete.`,
         };
         blocks.push(textBlock);
 
@@ -1105,8 +1213,8 @@ export async function toolResultToContentBlocks(
         if (parsed.action === "proposal") {
           // Record: before/after trust tier with evidence fields
           const fields: RecordBlock["fields"] = [];
-          if (parsed.currentTier) fields.push({ label: "Current tier", value: String(parsed.currentTier).replace(/_/g, " ") });
-          if (parsed.proposedTier) fields.push({ label: "Proposed tier", value: String(parsed.proposedTier).replace(/_/g, " ") });
+          if (parsed.currentTier) fields.push({ label: "Current tier", value: trustTierLabel(parsed.currentTier) });
+          if (parsed.proposedTier) fields.push({ label: "Proposed tier", value: trustTierLabel(parsed.proposedTier) });
           if (parsed.reason) fields.push({ label: "Reason", value: String(parsed.reason) });
 
           const trust = parsed.trust as Record<string, unknown> | undefined;
@@ -1150,10 +1258,10 @@ export async function toolResultToContentBlocks(
           status: parsed.action === "applied" ? "applied" : "proposed",
           details: {},
         };
-        if (parsed.fromTier) statusCard.details["From"] = String(parsed.fromTier).replace(/_/g, " ");
-        if (parsed.toTier) statusCard.details["To"] = String(parsed.toTier).replace(/_/g, " ");
-        if (parsed.currentTier) statusCard.details["Current"] = String(parsed.currentTier).replace(/_/g, " ");
-        if (parsed.proposedTier) statusCard.details["Proposed"] = String(parsed.proposedTier).replace(/_/g, " ");
+        if (parsed.fromTier) statusCard.details["From"] = trustTierLabel(parsed.fromTier);
+        if (parsed.toTier) statusCard.details["To"] = trustTierLabel(parsed.toTier);
+        if (parsed.currentTier) statusCard.details["Current"] = trustTierLabel(parsed.currentTier);
+        if (parsed.proposedTier) statusCard.details["Proposed"] = trustTierLabel(parsed.proposedTier);
         blocks.push(statusCard);
 
         return blocks;
@@ -1260,6 +1368,132 @@ export async function toolResultToContentBlocks(
         return meta.contentBlocks;
       }
       return [];
+    }
+
+    case "search_workspace": {
+      // Brief 281: map the shared recall payload onto existing blocks.
+      //   - memory/knowledge evidence  → KnowledgeCitationBlock (provenance)
+      //   - exactly one other result   → RecordBlock (focused summary)
+      //   - multiple other results     → InteractiveTableBlock (list)
+      //   - nothing matched / error    → AlertBlock (no dead-end)
+      const meta = result.metadata as { recall?: RecallResponse } | undefined;
+      const recall = meta?.recall;
+      if (!recall) return [];
+
+      const RECALL_LABEL: Record<RecallKind, string> = {
+        project: "Project",
+        process: "Process",
+        memory: "Memory",
+        work: "Work",
+        review: "Review",
+        activity: "Activity",
+      };
+
+      if (recall.results.length === 0) {
+        const searched = recall.kinds
+          .map((k) => RECALL_LABEL[k])
+          .join(", ");
+        const alert: AlertBlock = {
+          type: "alert",
+          severity: "info",
+          title: recall.query
+            ? `Nothing matched "${recall.query}"`
+            : "Nothing to show yet",
+          content: `Searched ${searched}. Try a different keyword, or filter by a kind (e.g. just Processes) or status. Add archived items by asking for archived results.`,
+        };
+        return [alert];
+      }
+
+      const blocks: ContentBlock[] = [];
+
+      const memoryResults = recall.results.filter((r) => r.kind === "memory");
+      const otherResults = recall.results.filter((r) => r.kind !== "memory");
+
+      // Memory/knowledge evidence preserves scope + provenance.
+      if (memoryResults.length > 0) {
+        const citation: KnowledgeCitationBlock = {
+          type: "knowledge_citation",
+          label: "Memory & knowledge",
+          sources: memoryResults.map((m) => ({
+            name: m.title,
+            type: "memory",
+            excerpt: m.evidence,
+            memoryId: m.id,
+            memoryType: m.memoryType,
+            memoryScopeType: m.memoryScopeType,
+            memoryProjectSlug: m.projectSlug ?? null,
+          })),
+        };
+        blocks.push(citation);
+      }
+
+      const openAction = (r: RecallResult) =>
+        r.route
+          ? [
+              {
+                id: `recall-open-${r.id}`,
+                label: "Open",
+                style: "secondary" as const,
+                payload: { href: r.route },
+              },
+            ]
+          : undefined;
+
+      if (otherResults.length === 1) {
+        const r = otherResults[0];
+        const fields: RecordBlock["fields"] = [
+          { label: "Type", value: RECALL_LABEL[r.kind] },
+        ];
+        if (r.status) fields.push({ label: "Status", value: r.status });
+        if (r.projectSlug)
+          fields.push({ label: "Project", value: r.projectSlug });
+        if (r.updatedAt)
+          fields.push({
+            label: "Updated",
+            value: new Date(r.updatedAt).toLocaleDateString(),
+          });
+        const record: RecordBlock = {
+          type: "record",
+          title: r.title,
+          subtitle: r.subtitle,
+          fields,
+          detail: r.evidence,
+          provenance: r.provenance,
+          actions: openAction(r),
+        };
+        blocks.push(record);
+      } else if (otherResults.length > 1) {
+        const table: InteractiveTableBlock = {
+          type: "interactive_table",
+          title: "Workspace results",
+          summary: recall.truncated
+            ? `Showing ${recall.results.length} of ${Object.values(
+                recall.counts,
+              ).reduce((a, b) => a + b, 0)} — narrow with a kind or status filter.`
+            : undefined,
+          columns: [
+            { key: "kind", label: "Type", format: "badge" },
+            { key: "title", label: "Title" },
+            { key: "status", label: "Status" },
+            { key: "updated", label: "Updated" },
+          ],
+          rows: otherResults.map((r) => ({
+            id: r.id,
+            cells: {
+              kind: RECALL_LABEL[r.kind],
+              title: r.title,
+              status: r.status ?? "—",
+              updated: r.updatedAt
+                ? new Date(r.updatedAt).toLocaleDateString()
+                : "—",
+            },
+            actions: openAction(r),
+          })),
+        };
+        blocks.push(table);
+      }
+
+      return blocks;
     }
 
     default:

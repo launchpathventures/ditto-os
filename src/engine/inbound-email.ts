@@ -15,7 +15,10 @@
 
 import { db, schema } from "../db";
 import { writeMemory } from "./legibility/write-memory";
-import { eq, and, gte, desc, notInArray, sql } from "drizzle-orm";
+import { eq, and, gte, desc, notInArray, sql, inArray } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as networkSchema from "@ditto/core/db/network";
+import { networkDb } from "../db/network-db";
 import type { TrustTier } from "../db/schema";
 import { isOptOutSignal } from "./channel";
 import { notifyUser } from "./notify-user";
@@ -23,6 +26,8 @@ import { recordInteraction, optOutPerson, findPersonByEmailGlobal, createPerson 
 import { resumeHumanStep, pauseGoal } from "./heartbeat";
 import { selfConverse } from "./self";
 import { fireEvent } from "./scheduler";
+import { createNetworkLaneStepRun } from "./network-step-run";
+import { recordIntroFeedback } from "./intro-feedback";
 
 // ============================================================
 // Types
@@ -40,6 +45,9 @@ export interface InboundEmailPayload {
     extractedText?: string;
     messageId?: string;
     threadId?: string;
+    inReplyTo?: string;
+    references?: string[] | string;
+    headers?: Record<string, string | string[] | undefined>;
   };
 }
 
@@ -206,6 +214,15 @@ function isDeferral(text: string): boolean {
 
 export type ReplyClassification = "opt_out" | "positive" | "question" | "deferred" | "auto_reply" | "general";
 
+export type IntroReplyClassification =
+  networkSchema.IntroFeedbackClassifiedCategory;
+
+export interface IntroReplyClassificationResult {
+  category: IntroReplyClassification;
+  outcomeClass: networkSchema.IntroOutcomeClass | null;
+  confidence: "high" | "medium" | "low";
+}
+
 /**
  * Classify an inbound reply into 6 categories (Brief 146).
  *
@@ -215,7 +232,21 @@ export type ReplyClassification = "opt_out" | "positive" | "question" | "deferre
  * This ordering prevents false positives: positive is checked before question,
  * so "Sounds great, when works?" matches positive (not question).
  */
-function classifyReply(text: string, subject: string = ""): ReplyClassification {
+export function classifyReply(text: string, subject?: string): ReplyClassification;
+export function classifyReply(
+  text: string,
+  subject: string | undefined,
+  context: "intro",
+): IntroReplyClassificationResult;
+export function classifyReply(
+  text: string,
+  subject: string = "",
+  context?: "intro",
+): ReplyClassification | IntroReplyClassificationResult {
+  if (context === "intro") {
+    return classifyIntroReply(text);
+  }
+
   if (isOptOutSignal(text)) {
     return "opt_out";
   }
@@ -261,6 +292,237 @@ function classifyReply(text: string, subject: string = ""): ReplyClassification 
   }
 
   return "general";
+}
+
+function includesAny(lower: string, phrases: readonly string[]): boolean {
+  return phrases.some((phrase) => lower.includes(phrase));
+}
+
+function seedOutcomeClass(
+  lower: string,
+): networkSchema.IntroOutcomeClass | null {
+  if (includesAny(lower, ["advisory", "advisor", "advise"])) return "advisory";
+  if (includesAny(lower, ["hired", "hire", "candidate", "role", "recruit"])) {
+    return "hire";
+  }
+  if (includesAny(lower, ["client", "customer", "contract", "signed"])) {
+    return "client";
+  }
+  if (includesAny(lower, ["funding", "fundraise", "investor", "investment"])) {
+    return "funding";
+  }
+  if (includesAny(lower, ["partner", "partnership", "channel partner"])) {
+    return "partnership";
+  }
+  if (includesAny(lower, ["collaborat", "project together", "working together"])) {
+    return "collaboration";
+  }
+  if (includesAny(lower, ["no outcome", "nothing came of it"])) return "no-outcome";
+  return null;
+}
+
+export function classifyIntroReply(
+  text: string,
+): IntroReplyClassificationResult {
+  const lower = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const outcomeClass = seedOutcomeClass(lower);
+
+  if (includesAny(lower, ["not relevant", "not a fit", "bad fit", "poor fit"])) {
+    return { category: "decline:not-relevant", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["too junior", "more senior", "senior enough", "not senior"])) {
+    return { category: "decline:too-junior", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["too senior", "more junior", "overqualified", "too experienced"])) {
+    return { category: "decline:too-senior", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["wrong domain", "wrong industry", "different industry", "different sector"])) {
+    return { category: "decline:wrong-domain", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["salesy", "sales pitch", "selling to me", "too much sales"])) {
+    return { category: "decline:too-salesy", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["already know", "already connected", "we've met", "we have met", "met them already"])) {
+    return { category: "decline:already-know-them", outcomeClass: null, confidence: "high" };
+  }
+  if (includesAny(lower, ["not useful", "wasn't useful", "didn't fit", "did not fit", "no good"])) {
+    return { category: "outcome:not-useful", outcomeClass: outcomeClass ?? "no-outcome", confidence: "high" };
+  }
+  if (includesAny(lower, ["too early", "still talking", "haven't met", "have not met", "not met yet", "no outcome yet"])) {
+    return { category: "outcome:no-outcome-yet", outcomeClass: "no-outcome", confidence: "high" };
+  }
+  if (includesAny(lower, ["useful", "great intro", "good intro", "thanks for the intro", "met", "talking", "signed", "engagement"])) {
+    return { category: "outcome:useful", outcomeClass, confidence: outcomeClass ? "high" : "medium" };
+  }
+  if (includesAny(lower, ["no thanks", "pass", "decline", "not for me"])) {
+    return { category: "decline:other", outcomeClass: null, confidence: "medium" };
+  }
+  return { category: "ambiguous", outcomeClass: null, confidence: "low" };
+}
+
+type NetworkDbHandle = PostgresJsDatabase<typeof networkSchema>;
+type IntroductionRow = typeof networkSchema.introductions.$inferSelect;
+export interface InboundIntroductionMatch {
+  introduction: IntroductionRow;
+  party: networkSchema.IntroFeedbackParty;
+}
+
+function headerValue(
+  headers: Record<string, string | string[] | undefined> | undefined,
+  name: string,
+): string | string[] | undefined {
+  if (!headers) return undefined;
+  const direct = headers[name] ?? headers[name.toLowerCase()];
+  if (direct !== undefined) return direct;
+  const foundKey = Object.keys(headers).find(
+    (key) => key.toLowerCase() === name.toLowerCase(),
+  );
+  return foundKey ? headers[foundKey] : undefined;
+}
+
+function collectMessageReferences(
+  message: InboundEmailPayload["message"],
+): string[] {
+  const candidates = new Set<string>();
+  const add = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) add(item);
+      return;
+    }
+    if (typeof value !== "string") return;
+    const parts = value.match(/<[^>]+>|[^\s,]+/g) ?? [];
+    for (const part of parts) {
+      const clean = part.trim().replace(/^<|>$/g, "");
+      if (clean) candidates.add(clean);
+    }
+  };
+  add(message.threadId);
+  add(message.inReplyTo);
+  add(message.references);
+  add(headerValue(message.headers, "In-Reply-To"));
+  add(headerValue(message.headers, "References"));
+  return [...candidates];
+}
+
+function metadataHasReference(
+  metadata: Record<string, unknown> | null,
+  candidates: Set<string>,
+): boolean {
+  if (!metadata) return false;
+  const values = [
+    metadata.requesterApprovalMessageId,
+    metadata.recipientApprovalMessageId,
+    metadata.approvalMessageId,
+    metadata.threadMessageId,
+    metadata.approvalThreadMessageId,
+    metadata.approvalMessageIds,
+  ];
+  const flat = values.flatMap((value) =>
+    Array.isArray(value) ? value : value === undefined ? [] : [value],
+  );
+  return flat.some(
+    (value) => typeof value === "string" && candidates.has(value),
+  );
+}
+
+function normalizeSender(value: string | null | undefined): string {
+  const match = value?.match(/<([^>]+)>/);
+  return (match ? match[1] : value ?? "").trim().toLowerCase();
+}
+
+async function senderPartyForIntro(
+  dbHandle: NetworkDbHandle,
+  intro: IntroductionRow,
+  senderEmail: string,
+): Promise<networkSchema.IntroFeedbackParty | null> {
+  const sender = normalizeSender(senderEmail);
+  if (!sender) return null;
+  if (intro.recipientEmail && normalizeSender(intro.recipientEmail) === sender) {
+    return "recipient";
+  }
+  const userIds = [intro.requesterUserId, intro.recipientUserId].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  if (userIds.length === 0) return null;
+  const rows = await dbHandle
+    .select({
+      id: networkSchema.networkUsers.id,
+      email: networkSchema.networkUsers.email,
+    })
+    .from(networkSchema.networkUsers)
+    .where(inArray(networkSchema.networkUsers.id, userIds))
+    .limit(10);
+  for (const row of rows) {
+    if (normalizeSender(row.email) !== sender) continue;
+    if (row.id === intro.requesterUserId) return "requester";
+    if (row.id === intro.recipientUserId) return "recipient";
+  }
+  return null;
+}
+
+async function authenticatedIntroMatch(
+  dbHandle: NetworkDbHandle,
+  intro: IntroductionRow | null,
+  senderEmail: string,
+): Promise<InboundIntroductionMatch | null> {
+  if (!intro) return null;
+  const party = await senderPartyForIntro(dbHandle, intro, senderEmail);
+  return party ? { introduction: intro, party } : null;
+}
+
+export async function matchInboundToIntroductionReply(
+  message: InboundEmailPayload["message"],
+  opts: { db?: NetworkDbHandle } = {},
+): Promise<InboundIntroductionMatch | null> {
+  const candidates = collectMessageReferences(message);
+  if (candidates.length === 0) return null;
+  const candidateSet = new Set(candidates);
+  const dbHandle = opts.db ?? networkDb;
+  const senderEmail = normalizeSender(message.from);
+  if (!senderEmail) return null;
+
+  const directRows = await dbHandle
+    .select()
+    .from(networkSchema.introductions)
+    .where(inArray(networkSchema.introductions.threadMessageId, candidates))
+    .limit(1);
+  const directMatch = await authenticatedIntroMatch(
+    dbHandle,
+    directRows[0] ?? null,
+    senderEmail,
+  );
+  if (directMatch) return directMatch;
+
+  const recentRows = await dbHandle
+    .select()
+    .from(networkSchema.introductions)
+    .where(
+      inArray(networkSchema.introductions.state, [
+        "proposed",
+        "requester-approved",
+        "recipient-asked",
+        "recipient-approved",
+        "thread-sent",
+      ]),
+    )
+    .limit(200);
+  const metadataMatch =
+    recentRows.find((row) =>
+      metadataHasReference(
+        (row.metadata as Record<string, unknown> | null) ?? null,
+        candidateSet,
+      ),
+    ) ?? null;
+  return authenticatedIntroMatch(dbHandle, metadataMatch, senderEmail);
+}
+
+export async function matchInboundToIntroduction(
+  message: InboundEmailPayload["message"],
+  opts: { db?: NetworkDbHandle } = {},
+): Promise<IntroductionRow | null> {
+  return (
+    (await matchInboundToIntroductionReply(message, opts))?.introduction ?? null
+  );
 }
 
 // ============================================================
@@ -1155,6 +1417,64 @@ export async function processInboundEmail(
     return { action: "unknown_sender", details: "No sender email" };
   }
 
+  const replyText = message.extractedText || message.text || "";
+  const subject = message.subject || "";
+
+  const maybeIntroReply =
+    /\bintro\b/i.test(subject) ||
+    Boolean(message.inReplyTo) ||
+    Boolean(message.references) ||
+    Boolean(headerValue(message.headers, "In-Reply-To")) ||
+    Boolean(headerValue(message.headers, "References"));
+  let introMatch: InboundIntroductionMatch | null = null;
+  if (maybeIntroReply) {
+    try {
+      introMatch = await matchInboundToIntroductionReply(message);
+    } catch (error) {
+      console.warn(
+        `[inbound] Intro reply match skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  if (introMatch) {
+    const baseClassification = classifyReply(replyText, subject);
+    if (baseClassification === "auto_reply") {
+      return {
+        action: "auto_reply_ignored",
+        details: `Auto-reply ignored for introduction ${introMatch.introduction.id}`,
+      };
+    }
+    const introClassification = classifyReply(replyText, subject, "intro");
+    if (introClassification.category === "ambiguous") {
+      return {
+        action: "interaction_recorded",
+        details: `Ambiguous intro reply routed to chat for ${introMatch.introduction.id}`,
+      };
+    }
+    const stepRunId = await createNetworkLaneStepRun({
+      route: "network-intro-inbound-reply",
+      sessionId: introMatch.introduction.id,
+      actorId: senderEmail,
+    });
+    await recordIntroFeedback({
+      db: networkDb,
+      stepRunId,
+      introId: introMatch.introduction.id,
+      party: introMatch.party,
+      payload: {
+        eventType: "reply",
+        classifiedCategory: introClassification.category,
+        outcomeClass: introClassification.outcomeClass,
+        freeText: replyText,
+        sourceMessageId: message.messageId ?? message.threadId ?? null,
+      },
+    });
+    return {
+      action: "interaction_recorded",
+      details: `Recorded intro feedback for ${introMatch.introduction.id}`,
+    };
+  }
+
   // 0. Check if sender is a network user (the boss is talking)
   // This is fundamentally different from a contact replying — it's
   // the user delegating work, asking questions, or providing context.
@@ -1168,9 +1488,6 @@ export async function processInboundEmail(
     console.log(`[inbound] Unknown sender: ${senderEmail} — no person record found`);
     return { action: "unknown_sender", details: `No person record for ${senderEmail}` };
   }
-
-  const replyText = message.extractedText || message.text || "";
-  const subject = message.subject || "";
 
   // 2. Check for waiting_human step
   const waitingRun = await findWaitingRunForPerson(person.id);

@@ -235,6 +235,7 @@ export function RequestCanvas({
 }) {
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
+  const [savedRequestId, setSavedRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const badges = useMemo(() => briefBadges(draft), [draft]);
@@ -265,8 +266,11 @@ export function RequestCanvas({
       const request = await saveActiveRequest({
         draft,
         visitorSessionId,
+        requestId: savedRequestId,
+        identity,
         publish,
       });
+      setSavedRequestId(request.id);
       setSavedStatus(request.status);
     } catch {
       setError("I couldn't save that request. Try again in a moment.");

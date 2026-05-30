@@ -4,7 +4,13 @@ import * as networkSchema from "@ditto/core/db/network";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { networkDb, isNetworkDbConnectionError } from "../../../../../../../../../src/db/network-db";
 import { createNetworkLaneStepRun } from "../../../../../../../../../src/engine/network-step-run";
-import { generateShareVariants } from "../../../../../../../../../src/engine/generate-share-variants";
+import {
+  generateShareVariants,
+  isShareChannel,
+  type ShareChannel,
+} from "../../../../../../../../../src/engine/generate-share-variants";
+import { writeNetworkAuditEvent } from "../../../../../../../../../src/engine/network-audit";
+import { checkRateLimit } from "../../../../../../../../../src/engine/network-abuse-controls";
 import {
   applyApprovedPublicClaimsToCard,
   loadApprovedPublicMemberSignalClaims,
@@ -36,6 +42,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (Object.prototype.hasOwnProperty.call(body, "stepRunId")) {
       return NextResponse.json({ error: "step_run_bypass_rejected" }, { status: 400 });
     }
+    // Insight-239: validate the channel allow-list BEFORE any wrapper-run is
+    // minted. Missing channel defaults to "linkedin" for Brief 260 callers
+    // (the compact modal and Brief 254 call sites omit the field).
+    // "website-badge" is in the allow-list (it is a valid ShareChannel); the
+    // Studio UI never POSTs it, but a direct API caller may — the engine
+    // short-circuits it to content-free static text. Auditing that request
+    // (rate-limit slot + audit row) is intentional, not a leak.
+    const channel: ShareChannel =
+      body.channel === undefined ? "linkedin" : (body.channel as ShareChannel);
+    if (body.channel !== undefined && !isShareChannel(body.channel)) {
+      return NextResponse.json({ error: "invalid_channel" }, { status: 400 });
+    }
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
     const session = await resolveNetworkLaneSession({
       sessionId,
@@ -43,6 +61,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       fallbackUserId: typeof body.userId === "string" ? body.userId : null,
     });
     if (!session) return NextResponse.json({ error: "expert_session_required" }, { status: 403 });
+
+    const rateLimit = await checkRateLimit({
+      limitName: "share-studio-variant",
+      actor: { kind: "user", id: session.userId },
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "too_many_requests", retryAfterSec: rateLimit.retryAfterSec },
+        {
+          status: 429,
+          headers: { "retry-after": String(rateLimit.retryAfterSec) },
+        },
+      );
+    }
 
     const [user] = await networkDb
       .select()
@@ -74,7 +106,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const variants = await generateShareVariants({
       stepRunId,
       card,
+      channel,
       kb,
+    });
+    await writeNetworkAuditEvent({
+      stepRunId,
+      eventClass: "share_studio_variant_generated",
+      subjectType: "network_profile_share",
+      subjectId: user.id,
+      actorType: "user",
+      actorId: session.actorId,
+      reasonCode: "share_variants_generated",
+      metadata: {
+        handle,
+        channel,
+        variantKeys: Object.keys(variants),
+        approvedPublicClaimCount: publicClaims.length,
+      },
     });
     return NextResponse.json(variants);
   } catch (error) {

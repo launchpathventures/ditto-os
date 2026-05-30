@@ -71,6 +71,11 @@ export type {
   // Brief 228 — project retrofit plan block
   RetrofitPlanBlock,
   RetrofitPlanStatus,
+  // Brief 288 — Mira-proposed intro consent card
+  IntroProposalCardBlock,
+  IntroProposalCardState,
+  IntroProposalCardAffordance,
+  IntroProposalEvidence,
 } from "../../../src/engine/content-blocks";
 // renderBlockToText is a pure function — import it directly from
 // @engine/content-blocks in client components to avoid pulling in
@@ -146,3 +151,18 @@ export type {
   ChatThreadDetail,
   ThreadTurn,
 } from "../../../src/engine/chat-threads";
+
+// Brief 274 — Manual Search / Possible Connection types for client code.
+export type {
+  PossibleConnection,
+  PossibleConnectionEvidence,
+  PossibleConnectionNextAction,
+  PossibleConnectionIntroEligibility,
+} from "../../../src/engine/connection-proposal";
+export type {
+  PersistedPossibleConnection,
+  NetworkManualSearchResult,
+} from "../../../src/engine/network-manual-search";
+export type {
+  RecordNetworkSearchFeedbackResult,
+} from "../../../src/engine/network-search-feedback";

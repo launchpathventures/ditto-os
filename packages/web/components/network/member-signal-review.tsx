@@ -59,6 +59,7 @@ function sectionLabel(section: string): string {
 export function MemberSignalReview({
   sessionId,
   userId,
+  claimToken,
   memberSignalId,
   claims,
   onClaimsChange,
@@ -66,6 +67,7 @@ export function MemberSignalReview({
 }: {
   sessionId?: string | null;
   userId?: string | null;
+  claimToken?: string | null;
   memberSignalId?: string | null;
   claims: MemberSignalClaimRow[];
   onClaimsChange?: (claims: MemberSignalClaimRow[]) => void;
@@ -111,6 +113,7 @@ export function MemberSignalReview({
           action: "update_claim",
           sessionId,
           userId,
+          claimToken,
           memberSignalId,
           claimId: claim.id,
           claimAction: action,

@@ -42,6 +42,12 @@ export {
   type FormSubmitAction,
   type GatheringIndicatorBlock,
   type ChecklistBlock,
+  // Brief 288 — Mira-proposed intro proposal card
+  type IntroProposalCardBlock,
+  type IntroProposalCardAffordance,
+  type IntroProposalCardState,
+  type IntroProposalEvidence,
+
   type ChartBlock,
   type MetricBlock,
   type AnnotatedField,

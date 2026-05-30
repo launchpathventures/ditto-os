@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   createNetworkLaneStepRun: vi.fn(),
   emitIntroRequest: vi.fn(),
-  checkVisitorRateLimit: vi.fn(),
+  checkRateLimits: vi.fn(),
+  isNetworkOperationPaused: vi.fn(),
 }));
 
 vi.mock("../../../../../../../../../src/db/network-db", () => ({
@@ -21,9 +22,9 @@ vi.mock("../../../../../../../../../src/engine/emit-intro-request", () => ({
   emitIntroRequest: mocks.emitIntroRequest,
 }));
 
-vi.mock("../../../../../../../../../src/engine/visitor-rate-limit", () => ({
-  checkVisitorRateLimit: mocks.checkVisitorRateLimit,
-  visitorRateLimitCopy: () => "Too many requests.",
+vi.mock("../../../../../../../../../src/engine/network-abuse-controls", () => ({
+  checkRateLimits: mocks.checkRateLimits,
+  isNetworkOperationPaused: mocks.isNetworkOperationPaused,
 }));
 
 const [{ POST }, session] = await Promise.all([
@@ -71,7 +72,8 @@ beforeEach(() => {
       }),
     }),
   });
-  mocks.checkVisitorRateLimit.mockResolvedValue({ allowed: true });
+  mocks.checkRateLimits.mockResolvedValue({ allowed: true, retryAfterSec: 60 });
+  mocks.isNetworkOperationPaused.mockResolvedValue({ paused: false });
   mocks.createNetworkLaneStepRun.mockResolvedValue("network-lane-step:visitor-intro");
   mocks.emitIntroRequest.mockResolvedValue({
     block: authBlock(),
@@ -149,5 +151,72 @@ describe("POST /api/v1/network/people/:id/intro-request", () => {
       block: { costLabel: "1st of 2 free intros (1 left after this)" },
       introductionId: "intro-1",
     });
+  });
+
+  it("honors a paused profile member before emitting the visitor intro", async () => {
+    const transcript = session.appendVisitorProfileTurn("visitor-session", {
+      role: "visitor",
+      content: "I'd like an intro to Tim.",
+    });
+    session.setPendingVisitorIntro({
+      sessionId: "visitor-session",
+      userId: "target-user",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      transcript,
+    });
+    mocks.isNetworkOperationPaused.mockResolvedValueOnce({
+      paused: true,
+      reason: "person-ref_paused",
+    });
+
+    const response = await POST(
+      request({ sessionId: "visitor-session", draft: "Hi Tim" }),
+      { params: Promise.resolve({ id: "tim-green" }) },
+    );
+
+    expect(response.status).toBe(423);
+    expect(await response.json()).toEqual({
+      error: "network_operation_paused",
+      reason: "person-ref_paused",
+    });
+    expect(mocks.createNetworkLaneStepRun).not.toHaveBeenCalled();
+    expect(mocks.emitIntroRequest).not.toHaveBeenCalled();
+  });
+
+  it("uses the shared Postgres-backed limiter before visitor intro emission", async () => {
+    const transcript = session.appendVisitorProfileTurn("visitor-session", {
+      role: "visitor",
+      content: "I'd like an intro to Tim.",
+    });
+    session.setPendingVisitorIntro({
+      sessionId: "visitor-session",
+      userId: "target-user",
+      draft: "Hi Tim - Avery asked for an introduction.",
+      transcript,
+    });
+    mocks.checkRateLimits.mockResolvedValueOnce({ allowed: false, retryAfterSec: 120 });
+
+    const response = await POST(
+      request({ sessionId: "visitor-session", draft: "Hi Tim" }),
+      { params: Promise.resolve({ id: "tim-green" }) },
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({
+      rateLimited: true,
+      retryAfterSec: 120,
+    });
+    expect(mocks.checkRateLimits).toHaveBeenCalledWith([
+      expect.objectContaining({
+        limitName: "network-intro",
+        actor: { kind: "session", id: "visitor-session:no-fingerprint" },
+      }),
+      expect.objectContaining({
+        limitName: "network-intro",
+        actor: { kind: "ip", id: "127.0.0.1" },
+      }),
+    ]);
+    expect(mocks.createNetworkLaneStepRun).not.toHaveBeenCalled();
+    expect(mocks.emitIntroRequest).not.toHaveBeenCalled();
   });
 });

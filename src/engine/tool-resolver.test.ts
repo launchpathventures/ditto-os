@@ -12,11 +12,48 @@ import os from "os";
 import { resolveNetworkToolUserId, resolveTools } from "./tool-resolver";
 import { clearRegistryCache } from "./integration-registry";
 
+const needRequestToolMocks = vi.hoisted(() => ({
+  draftNeedRequest: vi.fn(async () => ({
+    rawNeed: "Need a fractional CMO",
+    outcomeNeeded: "fractional CMO",
+    idealPerson: "fractional CMO",
+    proofRequired: "B2B SaaS proof",
+    badFit: "",
+    urgency: "",
+    geography: "Europe",
+    commercialShape: "paid advisory",
+    successOutcome: "CMO found",
+    outcomeValueHint: null,
+    budgetPrivate: "",
+    budgetShareableLabel: "",
+    shareableSummary: "Need a fractional CMO in Europe.",
+    privateNotes: "",
+    sourcesAllowed: "both",
+    contactPolicy: "ask-before-contact",
+    mode: "manual-search",
+    missingFields: [],
+    quickAnswerField: null,
+    quickAnswers: [],
+    jobRequestCard: { type: "job-request-card" },
+  })),
+  saveNeedRequest: vi.fn(async () => ({ id: "request-1", status: "active" })),
+}));
+
+vi.mock("./need-request-draft", () => ({
+  draftNeedRequest: needRequestToolMocks.draftNeedRequest,
+}));
+
+vi.mock("./need-request-storage", () => ({
+  saveNeedRequest: needRequestToolMocks.saveNeedRequest,
+}));
+
 let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ditto-tool-resolver-test-"));
   clearRegistryCache();
+  needRequestToolMocks.draftNeedRequest.mockClear();
+  needRequestToolMocks.saveNeedRequest.mockClear();
 });
 
 afterEach(() => {
@@ -162,6 +199,69 @@ describe("tool-resolver", () => {
           "extract_kb_facts",
         ),
       ).toThrow("extract_kb_facts userId does not match execution context");
+    });
+  });
+
+  describe("Active Request built-in tools", () => {
+    it("does not expose owner ids in the update_need_request model schema", () => {
+      const result = resolveTools(["update_need_request"], undefined, undefined, undefined, "network-lane-step:request:test");
+      const schema = result.tools[0].input_schema as {
+        properties: Record<string, unknown>;
+      };
+
+      expect(schema.properties).toHaveProperty("requestId");
+      expect(schema.properties).not.toHaveProperty("userId");
+      expect(schema.properties).not.toHaveProperty("visitorSessionId");
+    });
+
+    it("binds update_need_request writes to the execution-context user", async () => {
+      const result = resolveTools(["update_need_request"], undefined, undefined, undefined, "network-lane-step:request:test");
+
+      const output = await result.executeIntegrationTool(
+        "update_need_request",
+        {
+          requestId: "request-1",
+          rawNeed: "Need a fractional CMO",
+          mode: "both",
+          publish: true,
+          requesterContext: {
+            name: "Alex Rivers",
+            email: "alex@example.com",
+          },
+        },
+        { userId: "context-user" },
+      );
+
+      expect(JSON.parse(output)).toMatchObject({
+        request: { id: "request-1", status: "active" },
+        draft: { mode: "both" },
+      });
+      expect(needRequestToolMocks.saveNeedRequest).toHaveBeenCalledWith(expect.objectContaining({
+        requestId: "request-1",
+        userId: "context-user",
+        visitorSessionId: null,
+        actorId: "context-user",
+        identity: {
+          name: "Alex Rivers",
+          email: "alex@example.com",
+        },
+      }));
+    });
+
+    it("rejects model-supplied Active Request owners that conflict with execution context", async () => {
+      const result = resolveTools(["update_need_request"], undefined, undefined, undefined, "network-lane-step:request:test");
+
+      await expect(
+        result.executeIntegrationTool(
+          "update_need_request",
+          {
+            rawNeed: "Need a fractional CMO",
+            userId: "other-user",
+          },
+          { userId: "context-user" },
+        ),
+      ).rejects.toThrow("update_need_request userId does not match execution context");
+      expect(needRequestToolMocks.saveNeedRequest).not.toHaveBeenCalled();
     });
   });
 

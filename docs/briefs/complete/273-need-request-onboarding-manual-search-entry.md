@@ -1,7 +1,7 @@
 # Brief 273: Need Request Onboarding and Manual Search Entry
 
 **Date:** 2026-05-14
-**Status:** built (2026-05-14; fresh-context review attempt blocked by usage limit; pending review retry + human approval)
+**Status:** complete + approved (2026-05-18)
 **Depends on:** Brief 271; Brief 257/264-266; Brief 258; Brief 261
 **Unlocks:** Briefs 274, 275, 276, 278
 
@@ -161,23 +161,23 @@ Active Request is the durable demand-side object. It should supersede the older 
 
 ## Acceptance Criteria
 
-1. [ ] User can start with a one-line need and get a structured draft request.
-2. [ ] `draft_need_request(stepRunId, ...)` refuses without `stepRunId` outside `DITTO_TEST_MODE`.
-3. [ ] Drafted request includes outcome, ideal person, proof required, bad fit, urgency, geography, commercial shape, shareable summary, and private notes.
-3a. [ ] Drafted request includes `successOutcome` and optional private `outcomeValueHint`; neither leaks to member-facing copy unless explicitly marked shareable.
-4. [ ] User can edit every drafted field before saving.
-5. [ ] Calibration asks only missing fields; if raw need contains budget, geography, and proof, those questions are skipped.
-6. [ ] User can choose `manual-search`, `background-watch`, or `both`.
-7. [ ] Default contact policy is "ask before contacting anyone."
-8. [ ] Search-only can proceed with light identity; intro/contact requires name, email, org/site or credibility context.
-9. [ ] Budget/private notes never appear in member-facing result cards or public request copy unless explicitly marked shareable.
-10. [ ] Existing `/network/chat?mode=client` and `networkJobRequests` flows either map into Active Request or remain backward-compatible with a documented migration path.
-11. [ ] HTTP request route rejects caller-supplied `stepRunId` where wrapper-step-run tools are invoked.
-12. [ ] Active Request rows can be listed, paused, resumed, and closed.
-13. [ ] Search now handoff produces an input payload compatible with Brief 274.
-14. [ ] Keep watch handoff produces an Active Request payload compatible with Brief 275.
-15. [ ] Component tests cover raw need drafting, calibration skip logic, private field handling, and mode choice.
-16. [ ] Engine tests cover `stepRunId`, wrapper bypass rejection including falsy values, draft extraction, private scrub, and identity-gated intro path.
+1. [x] User can start with a one-line need and get a structured draft request.
+2. [x] `draft_need_request(stepRunId, ...)` refuses without `stepRunId` outside `DITTO_TEST_MODE`.
+3. [x] Drafted request includes outcome, ideal person, proof required, bad fit, urgency, geography, commercial shape, shareable summary, and private notes.
+3a. [x] Drafted request includes `successOutcome` and optional private `outcomeValueHint`; neither leaks to member-facing copy unless explicitly marked shareable.
+4. [x] User can edit every drafted field before saving.
+5. [x] Calibration asks only missing fields; if raw need contains budget, geography, and proof, those questions are skipped.
+6. [x] User can choose `manual-search`, `background-watch`, or `both`.
+7. [x] Default contact policy is "ask before contacting anyone."
+8. [x] Search-only can proceed with light identity; intro/contact requires name, email, org/site or credibility context.
+9. [x] Budget/private notes never appear in member-facing result cards or public request copy unless explicitly marked shareable.
+10. [x] Existing `/network/chat?mode=client` and `networkJobRequests` flows either map into Active Request or remain backward-compatible with a documented migration path.
+11. [x] HTTP request route rejects caller-supplied `stepRunId` where wrapper-step-run tools are invoked.
+12. [x] Active Request rows can be listed, paused, resumed, and closed.
+13. [x] Search now handoff produces an input payload compatible with Brief 274.
+14. [x] Keep watch handoff produces an Active Request payload compatible with Brief 275.
+15. [x] Component tests cover raw need drafting, calibration skip logic, private field handling, and mode choice.
+16. [x] Engine tests cover `stepRunId`, wrapper bypass rejection including falsy values, draft extraction, private scrub, and identity-gated intro path.
 
 ## Review Process
 
@@ -214,3 +214,11 @@ pnpm --filter @ditto/web dev
 - New nullable Active Request columns sit beside the existing card: `visitorSessionId`, `mode`, outcome/proof/geography/commercial/private fields, `sourcesAllowed`, `contactPolicy`, identity fields, and search/watch handoff JSON.
 - Migration path: dual-read period is unnecessary for v1 because the durable table is unchanged. Older rows render through the existing card path; new rows have both the old card payload and the Active Request columns. Future cleanup can retire legacy "job request" labels after Briefs 274-275 consume the new columns.
 - Request audit events are stored in `network_request_audit_events` with `stepRunId`, before/after snapshots, and lifecycle event type.
+
+## Review Fix Closeout Notes (2026-05-18)
+
+- Fresh-context review found two blocking safety/durability issues: request identity collected in the UI was not persisted, and `update_need_request` trusted model-supplied owner ids. It also flagged repeated save duplication, landing handoff flakiness/45s seeded delay, and prompt-boundary hardening.
+- Fixes: `saveActiveRequest` now forwards `identity` and `requestId`; `RequestCanvas` stores the saved id for future updates; `saveNeedRequest` update behavior is regression-tested; `update_need_request` derives actor ownership from execution context and no longer exposes `userId`/`visitorSessionId` in the model schema; raw need text is wrapped as untrusted input in the LLM prompt; seeded request handoff is fast and deterministic.
+- Baseline cleanup: the unrelated full-suite drift found during review was also fixed by completing the `workspace-provisioner` test mock and moving network-lane tests onto `withNetworkDbTransaction`, keeping production `networkDb` real while making local/CI tests deterministic.
+- Verification: focused Brief-273 vitest 96/96; landing Playwright 8/8; `pnpm run type-check` 0 errors; `pnpm --filter @ditto/web type-check` 0 errors; full `pnpm test` 3037/3037 with 13 skipped; `git diff --check` clean.
+- Reference docs audit: no architecture/ADR change needed. The network-tier test-isolation point re-aligns tests with existing Brief-263/ADR-048 posture rather than introducing a new design principle.

@@ -13,6 +13,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { checkRateLimit } from "../../../../../../../src/engine/network-abuse-controls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +100,23 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+    }
+
+    const sharedRateLimit = await checkRateLimit({
+      limitName: "profile-chat",
+      actor: sessionId ? { kind: "session", id: sessionId } : { kind: "ip", id: ip },
+    });
+    if (!sharedRateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Too many requests. Please try again later.",
+          retryAfterSec: sharedRateLimit.retryAfterSec,
+        },
+        {
+          status: 429,
+          headers: { "retry-after": String(sharedRateLimit.retryAfterSec) },
+        },
+      );
     }
 
     // Load env vars from root .env (Next.js may not have them in API routes)

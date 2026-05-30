@@ -145,6 +145,13 @@ describe("/api/v1/network/requests", () => {
     const response = await POST(request({
       rawNeed: "Need a fractional CMO",
       visitorSessionId: "visitor-1",
+      requestId: "request-1",
+      identity: {
+        name: "Alex Rivers",
+        email: "ALEX@EXAMPLE.COM",
+        orgSite: "example.com",
+        credibility: "Founder",
+      },
       publish: true,
     }));
 
@@ -157,9 +164,16 @@ describe("/api/v1/network/requests", () => {
       stepRunId: "network-lane-step:request:test",
     }));
     expect(saveNeedRequest).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: "request-1",
       visitorSessionId: "visitor-1",
       stepRunId: "network-lane-step:request:test",
       status: "active",
+      identity: {
+        name: "Alex Rivers",
+        email: "alex@example.com",
+        orgSite: "example.com",
+        credibility: "Founder",
+      },
     }));
   });
 

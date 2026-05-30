@@ -1,4 +1,5 @@
 import type { JobRequestCardBlock } from "@/lib/engine";
+import type { RequestIdentity } from "./request-identity-card";
 
 export type ActiveRequestMode = "manual-search" | "background-watch" | "both";
 export type ActiveRequestSources = "ditto-members" | "public-web" | "both";
@@ -34,11 +35,15 @@ export interface ActiveRequestDraft {
 export async function saveActiveRequest({
   draft,
   visitorSessionId,
+  requestId,
+  identity,
   publish,
   fetchImpl = fetch,
 }: {
   draft: ActiveRequestDraft;
   visitorSessionId: string;
+  requestId?: string | null;
+  identity?: RequestIdentity | null;
   publish: boolean;
   fetchImpl?: typeof fetch;
 }) {
@@ -48,8 +53,10 @@ export async function saveActiveRequest({
     credentials: "include",
     body: JSON.stringify({
       action: "save",
+      requestId,
       rawNeed: draft.rawNeed,
       visitorSessionId,
+      identity,
       publish,
       draft,
     }),

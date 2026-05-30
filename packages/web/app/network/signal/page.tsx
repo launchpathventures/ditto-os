@@ -23,8 +23,12 @@ const PROFILE_SCENES = [
 
 export default function NetworkSignalPage() {
   const searchParams = useSearchParams();
-  const initialProfileHint = searchParams?.get("seed")?.trim().slice(0, 700) || undefined;
+  const seedParam = searchParams?.get("seed")?.trim().slice(0, 700) || undefined;
+  const initialProfileHint = seedParam && seedParam !== "discovery-profile" ? seedParam : undefined;
+  const claimedMemberSignalId = searchParams?.get("claim")?.trim().slice(0, 200) || undefined;
+  const claimToken = searchParams?.get("claimToken")?.trim().slice(0, 500) || undefined;
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [claimUserId, setClaimUserId] = useState<string | null>(null);
   const [memberSignalId, setMemberSignalId] = useState<string | null>(null);
   const [calibrationQuestions, setCalibrationQuestions] = useState<string[]>([]);
   const [claims, setClaims] = useState<MemberSignalClaimRow[]>([]);
@@ -64,6 +68,51 @@ export default function NetworkSignalPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!claimedMemberSignalId || !claimToken) return;
+    let cancelled = false;
+    async function loadClaimedSignal() {
+      setMessage(null);
+      try {
+        const response = await fetch(
+          `/api/v1/network/signal?memberSignalId=${encodeURIComponent(claimedMemberSignalId)}&claimToken=${encodeURIComponent(claimToken)}`,
+          { credentials: "include" },
+        );
+        const payload = await response.json() as {
+          memberSignal?: {
+            id: string;
+            sourceSummary?: string | null;
+            calibrationQuestions?: unknown;
+          };
+          claims?: MemberSignalClaimRow[];
+          userId?: string;
+          error?: string;
+        };
+        if (!response.ok || !payload.memberSignal || !payload.claims || !payload.userId) {
+          throw new Error(payload.error || "claim_review_load_failed");
+        }
+        if (cancelled) return;
+        setMemberSignalId(payload.memberSignal.id);
+        setClaimUserId(payload.userId);
+        setClaims(payload.claims);
+        setCalibrationQuestions(
+          Array.isArray(payload.memberSignal.calibrationQuestions)
+            ? payload.memberSignal.calibrationQuestions.filter((item): item is string => typeof item === "string")
+            : [],
+        );
+        setDraftStatus("ready");
+        setMessage(payload.memberSignal.sourceSummary ?? "Profile seed imported for review.");
+      } catch (error) {
+        if (cancelled) return;
+        setMessage(error instanceof Error ? error.message : "Claim review could not load.");
+      }
+    }
+    void loadClaimedSignal();
+    return () => {
+      cancelled = true;
+    };
+  }, [claimedMemberSignalId, claimToken]);
 
   function handleResearchComplete(response: MemberSignalResearchResponse) {
     setMemberSignalId(response.memberSignal.id);
@@ -184,6 +233,8 @@ export default function NetworkSignalPage() {
         <div className="lg:sticky lg:top-5 lg:self-start">
           <MemberSignalReview
             sessionId={sessionId}
+            userId={claimUserId}
+            claimToken={claimToken}
             memberSignalId={memberSignalId}
             claims={claims}
             onClaimsChange={setClaims}

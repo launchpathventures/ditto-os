@@ -1,0 +1,133 @@
+# Ditto — Operating Cycle: Background Watch (Brief 293)
+#
+# NOT loaded by workspace `loadAllProcesses` — placed under
+# `processes/cycles/network/` (a subdirectory) precisely because the watch
+# runs Network-tier, not as a workspace process. The loader only scans the
+# top level of `processes/`, `processes/templates/`, and `processes/cycles/`
+# (see `src/engine/process-loader.ts:464`), so this file is documentation
+# only. An AC test asserts the loader does not pick it up.
+#
+# This YAML documents the cycle decomposition the runner in
+# `src/engine/network-background-watch.ts` implements. It is intentionally
+# legible — the cycle is sense → assess → act → gate → land → learn → brief
+# (parent Brief 275, Insight-168 archetype). The runner is a plain async
+# function the hourly Network-deployment sweep + the manual "run now" route
+# call directly; there is no workspace process engine to invoke here.
+#
+# Tool boundary (Brief 293 / Insight-235): every tool listed below is
+# resolvable in `tool-resolver.ts` AND is on `BACKGROUND_WATCH_ALLOWED_TOOLS`.
+# No contact tool may be added to this list — the routing-invariant test
+# in `network-background-watch.test.ts` asserts this.
+
+name: Network Background Watch
+id: network-background-watch
+version: 1
+status: documentation-only
+
+operator: network-deployment
+defaultIdentity: system
+
+description: >
+  Per-watch operating cycle. Senses the watch's seed Active Request or
+  Member Signal, runs an evidence-backed search via Brief 274's
+  `runNetworkSearch`, applies the 8-rule network-health gate, lands a
+  thin proposal join row per non-suppressed connection, learns from the
+  result (consecutive-quiet counter, what-changed delta), and briefs the
+  watch row for the next run. Never contacts anyone — the watch's tool
+  list contains no contact tool by construction.
+
+trigger:
+  # Documentation only — the actual trigger is the hourly Network-deployment
+  # sweep in `src/engine/scheduler.ts` + the manual "run now" route.
+  type: schedule
+  cron: "0 * * * *"
+  description: Hourly Network sweep selects watches where nextRunAt <= now.
+
+inputs:
+  - name: watchId
+    type: text
+    source: system
+    required: true
+    description: The Background Watch row to run.
+  - name: triggeredBy
+    type: enum
+    values: [schedule, manual, harness]
+    source: system
+    required: true
+
+steps:
+  - id: sense
+    name: Sense
+    description: >
+      Load the watch's seed Active Request (or Member Signal) and prepare
+      the search query + job-request card.
+    tool: null
+
+  - id: assess
+    name: Assess
+    description: >
+      Check the watch is still `active`, that no operator pause applies,
+      that the requester is not over their hourly rate limit, and that any
+      manual "run now" is past its 4-hour cooldown.
+    tool: null
+
+  - id: act
+    name: Act — search
+    description: >
+      Run `runNetworkSearch` (Brief 274). No duplicate ranking; the runner
+      reuses the existing search pipeline with `mode: "from-request"` or
+      `"both"`. Search-side privacy scrubbing (Brief 283) already applies.
+    tool: run_network_search
+
+  - id: gate
+    name: Gate — network health
+    description: >
+      Apply the 8-rule network-health evaluator
+      (`evaluateNetworkHealth`). Suppress wins over queue-for-review wins
+      over downgrade wins over pass. Suppressed connections never produce
+      a watch proposal row.
+    tool: null
+
+  - id: land
+    name: Land — thin proposals
+    description: >
+      For non-suppressed decisions, write a thin
+      `network_watch_proposals` row (FK + decision + reasons + delta) and
+      flip the underlying `networkPossibleConnections.lifecycleState` to
+      `watched`. For invitation candidates pointing at this connection,
+      set `watchId` (never bypass `discoveryProfileId` — Brief 279 path
+      stays intact).
+    tool: run_network_background_watch
+
+  - id: learn
+    name: Learn — health summary
+    description: >
+      Close out the `network_watch_runs` row with per-decision counts +
+      rule-hit tallies. Update `consecutive_quiet_runs` to feed the
+      cadence calibration substrate (parent D6).
+    tool: null
+
+  - id: brief
+    name: Brief — next run
+    description: >
+      Update the watch row: `nextRunAt = nextRunFor(frequency, now)`,
+      `lastRunAt`, and (for manual runs) `lastManualRunAt`.
+    tool: null
+
+# Tools allowed in this cycle. Every name must resolve in `tool-resolver.ts`
+# AND must be in `BACKGROUND_WATCH_ALLOWED_TOOLS` (no contact tool — Brief
+# 293 / Insight-235). The routing-invariant test asserts this.
+tools:
+  - run_network_search
+  - run_network_background_watch
+  - record_network_search_feedback
+
+# Explicit non-tools — recorded for legibility; the routing-invariant test
+# verifies these are NOT resolvable under a watch step run.
+forbidden_tools:
+  - send_claim_invite
+  - send_recipient_approval_email
+  - send_requester_approval_email
+  - send_follow_up_email
+  - create_intro_thread
+  - fan_out_intro_feedback

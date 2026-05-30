@@ -1,11 +1,20 @@
 /**
- * Ditto — Chat Session API (Brief 123)
+ * Ditto — Chat Session API (Brief 123, reconciled with workspace auth in Brief 280)
  *
- * GET /api/v1/chat/session — reads the session cookie, returns session data
- * (messages, metadata, active process runs) for the /chat page.
+ * GET /api/v1/chat/session — bootstraps the `/chat` workspace Self surface.
  *
- * POST /api/v1/chat/session/request-link — accepts an email, sends a magic link.
- * Returns identical success message regardless of whether email exists (prevent enumeration).
+ * Identity resolution (Brief 280): the authenticated workspace owner is the
+ * Self-home user even without a `ditto_chat_session` cookie. We resolve the
+ * workspace identity from the `ditto_workspace_session` cookie (or the
+ * local-dev bypass) FIRST, and fall back to the Brief 123 `ditto_chat_session`
+ * magic-link session for public/returning continuity. A Brief 123 session is
+ * still loaded when present so persisted message history survives reloads.
+ *
+ * This reads the workspace session cookie directly — it does NOT self-HTTP to
+ * `/api/v1/workspace/session` (Brief 280 constraint). The cookie-parse +
+ * case-insensitive owner match mirrors `checkWorkspaceAuth` in
+ * `/api/v1/projects` and the GET in `/api/v1/workspace/session`; the HMAC is
+ * verified at magic-link login time (`/login/auth`), not on every read.
  */
 
 import { NextResponse } from "next/server";
@@ -14,6 +23,7 @@ import { cookies } from "next/headers";
 export const runtime = "nodejs";
 
 const CHAT_SESSION_COOKIE = "ditto_chat_session";
+const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
 
 async function loadEnv() {
   if (!process.env.ANTHROPIC_API_KEY && !process.env.MOCK_LLM) {
@@ -25,66 +35,107 @@ async function loadEnv() {
   }
 }
 
+/**
+ * Resolve the authenticated workspace owner's email, or null.
+ * - Local-dev / CI: `WORKSPACE_OWNER_EMAIL` unset disables workspace auth
+ *   and the owner is `dev@local` (mirrors `/api/v1/workspace/session` GET).
+ * - Otherwise: parse `email|hmac` from the cookie and require a
+ *   case-insensitive match against `WORKSPACE_OWNER_EMAIL`.
+ */
+function resolveWorkspaceEmail(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+): string | null {
+  const owner = process.env.WORKSPACE_OWNER_EMAIL;
+  if (!owner) return "dev@local";
+  const raw = cookieStore.get(WORKSPACE_SESSION_COOKIE)?.value;
+  if (!raw) return null;
+  const sepIdx = raw.lastIndexOf("|");
+  const email = sepIdx === -1 ? raw : raw.substring(0, sepIdx);
+  return email.toLowerCase() === owner.toLowerCase() ? email : null;
+}
+
 export async function GET() {
   try {
     await loadEnv();
 
     const cookieStore = await cookies();
-    const sessionId = cookieStore.get(CHAT_SESSION_COOKIE)?.value;
+    const workspaceEmail = resolveWorkspaceEmail(cookieStore);
+    const chatSessionId = cookieStore.get(CHAT_SESSION_COOKIE)?.value;
 
-    if (!sessionId) {
+    // Nothing to authenticate as — preserve the Brief 123 unauthenticated
+    // path so public/magic-link users still see the email-request form.
+    if (!workspaceEmail && !chatSessionId) {
       return NextResponse.json({ authenticated: false }, { status: 200 });
     }
 
     const { db, schema } = await import("../../../../../../../src/db");
     const { eq, and, sql, desc } = await import("drizzle-orm");
 
-    // Load session
-    const [session] = await db
-      .select()
-      .from(schema.chatSessions)
-      .where(
-        and(
-          eq(schema.chatSessions.sessionId, sessionId),
-          sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
-        ),
-      );
+    // Load the Brief 123 magic-link session if a cookie is present, for
+    // persisted-history continuity (not required when workspace-authed).
+    let chatSession:
+      | {
+          sessionId: string;
+          authenticatedEmail: string | null;
+          messages: unknown;
+          messageCount: number | null;
+        }
+      | undefined;
+    if (chatSessionId) {
+      const [row] = await db
+        .select()
+        .from(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.sessionId, chatSessionId),
+            sql`${schema.chatSessions.expiresAt} > ${Date.now()}`,
+          ),
+        );
+      if (row?.authenticatedEmail) chatSession = row;
+    }
 
-    if (!session || !session.authenticatedEmail) {
+    const email = workspaceEmail ?? chatSession?.authenticatedEmail ?? null;
+    if (!email) {
       return NextResponse.json({ authenticated: false }, { status: 200 });
     }
 
-    // Load active process runs for this user
-    let statusMetrics = { contacted: 0, replied: 0, meetings: 0, nextAction: null as string | null };
+    // Status metrics — best-effort, keyed on the resolved email.
+    const statusMetrics = {
+      contacted: 0,
+      replied: 0,
+      meetings: 0,
+      nextAction: null as string | null,
+    };
     try {
       const { networkUsers, interactions, processRuns } = schema;
 
-      // Find the network user
       const [networkUser] = await db
         .select()
         .from(networkUsers)
-        .where(eq(networkUsers.email, session.authenticatedEmail))
+        .where(eq(networkUsers.email, email))
         .limit(1);
 
       if (networkUser) {
-        // Count interactions — push filters to DB (avoid loading all rows)
         const countByType = async (type: string) => {
           const rows = await db
             .select({ id: interactions.id })
             .from(interactions)
-            .where(and(eq(interactions.userId, networkUser.id), eq(interactions.type, type as typeof interactions.type._.data)));
+            .where(
+              and(
+                eq(interactions.userId, networkUser.id),
+                eq(interactions.type, type as typeof interactions.type._.data),
+              ),
+            );
           return rows.length;
         };
 
         statusMetrics.contacted = await countByType("outreach_sent");
         statusMetrics.replied = await countByType("reply_received");
 
-        // Meetings: two types
         const meetingScheduled = await countByType("meeting_scheduled");
         const meetingHeld = await countByType("meeting_held");
         statusMetrics.meetings = meetingScheduled + meetingHeld;
 
-        // Find next scheduled action
         const [nextRun] = await db
           .select()
           .from(processRuns)
@@ -102,15 +153,15 @@ export async function GET() {
         }
       }
     } catch {
-      // Status metrics are best-effort
+      // Status metrics are best-effort.
     }
 
     return NextResponse.json({
       authenticated: true,
-      email: session.authenticatedEmail,
-      sessionId: session.sessionId,
-      messages: session.messages,
-      messageCount: session.messageCount,
+      email,
+      sessionId: chatSession?.sessionId,
+      messages: chatSession?.messages ?? [],
+      messageCount: chatSession?.messageCount ?? 0,
       status: statusMetrics,
     });
   } catch (error) {

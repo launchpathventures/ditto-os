@@ -82,6 +82,17 @@ function ReviewPrimary({
       }).catch(() => null);
       return;
     }
+    // Brief 288 AC #18 — workspace-side consent on an imported
+    // intro-proposal-card. Persists the terminal state on the local activity
+    // and propagates it back to network.introductions (no live Network read).
+    if (actionId.startsWith("intro-proposal-card:")) {
+      await fetch("/api/v1/workspace/inbox/intro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload ?? { actionId }),
+      }).catch(() => null);
+      return;
+    }
     onAskAbout(String(payload?.message ?? actionId));
   }
 

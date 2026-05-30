@@ -84,6 +84,14 @@ describe("Action boundaries — isToolAllowed", () => {
     expect(isToolAllowed("generate_process", "workspace")).toBe(true);
   });
 
+  it("Brief 281: search_workspace is workspace-gated, never front_door", () => {
+    // Recall exposes private workspace artifacts — it must not leak to
+    // unauthenticated visitors.
+    expect(isToolAllowed("search_workspace", "front_door")).toBe(false);
+    expect(isToolAllowed("search_workspace", "workspace")).toBe(true);
+    expect(isToolAllowed("search_workspace", "workspace_budgeted")).toBe(true);
+  });
+
   it("allows allocate_budget only in workspace_budgeted", () => {
     expect(isToolAllowed("allocate_budget", "front_door")).toBe(false);
     expect(isToolAllowed("allocate_budget", "workspace")).toBe(false);
@@ -104,6 +112,45 @@ describe("Action boundaries — filterToolsForContext", () => {
     const filtered = filterToolsForContext(tools, "front_door");
 
     expect(filtered).toEqual(tools);
+  });
+});
+
+describe("Action boundaries — Brief 280 AC5 (workspace chat front door)", () => {
+  // The five tools the workspace Self conversation must be able to use
+  // inline, and which the public front door must never expose.
+  const WORKSPACE_CHAT_TOOLS = [
+    "generate_process",
+    "get_process_detail",
+    "get_briefing",
+    "create_work_item",
+    "start_pipeline",
+  ] as const;
+
+  it.each(WORKSPACE_CHAT_TOOLS)(
+    "%s is allowed in workspace and workspace_budgeted",
+    (tool) => {
+      expect(isToolAllowed(tool, "workspace")).toBe(true);
+      expect(isToolAllowed(tool, "workspace_budgeted")).toBe(true);
+    },
+  );
+
+  it.each(WORKSPACE_CHAT_TOOLS)(
+    "%s is blocked in front_door",
+    (tool) => {
+      expect(isToolAllowed(tool, "front_door")).toBe(false);
+    },
+  );
+
+  it("front_door tool set excludes every workspace chat tool", () => {
+    const frontDoor = getToolSetForContext("front_door").allowedTools;
+    for (const tool of WORKSPACE_CHAT_TOOLS) {
+      expect(frontDoor).not.toContain(tool);
+    }
+  });
+
+  it("workspace tool set is a superset of the workspace chat tools", () => {
+    const filtered = filterToolsForContext([...WORKSPACE_CHAT_TOOLS], "workspace");
+    expect(filtered).toEqual([...WORKSPACE_CHAT_TOOLS]);
   });
 });
 

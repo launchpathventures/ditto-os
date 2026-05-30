@@ -99,6 +99,8 @@ const { mockProvisionWorkspace } = vi.hoisted(() => ({
 vi.mock("./workspace-provisioner", () => ({
   provisionWorkspace: mockProvisionWorkspace,
   createRailwayClient: vi.fn(() => ({})),
+  provisioningErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
 }));
 
 // Mock workspace-welcome (Brief 153)
@@ -109,7 +111,44 @@ vi.mock("./workspace-welcome", () => ({
   sendWorkspaceWelcome: mockSendWorkspaceWelcome,
 }));
 
-import { processInboundEmail, isWorkspaceAcceptanceSignal, type InboundEmailPayload } from "./inbound-email";
+const {
+  mockNetworkSelectQueue,
+  mockCreateNetworkLaneStepRun,
+  mockRecordIntroFeedback,
+} = vi.hoisted(() => ({
+  mockNetworkSelectQueue: [] as unknown[][],
+  mockCreateNetworkLaneStepRun: vi.fn(),
+  mockRecordIntroFeedback: vi.fn(),
+}));
+
+vi.mock("../db/network-db", () => ({
+  networkDb: {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => mockNetworkSelectQueue.shift() ?? [],
+        }),
+      }),
+    }),
+  },
+  withNetworkDbAvailability: (handle: unknown) => handle,
+}));
+
+vi.mock("./network-step-run", () => ({
+  createNetworkLaneStepRun: mockCreateNetworkLaneStepRun,
+}));
+
+vi.mock("./intro-feedback", () => ({
+  recordIntroFeedback: mockRecordIntroFeedback,
+}));
+
+import {
+  classifyReply,
+  matchInboundToIntroduction,
+  processInboundEmail,
+  isWorkspaceAcceptanceSignal,
+  type InboundEmailPayload,
+} from "./inbound-email";
 import { resumeHumanStep } from "./heartbeat";
 import { createHmac } from "crypto";
 import { Webhook } from "svix";
@@ -119,6 +158,14 @@ beforeEach(() => {
   testDb = result.db;
   cleanup = result.cleanup;
   vi.clearAllMocks();
+  mockNetworkSelectQueue.length = 0;
+  mockCreateNetworkLaneStepRun.mockResolvedValue(
+    "network-lane-step:network-intro-inbound-reply:00000000-0000-4000-8000-000000000001",
+  );
+  mockRecordIntroFeedback.mockResolvedValue({
+    feedbackId: "feedback-1",
+    action: "recorded",
+  });
 });
 
 afterEach(() => {
@@ -428,6 +475,60 @@ describe("processInboundEmail", () => {
     expect(result.action).toBe("interaction_recorded");
     expect(result.personId).toBeDefined();
   });
+
+  it("records authenticated introduction replies before legacy sender routing", async () => {
+    mockNetworkSelectQueue.push(
+      [
+        {
+          id: "intro-live-1",
+          requesterUserId: "requester-live-1",
+          recipientUserId: null,
+          recipientEmail: null,
+          threadMessageId: "thread-live-1",
+          metadata: null,
+        },
+      ],
+      [{ id: "requester-live-1", email: "rob@example.com" }],
+    );
+
+    const payload: InboundEmailPayload = {
+      eventType: "message.received",
+      message: {
+        from: "rob@example.com",
+        subject: "Re: Intro: Rob <> Priya",
+        text: "Great intro, advisory engagement signed last week.",
+        messageId: "msg-intro-1",
+        threadId: "thread-live-1",
+      },
+    };
+
+    const result = await processInboundEmail(payload);
+
+    expect(result).toMatchObject({
+      action: "interaction_recorded",
+      details: "Recorded intro feedback for intro-live-1",
+    });
+    expect(mockCreateNetworkLaneStepRun).toHaveBeenCalledWith({
+      route: "network-intro-inbound-reply",
+      sessionId: "intro-live-1",
+      actorId: "rob@example.com",
+    });
+    expect(mockRecordIntroFeedback).toHaveBeenCalledWith({
+      db: expect.any(Object),
+      stepRunId:
+        "network-lane-step:network-intro-inbound-reply:00000000-0000-4000-8000-000000000001",
+      introId: "intro-live-1",
+      party: "requester",
+      payload: {
+        eventType: "reply",
+        classifiedCategory: "outcome:useful",
+        outcomeClass: "advisory",
+        freeText: "Great intro, advisory engagement signed last week.",
+        sourceMessageId: "msg-intro-1",
+      },
+    });
+    expect(mockSelfConverse).not.toHaveBeenCalled();
+  });
 });
 
 // ============================================================
@@ -619,6 +720,170 @@ describe("expanded reply classification (Brief 146)", () => {
       .from(schema.interactions)
       .where(eq(schema.interactions.personId, personId));
     expect(interactions[0].outcome).toBe("deferred");
+  });
+});
+
+// ============================================================
+// Intro-context reply classification + matching (Brief 289)
+// ============================================================
+
+describe("intro reply classification (Brief 289)", () => {
+  const cases = [
+    ["decline:not-relevant", ["not relevant for me", "not a fit for this search"]],
+    ["decline:too-junior", ["too junior", "need someone more senior"]],
+    ["decline:too-senior", ["too senior", "more junior would be better"]],
+    ["decline:wrong-domain", ["wrong domain", "different industry"]],
+    ["decline:too-salesy", ["too salesy", "felt like a sales pitch"]],
+    ["decline:already-know-them", ["already know them", "we've met before"]],
+    ["decline:other", ["no thanks", "I'll pass"]],
+    ["outcome:useful", ["great intro", "useful, we are talking"]],
+    ["outcome:not-useful", ["not useful", "didn't fit"]],
+    ["outcome:no-outcome-yet", ["too early", "haven't met yet"]],
+    ["ambiguous", ["thanks", "I saw this"]],
+  ] as const;
+
+  for (const [expected, samples] of cases) {
+    for (const sample of samples) {
+      it(`classifies "${sample}" as ${expected}`, () => {
+        expect(classifyReply(sample, "", "intro").category).toBe(expected);
+      });
+    }
+  }
+
+  it("seeds outcome class from useful outcome keywords", () => {
+    expect(
+      classifyReply("Great intro, advisory engagement signed last week", "", "intro"),
+    ).toMatchObject({
+      category: "outcome:useful",
+      outcomeClass: "advisory",
+    });
+    expect(
+      classifyReply("Useful, this could become a client contract", "", "intro"),
+    ).toMatchObject({
+      category: "outcome:useful",
+      outcomeClass: "client",
+    });
+  });
+
+  it("guards obvious false positives", () => {
+    expect(
+      classifyReply("This is a great question, can you explain?", "", "intro")
+        .category,
+    ).toBe("ambiguous");
+    expect(classifyReply("senior team is copied here", "", "intro").category).toBe(
+      "ambiguous",
+    );
+    expect(classifyReply("sales team followed up", "", "intro").category).toBe(
+      "ambiguous",
+    );
+  });
+});
+
+describe("matchInboundToIntroduction (Brief 289)", () => {
+  function fakeNetworkDb(rows: unknown[], users: unknown[] = []) {
+    let call = 0;
+    return {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => {
+              call += 1;
+              return call === 2 ? users : rows;
+            },
+          }),
+        }),
+      }),
+    } as unknown as NonNullable<Parameters<typeof matchInboundToIntroduction>[1]>["db"];
+  }
+
+  it("matches by warm intro thread id from AgentMail threadId", async () => {
+    const row = {
+      id: "intro-thread",
+      threadMessageId: "thread-123",
+      requesterUserId: "requester-thread",
+      recipientUserId: null,
+      recipientEmail: null,
+      metadata: null,
+    };
+    const result = await matchInboundToIntroduction(
+      {
+        from: "rob@example.com",
+        threadId: "thread-123",
+      },
+      { db: fakeNetworkDb([row], [{ id: "requester-thread", email: "rob@example.com" }]) },
+    );
+    expect(result?.id).toBe("intro-thread");
+  });
+
+  it("matches by approval email references stored in metadata", async () => {
+    const row = {
+      id: "intro-approval",
+      threadMessageId: null,
+      requesterUserId: "requester-approval",
+      recipientUserId: null,
+      recipientEmail: null,
+      metadata: { approvalMessageIds: ["approval-msg-1"] },
+    };
+    let call = 0;
+    const db = {
+      select: () => {
+        return {
+          from: () => ({
+            where: () => ({
+              limit: async () => {
+                call += 1;
+                if (call === 1) return [];
+                if (call === 2) return [row];
+                return [{ id: "requester-approval", email: "rob@example.com" }];
+              },
+            }),
+          }),
+        };
+      },
+    } as unknown as NonNullable<Parameters<typeof matchInboundToIntroduction>[1]>["db"];
+
+    const result = await matchInboundToIntroduction(
+      {
+        from: "rob@example.com",
+        headers: { References: "<approval-msg-1>" },
+      },
+      { db },
+    );
+    expect(result?.id).toBe("intro-approval");
+  });
+
+  it("returns null for spoofed or unrelated replies", async () => {
+    const result = await matchInboundToIntroduction(
+      {
+        from: "attacker@example.com",
+        headers: { References: "<not-known>" },
+      },
+      { db: fakeNetworkDb([]) },
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when a valid reference is sent by the wrong address", async () => {
+    const row = {
+      id: "intro-spoof",
+      threadMessageId: "thread-spoof",
+      requesterUserId: "requester-spoof",
+      recipientUserId: null,
+      recipientEmail: null,
+      metadata: null,
+    };
+    const result = await matchInboundToIntroduction(
+      {
+        from: "attacker@example.com",
+        threadId: "thread-spoof",
+      },
+      {
+        db: fakeNetworkDb([row], [
+          { id: "requester-spoof", email: "rob@example.com" },
+        ]),
+      },
+    );
+    expect(result).toBeNull();
   });
 });
 

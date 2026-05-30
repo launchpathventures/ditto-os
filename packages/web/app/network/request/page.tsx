@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
+import { verifyRefTokenForHost } from "@/lib/signed-cookie";
 import { RequestWorkspace } from "./request-workspace";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +26,12 @@ function normalizeInitialNeed(value: string | null): string | undefined {
 
 export default async function NetworkRequestPage({ searchParams }: NetworkRequestPageProps) {
   const params = await searchParams;
+  const dittoRef = firstParam(params.ditto_ref);
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+  if (dittoRef && !(await verifyRefTokenForHost(dittoRef, host))) {
+    notFound();
+  }
   const initialNeed = normalizeInitialNeed(firstParam(params.seed));
 
   return <RequestWorkspace initialNeed={initialNeed} />;

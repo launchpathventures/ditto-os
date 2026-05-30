@@ -12,9 +12,9 @@ import {
   visitorTranscriptHash,
 } from "../../../../../../../../../src/engine/visitor-profile-session";
 import {
-  checkVisitorRateLimit,
-  visitorRateLimitCopy,
-} from "../../../../../../../../../src/engine/visitor-rate-limit";
+  checkRateLimits,
+  isNetworkOperationPaused,
+} from "../../../../../../../../../src/engine/network-abuse-controls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,23 +69,40 @@ async function postHandler(request: Request, { params }: Params) {
   const fingerprint = typeof body.fingerprint === "string" ? body.fingerprint.slice(0, 200) : null;
   const ip = visitorIp(request);
   const greeterName = user.personaAssignment === "mira" ? "Mira" : "Alex";
-  const rateLimit = await checkVisitorRateLimit({ ip, fingerprint, sessionId });
-  if ("blocked" in rateLimit) {
+  if (!sessionId) {
+    return NextResponse.json({ error: "session_required" }, { status: 400 });
+  }
+  const rateLimit = await checkRateLimits([
+    {
+      limitName: "network-intro",
+      actor: { kind: "session", id: `${sessionId}:${fingerprint ?? "no-fingerprint"}` },
+    },
+    {
+      limitName: "network-intro",
+      actor: { kind: "ip", id: ip },
+      policy: { max: 200 },
+    },
+  ]);
+  if (!rateLimit.allowed) {
     return NextResponse.json(
       {
         rateLimited: true,
         retryAfterSec: rateLimit.retryAfterSec,
-        message: visitorRateLimitCopy(greeterName, rateLimit),
+        message: `I need a minute - back in ${Math.ceil(rateLimit.retryAfterSec / 60)} min.`,
       },
       { status: 429 },
     );
   }
-  if (!sessionId) {
-    return NextResponse.json({ error: "session_required" }, { status: 400 });
-  }
   const pending = getPendingVisitorIntro({ sessionId, userId: user.id });
   if (!pending) {
     return NextResponse.json({ error: "intro_request_not_pending" }, { status: 409 });
+  }
+  const pause = await isNetworkOperationPaused({ memberId: user.id });
+  if (pause.paused) {
+    return NextResponse.json(
+      { error: "network_operation_paused", reason: pause.reason },
+      { status: 423 },
+    );
   }
   const transcript = getVisitorProfileTranscript(sessionId);
   if (pending.transcriptHash !== visitorTranscriptHash(transcript)) {

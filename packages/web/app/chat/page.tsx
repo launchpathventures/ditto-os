@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { StatusStrip } from "./components/status-strip";
 import { ChatConversation } from "./components/chat-conversation";
+import { ArchiveDrawer } from "./components/archive-drawer";
 
 interface SessionData {
   authenticated: boolean;
@@ -36,6 +37,7 @@ export default function ChatPage() {
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   // Check URL params for error from auth redirect
   useEffect(() => {
@@ -85,7 +87,11 @@ export default function ChatPage() {
   // Authenticated — show persistent chat
   return (
     <div className="min-h-screen flex flex-col">
-      <ChatNav />
+      <ChatNav onOpenArchive={() => setArchiveOpen(true)} />
+      <ArchiveDrawer
+        open={archiveOpen}
+        onClose={() => setArchiveOpen(false)}
+      />
       {sessionData.status && (
         <StatusStrip
           contacted={sessionData.status.contacted}
@@ -105,14 +111,29 @@ export default function ChatPage() {
   );
 }
 
-/** Minimal top nav — matches homepage sparse feel */
-function ChatNav() {
+/**
+ * Minimal top nav — matches homepage sparse feel. When authenticated, it
+ * exposes a single compact Archive affordance (Brief 281). This is an
+ * escape hatch, not a primitive sidebar: the conversation stays the
+ * default workspace IA (Brief 280).
+ */
+function ChatNav({ onOpenArchive }: { onOpenArchive?: () => void }) {
   return (
     <nav className="border-b border-border/40">
       <div className="max-w-[640px] mx-auto px-4 py-3 flex items-center justify-between">
         <Link href="/" className="text-sm font-medium text-text-primary hover:text-text-secondary transition-colors">
           ditto
         </Link>
+        {onOpenArchive && (
+          <button
+            type="button"
+            onClick={onOpenArchive}
+            aria-label="Open archive"
+            className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-sm font-medium text-text-muted hover:text-text-primary transition-colors"
+          >
+            Archive
+          </button>
+        )}
       </div>
     </nav>
   );

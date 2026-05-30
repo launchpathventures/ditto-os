@@ -127,3 +127,46 @@ When work touches Member Signals, Active Requests, manual search, background wat
 - Two-sided intro consent: requester approval before asking recipient; recipient approval before shared thread.
 - Outbound email compliance: suppression, opt-out, sender identity, complaint handling, and misleading-subject checks for claim invites and intro emails.
 - Side-effect matrix: does every route/tool that writes, sends, searches, starts jobs, deletes/exports, or invokes LLM/external APIs require `stepRunId` or a wrapper step run and reject caller-supplied `stepRunId`, including falsy values?
+
+### 18. Boundary Enforced by Transport, Not Runtime Filter (Insight-235)
+When the work asserts or relies on a capability/security boundary, is the boundary checked at its real enforcement seam — not a plausible-sounding proxy?
+- Does any acceptance criterion claiming a safety boundary name the **enforcement seam** (which engine/endpoint/route the surface is wired to) and exercise that seam or the routing invariant — not just a table-consistency unit test?
+- If a privileged path passes the full toolset without consulting the boundary table (e.g. `selfConverseStream()` not calling `filterToolsForContext()`), is there a comment at that exact site stating the guarantee is transport-level and pointing to where the boundary *is* enforced?
+- Did the reviewer trace from the surface to the actual decision point and verify the path under review reaches it — rather than confirming a table merely exists?
+- FLAG any "fix" that adds a redundant runtime filter on a path that is safe by construction (it obscures the real invariant).
+
+### 19. Fan-Out Helper Cross-Cutting Filter Uniformity (Insight-236)
+When a helper fans out across heterogeneous kinds and accepts a filter that applies to some-but-not-all of them, is the filter resolved once and applied uniformly?
+- Is the cross-cutting filter resolved **exactly once** into a single typed object and threaded into every collector — never re-derived per kind?
+- Unresolved → empty: does an unresolvable filter short-circuit to nothing (never an unscoped fallback)?
+- Unscopable kinds omitted: are kinds the filter cannot scope explicitly omitted (and their count zeroed), not silently returned unfiltered?
+- Indirect ownership: does the resolved object carry enough to apply the filter through indirect paths (e.g. a memory's project via its process scope / `appliedProjectIds`)?
+- Do tests include a **cross-kind filtered case**, not only per-kind cases? (The leak is invisible to single-kind tests.)
+
+### 20. Member Signal Provenance — Network Trust Gate (Brief 278 D-Q7)
+Every Member Signal claim, Possible Connection match rationale, request inference, and invite reason carries an inspectable source label/id?
+- **Verify:** every public-facing claim/match/invite-reason links to a `network_signal_sources` row, KB fact, scout result, or member-approved statement the owner can open; agent-generated text without a source label is a FAIL. The umbrella check in item #17 names this gate; this item is the durable boolean.
+
+### 21. Private-Leakage Scrub Coverage — Network Trust Gate (Brief 278 D-Q7)
+Every Network surface that renders to a non-owner — public profile, share, search results, proposal email, intro email, watch digest, claim invite, admin preview — passes `network-privacy-scrubber.ts` and proves private/on-request/hidden data cannot leak?
+- **Verify:** focused vitest covers the eight-surface × four-visibility matrix; `NetworkProfileCardBlock.antiPersonaMd` is `null` on every non-owner render (Hard Rule #5 enforced at the block, not only the scrubber); admin reveal of raw text writes its own `network_audit_events` row.
+
+### 22. No-Contact Background Watch — Network Trust Gate (Brief 278 D-Q7)
+Background watches can sense, score, and digest without contacting any third party?
+- **Verify:** every background-watch runtime tool/step's output is digest/propose/queue only; outbound contact requires a downstream `compose_intro` or `send_claim_invite` step gated on operator/recipient consent and `network-email-compliance.ts`; tests assert no email/DM/webhook side effect inside the watch loop itself.
+
+### 23. Two-Sided Intro Consent — Network Trust Gate (Brief 278 D-Q7)
+Every Introduction Proposal requires requester approval before the recipient is asked, and recipient approval before a shared thread opens?
+- **Verify:** the `introductions` row carries both `requesterApprovedAt` and `recipientApprovedAt` (or equivalent two-stage approval state) before any email/thread side effect; `AuthorizationRequestBlock` gates both halves; tests cover the asymmetric-decline case (either side declines → no thread).
+
+### 24. Claim-Before-Public Discovery — Network Trust Gate (Brief 278 D-Q7)
+Discovery Profiles remain internal until the discovered person claims/approves?
+- **Verify:** `network_discovered_profiles` is internal-only until a `network_claim_tokens` redemption resolves to `claimed`; the public profile route returns 410/404 for unclaimed Discovery Profiles; OG/share/search/email surfaces never render unclaimed Discovery Profile content.
+
+### 25. Outbound-Email Suppression and Compliance — Network Trust Gate (Brief 278 D-Q7)
+Every claim invite and intro-related email passes suppression check, sender identity, RFC 8058 one-click unsubscribe, configured CAN-SPAM footer, and a misleading-subject check before send?
+- **Verify:** `network-email-compliance.ts` is called by every send path; a `network-suppression.ts` hit writes an audited refusal row (not a silent drop); `List-Unsubscribe` (mailto+https) + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers are present on every send through the `AgentMailAdapter` `headers` pass-through; complaint webhook (`/api/v1/network/complaints`) feeds suppression and pause.
+
+### 26. Source-Policy Enforcement Before Store/Outreach — Network Trust Gate (Brief 278 D-Q7)
+Discovery and outbound paths enforce source policy in code before any collect/store/invite-use write?
+- **Verify:** `discovery-source-policy.ts` gates are called at the three enforcement points (collect, store, invite-use); a disallowed source class writes an audited block row and refuses the write; LinkedIn ingestion beyond URL pointer / user-provided / consented / formal-API data is blocked in code, not in documentation.

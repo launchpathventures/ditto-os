@@ -73,6 +73,59 @@ describe("need request storage", () => {
     });
   }, 15_000);
 
+  it("updates an existing Active Request row with calibrated identity instead of duplicating it", async () => {
+    await withNetworkDbTransaction(async (db) => {
+      const draft = draftNeedRequestFromText({
+        rawNeed: "Need a fractional CMO for a climate startup.",
+      });
+      const created = await saveNeedRequest({
+        db,
+        draft,
+        visitorSessionId: "visitor-identity",
+        status: "draft",
+        mode: "manual-search",
+        stepRunId: "network-lane-step:request:create",
+      });
+      const updatedDraft = {
+        ...draft,
+        outcomeNeeded: "climate startup growth plan",
+      };
+      const updated = await saveNeedRequest({
+        db,
+        requestId: created.id,
+        draft: updatedDraft,
+        visitorSessionId: "visitor-identity",
+        status: "active",
+        mode: "both",
+        identity: {
+          name: "Alex Rivers",
+          email: "alex@example.com",
+          orgSite: "example.com",
+          credibility: "Founder",
+        },
+        stepRunId: "network-lane-step:request:update",
+      });
+
+      expect(updated.id).toBe(created.id);
+      expect(updated.status).toBe("active");
+      expect(updated.mode).toBe("both");
+      expect(updated.requesterName).toBe("Alex Rivers");
+      expect(updated.requesterEmail).toBe("alex@example.com");
+
+      const rows = await db
+        .select()
+        .from(networkSchema.networkJobRequests)
+        .where(eq(networkSchema.networkJobRequests.visitorSessionId, "visitor-identity"));
+      expect(rows).toHaveLength(1);
+
+      const events = await db
+        .select()
+        .from(networkSchema.networkRequestAuditEvents)
+        .where(eq(networkSchema.networkRequestAuditEvents.requestId, created.id));
+      expect(events.map((event) => event.eventType)).toEqual(["created", "updated"]);
+    });
+  }, 15_000);
+
   it("scrubs private budget and value from public request and search payloads", () => {
     const draft = draftNeedRequestFromText({
       rawNeed: "Need a fractional CMO for $20k/month revenue work in Europe.",

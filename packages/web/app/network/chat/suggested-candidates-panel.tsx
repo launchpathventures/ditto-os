@@ -2,8 +2,16 @@
 
 import { useState } from "react";
 import { ExternalLink, RefreshCw, Search, UserRoundPlus } from "lucide-react";
-import type { JobRequestCardBlock, SuggestedCandidate } from "@/lib/engine";
+import type {
+  JobRequestCardBlock,
+  PersistedPossibleConnection,
+  SuggestedCandidate,
+} from "@/lib/engine";
 import { cn } from "@/lib/utils";
+import {
+  PossibleConnectionCard,
+  type PossibleConnectionFeedbackKind,
+} from "@/components/network/possible-connection-card";
 import { FitConfidenceDot } from "./fit-confidence-dot";
 
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -146,6 +154,9 @@ export function SuggestedCandidatesPanel({
   onCandidatesRefresh,
   onRefreshInFlightChange,
   onScoutLike,
+  possibleConnections,
+  onConnectionAction,
+  connectionActionBusy,
   sessionId,
   now,
   className,
@@ -157,10 +168,53 @@ export function SuggestedCandidatesPanel({
   onCandidatesRefresh?: (candidates: SuggestedCandidate[]) => void;
   onRefreshInFlightChange?: (inFlight: boolean) => void;
   onScoutLike?: (candidate: SuggestedCandidate) => void;
+  /**
+   * Brief 274: when reasoned Possible Connections are available, render
+   * them instead of the legacy candidate cards. Legacy match flow keeps
+   * working unchanged when this prop is absent.
+   */
+  possibleConnections?: PersistedPossibleConnection[];
+  onConnectionAction?: (
+    kind: PossibleConnectionFeedbackKind,
+    connection: PersistedPossibleConnection,
+  ) => void;
+  connectionActionBusy?: {
+    connectionId: string;
+    kind: PossibleConnectionFeedbackKind;
+  } | null;
   sessionId?: string | null;
   now?: number;
   className?: string;
 }) {
+  if (possibleConnections && possibleConnections.length > 0) {
+    return (
+      <section
+        aria-label="Possible connections"
+        data-testid="suggested-candidates-panel"
+        className={cn("w-full max-w-full", className)}
+      >
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+          Possible connections
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {possibleConnections.map((connection) => (
+            <PossibleConnectionCard
+              key={connection.id}
+              connection={connection}
+              busyKind={
+                connectionActionBusy &&
+                connectionActionBusy.connectionId === connection.id
+                  ? connectionActionBusy.kind
+                  : null
+              }
+              onAction={(kind, c) => onConnectionAction?.(kind, c)}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   const visibleCandidates = candidates.slice(0, 5);
   const staleAgeHours = staleSuggestionAgeHours(visibleCandidates, now);
   const [moreLikeCandidate, setMoreLikeCandidate] = useState<SuggestedCandidate | null>(null);

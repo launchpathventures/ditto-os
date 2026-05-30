@@ -36,8 +36,10 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 .claude/worktrees/
 .gstack/
+/*.png
 
 # Test temp directories
 .test-tmp-cmd/

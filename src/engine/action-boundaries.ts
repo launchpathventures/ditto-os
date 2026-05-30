@@ -54,6 +54,7 @@ const FRONT_DOOR_TOOLS: string[] = [
 const WORKSPACE_TOOLS: string[] = [
   // Research & analysis
   "search_knowledge",
+  "search_workspace",     // Brief 281 — read-only durable-artifact recall
   "assess_confidence",
   "detect_risks",
   "suggest_next",
