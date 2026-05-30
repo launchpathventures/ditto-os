@@ -80,6 +80,10 @@ function buildPayload(block: AuthorizationRequestBlock, event: string): Record<s
       recipientLabel: block.recipientLabel,
       header: block.header,
       preview: block.preview,
+      request: block.request ?? null,
+      draft: block.draft ?? null,
+      requesterId: block.requesterId ?? null,
+      costLabel: block.costLabel ?? null,
       createdAt: new Date().toISOString(),
     },
   };
@@ -164,6 +168,12 @@ export function AuthorizationRequestBlockComponent({ block, onAction }: Props) {
             )}
           </div>
         )}
+
+        {block.costLabel ? (
+          <p className="mt-2 text-xs font-medium text-text-muted">
+            {block.costLabel}
+          </p>
+        ) : null}
 
         <ConfirmationExecuting>Sending...</ConfirmationExecuting>
         <ConfirmationSucceeded>{statusLine}</ConfirmationSucceeded>

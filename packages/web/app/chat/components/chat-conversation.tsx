@@ -1,146 +1,165 @@
 "use client";
 
 /**
- * Chat Conversation — Authenticated persistent chat (Brief 123)
+ * Chat Conversation — Authenticated workspace Self surface (Brief 280)
  *
- * Renders full message history using ai-elements/message.tsx with
- * BlockRegistry dispatch. Same streaming backend as the front door,
- * but with richer message rendering.
+ * This is the post-Day-Zero workspace home. It is a single conversation
+ * with the Self/Mira. Processes, reviews, work items, briefings, and
+ * progress render as inline `ContentBlock` artifacts in this conversation
+ * using the existing block registry — there is no separate panel or tab.
  *
- * Brief 157 MP-2.4: Subscribes to SSE harness events so ProgressBlock
- * appears during first process execution without page refresh.
+ * Stream seam: workspace `/chat` talks to `/api/chat` / `selfConverseStream()`
+ * via the AI SDK v5 `useChat` transport. It MUST NOT call
+ * `/api/v1/network/chat/stream` and MUST NOT send `context: "front-door"`
+ * (Brief 280 AC4) — workspace tools (`generate_process`, `start_pipeline`,
+ * `get_briefing`, `create_work_item`, …) are blocked in front-door context
+ * by `src/engine/action-boundaries.ts`.
  *
- * Provenance: ditto-conversation.tsx (front door), ai-elements/message.tsx (workspace)
+ * Live run progress that originates outside the message stream (heartbeat
+ * step events) still arrives via the `/api/events` SSE harness feed and
+ * renders as an inline `ProgressBlock` overlay (Brief 157 MP-2.4 behavior,
+ * preserved). Reduced-motion is honored by `ProgressBlockComponent`.
+ *
+ * Provenance: components/self/conversation.tsx (canonical useChat pattern),
+ * components/layout/workspace.tsx (initial-message seeding), Brief 280.
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
-import { Message } from "@/components/ai-elements/message";
+import { DefaultChatTransport } from "ai";
+import { useChat } from "@ai-sdk/react";
+import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
+import { Message } from "@/components/ai-elements/message";
+import { MaskedCredentialInput } from "@/components/self/masked-input";
 import { useHarnessEvents, type HarnessEventData } from "@/hooks/use-harness-events";
 import { ProgressBlockComponent } from "@/components/blocks/progress-block";
-import type { ContentBlock, ProgressBlock } from "@/lib/engine";
+import { dataPartSchemas } from "@/lib/data-part-schemas";
+import type { ProgressBlock } from "@/lib/engine";
 
 interface ChatConversationProps {
   initialMessages: Array<{ role: string; content: string }>;
-  sessionId: string;
-  authenticatedEmail: string;
+  /**
+   * Retained for the chat/page.tsx → ChatConversation contract. The
+   * workspace Self stream is keyed on the workspace identity (`userId`)
+   * server-side, not on these props, so they are no longer read here.
+   */
+  sessionId?: string;
+  authenticatedEmail?: string;
 }
 
+interface CredentialRequest {
+  service: string;
+  processSlug: string | null;
+  fieldLabel: string;
+  placeholder: string;
+}
+
+// Entry points for the empty workspace conversation — "talk to your
+// workspace" affordances rather than primitive tabs (Brief 280 IA).
+const STARTER_SUGGESTIONS = [
+  "What needs my attention?",
+  "Start a new process",
+  "Show me my briefing",
+  "Review something",
+];
+
 /**
- * Convert stored {role, content} messages to UIMessage format
- * that the ai-elements/Message component expects.
+ * Convert stored {role, content} messages (Brief 123 persisted history)
+ * to the UIMessage format the AI SDK v5 `useChat` hook seeds from.
  */
 function toUIMessages(messages: Array<{ role: string; content: string }>): UIMessage[] {
   return messages.map((msg, i) => ({
-    id: `msg-${i}`,
-    role: msg.role === "user" ? "user" as const : "assistant" as const,
+    id: `seed-${i}`,
+    role: msg.role === "user" ? ("user" as const) : ("assistant" as const),
     parts: [{ type: "text" as const, text: msg.content }],
   }));
 }
 
-function makeUIMessage(id: string, role: "user" | "assistant", text: string): UIMessage {
-  return { id, role, parts: [{ type: "text", text }] };
-}
-
-function makeBlockPart(block: ContentBlock) {
-  return { type: "data-content-block" as const, data: block };
-}
-
-function mergeTextPart(parts: UIMessage["parts"], text: string): UIMessage["parts"] {
-  const nonTextParts = parts.filter((part) => part.type !== "text");
-  if (nonTextParts.length > 0) {
-    return [...nonTextParts, { type: "text", text }] as UIMessage["parts"];
-  }
-  return [{ type: "text", text }];
-}
-
-function authorizationBlockId(block: ContentBlock): string | null {
-  return block.type === "authorization-request" && typeof block.authorizationId === "string"
-    ? block.authorizationId
-    : null;
-}
-
-function partContentBlock(part: UIMessage["parts"][number]): ContentBlock | null {
-  if (part.type !== "data-content-block") return null;
-  const data = (part as { data?: unknown }).data;
-  return data && typeof data === "object" ? data as ContentBlock : null;
-}
-
-function containsAuthorizationBlock(messages: UIMessage[], block: ContentBlock): boolean {
-  const nextId = authorizationBlockId(block);
-  if (!nextId) return false;
-  return messages.some((message) =>
-    message.parts.some((part) => {
-      const existingBlock = partContentBlock(part);
-      return existingBlock ? authorizationBlockId(existingBlock) === nextId : false;
-    }),
-  );
-}
-
-function replaceAuthorizationBlock(messages: UIMessage[], block: ContentBlock): UIMessage[] {
-  const nextId = authorizationBlockId(block);
-  if (!nextId) return messages;
-  return messages.map((message) => ({
-    ...message,
-    parts: message.parts.map((part) => {
-      const existingBlock = partContentBlock(part);
-      return existingBlock && authorizationBlockId(existingBlock) === nextId
-        ? makeBlockPart(block)
-        : part;
-    }) as UIMessage["parts"],
-  }));
-}
-
-export function ChatConversation({
-  initialMessages,
-  sessionId,
-  authenticatedEmail,
-}: ChatConversationProps) {
-  const [messages, setMessages] = useState<UIMessage[]>(() => toUIMessages(initialMessages));
+export function ChatConversation({ initialMessages }: ChatConversationProps) {
+  const router = useRouter();
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [credentialRequests, setCredentialRequests] = useState<CredentialRequest[]>([]);
+  const [transientStatus, setTransientStatus] = useState<string | null>(null);
   const [activeProgress, setActiveProgress] = useState<Map<string, ProgressBlock>>(new Map());
-  // Brief 157 AC6: Progressive reveal — show workspace prompt after first process is created
-  const [firstProcessCreated, setFirstProcessCreated] = useState<{ name: string; slug: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const sendingRef = useRef(false);
-  const msgIdCounter = useRef(initialMessages.length);
-  const messagesRef = useRef<UIMessage[]>(messages);
+  const transientTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const updateMessages = useCallback((updater: (prev: UIMessage[]) => UIMessage[]) => {
-    setMessages((prev) => {
-      const next = updater(prev);
-      messagesRef.current = next;
-      return next;
-    });
-  }, []);
+  const {
+    messages,
+    status,
+    error,
+    sendMessage,
+    regenerate,
+    addToolApprovalResponse,
+  } = useChat({
+    // Brief 280 AC4: workspace Self stream, not the network front door.
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: { userId: "default" },
+    }),
+    // Type-safe custom data parts (content-block, status, credential-request).
+    dataPartSchemas,
+    // Throttle UI updates during fast streaming.
+    experimental_throttle: 100,
+    // Conversation continuity: seed Brief-123 persisted history if present.
+    messages: toUIMessages(initialMessages),
+    onData(dataPart) {
+      if (dataPart.type === "data-status") {
+        const statusData = dataPart.data as { message: string };
+        setTransientStatus(statusData.message);
+        if (transientTimerRef.current) clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = setTimeout(() => setTransientStatus(null), 5000);
+      }
+    },
+    onFinish() {
+      setTransientStatus(null);
+      if (transientTimerRef.current) {
+        clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = null;
+      }
+    },
+    onError() {
+      setTransientStatus(null);
+      if (transientTimerRef.current) {
+        clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = null;
+      }
+    },
+  });
 
-  // Brief 157 MP-2.4: Subscribe to SSE harness events for real-time progress
-  const onHarnessEvent = useCallback((event: HarnessEventData) => {
-    // Brief 157 AC6: Progressive reveal — detect first process creation
-    // Checked before runId guard since build-process-created may lack processRunId (F2 fix)
-    if (event.type === "build-process-created") {
-      setFirstProcessCreated({
-        name: event.processName as string,
-        slug: event.processSlug as string,
-      });
+  const isLoading = status === "submitted" || status === "streaming";
+  const isStreaming = status === "streaming";
+
+  // Detect credential requests in the latest assistant message.
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== "assistant") return;
+    const creds: CredentialRequest[] = [];
+    for (const part of lastMsg.parts) {
+      if ("type" in part && (part as { type: string }).type === "data-credential-request") {
+        creds.push((part as { data: CredentialRequest }).data);
+      }
     }
+    if (creds.length > 0) setCredentialRequests(creds);
+  }, [messages]);
 
+  // Brief 157 MP-2.4 (preserved): live run progress from the harness SSE
+  // feed renders inline. This is run telemetry that does not flow through
+  // the message stream, so it is overlaid below the conversation.
+  const onHarnessEvent = useCallback((event: HarnessEventData) => {
     const runId = event.processRunId as string | undefined;
     if (!runId) return;
-
     switch (event.type) {
       case "step-start": {
         const stepLabel = (event.processName as string)
-          ? `${event.processName}: ${event.roleName as string || event.stepId as string || "starting"}`
-          : (event.roleName as string || event.stepId as string || "Working...");
+          ? `${event.processName}: ${(event.roleName as string) || (event.stepId as string) || "starting"}`
+          : ((event.roleName as string) || (event.stepId as string) || "Working...");
         setActiveProgress((prev) => {
           const next = new Map(prev);
-          // Use completedSteps+1 as totalSteps to show indeterminate progress (F3 fix)
           const existing = next.get(runId);
           const completed = existing?.completedSteps ?? 0;
           next.set(runId, {
@@ -164,9 +183,8 @@ export function ChatConversation({
             const newCompleted = existing.completedSteps + 1;
             next.set(runId, {
               ...existing,
-              currentStep: event.summary as string || existing.currentStep,
+              currentStep: (event.summary as string) || existing.currentStep,
               completedSteps: newCompleted,
-              // Keep totalSteps at least 1 ahead so bar never shows 100% until run-complete
               totalSteps: Math.max(existing.totalSteps, newCompleted + 1),
             });
           }
@@ -186,7 +204,6 @@ export function ChatConversation({
               totalSteps: existing.completedSteps,
             });
           }
-          // Auto-clear after 5s
           setTimeout(() => {
             setActiveProgress((p) => {
               const n = new Map(p);
@@ -210,9 +227,7 @@ export function ChatConversation({
         setActiveProgress((prev) => {
           const next = new Map(prev);
           const existing = next.get(runId);
-          if (existing) {
-            next.set(runId, { ...existing, status: "paused" });
-          }
+          if (existing) next.set(runId, { ...existing, status: "paused" });
           return next;
         });
         break;
@@ -222,199 +237,104 @@ export function ChatConversation({
 
   useHarnessEvents({ onEvent: onHarnessEvent, enabled: true });
 
-  // Turnstile bot verification
-  const turnstileRef = useRef<HTMLDivElement>(null);
-  const turnstileWidgetId = useRef<string | null>(null);
-  const turnstileToken = useRef<string | null>(null);
-
-  const getTurnstileToken = useCallback((): string | null => {
-    const token = turnstileToken.current;
-    if (turnstileWidgetId.current != null && typeof window !== "undefined" && (window as any).turnstile) {
-      (window as any).turnstile.reset(turnstileWidgetId.current);
-      turnstileToken.current = null;
-    }
-    return token;
-  }, []);
-
-  useEffect(() => {
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-    if (!siteKey || !turnstileRef.current) return;
-
-    function renderWidget() {
-      if (turnstileWidgetId.current != null || !turnstileRef.current) return;
-      const turnstile = (window as any).turnstile;
-      if (!turnstile) return;
-      turnstileWidgetId.current = turnstile.render(turnstileRef.current, {
-        sitekey: siteKey,
-        size: "invisible",
-        callback: (token: string) => { turnstileToken.current = token; },
-        "error-callback": () => { turnstileToken.current = null; },
-      });
-    }
-
-    if ((window as any).turnstile) {
-      renderWidget();
-    } else {
-      const interval = setInterval(() => {
-        if ((window as any).turnstile) {
-          renderWidget();
-          clearInterval(interval);
-        }
-      }, 200);
-      return () => clearInterval(interval);
-    }
-  }, []);
-
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom on new content.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, activeProgress]);
 
-  // Focus input on mount
+  // Focus input on mount.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  async function sendMessage(text: string, actionPayload?: Record<string, unknown>) {
-    if (sendingRef.current || !text.trim()) return;
-    sendingRef.current = true;
-
-    const isStructuredAction = Boolean(actionPayload?.authorizationAction);
-    if (!isStructuredAction) {
-      const userId = `msg-${msgIdCounter.current++}`;
-      updateMessages((prev) => [...prev, makeUIMessage(userId, "user", text)]);
-    }
-    setInput("");
-    setIsStreaming(true);
-    setSuggestions([]);
-
-    try {
-      const token = getTurnstileToken();
-      const res = await fetch("/api/v1/network/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          sessionId,
-          context: "front-door",
-          returningEmail: authenticatedEmail,
-          ...(actionPayload ? { actionPayload } : {}),
-          ...(token ? { turnstileToken: token } : {}),
-        }),
-      });
-
-      if (!res.ok) {
-        const errorText = res.status === 429
-          ? "I'm getting a lot of messages right now. Give me a moment."
-          : "Something went wrong. Please try again.";
-        updateMessages((prev) => [...prev, makeUIMessage(`msg-${msgIdCounter.current++}`, "assistant", errorText)]);
-        setIsStreaming(false);
-        sendingRef.current = false;
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamedText = "";
-      let alexMsgAdded = false;
-      let assistantParts: UIMessage["parts"] = [];
-
-      while (true) {
-        const { done: readerDone, value } = await reader.read();
-        if (readerDone) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6);
-          if (!jsonStr) continue;
-
-          try {
-            const event = JSON.parse(jsonStr);
-
-            if (event.type === "text-replace") {
-              streamedText = event.text;
-              assistantParts = mergeTextPart(assistantParts, streamedText);
-              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
-              if (alexMsgAdded) {
-                updateMessages((prev) => [...prev.slice(0, -1), msg]);
-              } else {
-                alexMsgAdded = true;
-                updateMessages((prev) => [...prev, msg]);
-              }
-            }
-
-            if (event.type === "text-delta") {
-              streamedText += event.text;
-              assistantParts = mergeTextPart(assistantParts, streamedText);
-              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
-              if (!alexMsgAdded) {
-                alexMsgAdded = true;
-                updateMessages((prev) => [...prev, msg]);
-              } else {
-                updateMessages((prev) => [...prev.slice(0, -1), msg]);
-              }
-            }
-
-            if (event.type === "content-block" && event.block) {
-              const block = event.block as ContentBlock;
-              if (containsAuthorizationBlock(messagesRef.current, block)) {
-                updateMessages((prev) => replaceAuthorizationBlock(prev, block));
-                continue;
-              }
-              assistantParts = [
-                ...(streamedText ? [{ type: "text" as const, text: streamedText }] : []),
-                ...assistantParts.filter((part) => part.type !== "text"),
-                makeBlockPart(block),
-              ] as UIMessage["parts"];
-              const msg: UIMessage = { id: "msg-stream", role: "assistant", parts: assistantParts };
-              if (!alexMsgAdded) {
-                alexMsgAdded = true;
-                updateMessages((prev) => [...prev, msg]);
-              } else {
-                updateMessages((prev) => [...prev.slice(0, -1), msg]);
-              }
-            }
-
-            if (event.type === "metadata") {
-              setSuggestions(
-                Array.isArray(event.suggestions) ? event.suggestions : [],
-              );
-            }
-          } catch {
-            // Ignore malformed SSE lines
-          }
-        }
-      }
-    } catch {
-      updateMessages((prev) => [
-        ...prev,
-        makeUIMessage(`msg-${msgIdCounter.current++}`, "assistant", "Something went wrong. Please try again."),
-      ]);
-    } finally {
-      setIsStreaming(false);
-      sendingRef.current = false;
-      inputRef.current?.focus();
-    }
-  }
+  const send = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || isLoading) return;
+      setCredentialRequests([]);
+      setTransientStatus(null);
+      sendMessage({ role: "user", parts: [{ type: "text", text: trimmed }] });
+      setInput("");
+    },
+    [isLoading, sendMessage],
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    sendMessage(input.trim());
+    send(input);
   }
 
-  function handleAction(actionId: string, payload?: Record<string, unknown>) {
-    const text = payload?.message
-      ? String(payload.message)
-      : actionId;
-    sendMessage(text, payload);
-  }
+  // Inline block actions. Drill-downs navigate to real route shapes
+  // (Brief 280 AC13); everything else continues the conversation so the
+  // user is never forced out of chat (Brief 280 objective).
+  const handleBlockAction = useCallback(
+    async (actionId: string, payload?: Record<string, unknown>) => {
+      const href = typeof payload?.href === "string" ? payload.href : null;
+      if (href) {
+        router.push(href);
+        return;
+      }
+
+      if (actionId.startsWith("suggest-accept-")) {
+        const content = (payload?.content as string) ?? "";
+        send(content ? `I'd like to set that up — ${content}` : "I'd like to set that up.");
+        return;
+      }
+      if (actionId.startsWith("suggest-dismiss-")) {
+        try {
+          await fetch("/api/actions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ actionId, payload }),
+          });
+        } catch {
+          // Best-effort — dismissal still acknowledged in conversation.
+        }
+        send("Not right now, thanks.");
+        return;
+      }
+
+      // Explicit message payload (e.g. proposal-run carries the run prompt).
+      if (typeof payload?.message === "string" && payload.message.trim()) {
+        send(payload.message);
+        return;
+      }
+
+      const actionMessages: Record<string, string> = {
+        "knowledge-confirm": "That looks right.",
+        "knowledge-correct": payload?.corrections
+          ? `Let me correct that: ${payload.corrections}`
+          : "I'd like to fix something.",
+        "proposal-approve": "Looks good — let's try it.",
+        "proposal-adjust": "I'd change something about that.",
+      };
+      send(actionMessages[actionId] ?? `Action: ${actionId}`);
+    },
+    [router, send],
+  );
+
+  const handleToolApprove = useCallback(
+    (toolCallId: string) => addToolApprovalResponse({ id: toolCallId, approved: true }),
+    [addToolApprovalResponse],
+  );
+  const handleToolReject = useCallback(
+    (toolCallId: string) => addToolApprovalResponse({ id: toolCallId, approved: false }),
+    [addToolApprovalResponse],
+  );
+
+  const handleCredentialComplete = useCallback(
+    (success: boolean, message: string) => {
+      setCredentialRequests((prev) => prev.slice(1));
+      send(
+        success
+          ? `I've entered the credentials. ${message}`
+          : `There was a problem with the credentials: ${message}`,
+      );
+    },
+    [send],
+  );
+
+  const handleRetry = useCallback(() => regenerate(), [regenerate]);
 
   return (
     <div className="flex flex-col h-full">
@@ -426,16 +346,36 @@ export function ChatConversation({
               <p className="text-lg">What's on your mind?</p>
             </div>
           )}
-          {messages.map((msg, i) => (
-            <Message
-              key={msg.id}
-              message={msg}
-              isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-              isLast={i === messages.length - 1 && msg.role === "assistant"}
-              onAction={handleAction}
-            />
+          {messages.map((msg, i) => {
+            const isLastAssistant = msg.role === "assistant" && i === messages.length - 1;
+            return (
+              <Message
+                key={msg.id}
+                message={msg}
+                isStreaming={isStreaming && i === messages.length - 1}
+                isLast={isLastAssistant}
+                onAction={handleBlockAction}
+                onToolApprove={handleToolApprove}
+                onToolReject={handleToolReject}
+                onRetry={isLastAssistant ? handleRetry : undefined}
+              />
+            );
+          })}
+
+          {/* Credential capture (masked) — inline, never a separate page */}
+          {credentialRequests.map((req, i) => (
+            <div key={`cred-${req.service}-${i}`} className="py-2">
+              <MaskedCredentialInput
+                service={req.service}
+                processSlug={req.processSlug}
+                fieldLabel={req.fieldLabel}
+                placeholder={req.placeholder}
+                onComplete={handleCredentialComplete}
+              />
+            </div>
           ))}
-          {/* Brief 157 MP-2.4: Real-time progress blocks from SSE */}
+
+          {/* Brief 157 MP-2.4 (preserved): real-time run progress */}
           {activeProgress.size > 0 && (
             <div className="space-y-2 py-2">
               {Array.from(activeProgress.values()).map((block) => (
@@ -443,31 +383,36 @@ export function ChatConversation({
               ))}
             </div>
           )}
-          {/* Brief 157 AC6: Progressive reveal — workspace prompt after first process */}
-          {firstProcessCreated && (
-            <div className="my-4 p-4 rounded-lg border border-border bg-surface-raised">
-              <p className="text-sm text-text-primary">
-                Your first process <strong>{firstProcessCreated.name}</strong> is ready.
-              </p>
-              <a
-                href="/"
-                className="mt-2 inline-block text-sm font-medium text-text-primary hover:underline"
+
+          {/* Transient tool/status line (AC: tool progress state) */}
+          {isLoading && transientStatus && (
+            <p className="py-2 text-sm text-text-muted">{transientStatus}</p>
+          )}
+
+          {/* Error with retry */}
+          {error && (
+            <div className="my-2 text-sm text-negative bg-negative/5 rounded-lg px-4 py-3 flex items-center justify-between">
+              <span>Connection interrupted. Please try again.</span>
+              <button
+                onClick={handleRetry}
+                className="text-xs font-medium text-negative hover:underline ml-3 flex-shrink-0"
               >
-                Open your workspace to see it in action &rarr;
-              </a>
+                Retry
+              </button>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Quick-reply pills */}
-      {suggestions.length > 0 && !isStreaming && (
+      {/* Starter entry points (empty conversation only) */}
+      {messages.length === 0 && !isLoading && (
         <div className="max-w-[640px] mx-auto px-4 pb-2 flex flex-wrap gap-2">
-          {suggestions.map((s) => (
+          {STARTER_SUGGESTIONS.map((s) => (
             <button
               key={s}
-              onClick={() => sendMessage(s)}
+              onClick={() => send(s)}
               className="px-3 py-1.5 text-sm rounded-full border border-border/60 text-text-secondary hover:bg-surface-raised transition-colors"
             >
               {s}
@@ -487,14 +432,14 @@ export function ChatConversation({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Message Alex..."
-            disabled={isStreaming}
+            placeholder="Message your workspace…"
+            disabled={isLoading}
             className="flex-1 bg-transparent text-base text-text-primary placeholder:text-text-muted outline-none disabled:opacity-50"
             autoComplete="off"
           />
           <button
             type="submit"
-            disabled={!input.trim() || isStreaming}
+            disabled={!input.trim() || isLoading}
             className="flex items-center justify-center w-8 h-8 rounded-full bg-accent text-accent-foreground disabled:opacity-30 transition-opacity"
             aria-label="Send"
           >
@@ -502,9 +447,6 @@ export function ChatConversation({
           </button>
         </form>
       </div>
-
-      {/* Invisible Turnstile widget */}
-      <div ref={turnstileRef} className="hidden" />
     </div>
   );
 }

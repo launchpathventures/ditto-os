@@ -1,10 +1,18 @@
 /**
  * Ditto — Chat Page Object
  *
- * Selectors and actions for the /chat page (magic-link authenticated chat).
- * Used by onboarding E2E tests.
+ * Selectors and actions for the /chat page — the post-Day-Zero workspace
+ * Self conversation (Brief 280). Used by onboarding E2E tests.
  *
- * Provenance: Brief 157, Playwright page object pattern.
+ * Brief 280 reconciliation:
+ *  - `messageInput` matches the Self-conversation composer placeholder
+ *    ("Message your workspace…"), not the legacy "Message Alex…" string.
+ *  - The Brief-157 progressive-reveal workspace-prompt banner (an
+ *    `a[href="/"]` link) was removed by Brief 280's IA inversion: `/chat`
+ *    *is* the workspace home, so there is no separate workspace to be
+ *    prompted toward. `workspacePrompt`/`hasWorkspacePrompt` are gone.
+ *
+ * Provenance: Brief 157 (page object pattern), Brief 280 (IA inversion).
  */
 
 import type { Page, Locator } from "@playwright/test";
@@ -17,17 +25,15 @@ export class ChatPage {
   readonly sendButton: Locator;
   readonly assistantMessages: Locator;
   readonly progressBlock: Locator;
-  readonly workspacePrompt: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.emailInput = page.locator('input[type="email"]');
     this.sendMagicLinkButton = page.getByRole("button", { name: /send magic link/i });
-    this.messageInput = page.locator('input[placeholder="Message Alex..."]');
+    this.messageInput = page.getByPlaceholder(/message your workspace/i);
     this.sendButton = page.getByRole("button", { name: "Send" });
     this.assistantMessages = page.locator('[data-testid="assistant-message"]');
     this.progressBlock = page.locator('[data-testid="progress-block"]');
-    this.workspacePrompt = page.locator('a[href="/"]').filter({ hasText: /workspace/i });
   }
 
   /** Navigate to the chat page */
@@ -79,10 +85,5 @@ export class ChatPage {
   /** Check if a progress block is visible */
   async hasProgressBlock(): Promise<boolean> {
     return this.progressBlock.isVisible();
-  }
-
-  /** Check if the workspace prompt (progressive reveal) is visible */
-  async hasWorkspacePrompt(): Promise<boolean> {
-    return this.workspacePrompt.isVisible();
   }
 }

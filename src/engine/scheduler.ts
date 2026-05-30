@@ -121,6 +121,51 @@ export async function start(): Promise<void> {
   });
   activeTasks.set("__stale_escalation_sweep__", staleSweep);
 
+  // Register hourly Network-deployment Background Watch sweep (Brief 293).
+  // Selects active watches whose `nextRunAt <= now` and (per parent D11)
+  // applies an `Intl.DateTimeFormat` tz filter — null `ianaTimezone` falls
+  // back to UTC explicitly (AC #5). Per due watch we mint a network-lane
+  // step run (Insight-180) and invoke `runBackgroundWatch` with
+  // `triggeredBy: "schedule"`. The runner is responsible for the rate-limit
+  // and operator-paused checks; this sweep only fans out.
+  const backgroundWatchSweep = cron.schedule("0 * * * *", async () => {
+    try {
+      const { selectDueWatches, runBackgroundWatch } = await import(
+        "./network-background-watch"
+      );
+      const { createNetworkLaneStepRun } = await import("./network-step-run");
+      const now = new Date();
+      const due = await selectDueWatches({ now });
+      for (const { watchId } of due) {
+        try {
+          const stepRunId = await createNetworkLaneStepRun({
+            route: "network-background-watch-sweep",
+            sessionId: `watch:${watchId}`,
+          });
+          await runBackgroundWatch({
+            watchId,
+            stepRunId,
+            triggeredBy: "schedule",
+            now,
+          });
+        } catch (err) {
+          console.error(
+            `[scheduler] background-watch sweep error for ${watchId}:`,
+            err,
+          );
+        }
+      }
+      if (due.length > 0) {
+        console.log(
+          `[scheduler] background-watch sweep: ${due.length} watch(es) due`,
+        );
+      }
+    } catch (err) {
+      console.error("[scheduler] background-watch sweep error:", err);
+    }
+  });
+  activeTasks.set("__background_watch_sweep__", backgroundWatchSweep);
+
   console.log(`Scheduler started: ${activeTasks.size} schedule(s) registered`);
 }
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import type { NetworkProfileCardBlock } from "@/lib/engine";
 import { createTestDb, type TestDb } from "../../../../../../../src/test-utils";
 import * as schema from "../../../../../../../src/db/schema";
@@ -36,9 +37,6 @@ vi.mock("../../../../../../../src/db/network-db", () => ({
   ensureNetworkSchema: vi.fn(async () => {}),
 }));
 
-const { resetNetworkUpsellTrackerForTests } = await import(
-  "../../../../../../../src/engine/network-upsell-tracker"
-);
 const { POST } = await import("./route");
 
 function card(overrides: Partial<NetworkProfileCardBlock> = {}): NetworkProfileCardBlock {
@@ -76,11 +74,12 @@ function request(body: Record<string, unknown>) {
 async function insertExpertSession(
   sessionId: string,
   authenticatedEmail: string | null = null,
+  context: "expert" | "client" = "expert",
 ) {
   await testDb.insert(schema.chatSessions).values({
     sessionId,
     messages: [],
-    context: "expert",
+    context,
     ipHash: `hash-${sessionId}`,
     authenticatedEmail,
     expiresAt: new Date(Date.now() + 60_000),
@@ -104,7 +103,6 @@ beforeEach(() => {
   const result = createTestDb();
   testDb = result.db;
   cleanup = result.cleanup;
-  resetNetworkUpsellTrackerForTests();
 });
 
 afterEach(() => {
@@ -126,8 +124,14 @@ describe("POST /api/v1/network/handle", () => {
     }));
 
     expect(first.status).toBe(200);
-    const firstJson = await first.json() as { ok: boolean; handle: string; upsell: boolean };
+    const firstJson = await first.json() as {
+      ok: boolean;
+      handle: string;
+      upsell: boolean;
+      upsellCopy?: string | null;
+    };
     expect(firstJson).toMatchObject({ ok: true, handle: "timhgreen", upsell: true });
+    expect(firstJson.upsellCopy).toContain("Worth it if you do this kind of hunting more than twice a year");
 
     const second = await POST(request({
       sessionId: "lane-session",
@@ -139,6 +143,10 @@ describe("POST /api/v1/network/handle", () => {
     }));
     const secondJson = await second.json() as { ok: boolean; handle: string; upsell: boolean };
     expect(secondJson).toMatchObject({ ok: true, handle: "timhgreen", upsell: false });
+
+    const upsellRows = await tx.select().from(networkSchema.networkSessionUpsellLog);
+    expect(upsellRows).toHaveLength(1);
+    expect(upsellRows[0]).toMatchObject({ trigger: "expert-q6" });
 
     const [stored] = await tx
       .select({
@@ -153,7 +161,7 @@ describe("POST /api/v1/network/handle", () => {
     expect(stored?.wantsVisibility).toBe(true);
     expect(stored?.card?.shareUrl).toBe("https://ditto.partners/people/timhgreen");
     expect(stored?.card?.visibility).toBe("public");
-  }));
+  }), 20_000);
 
   it("returns handle alternatives when the handle is already taken", net(async (tx) => {
     await insertExpertSession("other-session");
@@ -226,6 +234,120 @@ describe("POST /api/v1/network/handle", () => {
       ]),
     );
   }));
+
+  it("persists profile pause and resume from a verified lane session", net(async (tx) => {
+    await insertExpertSession("client-session", "tim@example.com", "client");
+    await tx.insert(networkSchema.networkUsers).values({
+      email: "tim@example.com",
+      name: "Tim Green",
+      handle: "timhgreen",
+      wantsVisibility: true,
+      card: card({ visibility: "public" }),
+    });
+
+    const pause = await POST(request({
+      action: "set_visibility",
+      sessionId: "client-session",
+      context: "client",
+      wantsVisibility: false,
+    }));
+
+    expect(pause.status).toBe(200);
+    expect(await pause.json()).toMatchObject({
+      ok: true,
+      wantsVisibility: false,
+      paused: true,
+    });
+
+    const [paused] = await tx
+      .select({
+        wantsVisibility: networkSchema.networkUsers.wantsVisibility,
+        pausedAt: networkSchema.networkUsers.pausedAt,
+        card: networkSchema.networkUsers.card,
+      })
+      .from(networkSchema.networkUsers)
+      .where(eq(networkSchema.networkUsers.email, "tim@example.com"));
+    expect(paused?.wantsVisibility).toBe(false);
+    expect(paused?.pausedAt).toBeTruthy();
+    expect(paused?.card?.visibility).toBe("off");
+    const auditRows = await tx
+      .select({
+        eventClass: networkSchema.networkAuditEvents.eventClass,
+        subjectType: networkSchema.networkAuditEvents.subjectType,
+        metadata: networkSchema.networkAuditEvents.metadata,
+      })
+      .from(networkSchema.networkAuditEvents)
+      .where(eq(networkSchema.networkAuditEvents.subjectType, "public-profile"));
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventClass: "profile_visibility_changed",
+          subjectType: "public-profile",
+          metadata: expect.objectContaining({
+            before: expect.objectContaining({
+              wantsVisibility: true,
+              cardVisibility: "public",
+            }),
+            after: expect.objectContaining({
+              wantsVisibility: false,
+              cardVisibility: "off",
+            }),
+            context: "client",
+          }),
+        }),
+      ]),
+    );
+
+    const resume = await POST(request({
+      action: "set_visibility",
+      sessionId: "client-session",
+      context: "client",
+      wantsVisibility: true,
+    }));
+
+    expect(resume.status).toBe(200);
+    const [resumed] = await tx
+      .select({
+        wantsVisibility: networkSchema.networkUsers.wantsVisibility,
+        pausedAt: networkSchema.networkUsers.pausedAt,
+        card: networkSchema.networkUsers.card,
+      })
+      .from(networkSchema.networkUsers)
+      .where(eq(networkSchema.networkUsers.email, "tim@example.com"));
+    expect(resumed?.wantsVisibility).toBe(true);
+    expect(resumed?.pausedAt).toBeNull();
+    expect(resumed?.card?.visibility).toBe("public");
+  }));
+
+  it.each([null, "", false, "network-lane-step:spoof"])(
+    "rejects caller-supplied stepRunId before profile visibility writes: %s",
+    async (stepRunId) =>
+      net(async (tx) => {
+        await insertExpertSession("guard-session", "tim@example.com", "client");
+        await tx.insert(networkSchema.networkUsers).values({
+          email: "tim@example.com",
+          name: "Tim Green",
+          handle: "timhgreen",
+          wantsVisibility: true,
+        });
+
+        const response = await POST(request({
+          action: "set_visibility",
+          sessionId: "guard-session",
+          context: "client",
+          wantsVisibility: false,
+          stepRunId,
+        }));
+
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({ error: "step_run_bypass_rejected" });
+        const [user] = await tx
+          .select({ wantsVisibility: networkSchema.networkUsers.wantsVisibility })
+          .from(networkSchema.networkUsers)
+          .where(eq(networkSchema.networkUsers.email, "tim@example.com"));
+        expect(user?.wantsVisibility).toBe(true);
+      })(),
+  );
 
   it("rejects claims that are not attached to a live expert lane session", net(async (tx) => {
     const response = await POST(request({

@@ -17,18 +17,115 @@
  * without auth (AC11).
  *
  * Deployment mode (see ../lib/deployment.ts):
- * - `public`    — `/welcome`, `/network`, and `/admin` are publicly routable;
+ * - `public`    — `/welcome`, `/network`, `/admin`, and `/people` are publicly routable;
  *                 `/` (root) bypasses auth so the front door can render.
- * - `workspace` — `/welcome` and `/admin` are hard-404'd at the edge and are
- *                 not in the public list; `/` falls through to the auth check.
+ * - `workspace` — `/welcome`, `/admin`, and network admin APIs are hard-404'd
+ *                 at the edge and are not in the public list; `/` falls
+ *                 through to the auth check.
  */
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getDeploymentMode } from "./lib/deployment";
 import { getPublicBaseUrl } from "./lib/public-url";
+import {
+  REF_TOKEN_TTL_MS,
+  SHARE_REF_COOKIE,
+  signRefToken,
+  verifyRefTokenForHost,
+} from "./lib/signed-cookie";
+import { TOMBSTONE_NEUTRAL_HTML } from "./lib/tombstone-page";
 
 const WORKSPACE_SESSION_COOKIE = "ditto_workspace_session";
+const SHARE_REF_CHANNELS = new Set([
+  "linkedin",
+  "x",
+  "instagram",
+  "email-signature",
+  "website-badge",
+  "badge",
+]);
+
+/**
+ * Brief 284 — public profile tombstone check. Returns HTTP 410 + neutral HTML
+ * for tombstoned subjects so the page never renders the claim flow or any
+ * prior content. We fetch a lightweight JSON endpoint (Node.js runtime)
+ * rather than hitting the network DB from Edge.
+ *
+ * Fail-open by design: if the tombstone-status fetch throws or returns a
+ * non-OK status, this returns `null` and the request proceeds to normal
+ * routing. The page-level `TombstoneFallback` in `people/[handle]/page.tsx`
+ * re-checks `user.status` and `isSubjectTombstoned()` directly against the
+ * network DB, so the page render is the authoritative gate. This middleware
+ * exists only to short-circuit the render before the page assembles.
+ */
+async function tombstoneInterceptForProfilePath(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  const match = request.nextUrl.pathname.match(/^\/people\/([^/]+)\/?$/);
+  if (!match) return null;
+  const handle = match[1];
+  try {
+    const statusUrl = new URL(
+      `/api/v1/network/people/${handle}/tombstone-status`,
+      request.nextUrl,
+    );
+    const response = await fetch(statusUrl, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { tombstoned?: boolean };
+    if (!data.tombstoned) return null;
+    return new NextResponse(TOMBSTONE_NEUTRAL_HTML, {
+      status: 410,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Robots-Tag": "noindex, nofollow",
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function responseWithShareRefCookie(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  const match = request.nextUrl.pathname.match(/^\/people\/([^/]+)\/?$/);
+  if (!match) return null;
+  const channel = request.nextUrl.searchParams.get("ref")?.trim();
+  if (!channel || !SHARE_REF_CHANNELS.has(channel)) return null;
+  const ph = decodeURIComponent(match[1]).trim().toLowerCase();
+  if (!ph) return null;
+
+  const response = NextResponse.next();
+  const host = request.nextUrl.hostname;
+  const domain = host === "ditto.partners" || host.endsWith(".ditto.partners")
+    ? ".ditto.partners"
+    : undefined;
+  response.cookies.set({
+    name: SHARE_REF_COOKIE,
+    value: await signRefToken({ channel, ph, ts: Date.now() }),
+    httpOnly: true,
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+    path: "/",
+    domain,
+    maxAge: Math.floor(REF_TOKEN_TTL_MS / 1000),
+  });
+  return response;
+}
+
+async function isValidWorkspaceReferralHandoff(request: NextRequest): Promise<boolean> {
+  const { pathname, searchParams, hostname } = request.nextUrl;
+  if (pathname !== "/welcome" && pathname !== "/network/request") return false;
+  const token = searchParams.get("ditto_ref");
+  if (!token) return false;
+  const host = request.headers.get("x-forwarded-host") ?? hostname;
+  return Boolean(await verifyRefTokenForHost(token, host));
+}
 
 /** Verify HMAC-signed session cookie (Edge-compatible via Web Crypto API). */
 async function verifySessionCookie(cookieValue: string, ownerEmail: string): Promise<boolean> {
@@ -67,13 +164,13 @@ const BASE_PUBLIC_PREFIXES = [
 ];
 
 /** Additional public prefixes enabled only in `public` deployment mode. */
-const PUBLIC_MODE_PREFIXES = ["/welcome", "/network", "/admin"];
+const PUBLIC_MODE_PREFIXES = ["/welcome", "/network", "/admin", "/people"];
 
 /**
  * Prefixes that are hard-404'd in `workspace` mode — these surfaces are
  * not shipped on client deployments, not merely auth-gated.
  */
-const WORKSPACE_MODE_BLOCKED_PREFIXES = ["/welcome", "/admin"];
+const WORKSPACE_MODE_BLOCKED_PREFIXES = ["/welcome", "/admin", "/api/v1/network/admin"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -81,10 +178,23 @@ export async function middleware(request: NextRequest) {
   const managedWorkspace = mode === "workspace" && (
     !!process.env.DITTO_NETWORK_URL || !!process.env.DITTO_WORKSPACE_USER_ID
   );
+  const workspaceReferralHandoff =
+    mode === "workspace" ? await isValidWorkspaceReferralHandoff(request) : false;
 
   // Hard-block surfaces that aren't shipped in workspace mode.
-  if (mode === "workspace" && isBlockedInWorkspaceMode(pathname)) {
+  if (
+    mode === "workspace" &&
+    isBlockedInWorkspaceMode(pathname) &&
+    !workspaceReferralHandoff
+  ) {
     return new NextResponse("Not Found", { status: 404 });
+  }
+
+  if (mode === "public") {
+    const tombstone = await tombstoneInterceptForProfilePath(request);
+    if (tombstone) return tombstone;
+    const shareRef = await responseWithShareRefCookie(request);
+    if (shareRef) return shareRef;
   }
 
   // Root ("/") is public in public mode so the front door can render to
@@ -100,6 +210,10 @@ export async function middleware(request: NextRequest) {
       ? [...BASE_PUBLIC_PREFIXES, ...PUBLIC_MODE_PREFIXES]
       : BASE_PUBLIC_PREFIXES;
   if (publicPrefixes.some((prefix) => pathname.startsWith(prefix))) {
+    return NextResponse.next();
+  }
+
+  if (workspaceReferralHandoff) {
     return NextResponse.next();
   }
 

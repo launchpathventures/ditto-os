@@ -64,6 +64,7 @@ export interface ReviewItem {
     outputText: string;
     confidence: ConfidenceLevel | null;
     flags?: string[];
+    blocks?: import("../../../src/engine/content-blocks").ContentBlock[];
   };
 }
 

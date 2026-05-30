@@ -11,7 +11,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface ClaimHandleBody {
+  action?: string | null;
   sessionId?: string | null;
+  context?: string | null;
   name?: string | null;
   handle?: string | null;
   card?: unknown;
@@ -20,9 +22,31 @@ interface ClaimHandleBody {
 }
 
 type HandleClaimReason = "empty" | "too-short" | "invalid-format" | "reserved" | "taken";
+type LaneContext = "expert" | "client";
 
 function syntheticEmail(sessionId: string): string {
   return `network-${sessionId}@ditto.local`;
+}
+
+function hasCallerStepRun(body: Record<string, unknown>): boolean {
+  return Object.prototype.hasOwnProperty.call(body, "stepRunId");
+}
+
+function normalizeLaneContext(value: unknown): LaneContext | null {
+  return value === "expert" || value === "client" ? value : null;
+}
+
+function visibilityCard(
+  card: NetworkProfileCardBlock | null | undefined,
+  wantsVisibility: boolean,
+  now: Date,
+): NetworkProfileCardBlock | null | undefined {
+  if (!card) return card;
+  return {
+    ...card,
+    visibility: wantsVisibility ? "public" : "off",
+    lastUpdatedAt: now.toISOString(),
+  };
 }
 
 function isUniqueHandleConflict(error: unknown): boolean {
@@ -142,8 +166,15 @@ function sanitizeNetworkProfileCard(value: unknown): NetworkProfileCardBlock | n
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as ClaimHandleBody;
+    const body = await request.json() as ClaimHandleBody & Record<string, unknown>;
+    if (hasCallerStepRun(body)) {
+      return NextResponse.json(
+        { error: "step_run_bypass_rejected" },
+        { status: 400 },
+      );
+    }
     const sessionId = body.sessionId?.trim() || null;
+    const action = body.action?.trim() || "claim-handle";
     const card = sanitizeNetworkProfileCard(body.card);
     const requestedHandle = body.handle?.trim() || card?.handle || "";
 
@@ -153,6 +184,116 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (action !== "claim-handle" && action !== "set_visibility") {
+      return NextResponse.json(
+        { error: "unsupported handle action." },
+        { status: 400 },
+      );
+    }
+
+    if (action === "set_visibility") {
+      if (typeof body.wantsVisibility !== "boolean") {
+        return NextResponse.json(
+          { error: "wantsVisibility is required." },
+          { status: 400 },
+        );
+      }
+
+      const [
+        { eq },
+        { resolveNetworkLaneSession },
+        { createNetworkLaneStepRun },
+        { writeNetworkAuditEvent },
+      ] = await Promise.all([
+        import("drizzle-orm"),
+        import("../kb/session"),
+        import("../../../../../../../src/engine/network-step-run"),
+        import("../../../../../../../src/engine/network-audit"),
+      ]);
+      const requestedContext = normalizeLaneContext(body.context);
+      const contexts: LaneContext[] = requestedContext ? [requestedContext] : ["expert", "client"];
+      let laneSession: Awaited<ReturnType<typeof resolveNetworkLaneSession>> | null = null;
+      for (const context of contexts) {
+        laneSession = await resolveNetworkLaneSession({ sessionId, context });
+        if (laneSession) break;
+      }
+      if (!laneSession) {
+        return NextResponse.json(
+          { error: "A valid Network lane session is required before changing profile visibility." },
+          { status: 403 },
+        );
+      }
+
+      const [currentUser] = await networkDb
+        .select({
+          id: networkSchema.networkUsers.id,
+          wantsVisibility: networkSchema.networkUsers.wantsVisibility,
+          pausedAt: networkSchema.networkUsers.pausedAt,
+          card: networkSchema.networkUsers.card,
+        })
+        .from(networkSchema.networkUsers)
+        .where(eq(networkSchema.networkUsers.id, laneSession.userId))
+        .limit(1);
+      if (!currentUser) {
+        return NextResponse.json(
+          { error: "Network user not found." },
+          { status: 404 },
+        );
+      }
+
+      const now = new Date();
+      const stepRunId = await createNetworkLaneStepRun({
+        route: "network-profile-set-visibility",
+        sessionId: laneSession.sessionId,
+        actorId: laneSession.actorId,
+      });
+      const nextCard = visibilityCard(currentUser.card, body.wantsVisibility, now);
+      await networkDb.transaction(async (tx) => {
+        await tx
+          .update(networkSchema.networkUsers)
+          .set({
+            wantsVisibility: body.wantsVisibility,
+            pausedAt: body.wantsVisibility ? null : now,
+            card: nextCard ?? null,
+            updatedAt: now,
+          })
+          .where(eq(networkSchema.networkUsers.id, currentUser.id));
+        await writeNetworkAuditEvent({
+          db: tx,
+          stepRunId,
+          eventClass: "profile_visibility_changed",
+          subjectType: "public-profile",
+          subjectId: currentUser.id,
+          actorType: "user",
+          actorId: laneSession.actorId,
+          reasonCode: body.wantsVisibility
+            ? "privacy-center-resume-profile"
+            : "privacy-center-pause-profile",
+          metadata: {
+            before: {
+              wantsVisibility: currentUser.wantsVisibility,
+              pausedAt: currentUser.pausedAt?.toISOString?.() ?? null,
+              cardVisibility: currentUser.card?.visibility ?? null,
+            },
+            after: {
+              wantsVisibility: body.wantsVisibility,
+              pausedAt: body.wantsVisibility ? null : now.toISOString(),
+              cardVisibility: nextCard?.visibility ?? null,
+            },
+            context: laneSession.context,
+          },
+          now,
+        });
+      });
+
+      return NextResponse.json({
+        ok: true,
+        wantsVisibility: body.wantsVisibility,
+        paused: !body.wantsVisibility,
+        card: nextCard ?? null,
+      });
+    }
+
     if (!requestedHandle) {
       return NextResponse.json(
         { error: "handle is required." },
@@ -170,12 +311,14 @@ export async function POST(request: Request) {
       { db, schema },
       { and, eq, sql },
       { suggestHandleAlternatives, validateHandle },
-      { hasFiredUpsell, recordUpsellFired },
+      { createNetworkLaneStepRun },
+      { maybeFireWorkspaceUpsell },
     ] = await Promise.all([
       import("../../../../../../../src/db"),
       import("drizzle-orm"),
       import("../../../../../../../src/engine/handle-claim"),
-      import("../../../../../../../src/engine/network-upsell-tracker"),
+      import("../../../../../../../src/engine/network-step-run"),
+      import("../../../../../../../src/engine/workspace-upsell-trigger"),
     ]);
 
     const [session] = await db
@@ -209,6 +352,7 @@ export async function POST(request: Request) {
       .where(eq(networkSchema.networkUsers.email, email));
 
     const userId = currentUser?.id ?? sessionId ?? email;
+    let persistedUserId = currentUser?.id ?? null;
 
     async function availableAlternatives(seed: string, count = 2): Promise<string[]> {
       const blocked = new Set<string>([seed]);
@@ -284,11 +428,16 @@ export async function POST(request: Request) {
           .update(networkSchema.networkUsers)
           .set(values)
           .where(eq(networkSchema.networkUsers.id, currentUser.id));
+        persistedUserId = currentUser.id;
       } else {
-        await networkDb.insert(networkSchema.networkUsers).values({
-          email,
-          ...values,
-        });
+        const [inserted] = await networkDb
+          .insert(networkSchema.networkUsers)
+          .values({
+            email,
+            ...values,
+          })
+          .returning({ id: networkSchema.networkUsers.id });
+        persistedUserId = inserted.id;
       }
     } catch (error) {
       if (isUniqueHandleConflict(error)) {
@@ -304,12 +453,21 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const shouldFireUpsell =
-      body.triggerUpsell === true &&
-      sessionId != null &&
-      !hasFiredUpsell(email, sessionId, "expert");
-    if (shouldFireUpsell) {
-      recordUpsellFired(email, sessionId, "expert");
+    let upsell:
+      | { fired: boolean; copy: string | null; declineLabel: string }
+      | null = null;
+    if (body.triggerUpsell === true && persistedUserId) {
+      const stepRunId = await createNetworkLaneStepRun({
+        route: "network-handle-upsell",
+        sessionId,
+        actorId: persistedUserId,
+      });
+      upsell = await maybeFireWorkspaceUpsell({
+        stepRunId,
+        userId: persistedUserId,
+        trigger: "expert-q6",
+        handle,
+      });
     }
 
     return NextResponse.json({
@@ -317,7 +475,9 @@ export async function POST(request: Request) {
       handle,
       shareUrl,
       card: cardToPersist,
-      upsell: shouldFireUpsell,
+      upsell: upsell?.fired ?? false,
+      upsellCopy: upsell?.copy ?? null,
+      upsellDeclineLabel: upsell?.declineLabel ?? null,
     });
   } catch (error) {
     if (isNetworkDbConnectionError(error)) {

@@ -235,6 +235,21 @@ describe("process-loader", () => {
       expect(cycleIds).toContain("relationship-nurture-cycle");
     });
 
+    it("does NOT load the Background Watch YAML (Brief 293 — documentation-only)", () => {
+      // The watch YAML lives at processes/cycles/network/network-background-watch.yaml.
+      // loadAllProcesses only scans the top level of each directory, so the
+      // subdirectory file is invisible to the workspace process engine. The
+      // runner is invoked directly by scheduler + manual route; if this test
+      // breaks, the watch has been promoted to a workspace process by accident.
+      const all = loadAllProcesses(
+        path.join(process.cwd(), "processes"),
+        path.join(process.cwd(), "processes", "templates"),
+        cycleDir,
+      );
+      const ids = all.map((d) => d.id);
+      expect(ids).not.toContain("network-background-watch");
+    });
+
     it("cycle step definitions are under 500 tokens (agent context budget)", () => {
       const files = ["sales-marketing.yaml", "network-connecting.yaml", "relationship-nurture.yaml"];
       for (const file of files) {

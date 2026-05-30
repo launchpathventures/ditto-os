@@ -17,8 +17,11 @@ import type {
   ChecklistBlock,
   StatusCardBlock,
   ProcessProposalBlock,
+  ProgressBlock,
+  TextBlock,
   KnowledgeCitationBlock,
   KnowledgeSynthesisBlock,
+  InteractiveTableBlock,
 } from "./content-blocks";
 
 let testDb: TestDb;
@@ -91,7 +94,8 @@ describe("get_process_detail block emission (AC1)", () => {
     const record = blocks.find((b) => b.type === "record") as RecordBlock;
     expect(record).toBeDefined();
     expect(record.title).toBe("Invoice Follow-up");
-    expect(record.status?.label).toBe("spot checked");
+    // Brief 280 AC8: canonical trust tier label (was "spot checked").
+    expect(record.status?.label).toBe("Spot-checked");
     expect(record.fields).toBeDefined();
     expect(record.fields!.some((f) => f.label === "Approval rate" && f.value === "85%")).toBe(true);
     expect(record.fields!.some((f) => f.label === "Steps" && f.value === "2")).toBe(true);
@@ -315,8 +319,9 @@ describe("adjust_trust block emission (AC5)", () => {
     const statusCard = blocks.find((b) => b.type === "status_card") as StatusCardBlock;
     expect(statusCard).toBeDefined();
     expect(statusCard.status).toBe("applied");
-    expect(statusCard.details["From"]).toBe("supervised");
-    expect(statusCard.details["To"]).toBe("spot checked");
+    // Brief 280 AC8: canonical trust tier labels (was "supervised" / "spot checked").
+    expect(statusCard.details["From"]).toBe("Supervised");
+    expect(statusCard.details["To"]).toBe("Spot-checked");
 
     // No record or checklist for applied (only proposal shows evidence)
     expect(blocks.filter((b) => b.type === "record")).toHaveLength(0);
@@ -555,6 +560,143 @@ describe("failed results emit no blocks", () => {
 });
 
 // ============================================================
+// Brief 281: search_workspace → recall block mapping
+// ============================================================
+
+describe("search_workspace block emission (Brief 281)", () => {
+  function recallMeta(partial: Record<string, unknown>) {
+    return {
+      recall: {
+        results: [],
+        counts: {
+          project: 0,
+          process: 0,
+          memory: 0,
+          work: 0,
+          review: 0,
+          activity: 0,
+        },
+        truncated: false,
+        query: null,
+        kinds: ["project", "process", "memory", "work", "review", "activity"],
+        ...partial,
+      },
+    };
+  }
+
+  it("emits an info AlertBlock (never a dead-end) when nothing matched", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "search_workspace",
+      {},
+      ok("No workspace artifacts matched.", recallMeta({ query: "zzz" })),
+    );
+    expect(blocks).toHaveLength(1);
+    const alert = blocks[0] as AlertBlock;
+    expect(alert.type).toBe("alert");
+    expect(alert.severity).toBe("info");
+    expect(alert.title).toContain("zzz");
+    expect(alert.content.toLowerCase()).toContain("filter");
+  });
+
+  it("maps memory results to a KnowledgeCitationBlock with provenance", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "search_workspace",
+      {},
+      ok(
+        "1 result",
+        recallMeta({
+          results: [
+            {
+              kind: "memory",
+              id: "m1",
+              title: "Prefer concise Q3 summaries",
+              evidence: "Prefer concise Q3 planning summaries.",
+              projectSlug: "acme",
+              route: "/memories/m1",
+              memoryScopeType: "process",
+              memoryType: "preference",
+            },
+          ],
+          counts: { project: 0, process: 0, memory: 1, work: 0, review: 0, activity: 0 },
+        }),
+      ),
+    );
+    const cite = blocks.find(
+      (b) => b.type === "knowledge_citation",
+    ) as KnowledgeCitationBlock;
+    expect(cite).toBeDefined();
+    expect(cite.sources[0].type).toBe("memory");
+    expect(cite.sources[0].memoryProjectSlug).toBe("acme");
+    // Brief-227 scope pill must reach the citation (review Finding 4).
+    expect(cite.sources[0].memoryScopeType).toBe("process");
+    expect(cite.sources[0].memoryType).toBe("preference");
+  });
+
+  it("maps a single non-memory result to a RecordBlock with an Open action", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "search_workspace",
+      {},
+      ok(
+        "1 result",
+        recallMeta({
+          results: [
+            {
+              kind: "project",
+              id: "p1",
+              title: "Acme Revamp",
+              status: "active",
+              projectSlug: "acme",
+              route: "/projects/acme",
+            },
+          ],
+          counts: { project: 1, process: 0, memory: 0, work: 0, review: 0, activity: 0 },
+        }),
+      ),
+    );
+    const record = blocks.find((b) => b.type === "record") as RecordBlock;
+    expect(record).toBeDefined();
+    expect(record.title).toBe("Acme Revamp");
+    expect(record.actions?.[0]?.payload).toEqual({ href: "/projects/acme" });
+  });
+
+  it("maps multiple non-memory results to an InteractiveTableBlock with truncation summary", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "search_workspace",
+      {},
+      ok(
+        "results",
+        recallMeta({
+          truncated: true,
+          results: [
+            { kind: "project", id: "p1", title: "Acme", route: "/projects/acme" },
+            { kind: "process", id: "pr1", title: "Quoting", status: "active", route: "/process/pr1" },
+          ],
+          counts: { project: 1, process: 9, memory: 0, work: 0, review: 0, activity: 0 },
+        }),
+      ),
+    );
+    const table = blocks.find(
+      (b) => b.type === "interactive_table",
+    ) as InteractiveTableBlock;
+    expect(table).toBeDefined();
+    expect(table.rows).toHaveLength(2);
+    expect(table.summary).toContain("of 10");
+    expect(table.rows[0].actions?.[0]?.payload).toEqual({
+      href: "/projects/acme",
+    });
+  });
+
+  it("returns no blocks when recall metadata is absent", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "search_workspace",
+      {},
+      ok("text only"),
+    );
+    expect(blocks).toHaveLength(0);
+  });
+});
+
+// ============================================================
 // FLAG 3 fix: metadata-based block emission (no text parsing)
 // ============================================================
 
@@ -690,5 +832,205 @@ describe("search_knowledge block emission (Brief 079)", () => {
 
     const blocks = await toolResultToContentBlocks("search_knowledge", { query: "test" }, result);
     expect(blocks).toHaveLength(0);
+  });
+});
+
+// ============================================================
+// Brief 280: workspace chat front-door inline artifacts
+// ============================================================
+
+describe("generate_process(save=true) inline summary (Brief 280 AC7)", () => {
+  const SAVED_OUTPUT = JSON.stringify({
+    action: "saved",
+    id: "proc-42",
+    slug: "inbox-triage",
+    processSlug: "inbox-triage",
+    name: "Inbox Triage",
+    stepCount: 3,
+    status: "draft",
+  });
+
+  it("emits a RecordBlock + SuggestionBlock with human-readable fields", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "generate_process",
+      {
+        save: true,
+        name: "Inbox Triage",
+        description: "Triage my inbox daily and surface what needs a reply",
+        trigger: "Daily at 8am",
+        trustTier: "spot_checked",
+        steps: [{}, {}, {}],
+      },
+      ok(SAVED_OUTPUT),
+    );
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].type).toBe("record");
+    expect(blocks[1].type).toBe("suggestion");
+
+    const record = blocks[0] as RecordBlock;
+    expect(record.title).toBe("Inbox Triage");
+    expect(record.status).toEqual({ label: "Draft", variant: "neutral" });
+
+    const fieldMap = Object.fromEntries(
+      (record.fields ?? []).map((f) => [f.label, f.value]),
+    );
+    expect(fieldMap["Purpose"]).toBe(
+      "Triage my inbox daily and surface what needs a reply",
+    );
+    expect(fieldMap["Trigger"]).toBe("Daily at 8am");
+    expect(fieldMap["Trust tier"]).toBe("Spot-checked");
+    expect(fieldMap["Steps"]).toBe("3");
+
+    // AC7: slug / id / executor names never displayed raw in the summary.
+    const fieldValues = (record.fields ?? []).map((f) => String(f.value));
+    expect(fieldValues).not.toContain("inbox-triage");
+    expect(fieldValues).not.toContain("proc-42");
+    expect(record.title).not.toBe("inbox-triage");
+
+    // Drill-down carries the real route shape (AC13) in the payload only.
+    const openAction = (record.actions ?? []).find((a) => a.id === "open-process");
+    expect(openAction?.payload).toEqual({
+      processId: "proc-42",
+      href: "/process/proc-42",
+    });
+
+    // "Run now" routes back through the Self conversation (AC9 entry point).
+    const suggestion = blocks[1] as SuggestionBlock;
+    const runAction = (suggestion.actions ?? []).find((a) => a.id === "proposal-run");
+    expect(runAction?.payload).toEqual({
+      processSlug: "inbox-triage",
+      message: "Run the Inbox Triage process now.",
+    });
+  });
+
+  it("returns no blocks for the save=false preview path", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "generate_process",
+      { save: false, name: "Inbox Triage" },
+      ok(JSON.stringify({ action: "preview", slug: "inbox-triage", stepCount: 3 })),
+    );
+    // The preview branch emits a ProcessProposalBlock, not the saved summary.
+    expect(blocks.every((b) => b.type !== "suggestion")).toBe(true);
+  });
+});
+
+describe("canonical trust tier labels (Brief 280 AC8)", () => {
+  it.each([
+    ["supervised", "Supervised"],
+    ["spot_checked", "Spot-checked"],
+    ["autonomous", "Autonomous"],
+    ["critical", "Critical"],
+  ])("get_process_detail renders %s as %s", async (tier, label) => {
+    const blocks = await toolResultToContentBlocks(
+      "get_process_detail",
+      {},
+      ok(JSON.stringify({ name: "P", slug: "p", status: "active", trustTier: tier })),
+    );
+    const record = blocks.find((b) => b.type === "record") as RecordBlock | undefined;
+    expect(record).toBeDefined();
+    const trustField = (record!.fields ?? []).find((f) => f.label === "Trust tier");
+    expect(trustField?.value).toBe(label);
+  });
+
+  // adjust_trust is also an inline process surface in the workspace Self
+  // conversation, so AC8's canonical labels apply there too (Reviewer
+  // finding: previously used a naive underscore→space transform).
+  it.each([
+    ["supervised", "Supervised"],
+    ["spot_checked", "Spot-checked"],
+    ["autonomous", "Autonomous"],
+    ["critical", "Critical"],
+  ])("adjust_trust proposal renders %s as %s", async (tier, label) => {
+    const blocks = await toolResultToContentBlocks(
+      "adjust_trust",
+      { processSlug: "p" },
+      ok(
+        JSON.stringify({
+          action: "proposal",
+          processName: "P",
+          currentTier: tier,
+          proposedTier: tier,
+          reason: "r",
+        }),
+      ),
+    );
+    const record = blocks.find((b) => b.type === "record") as RecordBlock | undefined;
+    expect(record).toBeDefined();
+    const fields = record!.fields ?? [];
+    expect(fields.find((f) => f.label === "Current tier")?.value).toBe(label);
+    expect(fields.find((f) => f.label === "Proposed tier")?.value).toBe(label);
+  });
+
+  it.each([
+    ["supervised", "Supervised"],
+    ["spot_checked", "Spot-checked"],
+    ["autonomous", "Autonomous"],
+    ["critical", "Critical"],
+  ])("adjust_trust applied renders %s as %s", async (tier, label) => {
+    const blocks = await toolResultToContentBlocks(
+      "adjust_trust",
+      { processSlug: "p" },
+      ok(
+        JSON.stringify({
+          action: "applied",
+          processName: "P",
+          fromTier: tier,
+          toTier: tier,
+        }),
+      ),
+    );
+    const statusCard = blocks.find((b) => b.type === "status_card") as
+      | StatusCardBlock
+      | undefined;
+    expect(statusCard).toBeDefined();
+    expect(statusCard!.details["From"]).toBe(label);
+    expect(statusCard!.details["To"]).toBe(label);
+  });
+});
+
+describe("start_pipeline generic progress copy (Brief 280)", () => {
+  it("uses generic process wording, not dev-pipeline wording", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "start_pipeline",
+      {},
+      ok(
+        JSON.stringify({
+          runId: "run-1",
+          processSlug: "inbox-triage",
+          status: "running",
+          steps: ["Fetch inbox", "Classify", "Summarise"],
+        }),
+      ),
+    );
+
+    const progress = blocks.find((b) => b.type === "progress") as ProgressBlock;
+    expect(progress?.entityId).toBe("run-1");
+    expect(progress?.totalSteps).toBe(3);
+
+    const text = blocks.find((b) => b.type === "text") as TextBlock;
+    expect(text?.text).toBe(
+      "Starting the process (3 steps). I'll keep you updated as steps complete.",
+    );
+    expect(text?.text.toLowerCase()).not.toContain("dev pipeline");
+  });
+
+  it("singularises the step count", async () => {
+    const blocks = await toolResultToContentBlocks(
+      "start_pipeline",
+      {},
+      ok(
+        JSON.stringify({
+          runId: "run-2",
+          processSlug: "p",
+          status: "running",
+          steps: ["Only step"],
+        }),
+      ),
+    );
+    const text = blocks.find((b) => b.type === "text") as TextBlock;
+    expect(text?.text).toBe(
+      "Starting the process (1 step). I'll keep you updated as steps complete.",
+    );
   });
 });

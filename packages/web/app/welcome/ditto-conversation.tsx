@@ -997,52 +997,42 @@ export function DittoConversation() {
   return (
     <ConversationProvider>
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Phase-aware bottom-anchored hero. Landing shows the morning
-          workspace floor; picker + conversation phases share a soft pastel
-          sky (atmosphere) anchored to the bottom of the viewport so the
-          chat composer sits gorgeously on top of it. The image is
-          decorative-only and sits at z-0 behind chrome. */}
+      {/* Full-cover home hero. The first-dawn city workspace background
+          fills the viewport at full intensity — matching how /network
+          displays its hero — with no fade-to-canvas overlay. Decorative
+          only; sits at z-0 behind chrome. */}
+      <HeroBackdrop variant="home" anchor="cover" intensity={1} priority />
+      {/* Legibility scrim — left-heavy dark gradient so headline/preamble
+          copy reads cleanly over the city image, with a softer top→bottom
+          darkening to anchor the footer. Right side stays open so the
+          wedge demo sits on the brighter sky portion. */}
       <div
-        className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-700 ease-in-out"
-        style={{ opacity: phase === "preamble" ? 1 : 0 }}
-      >
-        <HeroBackdrop
-          variant="workspace"
-          anchor="bottom"
-          height={420}
-          intensity={0.32}
-          priority
-        />
-      </div>
-      <div
-        className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-700 ease-in-out"
-        style={{ opacity: phase === "preamble" ? 0 : 1 }}
-      >
-        <HeroBackdrop
-          variant="atmosphere"
-          anchor="bottom"
-          height={560}
-          intensity={phase === "picker" ? 0.6 : 0.5}
-          priority
-        />
-      </div>
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background: [
+            "linear-gradient(90deg, rgba(5, 9, 18, 0.82) 0%, rgba(5, 9, 18, 0.58) 32%, rgba(5, 9, 18, 0.22) 68%, rgba(5, 9, 18, 0.08) 100%)",
+            "linear-gradient(180deg, rgba(5, 9, 18, 0.10) 0%, rgba(5, 9, 18, 0.18) 55%, rgba(5, 9, 18, 0.55) 100%)",
+          ].join(", "),
+        }}
+      />
       {/* Turnstile invisible widget container */}
       <div ref={turnstileRef} style={{ display: "none" }} />
       {/* Minimal nav */}
       <nav className="relative z-20 shrink-0 flex items-center justify-between px-6 py-5 md:px-10">
-        <Link href="/" className="text-xl font-bold tracking-tight text-text-primary">
+        <Link href="/" className="text-xl font-bold tracking-tight text-white drop-shadow-[0_1px_12px_rgba(0,0,0,0.45)]">
           ditto
         </Link>
         <div className="flex items-center gap-6">
           <Link
             href="/about"
-            className="hidden text-sm text-text-secondary hover:text-text-primary md:block"
+            className="hidden text-sm text-white/80 hover:text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.4)] md:block"
           >
             About
           </Link>
           <Link
             href="/how-it-works"
-            className="hidden text-sm text-text-secondary hover:text-text-primary md:block"
+            className="hidden text-sm text-white/80 hover:text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.4)] md:block"
           >
             How It Works
           </Link>
@@ -1080,7 +1070,7 @@ export function DittoConversation() {
               {preamble === 0 && (
                 <div className="flex flex-1 flex-col justify-center">
                   <div className="flex items-end gap-3">
-                    <span className="inline-block h-8 w-[3px] animate-cursor-blink bg-text-primary md:h-10" />
+                    <span className="inline-block h-8 w-[3px] animate-cursor-blink bg-white md:h-10" />
                     <div className="flex items-end gap-1.5 pb-1">
                       <span className="h-2 w-2 rounded-full bg-vivid animate-bounce" style={{ animationDelay: "0ms" }} />
                       <span className="h-2 w-2 rounded-full bg-vivid animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -1092,17 +1082,17 @@ export function DittoConversation() {
               {preamble >= 1 && preamble <= 4 && (
                 <div className={`flex flex-1 flex-col justify-center space-y-4 md:space-y-5 ${preamble === 4 ? "animate-fade-out" : ""}`}>
                   {preamble >= 1 && (
-                    <p className="animate-reveal-ltr text-xl font-medium text-text-muted md:text-2xl">
-                      AI can do <strong className="font-semibold text-text-primary">more for you and your business</strong> than it currently does.
+                    <p className="animate-reveal-ltr text-xl font-medium text-white/75 drop-shadow-[0_1px_10px_rgba(0,0,0,0.4)] md:text-2xl">
+                      AI can do <strong className="font-semibold text-white">more for you and your business</strong> than it currently does.
                     </p>
                   )}
                   {preamble >= 2 && (
-                    <p className="animate-reveal-ltr text-xl font-medium text-text-muted md:text-2xl">
-                      You know it. You just don&apos;t have <strong className="font-semibold text-text-primary">time to figure it out</strong>.
+                    <p className="animate-reveal-ltr text-xl font-medium text-white/75 drop-shadow-[0_1px_10px_rgba(0,0,0,0.4)] md:text-2xl">
+                      You know it. You just don&apos;t have <strong className="font-semibold text-white">time to figure it out</strong>.
                     </p>
                   )}
                   {preamble >= 3 && (
-                    <p className="animate-reveal-ltr text-xl font-semibold text-text-primary md:text-2xl">
+                    <p className="animate-reveal-ltr text-xl font-semibold text-white drop-shadow-[0_1px_10px_rgba(0,0,0,0.4)] md:text-2xl">
                       What if AI <strong className="font-bold">just worked</strong>?
                     </p>
                   )}
@@ -1111,7 +1101,7 @@ export function DittoConversation() {
               <button
                 type="button"
                 onClick={handleSkipPreamble}
-                className="absolute bottom-4 right-4 text-xs font-medium text-text-muted/70 transition-colors hover:text-text-primary md:bottom-6 md:right-6 md:text-sm"
+                className="absolute bottom-4 right-4 text-xs font-medium text-white/65 transition-colors hover:text-white md:bottom-6 md:right-6 md:text-sm"
               >
                 Skip →
               </button>
@@ -1124,13 +1114,12 @@ export function DittoConversation() {
           {showIntro && (!firstTime || preamble >= 5) && (
             <div id="get-started" className="flex min-h-0 flex-1 flex-col justify-center py-2">
               <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(380px,1fr)] lg:items-center lg:gap-10">
-                <header className="order-1 space-y-5 animate-fade-in-slow">
-                  <h1 className="max-w-[34rem] text-4xl font-bold leading-none text-text-primary md:text-[3.4rem]">
-                    AI that works for business people.
-                    <br />
-                    <span>Not the other way around.</span>
+                <header className="order-1 animate-fade-in-slow">
+                  <h1 className="max-w-[34rem] text-[42px] font-semibold leading-none tracking-normal text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.45)] sm:text-[64px]">
+                    AI that works for business people.{" "}
+                    <span className="font-instrument-serif font-normal italic">Not the other way around</span>.
                   </h1>
-                  <p className="max-w-[34rem] text-base leading-relaxed text-text-secondary md:text-lg">
+                  <p className="mt-5 max-w-[34rem] text-base leading-7 text-white/78 drop-shadow-[0_1px_10px_rgba(0,0,0,0.4)] sm:text-lg">
                     Tell Ditto what you need off your plate. It runs the work,
                     learns from your corrections, and shows you everything before
                     it goes out. No prompts. No setup. No checking the same
@@ -1150,17 +1139,12 @@ export function DittoConversation() {
                   <button
                     type="button"
                     onClick={openPersonaPicker}
-                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover active:translate-y-px sm:w-auto"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#111] shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition-colors hover:bg-white/90 active:translate-y-px sm:w-auto"
                   >
                     Get your Ditto
                     <ArrowRight size={16} />
                   </button>
 
-                  <div className="grid gap-2 text-sm font-medium text-text-muted sm:grid-cols-3 lg:max-w-[34rem]">
-                    <p>Earns your trust, doesn&apos;t ask for it</p>
-                    <p>You see everything before it ships</p>
-                    <p>Gets better every week</p>
-                  </div>
                 </div>
               </div>
             </div>

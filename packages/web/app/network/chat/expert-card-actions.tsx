@@ -29,7 +29,7 @@ export function ExpertCardActions({
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-raised"
       >
         <PencilLine className="h-4 w-4" aria-hidden="true" />
-        Tweak this with me
+        Tune card
       </button>
       <button
         type="button"
@@ -42,7 +42,7 @@ export function ExpertCardActions({
         )}
       >
         <Radio className="h-4 w-4" aria-hidden="true" />
-        Open for opportunities
+        Make searchable
       </button>
       <button
         type="button"
@@ -50,7 +50,7 @@ export function ExpertCardActions({
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
       >
         <Search className="h-4 w-4" aria-hidden="true" />
-        Find me clients
+        Find clients from this
       </button>
     </div>
   );

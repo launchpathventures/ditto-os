@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0e27fb7e-b7b4-4485-9643-2af1c03dc0e4",
-  "prevId": "d8a74b89-f591-40fd-8c9f-90f3de1826fc",
+  "id": "4b59dc3e-bb5e-4f1a-a24f-190181cca694",
+  "prevId": "0e27fb7e-b7b4-4485-9643-2af1c03dc0e4",
   "tables": {
     "activities": {
       "name": "activities",
@@ -3386,8 +3386,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "admin_feedback": {
-      "name": "admin_feedback",
+    "review_pages": {
+      "name": "review_pages",
       "columns": {
         "id": {
           "name": "id",
@@ -3403,18 +3403,54 @@
           "notNull": true,
           "autoincrement": false
         },
-        "feedback": {
-          "name": "feedback",
+        "person_id": {
+          "name": "person_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "created_by": {
-          "name": "created_by",
+        "token": {
+          "name": "token",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_blocks": {
+          "name": "content_blocks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chat_messages": {
+          "name": "chat_messages",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "user_name": {
+          "name": "user_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {
@@ -3423,32 +3459,39 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_accessed_at": {
+          "name": "first_accessed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "admin_feedback_user_id": {
-          "name": "admin_feedback_user_id",
+        "review_pages_token_unique": {
+          "name": "review_pages_token_unique",
           "columns": [
-            "user_id"
+            "token"
           ],
-          "isUnique": false
+          "isUnique": true
         }
       },
-      "foreignKeys": {
-        "admin_feedback_user_id_network_users_id_fk": {
-          "name": "admin_feedback_user_id_network_users_id_fk",
-          "tableFrom": "admin_feedback",
-          "tableTo": "network_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -3578,6 +3621,73 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "admin_feedback": {
+      "name": "admin_feedback",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "feedback": {
+          "name": "feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "admin_feedback_user_id": {
+          "name": "admin_feedback_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "admin_feedback_user_id_network_users_id_fk": {
+          "name": "admin_feedback_user_id_network_users_id_fk",
+          "tableFrom": "admin_feedback",
+          "tableTo": "network_users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -3964,6 +4074,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "business_context": {
           "name": "business_context",
           "type": "text",
@@ -4029,6 +4146,13 @@
           "autoincrement": false,
           "default": false
         },
+        "card": {
+          "name": "card",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "paused_at": {
           "name": "paused_at",
           "type": "integer",
@@ -4066,10 +4190,24 @@
           ],
           "isUnique": true
         },
+        "network_users_handle_unique": {
+          "name": "network_users_handle_unique",
+          "columns": [
+            "handle"
+          ],
+          "isUnique": true
+        },
         "network_users_email": {
           "name": "network_users_email",
           "columns": [
             "email"
+          ],
+          "isUnique": false
+        },
+        "network_users_handle": {
+          "name": "network_users_handle",
+          "columns": [
+            "handle"
           ],
           "isUnique": false
         }
@@ -4236,116 +4374,6 @@
             "email"
           ],
           "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "review_pages": {
-      "name": "review_pages",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "content_blocks": {
-          "name": "content_blocks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "chat_messages": {
-          "name": "chat_messages",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'active'"
-        },
-        "user_name": {
-          "name": "user_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "first_accessed_at": {
-          "name": "first_accessed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "review_pages_token_unique": {
-          "name": "review_pages_token_unique",
-          "columns": [
-            "token"
-          ],
-          "isUnique": true
         }
       },
       "foreignKeys": {},

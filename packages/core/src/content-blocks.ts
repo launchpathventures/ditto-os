@@ -125,6 +125,60 @@ export interface JobRequestCardBlock {
   lastUpdatedAt: string;
 }
 
+/** IntroProposalCardState — outbound (Mira-proposed) intro consent state.
+ *  Mirrors the new `IntroductionState` values added in Brief 288 AC #3. */
+export type IntroProposalCardState =
+  | "proposed"
+  | "requester-approved"
+  | "recipient-asked"
+  | "recipient-approved"
+  | "thread-sent"
+  | "declined"
+  | "not-now"
+  | "feedback-collected";
+
+/** IntroProposalCardAffordance — block-level affordances surfaced to the
+ *  reviewer (chat surface / inbox card / decision email). */
+export type IntroProposalCardAffordance =
+  | "approve"
+  | "decline"
+  | "not-now"
+  | "edit-draft"
+  | "open-chat";
+
+/** IntroProposalEvidence — one citation row backing a proposed intro.
+ *  Each `sourceId` references a `network_signal_sources` row (Brief 278 D-Q7)
+ *  so reviewers can trace claims back to their origin. */
+export interface IntroProposalEvidence {
+  label: string;
+  sourceId: string;
+  kind: string;
+}
+
+/** IntroProposalCardBlock — Mira-proposed introduction up for two-sided
+ *  consent review (Brief 288). Renders in the chat refinement surface and in
+ *  in-workspace inbox deliveries. `recipientPreview` carries the exact
+ *  `AuthorizationRequestBlock` the recipient will see — the load-bearing
+ *  "here's what they'll see" trust affordance. */
+export interface IntroProposalCardBlock {
+  type: "intro-proposal-card";
+  state: IntroProposalCardState;
+  introId: string;
+  header: string;
+  whyThisFits: string;
+  whyNow: string;
+  evidence: IntroProposalEvidence[];
+  risks: string[] | null;
+  /** The exact AuthorizationRequestBlock the recipient will see, after the
+   *  same privacy-scrub passes that gate `sendRecipientApprovalEmail`. */
+  recipientPreview: AuthorizationRequestBlock;
+  whatStaysPrivate: string[];
+  costLabel: string | null;
+  /** Confidence in the fit, normalized 0–1. */
+  confidence: number;
+  affordances: IntroProposalCardAffordance[];
+}
+
 /** StatusCardBlock — Process or work item status.
  *  Optional `metadata` (Brief 221) carries typed subtype-specific data — e.g.,
  *  runner-dispatch state via `metadata.cardKind = "runnerDispatch"` plus runner
@@ -293,6 +347,12 @@ export interface AuthorizationRequestBlock {
   actionClass: AuthorizationActionClass;
   executionResult: AuthorizationResult | null;
   expiresAt: string | null;
+  /** Self-contained request summary for cross-deployment auth artifacts. */
+  request?: string;
+  /** Editable/approved draft payload carried with the auth artifact. */
+  draft?: string;
+  /** Visitor/session/user id of the requester, when the artifact crosses deployments. */
+  requesterId?: string;
   /** Optional pricing/free-counter hint populated by later intro flows. */
   costLabel?: string | null;
   /** Optional server/client correlation id for affordance events. */
@@ -772,6 +832,7 @@ export type ContentBlock =
   | ReviewCardBlock
   | NetworkProfileCardBlock
   | JobRequestCardBlock
+  | IntroProposalCardBlock
   | StatusCardBlock
   | ActionBlock
   | InputRequestBlock
@@ -834,7 +895,7 @@ export function renderBlockToText(block: ContentBlock): string {
         `Handle: ${block.shareUrl}`,
         block.badges.length > 0 ? `Badges: ${block.badges.map((badge) => badge.label).join(", ")}` : "",
         block.narrativeMd,
-        block.antiPersonaMd ? `Allergic to: ${block.antiPersonaMd}` : `Allergic to: still asking ${block.name.split(/\s+/)[0] ?? block.name}`,
+        block.antiPersonaMd ? "Allergic to: owner-visible only" : `Allergic to: still asking ${block.name.split(/\s+/)[0] ?? block.name}`,
         `Curated by ${block.greeterCuratedBy === "mira" ? "Mira" : "Alex"}`,
       ]
         .filter(Boolean)
@@ -857,6 +918,36 @@ export function renderBlockToText(block: ContentBlock): string {
       ]
         .filter(Boolean)
         .join("\n");
+
+    case "intro-proposal-card": {
+      const parts: string[] = [];
+      parts.push(`Intro proposal — ${block.state}`);
+      parts.push(block.header);
+      parts.push(`Why this fits: ${block.whyThisFits}`);
+      parts.push(`Why now: ${block.whyNow}`);
+      if (block.evidence.length > 0) {
+        parts.push("Evidence:");
+        for (const ev of block.evidence) {
+          parts.push(`  - ${ev.label} (${ev.kind} · ${ev.sourceId})`);
+        }
+      }
+      if (block.risks && block.risks.length > 0) {
+        parts.push("Risks:");
+        for (const r of block.risks) parts.push(`  - ${r}`);
+      }
+      if (block.whatStaysPrivate.length > 0) {
+        parts.push("What stays private:");
+        for (const w of block.whatStaysPrivate) parts.push(`  - ${w}`);
+      }
+      parts.push(`Confidence: ${block.confidence.toFixed(2)}`);
+      if (block.costLabel) parts.push(`Cost: ${block.costLabel}`);
+      parts.push("Recipient will see:");
+      parts.push(renderBlockToText(block.recipientPreview));
+      if (block.affordances.length > 0) {
+        parts.push(`Affordances: ${block.affordances.join(", ")}`);
+      }
+      return parts.filter(Boolean).join("\n");
+    }
 
     case "status_card":
       return [

@@ -1141,3 +1141,73 @@ The following terms are additions from Briefs 072-074, 099a-c, 102-103, 108, 115
 **Runner Response Body** — The opaque-JSON channel `runner_dispatches.response_body` (column added by Brief 232 migration idx=17, prefix `0018_*`). The wire boundary `workItemStatusUpdateSchema` accepts an OPTIONAL `responseBody: z.record(z.unknown())` field; the status webhook persists it on the matched dispatch row inside the existing transaction (orphan callbacks silently drop). Per-shape validation is consumer-side: the project retrofitter reads `{commitSha, actuallyChangedFiles, skippedFiles?}` and falls back to a legacy hex-parse from `externalRunId` when responseBody is null/malformed (Brief 228 MVP behaviour preserved). Generic by design — future task types (post-merge linter results, deploy-runner output, branch coverage) compose without schema growth or new tables. Excludes `local-mac-mini` (synchronous bridge has no callback path; results return inline). Cloud runners (`claude-code-routine` + `claude-managed-agent` + `github-action`) carry the channel — the routine + managed-agent in-prompt callback stanza (`buildInternalCallbackSection`) and the GH Action template both name `responseBody` in the curl `-d` body shape.
 - Layer: 1 (Data — `runner_dispatches.response_body` column) / 3 (Harness — webhook persistence) / 6 (Human — the renderer's `skippedUserTouchedFiles` populates end-to-end)
 - Related: Brief 228 AC #11 (discharged), `parseRunnerResponse`, `workItemStatusUpdateSchema`, `buildInternalCallbackSection`
+
+## Network Superconnector Doctrine (Brief 271)
+
+**Superconnector** — The product thesis behind Ditto Network: a representative who quietly understands what people are excellent at, what they need, and when a thoughtful introduction could create value. Not a search engine and not a directory. The promise is fewer, better, consent-based introductions that produce concrete professional or economic outcomes (work, hires, funding, partnerships, advice, customers, collaborators). User-supplied canonical metaphor; original to Ditto. Headlines and first-viewport copy reference the term verbatim.
+- Layer: 6 (Human) / Cross-cutting (product doctrine)
+- Related: Member Signal, Need Signal, Active Request, Manual Search, Background Watch, Possible Connection, Introduction Proposal, Network Health, Source Provenance
+
+**Member Signal** — The living representation of a Network member: what they are excellent at, who fits them, who does not, sources behind every claim, and freshness. Built from links, work, and context that the member supplies and approves. The signal is what Ditto reasons about when a request arrives or a watch fires; the profile card is its public projection. Replaces the lane-mechanic phrasing of "expert profile" in product copy. Member signals are private by default; members choose visibility per facet.
+- Layer: 1 (Process — `network_member_signals`, `network_signal_sources`, `network_signal_claims`, KB facts) / 6 (Human — profile card and review UI)
+- Related: Superconnector, Signal Claim, Need Signal, Source Provenance, Possible Connection
+
+**Signal Claim** — A single reviewed Member Signal statement such as `knownFor`, `bestIntroducedFor`, `canHelpWith`, `currentFocus`, `openTo`, `notAFitFor`, `proof`, `tasteAndStyle`, `preferredIntroStyle`, or `sourceSummary`. Each claim carries source label, source URL or source id, evidence snippet, confidence, visibility, and approval state. Public surfaces may use only approved or edited claims with `visibility = public`; private and on-request claims require the later Brief 278 scrubber before any external-facing use.
+- Layer: 1 (Process — `network_signal_claims`) / 6 (Human — claim review controls)
+- Related: Member Signal, Source Provenance, Consent, Public Profile
+
+**Need Signal** — A user's stated or inferred professional need, including the outcome they want, who they are looking for, and the filters that must stay private (budget, anti-persona, sensitive context). Captured during intake; refined by the Greeter (Mira) into an Active Request when the user is ready. Distinct from the Active Request itself: the Need Signal is the user-side framing; the Active Request is the brief Ditto can work from.
+- Layer: 1 (Process — client intake) / 6 (Human — chat surface)
+- Related: Active Request, Superconnector, Manual Search, Background Watch
+
+**Active Request** — A captured need that Ditto can work from now. Carries the outcome, the criteria, the private filters, and the user's consent to act. Surfaces as a Job Request card to the user and as a brief to the matching pipeline. Replaces "job post" in product copy unless the user explicitly frames a job. Active Requests can be paused, edited, or closed; closing one does not delete the underlying Need Signal.
+- Layer: 1 (Process — `network_client_requests` / `JobRequestCardBlock`) / 6 (Human)
+- Related: Need Signal, Manual Search, Background Watch, Introduction Proposal
+
+**Manual Search** — A user-initiated, foreground search the user is watching happen. The Greeter checks the on-network and off-network sources, returns possible connections with source-traced evidence, and asks before any outreach. Manual Search is the "find someone now" entry job. Visibly distinct from Background Watch: the user is present, the result lands in the current session, and the next decision is theirs.
+- Layer: 1 (Process — client lane match + Brief 258 scout) / 6 (Human)
+- Related: Background Watch, Active Request, Possible Connection, Source Provenance
+
+**Background Watch** — A continuous, low-volume operating cycle that quietly looks for strong-fit people and timing on the user's behalf while they are not in the app. Surfaces only when there is something worth surfacing; pauses on demand. "Watching quietly," never "automating outreach." Distinct from Manual Search in cadence (continuous, not on-demand), surface (notification when ready, not in-session result), and user attention (none required by default). Maps to the existing Briefs 115-118 operating cycle model.
+- Layer: 4 (Awareness — cross-process intelligence) / 6 (Human — watch state surface)
+- Related: Manual Search, Operating Cycle Archetype, Active Request, Network Health
+
+**Possible Connection** — A person Ditto thinks may fit a Need Signal or Active Request, with source-backed evidence for why. Always shown with provenance ("from your LinkedIn first-degree", "from a Brief 258 scout", "from a member-signal match") and a "why this fits" rationale. Replaces "candidate" in product copy when the relationship is not employment or recruiting; "candidate" is reserved for explicit hiring contexts. A Possible Connection becomes an Introduction Proposal only after the user approves outreach.
+- Layer: 1 (Process — match output) / 6 (Human — suggested-candidates panel)
+- Related: Source Provenance, Active Request, Introduction Proposal, Manual Search
+
+**Introduction Proposal** — A drafted, reviewable introduction request the user can approve, edit, or decline. Carries the requester, the recipient (a Possible Connection), the drafted note, the transcript preview, and the consent surface ("ask if they are open"). Never "contact them." Reviewed in the workspace Inbox via the existing `AuthorizationRequestBlock` flow. The unit that turns a connection into a useful introduction and, downstream, a concrete outcome.
+- Layer: 1 (Process — `introductions` table) / 6 (Human — authorization block)
+- Related: Possible Connection, Active Request, Introductions Primitive (Brief 261)
+
+**Invitation Candidate** — A Possible Connection that has cleared the high-fit threshold to become a candidate for outbound discovery: clear evidence of excellence/relevance or superconnector behavior, an allowed public contact path, and no suppression/decline/complaint hit. Invitation Candidates are internal-only — they never appear on a public surface, never receive contact directly, and only graduate to a Discovery Profile after source-policy and operator gates clear. The seam where a manual-search result becomes an outbound-discovery subject (Brief 270 lifecycle: Possible Connection → Invitation Candidate → Discovery Profile → Claim Invite). Replaces ad-hoc "shortlist" or "lead" framing in product copy.
+- Layer: 1 (Process — `network_invitation_candidates`, `invitation-candidate-score.ts`)
+- Related: Possible Connection, Discovery Profile, Claim Invite, Source Provenance
+
+**Discovery Profile** — An internal, source-backed pre-claim profile for a non-member discovered from approved public/provided sources. Built from registered source classes (user-provided URLs, public search results, public personal/company websites, public professional posts/pages, opportunity/work portals, referral/user-provided lists); LinkedIn is constrained to URL pointer / user-provided / consented / formal-API data only. Discovery Profiles are never public — they inform search, proposal, and invite decisions inside Ditto, but no public handle, no public profile page, and no search/share/email/OG surface renders an unclaimed Discovery Profile. They expire or refresh on the retention schedule (Brief 278 proposed defaults: refresh at 30 days, expire at 180 days if never claimed). A Discovery Profile becomes a Member Signal only through the Claim Invite path, after the discovered person reviews, edits, approves, or deletes what Ditto found.
+- Layer: 1 (Process — `network_discovered_profiles`, `discovery-profile.ts`, source registry)
+- Related: Invitation Candidate, Claim Invite, Source Policy, Member Signal, Source Provenance
+
+**Claim Invite** — A consent-first invitation asking a discovered person to review, edit, approve, or delete what Ditto found from public sources before any public Ditto profile is created for them. Sent only after operator approval, source-policy pass, suppression pass, and email-compliance pass (sender identity, RFC 8058 one-click unsubscribe, configured CAN-SPAM footer, misleading-subject check). The token is hashed and short-lived (Brief 278 proposed default: 30 days); redemption lands the discovered person in the Brief 272 Member Signal review with four equal exits — claim & correct, decline, suppress, delete. Anti-resurrection applies: a declined or deleted subject's direct profile URL returns HTTP 410 + neutral tombstone, never 404 and never the claim page again. Replaces "cold invite" / "outreach campaign" framing.
+- Layer: 1 (Process — `network_claim_tokens`, `network_invitation_events`, `claim-invite.ts`)
+- Related: Discovery Profile, Member Signal, Source Policy, Suppression, Outbound Email Compliance
+
+**Network Health** — The view that frames Ditto's value at the community scale: fewer noisy intros, more useful ones; sources that get more trusted as members approve them; representation that does not drift into impersonation. Network Health is the lens through which broadcast-style or systemic behaviour gets challenged. Product copy uses Network Health to justify constraints (consent, rate limits, source-traced claims) without lecturing the user.
+- Layer: Cross-cutting (governance) / 6 (Human — copy doctrine)
+- Related: Superconnector, Source Provenance, Consent, Trust Tier
+
+**Source Provenance** — The requirement that every claim Ditto surfaces about a member or a Possible Connection traces back to a named source the user can inspect. Includes link, document, member-approved statement, or scout result. UI copy uses "source", "evidence", and "why this fits", not "AI score" alone. Source Provenance is what makes warm-introduction-without-spam credible; absence of provenance is a refusal trigger.
+- Layer: 1 (Process — `network_signal_sources`, KB facts, scout results) / 6 (Human — claim chips and possible-connection rendering)
+- Related: Signal Claim, Possible Connection, Network Health, Superconnector, KB Fact
+
+**Share Studio** — The post-approval surface where a member turns their approved public profile card into channel-shaped share assets. Distinct from the compact share modal (Brief 260, one-tap copy): Share Studio (Brief 290) is the tabbed, multi-channel composer the member reaches after claim/approval. One tab per channel (LinkedIn, X, Instagram, email signature, website badge); each tab renders the channel's allowed voice variants from a single source-traced card. Never auto-posts — every channel produces copy-and-paste text or a URL the member places themselves. Public-claim-only: the studio renders only `visibility = public` approved/edited claims; anti-persona and private filters are owner-visible only and scrubbed before any variant is generated.
+- Layer: 6 (Human — `share-modal.tsx` StudioShareModal) / 1 (Process — `network-share` step-run, `generate-share-variants.ts`)
+- Related: Share Variant, Website Badge, Member Signal, Signal Claim, Consent
+
+**Share Variant** — A single channel-and-voice rendering of the public card produced by Share Studio. The channel × voice matrix is normative: LinkedIn = loud / quiet / ask; X = loud / quiet (≤280 chars); Instagram = quiet (plus a 1080×1920 story asset); email signature = quiet; website badge = static (content-free). Every variant is generated inside a wrapper step-run, rate-limited (`share-studio-variant`), and audited (`share_studio_variant_generated`). Members may edit a variant before copying; edits never write back to the Member Signal.
+- Layer: 1 (Process — `generate-share-variants.ts`, `CHANNEL_SPECS`) / 6 (Human — Share Studio tabs)
+- Related: Share Studio, Website Badge, Source Provenance
+
+**Website Badge** — The content-free share channel: a static `<a><img>` snippet (no script, no iframe) the member embeds on their own site, pointing at their public Ditto profile with a `?ref=badge` attribution param. The badge channel short-circuits the variant engine entirely — no LLM call, byte-identical static text — because there is no per-member generated copy to leak. It is in the share allow-list (a direct API caller may request it; the request is still rate-limited and audited, which is intentional, not a leak), but the Studio UI never POSTs it.
+- Layer: 6 (Human — `website-badge-snippet.tsx`) / 1 (Process — `generate-share-variants.ts` static short-circuit)
+- Related: Share Studio, Share Variant, Source Provenance

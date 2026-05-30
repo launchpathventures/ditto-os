@@ -64,6 +64,14 @@ export interface OutboundMessage {
    * after the text body, outside textToHtml(). (Brief 149 AC18)
    */
   htmlBlocks?: string[];
+  /** Provider-specific email headers (Brief 283: RFC 8058 compliance). */
+  headers?: Record<string, string>;
+  /**
+   * Extra recipients on the same To: line (Brief 288).
+   * Used by warm-intro threads where both parties share a single thread.
+   * Appended after `to` in the AgentMail recipients array.
+   */
+  additionalTo?: string[];
 }
 
 export interface SendResult {
@@ -91,7 +99,12 @@ export interface ChannelAdapter {
   /** List recent messages in the inbox */
   listInbound?(limit?: number): Promise<InboundMessage[]>;
   /** Reply to a specific message (preserves threading) */
-  reply?(messageId: string, body: string, personaId: PersonaId): Promise<SendResult>;
+  reply?(
+    messageId: string,
+    body: string,
+    personaId: PersonaId,
+    options?: string | { toAddress?: string; headers?: Record<string, string> },
+  ): Promise<SendResult>;
 }
 
 // ============================================================
@@ -345,6 +358,7 @@ export class AgentMailAdapter implements ChannelAdapter {
           {
             text: body,
             html,
+            ...(message.headers ? { headers: message.headers } : {}),
             ...(ghostBcc ? { bcc: ghostBcc } : {}),
           },
         );
@@ -356,10 +370,11 @@ export class AgentMailAdapter implements ChannelAdapter {
       }
 
       const result = await this.client.inboxes.messages.send(this.inboxId, {
-        to: [message.to],
+        to: [message.to, ...(message.additionalTo ?? [])],
         subject: message.subject ?? "",
         text: body,
         html,
+        ...(message.headers ? { headers: message.headers } : {}),
         ...(ghostBcc ? { bcc: ghostBcc } : {}),
       });
 
@@ -430,7 +445,14 @@ export class AgentMailAdapter implements ChannelAdapter {
    * sign-off. Ghost mode replies must go through send() with inReplyToMessageId
    * and sendingIdentity: "ghost" to get correct formatting.
    */
-  async reply(messageId: string, body: string, personaId: PersonaId, toAddress?: string): Promise<SendResult> {
+  async reply(
+    messageId: string,
+    body: string,
+    personaId: PersonaId,
+    options?: string | { toAddress?: string; headers?: Record<string, string> },
+  ): Promise<SendResult> {
+    const toAddress = typeof options === "string" ? options : options?.toAddress;
+    const headers = typeof options === "string" ? undefined : options?.headers;
     if (toAddress && isTestModeSuppressed(toAddress)) {
       return { success: true, messageId: `test-suppressed-${Date.now()}` };
     }
@@ -442,7 +464,10 @@ export class AgentMailAdapter implements ChannelAdapter {
       const result = await this.client.inboxes.messages.reply(
         this.inboxId,
         messageId,
-        { text: fullBody },
+        {
+          text: fullBody,
+          ...(headers ? { headers } : {}),
+        },
       );
 
       return {
@@ -992,6 +1017,8 @@ export interface SendAndRecordInput {
   htmlBlocks?: string[];
   /** Step run ID for invocation guard (Insight-180, Brief 151) */
   stepRunId?: string;
+  /** Provider-specific email headers (Brief 283 / RFC 8058). */
+  headers?: Record<string, string>;
   /** Injected channel adapter — when non-null, used instead of default AgentMail (Brief 152) */
   adapter?: ChannelAdapter | null;
 }
@@ -1252,6 +1279,7 @@ export async function sendAndRecord(input: SendAndRecordInput): Promise<SendAndR
     sendingIdentity: input.sendingIdentity,
     bccAddress: isGhost ? input.userEmail : undefined,
     htmlBlocks: input.htmlBlocks,
+    headers: input.headers,
   });
 
   // Record the interaction regardless of send success

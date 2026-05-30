@@ -76,6 +76,8 @@ export interface UserNotification {
    * Keeps textToHtml pure — always escapes. (Brief 149 AC18)
    */
   htmlBlocks?: string[];
+  /** Provider-specific email headers, e.g. RFC 8058 unsubscribe headers. */
+  headers?: Record<string, string>;
 }
 
 export interface NotifyResult {
@@ -277,6 +279,7 @@ export async function notifyUser(
         includeOptOut: notification.includeOptOut ?? false,
         inReplyToMessageId: notification.inReplyToMessageId,
         htmlBlocks: notification.htmlBlocks,
+        headers: notification.headers,
       });
       await stampLastNotified(notification.userId);
       console.log(`[notify] Urgent email fallback sent to ${networkUser.email}`);
@@ -299,6 +302,7 @@ export async function notifyUser(
           includeOptOut: notification.includeOptOut ?? false,
           inReplyToMessageId: notification.inReplyToMessageId,
           htmlBlocks: notification.htmlBlocks,
+          headers: notification.headers,
         });
 
         // Stamp lastNotifiedAt on success — this is the single source of truth
@@ -372,6 +376,7 @@ export async function notifyUser(
             includeOptOut: notification.includeOptOut ?? false,
             inReplyToMessageId: notification.inReplyToMessageId,
             htmlBlocks: notification.htmlBlocks,
+            headers: notification.headers,
           });
 
           if (result.success) {

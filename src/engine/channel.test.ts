@@ -338,6 +338,50 @@ describe("AgentMailAdapter", () => {
     }));
   });
 
+  it("passes custom headers to AgentMail send", async () => {
+    mockSend.mockResolvedValue({
+      messageId: "am-msg-headers",
+      threadId: "am-thread-headers",
+    });
+
+    const headers = {
+      "List-Unsubscribe": "<mailto:unsubscribe@ditto.partners>",
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+    const adapter = new AgentMailAdapter("test-api-key", "inbox-1");
+    await adapter.send({
+      to: "recipient@example.com",
+      subject: "Compliant hello",
+      body: "Hello.",
+      personaId: "alex",
+      mode: "connecting",
+      headers,
+    });
+
+    expect(mockSend).toHaveBeenCalledWith(
+      "inbox-1",
+      expect.objectContaining({ headers }),
+    );
+  });
+
+  it("omits headers from AgentMail send when none are provided", async () => {
+    mockSend.mockResolvedValue({
+      messageId: "am-msg-no-headers",
+      threadId: "am-thread-no-headers",
+    });
+
+    const adapter = new AgentMailAdapter("test-api-key", "inbox-1");
+    await adapter.send({
+      to: "recipient@example.com",
+      subject: "Plain hello",
+      body: "Hello.",
+      personaId: "alex",
+      mode: "connecting",
+    });
+
+    expect(mockSend.mock.calls.at(-1)?.[1]).not.toHaveProperty("headers");
+  });
+
   it("replies to an existing message (threading)", async () => {
     mockReply.mockResolvedValue({
       messageId: "am-reply-789",
@@ -360,6 +404,31 @@ describe("AgentMailAdapter", () => {
       "inbox-1",
       "am-msg-123",
       expect.objectContaining({ text: expect.stringContaining("— Mira") }),
+    );
+  });
+
+  it("passes custom headers to AgentMail threaded send replies", async () => {
+    mockReply.mockResolvedValue({
+      messageId: "am-reply-headers",
+      threadId: "am-thread-456",
+    });
+
+    const headers = { "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
+    const adapter = new AgentMailAdapter("test-api-key", "inbox-1");
+    await adapter.send({
+      to: "recipient@example.com",
+      subject: "Re: Hello",
+      body: "Thanks.",
+      personaId: "mira",
+      mode: "selling",
+      inReplyToMessageId: "am-msg-123",
+      headers,
+    });
+
+    expect(mockReply).toHaveBeenCalledWith(
+      "inbox-1",
+      "am-msg-123",
+      expect.objectContaining({ headers }),
     );
   });
 
@@ -415,6 +484,29 @@ describe("AgentMailAdapter", () => {
       "inbox-1",
       "am-msg-1",
       { text: expect.stringContaining("— Alex") },
+    );
+  });
+
+  it("passes custom headers to AgentMail reply()", async () => {
+    mockReply.mockResolvedValue({
+      messageId: "am-reply-headers-2",
+      threadId: "am-thread-1",
+    });
+
+    const headers = {
+      "List-Unsubscribe": "<mailto:unsubscribe@ditto.partners>",
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+    const adapter = new AgentMailAdapter("test-api-key", "inbox-1");
+    await adapter.reply!("am-msg-1", "Great to hear!", "alex", { headers });
+
+    expect(mockReply).toHaveBeenCalledWith(
+      "inbox-1",
+      "am-msg-1",
+      expect.objectContaining({
+        text: expect.stringContaining("— Alex"),
+        headers,
+      }),
     );
   });
 });

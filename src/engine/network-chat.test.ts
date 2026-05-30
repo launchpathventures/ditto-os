@@ -729,7 +729,7 @@ describe("network-chat integration", () => {
     expect(session.messages).toEqual([
       {
         role: "assistant",
-        content: "Good to hear from you. Sarah thought you might be worth a chat. So tell me — what are you working on that's giving you grief?",
+        content: "Sarah sent you here because they thought I could be useful. Tell me what you're trying to make happen, and I'll help you shape the next move.",
       },
     ]);
   });
@@ -970,11 +970,12 @@ describe("network-chat integration", () => {
   // ============================================================
 
   describe("persistLearnedContext", () => {
-    it("creates person-scoped memories from learned context (one per field)", net(async (tx) => {
+    it("creates person-scoped memories from learned context (one per field)", net(async () => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      // Create a person record in the network tier
-      const [person] = await tx.insert(networkSchema.people).values({
+      // Create a person record in the workspace tier; memory scope ids follow
+      // the workspace people table that `findPersonByEmailGlobal` reads.
+      const [person] = await testDb.insert(schema.people).values({
         name: "Sarah",
         email: "sarah@example.com",
         userId: "test-user",
@@ -1030,10 +1031,10 @@ describe("network-chat integration", () => {
       }
     }));
 
-    it("called twice with same data → no duplicate memories", net(async (tx) => {
+    it("called twice with same data → no duplicate memories", net(async () => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      const [person] = await tx.insert(networkSchema.people).values({
+      const [person] = await testDb.insert(schema.people).values({
         name: "Bob",
         email: "bob@example.com",
         userId: "test-user",
@@ -1069,10 +1070,10 @@ describe("network-chat integration", () => {
       expect(memories.length).toBe(2); // Not 4
     }));
 
-    it("called with updated data → memory content updated, not duplicated", net(async (tx) => {
+    it("called with updated data → memory content updated, not duplicated", net(async () => {
       const { persistLearnedContext } = await import("./memory-bridge");
 
-      const [person] = await tx.insert(networkSchema.people).values({
+      const [person] = await testDb.insert(schema.people).values({
         name: "Eve",
         email: "eve@example.com",
         userId: "test-user",

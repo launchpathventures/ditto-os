@@ -47,6 +47,12 @@ describe("AuthorizationRequestBlockComponent", () => {
     expect(html).toContain("Not yet");
   });
 
+  it("renders costLabel when present and hides it for legacy blocks", () => {
+    const html = render(baseBlock({ costLabel: "1st of 2 free intros (1 left after this)" }));
+    expect(html).toContain("1st of 2 free intros (1 left after this)");
+    expect(render(baseBlock({ costLabel: null }))).not.toContain("free intros");
+  });
+
   it("renders executing state", () => {
     const html = render(baseBlock({ state: "executing", expiresAt: null }));
     expect(html).toContain("Sending...");
@@ -132,6 +138,10 @@ describe("AuthorizationRequestBlockComponent", () => {
     const source = readFileSync(join(__dirname, "authorization-request-block.tsx"), "utf8");
     expect(source).not.toContain("toolName: block.toolName");
     expect(source).not.toContain("toolInput: block.toolInput");
+    expect(source).toContain("request: block.request ?? null");
+    expect(source).toContain("draft: block.draft ?? null");
+    expect(source).toContain("requesterId: block.requesterId ?? null");
+    expect(source).toContain("costLabel: block.costLabel ?? null");
   });
 
   it("keeps the legacy Confirmation two-button callsite intact", () => {

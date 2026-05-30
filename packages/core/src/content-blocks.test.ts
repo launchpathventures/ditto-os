@@ -3,6 +3,7 @@ import {
   renderBlockToText,
   type AuthorizationRequestBlock,
   type ContentBlock,
+  type IntroProposalCardBlock,
   type JobRequestCardBlock,
   type NetworkProfileCardBlock,
   type ReviewCardBlock,
@@ -77,6 +78,8 @@ describe("ContentBlock network profile card", () => {
     expect(text).toContain("GTM operator");
     expect(text).toContain("https://ditto.partners/people/timhgreen");
     expect(text).toContain("Allergic to:");
+    expect(text).toContain("owner-visible only");
+    expect(text).not.toContain("\"advisor\" titles without operating scars");
     expect(text).toContain("Curated by Alex");
   });
 
@@ -117,6 +120,94 @@ describe("ContentBlock job request card", () => {
 
     expect(block.budgetShape.cadence).toBe("monthly");
     expect(block.suggestedCandidates[0]?.fitConfidence).toBe("high");
+  });
+});
+
+function makeIntroProposalCard(
+  overrides: Partial<IntroProposalCardBlock> = {},
+): IntroProposalCardBlock {
+  const recipientPreview: AuthorizationRequestBlock = {
+    type: "authorization-request",
+    state: "pending",
+    header: "Priya — Mira wants to introduce you to Rob (3-min read).",
+    preview: null,
+    recipientLabel: "priya@example.com",
+    actionClass: "email-send",
+    executionResult: null,
+    expiresAt: null,
+  };
+  return {
+    type: "intro-proposal-card",
+    state: "proposed",
+    introId: "intro-123",
+    header: "Mira: intro to Priya?",
+    whyThisFits:
+      "Priya has run Series-A GTM hiring loops three times in the last 18 months.",
+    whyNow:
+      "Rob just hit the 'find a head of sales' Active Request and Priya is open to advisory work.",
+    evidence: [
+      { label: "Priya's profile", sourceId: "ns-1", kind: "profile" },
+      { label: "Two prior advisory engagements", sourceId: "ns-2", kind: "watch" },
+    ],
+    risks: ["Priya prefers async first; Rob is more synchronous"],
+    recipientPreview,
+    whatStaysPrivate: [
+      "Rob's budget range",
+      "Anti-persona notes",
+    ],
+    costLabel: "Free intro · 2 of 5 this month",
+    confidence: 0.82,
+    affordances: ["approve", "decline", "not-now", "edit-draft", "open-chat"],
+    ...overrides,
+  };
+}
+
+describe("ContentBlock intro proposal card", () => {
+  it("is part of the discriminated ContentBlock union and has a text fallback", () => {
+    const block: ContentBlock = makeIntroProposalCard();
+
+    const text = renderBlockToText(block);
+
+    expect(text).toContain("Intro proposal — proposed");
+    expect(text).toContain("Mira: intro to Priya?");
+    expect(text).toContain("Why this fits:");
+    expect(text).toContain("Series-A GTM hiring loops");
+    expect(text).toContain("Why now:");
+    expect(text).toContain("Evidence:");
+    expect(text).toContain("Priya's profile");
+    expect(text).toContain("ns-1");
+    expect(text).toContain("Risks:");
+    expect(text).toContain("What stays private:");
+    expect(text).toContain("Confidence: 0.82");
+    expect(text).toContain("Cost: Free intro");
+    expect(text).toContain("Recipient will see:");
+    expect(text).toContain("Priya — Mira wants to introduce you to Rob");
+    expect(text).toContain("Affordances: approve, decline, not-now, edit-draft, open-chat");
+  });
+
+  it("narrows the discriminated union and exposes the recipient preview block", () => {
+    const block: ContentBlock = makeIntroProposalCard({ state: "recipient-asked" });
+
+    if (block.type !== "intro-proposal-card") {
+      throw new Error("expected intro proposal card");
+    }
+
+    expect(block.state).toBe("recipient-asked");
+    expect(block.recipientPreview.type).toBe("authorization-request");
+    expect(block.recipientPreview.actionClass).toBe("email-send");
+    expect(block.evidence.length).toBe(2);
+    expect(block.confidence).toBeGreaterThanOrEqual(0);
+    expect(block.confidence).toBeLessThanOrEqual(1);
+  });
+
+  it("renders without an optional cost label or risks", () => {
+    const text = renderBlockToText(
+      makeIntroProposalCard({ costLabel: null, risks: null }),
+    );
+
+    expect(text).not.toContain("Cost:");
+    expect(text).not.toContain("Risks:");
+    expect(text).toContain("Confidence: 0.82");
   });
 });
 

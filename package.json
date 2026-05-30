@@ -15,6 +15,7 @@
     "test": "vitest run --exclude src/engine/journey-smoke.test.ts",
     "test:watch": "vitest",
     "test:journey": "vitest run src/engine/journey-smoke.test.ts --testTimeout 120000",
+    "test:superconnector": "vitest run src/engine/network-privacy-scrubber.test.ts src/engine/network-audit.test.ts src/engine/network-abuse-controls.test.ts src/engine/discovery-source-policy.test.ts src/engine/network-suppression.test.ts src/engine/network-email-compliance.test.ts src/engine/network-identity-verification.test.ts src/engine/network-retention.test.ts packages/web/components/network/privacy-center.test.tsx packages/web/components/admin/network-health-dashboard.test.tsx && tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:auto": "expect-cli -a claude -y --target changes",

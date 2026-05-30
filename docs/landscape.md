@@ -73,6 +73,12 @@
 - **Ditto relevance:** HIGH for Layer 6 (conversation layer). The multi-step generative UI pattern is how "chat with my business" works — user asks, agent calls processes, results stream as components. `useChat` is the interaction primitive for pervasive conversation (ADR-010).
 - **Limitation:** Frontend-focused. No built-in workflow engine, trust, or governance.
 
+**next/og ImageResponse (Vercel / Next.js 15 — bundled, Added 2026-05-13)** — nextjs.org/docs/app/api-reference/functions/image-response
+- Server-side OG/social-card image generation primitive bundled with Next.js via `import { ImageResponse } from "next/og"`. Powered by Satori (HTML/CSS to SVG) + Resvg (SVG to PNG). 1200×630 OG dimensions are supported without adding a separate rendering service.
+- **Ditto relevance:** HIGH for Network Agent share surfaces. Brief 260 uses it for `/people/[handle]/opengraph-image` and the downloadable profile-card PNG endpoint so the same iconic card silhouette renders across in-product, OG, PNG, and social previews.
+- **Boundary:** Server route handlers and App Router metadata only. No client-side use. CSS support is Satori's subset, so shared image-rendered components must use flex/absolute positioning and inline styles rather than relying on Tailwind runtime classes. Custom fonts require `fonts` ArrayBuffers if exact typography is needed in OG output.
+- **Composition level:** depend — already present through `next@^15.3.3`; no new top-level dependency.
+
 **AI SDK Elements** — github.com/vercel/ai-elements
 - 1.8k stars | Active 2026 | TypeScript | Apache 2.0
 - 47+ pre-built React components for AI applications, distributed as shadcn/ui custom registry (copy into project, own the code). Five categories: chatbot (18), code (15), voice (6), workflow (7), utilities (2). Built on React 19, Tailwind v4, shadcn/ui, @xyflow/react.
@@ -526,8 +532,9 @@ New category added for Brief 079 (Network Agent MVP). Full report: `docs/researc
 ### Email Infrastructure for AI Agents
 
 **AgentMail** — agentmail.to
-- Purpose-built email infrastructure for AI agents. Programmatic inbox creation via API. Native reply handling with `extractedText` (reply content without quoted history). Thread management. Webhooks for inbound messages (`message.received`, `message.bounced`). Custom domains with DNS verification. WebSocket support for real-time. Usage-based pricing with free tier. $6M seed funding. MIT-licensed Node.js and Python SDKs.
+- Purpose-built email infrastructure for AI agents. Programmatic inbox creation via API. Native reply handling with `extractedText` (reply content without quoted history). Thread management. Svix-delivered webhooks for inbound + delivery-lifecycle events (full `EventType` set incl. `message.complained` — see verified compliance note below). Custom domains with DNS verification. WebSocket support for real-time. Usage-based pricing with free tier. $6M seed funding. MIT-licensed Node.js and Python SDKs.
 - **Ditto relevance:** HIGH — primary email adapter for Network Agent. Key advantages over Gmail API: per-agent inbox creation (`alex@ditto.partners`), extracted reply text for agent processing, native threading, and inbound webhooks. `depend` level (npm install). Gmail retained as fallback for workspace email (inbox triage). See `integrations/agentmail.yaml`.
+- **Compliance capability — VERIFIED (2026-05-18, Dev Researcher, Brief 278 / `docs/research/278-trust-privacy-admin.md` §17 Q5; Insight-043 landscape-accuracy duty):** SDK `agentmail@0.4.18` **supports** both halves. (a) `SendMessageRequest` **and** `ReplyToMessageRequest` accept `headers?: Record<string,string>`, so RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post: List-Unsubscribe=One-Click` are injectable on outbound **and** replies — Ditto's `AgentMailAdapter` (`src/engine/channel.ts` L342–364) does not pass `headers` today, a wiring extension, not a capability gap. (b) Webhook `EventType` is the full set `message.received[.spam|.blocked]` / `message.sent` / `message.delivered` / `message.bounced` / **`message.complained`** / `message.rejected` / `domain.verified` — not only received/bounced; `message.complained` carries a typed `Complaint { inboxId, threadId, messageId, timestamp, type, subType, recipients[] }` (ARF/FBL). Webhooks are Svix-delivered and Ditto **already verifies the Svix signature** in `packages/web/app/api/v1/network/inbound/route.ts`. Net: the email-compliance + complaint-pause work products build FROM existing AgentMail capability + the existing signed webhook receiver; no blocking external-capability unknown remains.
 
 **googleapis** — github.com/googleapis/google-api-nodejs-client (12k+ stars, Apache-2.0)
 - Official Google APIs Node.js client. Covers 200+ Google APIs including Gmail, Calendar, Drive, Sheets. OAuth2 client built-in (`google.auth.OAuth2`) with automatic token refresh. Gmail API: `gmail.users.messages.send` for sending, `gmail.users.messages.list`/`.get` for reading. Typed interfaces generated from discovery docs. Maintained by Google (googleapis org). Weekly releases. 2M+ weekly npm downloads.
@@ -866,6 +873,32 @@ Added to support Brief 181 Sub-brief 182 (evidence harvest) and ADR-033 §1 cons
 
 ---
 
+## Trust, Privacy & Abuse-Control Infrastructure (2026-05-18)
+
+Added by the Dev Researcher for Brief 278 (trust/privacy/admin/observability). Full survey: `docs/research/278-trust-privacy-admin.md` (companion UX: `docs/research/278-trust-privacy-admin-ux.md`). These are presented neutrally — classification states what each is, not which to pick (Architect synthesis).
+
+**rate-limiter-flexible** — github.com/animir/node-rate-limiter-flexible (npm, MIT, actively maintained)
+- Server-side rate limiting with pluggable stores: in-memory, **Postgres**, Redis, Mongo, Memcached, plus a Drizzle-compatible Postgres path. Implements fixed-window, token-bucket and related strategies; supports block durations, insurance-limiter fallback, and per-key consume/penalty/reward.
+- **Classification:** EVALUATE (candidate `depend`) — the Postgres store means **no Redis dependency**, relevant because the Ditto Network tier runs Supabase Postgres with no Redis in the stack. The existing limiter `src/engine/visitor-rate-limit.ts` is in-memory single-instance by its own documentation; multi-instance server-side enforcement (Brief 278 Constraint) needs a shared store.
+- **Ditto relevance:** HIGH for `network-abuse-controls.ts`. Not yet adopted — Architect decides between this, the Redis-coupled alternative below, and a hand-rolled Postgres counter (`INSERT … ON CONFLICT DO UPDATE`).
+- **Alternative catalogued:** `@upstash/ratelimit` (npm, MIT) — requires Upstash Redis (HTTP Redis); adds an external managed dependency not currently in the Ditto stack. Same algorithm families. Listed for completeness, no preference expressed.
+
+**Open Policy Agent (OPA) / Rego** — openpolicyagent.org (CNCF graduated, Apache-2.0)
+- General-purpose policy engine; policies authored in the Rego language, evaluated via a decision API (sidecar, Go library, or WASM bundle). Used for authz/admission/data-filtering policy-as-code.
+- **Classification:** PATTERN-REFERENCE, **not adopted** — evaluated for Brief 278 `discovery-source-policy.ts`. Adds a runtime/sidecar (or WASM) dependency and a second policy language. The in-repo precedent (`docs/adrs/029-x-api-and-social-publishing.md`) encodes platform-ToS constraints directly in TypeScript integration code; a lightweight in-code policy table/registry (`sourceType → {collect, store, inviteUse}`) is the no-new-dependency alternative. Both surfaced neutrally; Architect chooses.
+- **Ditto relevance:** MEDIUM — reference for the policy-as-code shape (three enforcement points: collect / store / invite-use) even if the engine itself is not consumed.
+
+### Discovery Source Registry (Brief 279)
+
+**In-code source registry + policy table** — Original to Ditto, informed by ADR-029 platform-policy-in-code precedent and official LinkedIn/Microsoft guidance.
+- **Classification:** ADOPTED in code, no new dependency. `src/engine/discovery-source-registry.ts` adds reviewable source classes with collection method, storage policy, rate-limit policy, invite policy, and `{collect, store, inviteUse}` gates. `src/engine/discovery-source-policy.ts` remains the enforcement substrate.
+- **Supported v1 source classes:** user-provided URLs, public search results, public websites, public professional posts, opportunity portals, referral lists, LinkedIn pointers, and future approved LinkedIn API access. Unknown/private datasets fail closed.
+- **LinkedIn stance:** pointer-only unless formal approved API/OAuth access exists. User-provided/search-discovered LinkedIn URLs may be stored as pointers; Ditto must not fetch/scrape LinkedIn pages, copy LinkedIn profile snippets into Discovery Profile claims, or use LinkedIn snippets as invite evidence. LinkedIn scrape is `collect=false/store=false/inviteUse=false`; LinkedIn pointer is `collect=true/store=true/inviteUse=false`.
+- **Official source basis checked 2026-05-19:** LinkedIn Help prohibits software/bots/scrapers/extensions that automate activity or scrape/copy profiles; LinkedIn API access is through Microsoft/LinkedIn OAuth/API authorization and scopes; FTC CAN-SPAM guidance backs truthful subject/sender identity plus unsubscribe/physical-address controls already implemented in `network-email-compliance.ts`.
+- **Ditto relevance:** HIGH for outbound discovery. This turns platform/legal posture into executable registry rules, keeping operator review from becoming the only safety boundary.
+
+---
+
 ## User-Facing Legibility & File-Backed Storage (2026-04-20)
 
 Added to support Insight-201 (user-facing-legibility principle) and Brief 197 phase design. Full survey in `docs/research/user-facing-legibility-patterns.md` — three architecturally-consequential gaps surfaced (write-path trust at file layer, bidirectional file↔DB sync, secret-exclusion as first-class invariant). **No DEPEND or ADOPT candidates surfaced in this survey** — the option space is about stances and invariants, not importable libraries. `isomorphic-git` is the one DEPEND entry below; it is git-infrastructure, not a legibility pattern per se.
@@ -1055,6 +1088,76 @@ Cross-cutting cloud-runner substrate; mode-agnostic (works whether the PR was op
 - **Classification:** DEPEND — pure GitHub config + webhook subscription, no code to vendor.
 - **Ditto usage:** Mobile-first deploy gate for `vercel deploy --prod` (or any prod deploy step). Ditto reads `deployment_status` to close the work item on success or surface retry on failure.
 - **Limitations:** Approval is GitHub-account-scoped (must be the same user attached to Ditto's GitHub integration, or an explicit team). Webhook-only status → recovery via deployment-by-ID polling.
+
+---
+
+## Background Watch, Saved-Search & Per-User-Timezone Scheduling (2026-05-19)
+
+Added by the Dev Researcher for Brief 275 (Background Watch and Network Health). Full survey: `docs/research/275-background-watch-network-health.md` (companion UX + pattern survey: `docs/research/275-background-watch-network-health-ux.md`, `docs/research/275-background-watch-network-health-ux-patterns.md`). Entries are presented neutrally — no library adoption is proposed; the work product is in-house composition of existing primitives.
+
+### Saved Search / Alert / Digest Patterns
+
+**In-house composition of `runNetworkSearch` + `pulse.ts` + `notifyUser`** — Original to Ditto, no external library evaluated as an adoption candidate.
+- **Classification:** PATTERN, **in-house** — Brief 275's "watch" is the operating-cycle realisation of the saved-search-on-a-schedule + digest pattern. The criteria-based filter is the existing Brief 273/274 search inputs; the scheduled evaluation is the existing pulse-tick (`src/engine/pulse.ts`) + per-process cron (`src/engine/scheduler.ts`); the digest composer reuses `src/engine/notify-user.ts` and the email pipeline in `src/engine/channel.ts`.
+- **External-pattern reference only (no adoption):** consumer-product surveys of Google Alerts, LinkedIn job alerts, Indeed Saved Searches, Glassdoor, RescueTime, etc. captured in `docs/research/275-background-watch-network-health-ux-patterns.md`. None imported, none vendored — those references inform UX shape (cadence prompts, three-state dismiss, "why this match" provenance), not implementation.
+- **Ditto relevance:** HIGH — this is the through-line for Brief 275. No new dependency. The novel parts (cycle-control magic links, per-user-timezone anchoring, three-state dismiss, watch auto-pause) are Original to Ditto per the research report.
+- **Limitations:** the in-house pattern carries the workspace-tier coupling of `notifyUser` (workspace SQLite `db` import) into the Network repo's cycle YAML topology; see Research-275 §5 for the cross-tier delivery options the Architect must resolve.
+
+### Per-User-Timezone Scheduling
+
+**`Intl.DateTimeFormat` (stdlib) + `Temporal` (Stage 3 TC39) as primitives** — Original to Ditto pattern, no library adoption.
+- **Classification:** PATTERN, **stdlib-only**. The IANA timezone capture is `Intl.DateTimeFormat().resolvedOptions().timeZone`; the future Stage-3 `Temporal` API is the polyfill-free path once it lands. No npm dependency is proposed; the consumer-product surveys (Calendly, Linear weekly digest, etc.) inform the UX expectation, not the implementation.
+- **Ditto relevance:** HIGH — Brief 275 acceptance criterion AC-9 (digests fire in user's local morning window). The existing `src/engine/scheduler.ts:109` hourly stale-escalation sweep is the in-repo precedent for "cron-in-UTC + runner-filter against per-user time" — that shape is reusable here.
+- **Patterns surveyed (no adoption):**
+  - Per-user IANA tz column on user row + UTC cron + runner filters by `Intl.DateTimeFormat`-formatted local hour (matches the in-repo `scheduler.ts:109` hourly-sweep precedent; no new dep).
+  - Per-user cron expression authored in user's local tz (requires per-user job registration — does not fit the cycle archetype).
+  - Future: `Temporal.ZonedDateTime` once Stage 3 ships natively in target runtimes.
+- **Limitations:** `networkUsers` has no `ianaTimezone` column today; Brief 275 schema additions would need to introduce one (or stash it in a JSON preferences column). Verification-need flagged in `docs/research/275-background-watch-network-health.md` §12.
+
+---
+
+## Share Loop, Attribution Cookies & Per-Channel Variant Generation (2026-05-19)
+
+Added by the Dev Researcher for Brief 277 (Share Loop and Public Profile Conversion). Full survey: `docs/research/277-share-loop-public-profile-conversion.md` (companion UX spec: `docs/research/277-share-loop-public-profile-conversion-ux.md`). Entries are presented neutrally — no library adoption is proposed; the work product is the Architect's call.
+
+### Encrypted/Signed Cookies for Visitor Attribution (Edge-compatible)
+
+**`packages/web/middleware.ts:79-95` + `packages/web/lib/signed-cookie.ts` — in-repo HMAC pattern (baseline)** — Original to Ditto, already shipped and Edge-runtime-verified.
+- **Classification:** PATTERN, **in-house** — `ditto_workspace_session` uses Web Crypto `crypto.subtle.sign` ("HMAC", "SHA-256") with secret from `SESSION_SECRET || NETWORK_AUTH_SECRET`. Format `value|hex-signature` via `lastIndexOf("|")`. Brief 291 lifted the primitive into `packages/web/lib/signed-cookie.ts` for `ditto_share_ref` and `?ditto_ref=` referral tokens; the attribution route now requires the signed landing cookie before minting a wrapper run or writing attribution. Tested in `packages/web/middleware.test.ts`, `packages/web/lib/signed-cookie.test.ts`, and `packages/web/app/api/v1/network/share-attribution/route.test.ts`.
+- **Ditto relevance:** HIGH — Brief 291 visitor-attribution cookie (`ditto_share_ref`) and cross-apex query handoff reuse the same signing primitive on a `{channel, ph, ts}` payload. `verifyRefTokenForHost` binds the query handoff to `{handle}.ditto.you`, preventing one profile's referral token from being replayed onto another workspace host. Re-using avoids introducing a second crypto library.
+- **Limitations:** HMAC-only (not encrypted) — payload is readable client-side. Acceptable for attribution metadata (referrer handle, timestamp) but unsuitable if PII ever ends up in the cookie. Cookies do NOT cross apex (`{handle}.ditto.you` ↔ `ditto.partners`); cross-apex handoff is an Original-to-Ditto gap (Q4 in research report).
+
+**`iron-session` — github.com/vvo/iron-session** — Encrypted-cookie session library, evaluated as an alternative.
+- **Stars / activity:** ~3.6k stars, active. Used by Vercel templates.
+- **Classification:** DEPEND — npm-installable, mature, well-governed; no source-grab required.
+- **Mechanism:** AES-encrypted, signed, stateless session cookies. Wraps `iron-webcrypto`. Conditional Edge compatibility (the underlying primitives work on Edge; the high-level `getIronSession` helper has historically required workarounds — see Insight if Architect chooses to adopt).
+- **Ditto relevance:** MEDIUM — gives encrypted payload (vs HMAC-only) but at the cost of a new dependency and a second cookie-handling primitive sitting alongside the in-repo HMAC pattern. Inconsistent middleware story unless the existing `ditto_workspace_session` is also migrated.
+- **Limitations:** Encryption is overkill for non-sensitive attribution metadata (visitor referrer handle + timestamp). Doubles the dep surface for one cookie.
+
+**`jose` — github.com/panva/jose** — JWT/JWE/JWS primitives in TypeScript, evaluated as an alternative.
+- **Stars / activity:** ~6.4k stars, very active, RFC-compliant.
+- **Classification:** DEPEND — npm-installable, mature.
+- **Mechanism:** Full JOSE suite: JWS (signing), JWE (encryption), JWK (key handling). Documented Edge-runtime support (uses Web Crypto under the hood — `SubtleCrypto`-compatible). Lower-level than `iron-session`; you build the cookie shape yourself.
+- **Ditto relevance:** MEDIUM — confirmed Edge-compatible if the Architect wants to standardise on JWT-shaped tokens instead of opaque `value|sig`. Useful if cross-service tokens are anticipated (e.g., bridge handoff to workspace deployment).
+- **Limitations:** No cookie-handling sugar (you wire `cookies()` + JWT primitives yourself). Same "two crypto libraries" risk as iron-session if introduced alongside the existing HMAC pattern. JWT spec footguns (alg=none confusion, signature verification ordering) are well-known but real.
+
+### HTML Sanitization for Render-Time Defense (Brief 282 Companion)
+
+**`sanitize-html` — github.com/apostrophecms/sanitize-html** — Server-side allowlist HTML sanitizer.
+- **Stars / activity:** ~3.7k stars, maintained by ApostropheCMS.
+- **Classification:** DEPEND — npm-installable, mature.
+- **Mechanism:** Allowlist-based: define `allowedTags`, `allowedAttributes`, `allowedSchemes`; everything else stripped. Pure-Node (uses `htmlparser2`).
+- **Ditto relevance:** MEDIUM — Brief 282's `network-privacy-scrubber.ts` is the canonical pre-render scrubber for structured fields (`name`, `oneLineRole`, `narrativeMd`, etc.). If `narrativeMd` is ever rendered as HTML rather than markdown-to-React, an additional render-time sanitizer is the second layer (defense in depth). The current renderer in `network-profile-card-renderer.tsx` uses React text rendering (no `dangerouslySetInnerHTML`), so this dep is **NOT required today** — flagged here for the Architect in case the Brief 277 OG/PNG render path introduces a Satori-rendered markdown surface.
+- **Limitations:** Node-only (uses `htmlparser2`); does not run on Edge runtime. The Brief 282 scrubber + React text rendering is the in-repo equivalent and is already shipping. Adding `sanitize-html` would create a second sanitization layer with overlapping responsibility unless Architect carves a clear "structured fields = scrubber, free-text HTML = sanitize-html" split.
+
+### Per-Channel LLM Prompt Branching for Social Sharing
+
+**`langchain-ai/social-media-agent` — github.com/langchain-ai/social-media-agent** — Reference implementation for AI-generated social posts across LinkedIn / X.
+- **Stars / activity:** ~1.7k stars; LangChain official.
+- **Classification:** PATTERN — study the approach, implement Ditto-side. Not adoptable as a dependency (it's a complete LangGraph application, not a library).
+- **Mechanism:** Constants-registry pattern. Per-channel prompt fragments live in module-level constants (`POST_STRUCTURE_INSTRUCTIONS`, `POST_CONTENT_RULES`, `BUSINESS_CONTEXT`, `TWEET_EXAMPLES`) that are concatenated into the system prompt. Channel selection (LinkedIn vs Twitter) toggles which constant set is used. Single LangGraph node per channel; no shared "general voice" prompt.
+- **Ditto relevance:** HIGH — Brief 277 wants three social voices (`quiet`, `loud`, `ask`) ALREADY in `src/engine/generate-share-variants.ts:104-109`, plus potential channel-specific variants (LinkedIn long-form vs X-280-chars vs IG-caption-with-hashtags). The constants-registry pattern is the lowest-overhead extension shape if Architect rules in favour of per-channel branching.
+- **Limitations:** Project carries LangGraph + LangSmith expectations; we would adopt the **prompt-organisation pattern**, not the framework. Surface-level prompt constants are easy to lift; the LangGraph wiring is not. Their post structure ("First sentence: hook. Second sentence: insight. ...") is a useful starting library but reflects LangChain's voice, not Ditto's REPRESENTATIVE-not-IMPERSONATOR contract.
 
 ---
 

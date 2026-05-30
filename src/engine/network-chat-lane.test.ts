@@ -2,9 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDb, type TestDb } from "../test-utils";
 import * as schema from "../db/schema";
 import { eq } from "drizzle-orm";
+import {
+  withNetworkDbTransaction,
+  type NetworkDbTransaction,
+} from "../db/network-db-test-helpers";
+import * as networkSchema from "@ditto/core/db/network";
 
 let testDb: TestDb;
 let cleanup: () => void;
+let currentTx: NetworkDbTransaction | null = null;
 
 vi.mock("../db", async () => {
   const realSchema = await vi.importActual<typeof import("../db/schema")>("../db/schema");
@@ -13,6 +19,18 @@ vi.mock("../db", async () => {
     schema: realSchema,
   };
 });
+
+vi.mock("../db/network-db", () => ({
+  get networkDb() {
+    if (!currentTx) {
+      throw new Error(
+        "[network-chat-lane.test] networkDb accessed outside withNetworkDbTransaction",
+      );
+    }
+    return currentTx;
+  },
+  ensureNetworkSchema: vi.fn(async () => {}),
+}));
 
 const {
   buildNetworkLaneOpener,
@@ -30,7 +48,20 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  currentTx = null;
 });
+
+function net(fn: (tx: NetworkDbTransaction) => Promise<void>): () => Promise<void> {
+  return () =>
+    withNetworkDbTransaction(async (tx) => {
+      currentTx = tx;
+      try {
+        await fn(tx);
+      } finally {
+        currentTx = null;
+      }
+    });
+}
 
 describe("network lane session helpers", () => {
   it("normalizes unknown lane values to expert", () => {
@@ -55,7 +86,7 @@ describe("network lane session helpers", () => {
     );
   });
 
-  it("uses a known user's existing persona assignment for Q0", async () => {
+  it("uses a known user's existing persona assignment for Q0", net(async () => {
     await testDb.insert(schema.people).values({
       userId: "founder",
       name: "Known User",
@@ -82,10 +113,10 @@ describe("network lane session helpers", () => {
     expect(session.opener).toBe(
       "Hi — I'm Mira. Walk me through what you're hunting.",
     );
-  });
+  }));
 
-  it("uses a verified known email for a fresh lane session", async () => {
-    await testDb.insert(schema.networkUsers).values({
+  it("uses a verified known email for a fresh lane session", net(async (tx) => {
+    await tx.insert(networkSchema.networkUsers).values({
       email: "known@example.com",
       name: "Known User",
       personaAssignment: "mira",
@@ -113,9 +144,9 @@ describe("network lane session helpers", () => {
       .where(eq(schema.chatSessions.sessionId, session.sessionId));
     expect(stored?.authenticatedEmail).toBe("known@example.com");
     expect(stored?.personaId).toBe("mira");
-  });
+  }));
 
-  it("lets a verified known email replace an anonymous lane assignment", async () => {
+  it("lets a verified known email replace an anonymous lane assignment", net(async (tx) => {
     const anonymous = await initializeNetworkLaneSession(
       null,
       "expert",
@@ -124,7 +155,7 @@ describe("network lane session helpers", () => {
     expect(anonymous.personaId).toBe("alex");
     expect(anonymous.userName).toBeNull();
 
-    await testDb.insert(schema.networkUsers).values({
+    await tx.insert(networkSchema.networkUsers).values({
       email: "known@example.com",
       name: "Known User",
       personaAssignment: "mira",
@@ -148,7 +179,7 @@ describe("network lane session helpers", () => {
       .where(eq(schema.chatSessions.sessionId, known.sessionId));
     expect(stored?.authenticatedEmail).toBe("known@example.com");
     expect(stored?.personaId).toBe("mira");
-  });
+  }));
 
   it("rate limits repeated lane opens by IP", async () => {
     const ipHash = hashIp("203.0.113.10");
@@ -167,8 +198,8 @@ describe("network lane session helpers", () => {
     expect(await checkNetworkLaneOpenRateLimit(ipHash)).toBe(false);
   });
 
-  it("falls back to the existing people-table rotation for anonymous visitors", async () => {
-    await testDb.insert(schema.people).values({
+  it("falls back to the existing people-table rotation for anonymous visitors", net(async (tx) => {
+    await tx.insert(networkSchema.people).values({
       userId: "founder",
       name: "Existing Alex",
       email: "alex@example.com",
@@ -188,5 +219,5 @@ describe("network lane session helpers", () => {
       .from(schema.chatSessions)
       .where(eq(schema.chatSessions.sessionId, session.sessionId));
     expect(stored?.personaId).toBe("mira");
-  });
+  }));
 });

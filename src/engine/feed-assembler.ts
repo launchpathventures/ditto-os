@@ -131,6 +131,7 @@ export async function assembleFeed(): Promise<{
     outputs,
     shiftReport,
     insights,
+    workspaceInboxDeliveries,
   ] = await Promise.all([
     assembleReviewItems(),
     assembleWorkUpdates(),
@@ -138,9 +139,10 @@ export async function assembleFeed(): Promise<{
     assembleProcessOutputs(),
     assembleShiftReport(),
     assembleInsights(),
+    assembleWorkspaceInboxDeliveries(),
   ]);
 
-  items.push(...reviewItems, ...workUpdates, ...exceptions, ...outputs, ...insights);
+  items.push(...reviewItems, ...workspaceInboxDeliveries, ...workUpdates, ...exceptions, ...outputs, ...insights);
   if (shiftReport) items.push(shiftReport);
 
   // Sort: priority first (action > informational > historical), then newest first
@@ -334,6 +336,47 @@ async function assembleReviewItems(): Promise<ReviewItem[]> {
   }
 
   return items;
+}
+
+async function assembleWorkspaceInboxDeliveries(): Promise<ReviewItem[]> {
+  const rows = await db
+    .select()
+    .from(schema.activities)
+    .where(eq(schema.activities.action, "workspace_inbox_delivery"))
+    .orderBy(desc(schema.activities.createdAt))
+    .limit(50);
+
+  return rows.flatMap((row): ReviewItem[] => {
+    const metadata = row.metadata as { kind?: string; blocks?: ContentBlock[] } | null;
+    const blocks = Array.isArray(metadata?.blocks) ? metadata.blocks : [];
+    const hasResolvedAuthorization = blocks.some(
+      (block) => block.type === "authorization-request" && block.state !== "pending",
+    );
+    if (hasResolvedAuthorization) return [];
+    const title =
+      metadata?.kind === "visitor_intro_request"
+        ? "Visitor intro request"
+        : metadata?.kind === "forwarded_note"
+          ? "Forwarded profile note"
+          : "Network inbox delivery";
+    const outputText = row.description || title;
+    return [{
+      itemType: "review",
+      id: `workspace-inbox-${row.id}`,
+      priority: "action",
+      timestamp: (row.createdAt ?? new Date()).toISOString(),
+      entityId: row.entityId ?? row.id,
+      entityLabel: title,
+      data: {
+        processRunId: row.entityId ?? row.id,
+        processName: title,
+        stepName: "workspace-inbox",
+        outputText,
+        confidence: null,
+        blocks,
+      },
+    }];
+  });
 }
 
 // ============================================================
