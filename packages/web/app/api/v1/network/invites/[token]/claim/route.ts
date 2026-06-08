@@ -11,14 +11,14 @@ import {
   isNetworkDbConnectionError,
   networkUnavailableResponse,
 } from "@/lib/network-availability";
-import { createNetworkLaneStepRun } from "../../../../../../../../../../src/engine/network-step-run";
+import { createNetworkLaneStepRun } from "../../../../../../../../../src/engine/network-step-run";
 import {
   declineClaimInvite,
   deleteDiscoveryProfile,
   getClaimInvitePreview,
   redeemClaimToken,
   suppressClaimInvite,
-} from "../../../../../../../../../../src/engine/claim-invite";
+} from "../../../../../../../../../src/engine/claim-invite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
