@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+
+// Reads request-time search params (useSearchParams) — render dynamically so
+// the static prerender does not hit the CSR-bailout build error.
+export const dynamic = "force-dynamic";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, CircleDashed } from "lucide-react";
@@ -21,7 +25,7 @@ const PROFILE_SCENES = [
   "/hero-network-cafe.png",
 ] as const;
 
-export default function NetworkSignalPage() {
+function NetworkSignalPageInner() {
   const searchParams = useSearchParams();
   const seedParam = searchParams?.get("seed")?.trim().slice(0, 700) || undefined;
   const initialProfileHint = seedParam && seedParam !== "discovery-profile" ? seedParam : undefined;
@@ -250,5 +254,13 @@ export default function NetworkSignalPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function NetworkSignalPage() {
+  return (
+    <Suspense fallback={null}>
+      <NetworkSignalPageInner />
+    </Suspense>
   );
 }

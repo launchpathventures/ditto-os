@@ -9,11 +9,11 @@ const mocks = vi.hoisted(() => ({
   deleteDiscoveryProfile: vi.fn(),
 }));
 
-vi.mock("../../../../../../../../../../src/engine/network-step-run", () => ({
+vi.mock("../../../../../../../../../src/engine/network-step-run", () => ({
   createNetworkLaneStepRun: mocks.createNetworkLaneStepRun,
 }));
 
-vi.mock("../../../../../../../../../../src/engine/claim-invite", () => ({
+vi.mock("../../../../../../../../../src/engine/claim-invite", () => ({
   getClaimInvitePreview: mocks.getClaimInvitePreview,
   redeemClaimToken: mocks.redeemClaimToken,
   declineClaimInvite: mocks.declineClaimInvite,

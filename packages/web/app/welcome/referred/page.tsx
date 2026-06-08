@@ -1,5 +1,9 @@
 "use client";
 
+
+// Reads request-time search params (useSearchParams) — render dynamically so
+// the static prerender does not hit the CSR-bailout build error.
+export const dynamic = "force-dynamic";
 /**
  * Referred Page — Recipient-to-User Conversion (Brief 095)
  *
