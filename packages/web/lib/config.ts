@@ -25,14 +25,40 @@ const CONFIG_PATH = join(DATA_DIR, "config.json");
 
 export function loadConfig(): DittoConfig | null {
   try {
-    if (!existsSync(CONFIG_PATH)) return null;
-    const raw = readFileSync(CONFIG_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (!parsed.connection || !parsed.model) return null;
-    return parsed as DittoConfig;
+    if (existsSync(CONFIG_PATH)) {
+      const raw = readFileSync(CONFIG_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed.connection && parsed.model) return parsed as DittoConfig;
+    }
   } catch {
-    return null;
+    // Fall through to env-based config below.
   }
+  // Fallback for provisioned/managed workspaces: the setup wizard may never
+  // have run (so config.json is absent), and on Railway DATA_DIR lives on the
+  // ephemeral image filesystem rather than the mounted volume — a written
+  // config.json would not survive a redeploy. Build config directly from the
+  // LLM env vars the provisioner/operator sets.
+  return configFromEnv();
+}
+
+/** Build a DittoConfig from environment when no config.json is present. */
+function configFromEnv(): DittoConfig | null {
+  const model = process.env.LLM_MODEL?.trim();
+  if (process.env.ANTHROPIC_API_KEY) {
+    return {
+      connection: "anthropic",
+      model: model || "claude-sonnet-4-6",
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    };
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return {
+      connection: "openai",
+      model: model || "gpt-4o",
+      apiKey: process.env.OPENAI_API_KEY,
+    };
+  }
+  return null;
 }
 
 export function saveConfig(config: DittoConfig): void {
