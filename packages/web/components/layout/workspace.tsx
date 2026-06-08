@@ -43,7 +43,6 @@ import {
   useThreadStore,
   type ChatThreadDetail,
 } from "@/components/chat/thread-store";
-import { classifyIntent } from "@/components/chat/intent-router";
 import type { ThreadTurn } from "@/lib/engine";
 
 interface WorkspaceProps {
@@ -376,16 +375,15 @@ export function Workspace({
   }, []);
 
   const sendFromBar = useCallback(
-    (text: string, onAmbiguous: (verdict: "new" | "ambiguous") => void) => {
+    // Always keep the message in the current view's scope and send immediately.
+    // (Previously classifyIntent could surface an "Is this about <scope>?"
+    // disambiguation prompt; that friction is removed — use "New chat" in the
+    // sidebar to start a separate thread.)
+    (text: string) => {
       if (!currentViewMeta) return;
-      const verdict = classifyIntent(text, currentViewMeta.scope);
-      if (verdict === "related") {
-        void openScopedSplit(currentViewMeta.scope).then(() => {
-          threadStore.requestSend(text, currentViewMeta.scope);
-        });
-      } else {
-        onAmbiguous(verdict);
-      }
+      void openScopedSplit(currentViewMeta.scope).then(() => {
+        threadStore.requestSend(text, currentViewMeta.scope);
+      });
     },
     [currentViewMeta, openScopedSplit],
   );
